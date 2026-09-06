@@ -12,7 +12,7 @@ Paste these into Play Console → Grow → Store presence → Main store listing
 | Tags | Launcher, Home screen, Widgets |
 | Contact email | gabrieltinndahn06@gmail.com |
 | Website | *(optional)* |
-| Privacy policy URL | Host `play/privacy-policy.md` and paste the URL — Play requires a reachable link |
+| Privacy policy URL | `https://firegb2012.github.io/ZenithUI/` (served from `docs/index.html` via GitHub Pages) |
 | Ads | No |
 | In-app purchases | No |
 | Content rating | Everyone (questionnaire: no user-generated content, no data sharing) |

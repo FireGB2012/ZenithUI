@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy Policy — Zenith UI</title>
+<meta name="description" content="Privacy policy for Zenith UI, a home screen replacement for Android. Nothing leaves your phone.">
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f6f7fb;
+    --panel: #ffffff;
+    --ink: #14161d;
+    --muted: #5a6072;
+    --line: #e3e6ef;
+    --accent: #5b5bd6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0a0b12;
+      --panel: #14161f;
+      --ink: #eef0f6;
+      --muted: #9aa1b4;
+      --line: #262a38;
+      --accent: #8b8bf0;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 40px 20px 80px;
+    background: var(--bg);
+    color: var(--ink);
+    font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-text-size-adjust: 100%;
+  }
+  main {
+    max-width: 720px;
+    margin: 0 auto;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    padding: 40px 36px;
+  }
+  h1 { font-size: 1.9rem; line-height: 1.2; letter-spacing: -0.02em; margin: 0 0 6px; }
+  h2 { font-size: 1.15rem; letter-spacing: -0.01em; margin: 34px 0 10px; }
+  .updated { color: var(--muted); font-size: 0.9rem; margin: 0 0 28px; }
+  .lede { font-size: 1.05rem; }
+  strong { font-weight: 650; }
+  ul { padding-left: 22px; }
+  li { margin: 8px 0; }
+  code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.88em;
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    padding: 1px 5px;
+    border-radius: 5px;
+  }
+  .table-wrap { overflow-x: auto; margin: 14px 0; }
+  table { border-collapse: collapse; width: 100%; min-width: 460px; font-size: 0.95rem; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.05em; }
+  a { color: var(--accent); }
+  footer { max-width: 720px; margin: 22px auto 0; color: var(--muted); font-size: 0.85rem; text-align: center; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Privacy Policy — Zenith UI</h1>
+  <p class="updated">Last updated: 6 September 2026</p>
+
+  <p class="lede">Zenith UI is a home screen replacement (launcher) for Android. This policy explains
+  what the app does with your information. The short version: nothing leaves your phone.</p>
+
+  <h2>What Zenith UI collects</h2>
+  <p><strong>Nothing.</strong> Zenith UI has no accounts, no analytics, no advertising, no crash
+  reporting and no network permission of its own. No personal data is collected, transmitted or sold.</p>
+
+  <h2>What is stored on your device</h2>
+  <p>The app saves the following in its own private storage, readable only by Zenith UI:</p>
+  <ul>
+    <li>The name you type during setup, used to greet you on your home screen.</li>
+    <li>Your home screen layout: which apps, folders and widgets you placed and where.</li>
+    <li>Your preferences: palette, light/dark mode, glass strength, grid size, icon size and shape,
+      and the icon pack you selected.</li>
+    <li>The text of the Quick Note widget, if you use it.</li>
+  </ul>
+  <p>All of this stays on the device. Uninstalling the app, or clearing its storage in Android
+  Settings, deletes it permanently.</p>
+
+  <h2>What Zenith UI reads from your device</h2>
+  <p>To work as a launcher, the app reads:</p>
+  <ul>
+    <li><strong>The list of installed applications</strong>, through Android's <code>LauncherApps</code>
+      service, so it can show your apps and their icons. This list is never sent anywhere.</li>
+    <li><strong>Your wallpaper</strong>, once you have made Zenith UI your default home app, so glass
+      panels can show a blurred copy of it. The image is used only for drawing and is never stored
+      or transmitted.</li>
+    <li><strong>Battery level and charging state</strong>, for the Power widget, via a standard system
+      broadcast.</li>
+    <li><strong>Today's calendar entries</strong>, but only if you open the bedside clock and grant
+      calendar access. The titles and times are read each time the screen is shown, displayed on your
+      device, and never stored by Zenith UI or sent anywhere. Declining leaves every other feature
+      working.</li>
+  </ul>
+
+  <h2>Permissions</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Permission</th><th>Why it is needed</th></tr></thead>
+      <tbody>
+        <tr><td><code>SET_WALLPAPER</code></td><td>Opens the system wallpaper picker when you choose "Wallpaper" in the Customise sheet</td></tr>
+        <tr><td><code>VIBRATE</code></td><td>Provides a short haptic tick when you pick up an icon or resize a widget</td></tr>
+        <tr><td><code>READ_CALENDAR</code></td><td>Optional. Asked for only when you tap "Allow calendar" on the bedside clock, so it can list today's events</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Zenith UI does not request internet, location, contacts, storage, camera or microphone
+  permissions. Calendar access is optional, requested only in the bedside clock, and can be revoked
+  at any time in Android Settings without affecting the rest of the launcher. The torch tile uses the
+  system camera flash API, which needs no permission.</p>
+
+  <h2>Leaving the app</h2>
+  <p>Searching the web from the search bar hands your query to the search app or browser you already
+  have installed. What happens after that is covered by that app's own privacy policy, not this one.
+  The same applies to any app you launch from Zenith UI.</p>
+
+  <h2>Children</h2>
+  <p>Zenith UI is suitable for all ages and collects no data from anyone, including children.</p>
+
+  <h2>Changes</h2>
+  <p>If this policy changes, the new version will be published at this address with an updated date.</p>
+
+  <h2>Contact</h2>
+  <p>Questions about this policy: <a href="mailto:gabrieltinndahn06@gmail.com">gabrieltinndahn06@gmail.com</a></p>
+</main>
+<footer>Zenith UI · com.gabriel.zenithui</footer>
+</body>
+</html>

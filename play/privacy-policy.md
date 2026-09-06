@@ -2,6 +2,10 @@
 
 **Last updated: 6 September 2026**
 
+> The copy Play actually links to is `docs/index.html`, published at
+> <https://firegb2012.github.io/ZenithUI/>. Edit both together, or the hosted policy drifts from
+> this one.
+
 Zenith UI is a home screen replacement (launcher) for Android. This policy explains what the app
 does with your information. The short version: nothing leaves your phone.
 

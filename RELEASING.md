@@ -59,7 +59,8 @@ Verify a build before uploading:
 - [ ] Upload `app-release.aab` to Internal testing first; install from the test link before going to production.
 - [ ] Store listing: copy from `play/listing.md`.
 - [ ] Graphics: `play/icon-512.png`, `play/feature-graphic-1024x500.png`, `play/screenshots/`.
-- [ ] Privacy policy: host `play/privacy-policy.md` (GitHub Pages or a Gist rendered page works) and paste the URL.
+- [ ] Privacy policy: paste `https://firegb2012.github.io/ZenithUI/`. It is served from `docs/index.html`
+      by GitHub Pages (Settings -> Pages -> Source: `main`, folder `/docs`).
 - [ ] Data safety: "No data collected" — full answers in `play/listing.md`.
 - [ ] Content rating questionnaire: no user-generated content, no ads, no data sharing.
 - [ ] Target audience: 13+ or Everyone; no ads declaration.

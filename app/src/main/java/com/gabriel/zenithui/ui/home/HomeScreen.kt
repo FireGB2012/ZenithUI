@@ -72,6 +72,7 @@ import androidx.compose.ui.unit.sp
 import com.gabriel.zenithui.ZenithViewModel
 import com.gabriel.zenithui.data.AppCell
 import com.gabriel.zenithui.data.FolderCell
+import com.gabriel.zenithui.data.HomeItem
 import com.gabriel.zenithui.data.LayoutBuilder
 import com.gabriel.zenithui.data.ROW_UNITS
 import com.gabriel.zenithui.data.WidgetCell
@@ -188,6 +189,24 @@ fun HomeScreen(viewModel: ZenithViewModel) {
         }
     }
 
+    /**
+     * Where an item dragged over [col], [row] would actually come to rest — the closest opening,
+     * since a drop onto a taken cell lands beside it rather than being refused. The hint and the
+     * drop itself both resolve through here, so the hint can never point at a cell the item will
+     * not take.
+     */
+    fun dropSlotFor(item: HomeItem, col: Int, row: Int): Pair<Int, Int>? =
+        viewModel.nearestFreeSlot(
+            page = pagerState.currentPage,
+            col = col,
+            row = row,
+            spanX = item.spanX,
+            spanY = item.spanY,
+            ignoreId = item.id,
+            rowStep = if (item is WidgetCell) 1 else LayoutBuilder.ICON_ROW_STEP,
+            colWidthInRowUnits = if (drag.cellHeight > 0f) drag.cellWidth / drag.cellHeight else 2f,
+        )
+
     fun handleDrop() {
         val item = drag.item
         if (item != null) {
@@ -196,31 +215,14 @@ fun HomeScreen(viewModel: ZenithViewModel) {
                 drag.removeArmed -> viewModel.removeItem(item.id)
                 hover != null -> viewModel.combine(item.id, hover)
                 else -> {
-                    val rowStep = if (item is WidgetCell) 1 else LayoutBuilder.ICON_ROW_STEP
                     val cell = drag.cellUnderItem(
                         columns = settings.columns,
                         rows = settings.rows * ROW_UNITS,
-                        rowStep = rowStep,
+                        rowStep = if (item is WidgetCell) 1 else LayoutBuilder.ICON_ROW_STEP,
                     )
-                    if (cell != null) {
-                        // Land on the closest opening rather than refusing the drop outright.
-                        val slot = viewModel.nearestFreeSlot(
-                            page = pagerState.currentPage,
-                            col = cell.first,
-                            row = cell.second,
-                            spanX = item.spanX,
-                            spanY = item.spanY,
-                            ignoreId = item.id,
-                            rowStep = rowStep,
-                            colWidthInRowUnits = if (drag.cellHeight > 0f) {
-                                drag.cellWidth / drag.cellHeight
-                            } else {
-                                2f
-                            },
-                        )
-                        if (slot != null) {
-                            viewModel.moveItem(item.id, pagerState.currentPage, slot.first, slot.second)
-                        }
+                    val slot = cell?.let { dropSlotFor(item, it.first, it.second) }
+                    if (slot != null) {
+                        viewModel.moveItem(item.id, pagerState.currentPage, slot.first, slot.second)
                     }
                 }
             }
@@ -327,6 +329,7 @@ fun HomeScreen(viewModel: ZenithViewModel) {
                             onNoteChange = { viewModel.setNote(it) },
                             onAmbient = { ambient = true },
                             onDrop = { handleDrop() },
+                            resolveDrop = { item, col, row -> dropSlotFor(item, col, row) },
                             modifier = Modifier
                                 .fillMaxSize()
                                 .graphicsLayer {

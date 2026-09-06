@@ -171,6 +171,7 @@ fun HomePage(
     onNoteChange: (String) -> Unit,
     onAmbient: () -> Unit,
     onDrop: () -> Unit,
+    resolveDrop: (HomeItem, Int, Int) -> Pair<Int, Int>?,
     modifier: Modifier = Modifier,
 ) {
     val palette = LocalPalette.current
@@ -212,11 +213,15 @@ fun HomePage(
                 rows = settings.rows * ROW_UNITS,
                 rowStep = if (dragged is WidgetCell) 1 else LayoutBuilder.ICON_ROW_STEP,
             )
-            if (cell != null && drag.hoverItemId == null) {
+            // The cell under your finger may be taken, in which case the drop lands beside it.
+            // Point at that opening instead: a hint showing somewhere the item will not go is
+            // worse than no hint at all.
+            val target = cell?.let { resolveDrop(dragged, it.first, it.second) }
+            if (target != null && drag.hoverItemId == null) {
                 val hintOffset by animateIntOffsetAsState(
                     targetValue = IntOffset(
-                        (cell.first * cellWidthPx).roundToInt(),
-                        (cell.second * cellHeightPx).roundToInt(),
+                        (target.first * cellWidthPx).roundToInt(),
+                        (target.second * cellHeightPx).roundToInt(),
                     ),
                     animationSpec = Motion.cell,
                     label = "dropHint",

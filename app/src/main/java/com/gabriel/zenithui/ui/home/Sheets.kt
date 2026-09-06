@@ -85,6 +85,7 @@ import com.gabriel.zenithui.data.FolderCell
 import com.gabriel.zenithui.data.HomeItem
 import com.gabriel.zenithui.data.IconPackInfo
 import com.gabriel.zenithui.data.IconPacks
+import com.gabriel.zenithui.data.GridDensity
 import com.gabriel.zenithui.data.IconShapes
 import com.gabriel.zenithui.data.AppCell
 import com.gabriel.zenithui.data.WidgetCell
@@ -459,21 +460,19 @@ fun SettingsSheet(
                 display = "${(settings.glass * 100).toInt()}%",
             ) { value -> onChange { it.copy(glass = value) } }
 
-            LabeledSlider(
-                label = "Columns",
-                value = settings.columns.toFloat(),
-                range = 3f..6f,
-                steps = 2,
-                display = settings.columns.toString(),
-            ) { value -> onChange { it.copy(columns = value.toInt()) } }
-
-            LabeledSlider(
-                label = "Rows",
-                value = settings.rows.toFloat(),
-                range = 4f..7f,
-                steps = 2,
-                display = settings.rows.toString(),
-            ) { value -> onChange { it.copy(rows = value.toInt()) } }
+            SectionLabel("Grid")
+            Segmented(
+                options = GridDensity.entries.map { it.id to it.label },
+                selected = settings.gridDensity,
+                onSelect = { value -> onChange { it.copy(gridDensity = value) } },
+            )
+            Text(
+                // How many cells that works out to depends on the screen, so it is reported
+                // rather than chosen.
+                text = "${settings.columns} columns · ${settings.rows} rows on this screen",
+                color = palette.onGlassMuted,
+                fontSize = 12.sp,
+            )
 
             LabeledSlider(
                 label = "Icon size",

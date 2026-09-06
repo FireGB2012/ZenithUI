@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -23,12 +24,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.IntSize
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import com.gabriel.zenithui.data.GridDensity
 import com.gabriel.zenithui.ui.common.LocalIconLoader
 import com.gabriel.zenithui.ui.home.HomeScreen
 import com.gabriel.zenithui.ui.onboarding.OnboardingFlow
@@ -117,6 +120,18 @@ fun ZenithApp(viewModel: ZenithViewModel) {
     val settings by viewModel.settings.collectAsState()
     val backdrop by viewModel.backdrop.collectAsState()
     var screenSize by remember { mutableStateOf(IntSize.Zero) }
+
+    // The grid is a function of the screen, not a stored number: re-derive it whenever the window
+    // resizes, so a fold opening or a tablet gets more cells rather than bigger ones.
+    val pixelsPerDp = LocalDensity.current.density
+    LaunchedEffect(screenSize, settings.gridDensity, settings.onboarded) {
+        if (!settings.onboarded || screenSize == IntSize.Zero) return@LaunchedEffect
+        viewModel.resolveGrid(
+            density = GridDensity.byId(settings.gridDensity),
+            widthDp = screenSize.width / pixelsPerDp,
+            heightDp = screenSize.height / pixelsPerDp,
+        )
+    }
 
     val view = LocalView.current
     val lightBars = when (settings.appearance) {

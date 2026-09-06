@@ -3,6 +3,7 @@ package com.gabriel.zenithui.data
 import androidx.compose.runtime.Immutable
 import org.json.JSONArray
 import org.json.JSONObject
+import kotlin.math.roundToInt
 
 /**
  * A home row is divided into this many vertical units. Icons take a whole row; a slim widget such
@@ -157,11 +158,20 @@ object Widgets {
 
     /** The size a widget takes when first placed. [rows] is in rows; spans are in row units. */
     fun defaultSpan(spec: WidgetSpec, columns: Int, rows: Int): Pair<Int, Int> =
-        clampSpan(spec, if (spec.fullWidth) columns else spec.spanX, spec.spanY, columns, rows)
+        clampSpan(spec, if (spec.fullWidth) columns else scaleX(spec.spanX, columns), spec.spanY, columns, rows)
 
-    fun clampSpan(spec: WidgetSpec, spanX: Int, spanY: Int, columns: Int, rows: Int): Pair<Int, Int> =
-        spanX.coerceIn(spec.minSpanX, minOf(spec.maxSpanX, columns)) to
+    /**
+     * Spans are declared against a four column grid, so on a wider one they are scaled to keep
+     * their share of it: half the width on a phone stays half the width on a tablet.
+     */
+    private fun scaleX(spanX: Int, columns: Int): Int =
+        (spanX * columns / GridDensity.BASE_COLUMNS.toFloat()).roundToInt().coerceAtLeast(1)
+
+    fun clampSpan(spec: WidgetSpec, spanX: Int, spanY: Int, columns: Int, rows: Int): Pair<Int, Int> {
+        val widest = minOf(scaleX(spec.maxSpanX, columns), columns).coerceAtLeast(spec.minSpanX)
+        return spanX.coerceIn(spec.minSpanX, widest) to
             spanY.coerceIn(spec.minSpanY, minOf(spec.maxSpanY, rows * ROW_UNITS))
+    }
 }
 
 fun homeItemFromJson(o: JSONObject): HomeItem? = when (o.optString("t")) {

@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -32,14 +33,22 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.gabriel.zenithui.ZenithViewModel
+import com.gabriel.zenithui.data.GridDensity
 import com.gabriel.zenithui.data.ZenithSettings
 import com.gabriel.zenithui.ui.common.AuroraBackdrop
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.ZenithTheme
+
+/**
+ * Onboarding is a form, not a canvas: past this width the eye has to travel too far between a
+ * label and its control, so the column stays phone-sized and centres itself on bigger screens.
+ */
+private val FORM_MAX_WIDTH = 480.dp
 
 /** The first-run experience: name, look, widgets, then a home screen built for you. */
 @Composable
@@ -54,10 +63,17 @@ fun OnboardingFlow(
     var paletteId by rememberSaveable { mutableStateOf("midnight") }
     var appearance by rememberSaveable { mutableStateOf("dark") }
     var glass by rememberSaveable { mutableStateOf(0.85f) }
-    var columns by rememberSaveable { mutableStateOf(4) }
-    var rows by rememberSaveable { mutableStateOf(5) }
+    var densityId by rememberSaveable { mutableStateOf(GridDensity.Balanced.id) }
     var iconShape by rememberSaveable { mutableStateOf("squircle") }
     val widgets = remember { androidx.compose.runtime.mutableStateListOf("clock", "toggles") }
+
+    // The grid you pick is a cell size; how many of them fit is the screen's business.
+    val gridDensity = GridDensity.byId(densityId)
+    val pixelsPerDp = LocalDensity.current.density
+    val (columns, rows) = remember(gridDensity, screenSize, pixelsPerDp) {
+        if (screenSize == IntSize.Zero) GridDensity.DEFAULT_COLUMNS to GridDensity.DEFAULT_ROWS
+        else gridDensity.gridFor(screenSize.width / pixelsPerDp, screenSize.height / pixelsPerDp)
+    }
 
     val preview = ZenithSettings(
         userName = name,
@@ -92,57 +108,65 @@ fun OnboardingFlow(
                 },
                 label = "onboarding",
             ) { current ->
-                when (current) {
-                    0 -> WelcomeStep(
-                        name = name,
-                        onNameChange = { name = it },
-                        onContinue = { step = 1 },
-                    )
+                // A phone-shaped column: on a tablet or an unfolded foldable the fields would
+                // otherwise stretch the full width of the screen.
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+                    Box(Modifier.widthIn(max = FORM_MAX_WIDTH).fillMaxSize()) {
+                        when (current) {
+                            0 -> WelcomeStep(
+                                name = name,
+                                onNameChange = { name = it },
+                                onContinue = { step = 1 },
+                            )
 
-                    1 -> ThemeStep(
-                        name = name,
-                        paletteId = paletteId,
-                        appearance = appearance,
-                        glass = glass,
-                        onPalette = { paletteId = it },
-                        onAppearance = { appearance = it },
-                        onGlass = { glass = it },
-                        onBack = { step = 0 },
-                        onContinue = { step = 2 },
-                    )
+                            1 -> ThemeStep(
+                                name = name,
+                                paletteId = paletteId,
+                                appearance = appearance,
+                                glass = glass,
+                                onPalette = { paletteId = it },
+                                onAppearance = { appearance = it },
+                                onGlass = { glass = it },
+                                onBack = { step = 0 },
+                                onContinue = { step = 2 },
+                            )
 
-                    2 -> WidgetStep(
-                        selected = widgets,
-                        columns = columns,
-                        rows = rows,
-                        iconShape = iconShape,
-                        onToggle = { type -> if (type in widgets) widgets.remove(type) else widgets.add(type) },
-                        onDensity = { c, r -> columns = c; rows = r },
-                        onIconShape = { iconShape = it },
-                        onBack = { step = 1 },
-                        onContinue = { step = 3 },
-                    )
+                            2 -> WidgetStep(
+                                selected = widgets,
+                                density = gridDensity,
+                                columns = columns,
+                                rows = rows,
+                                iconShape = iconShape,
+                                onToggle = { type -> if (type in widgets) widgets.remove(type) else widgets.add(type) },
+                                onDensity = { densityId = it.id },
+                                onIconShape = { iconShape = it },
+                                onBack = { step = 1 },
+                                onContinue = { step = 3 },
+                            )
 
-                    3 -> SetupStep(
-                        viewModel = viewModel,
-                        name = name,
-                        paletteId = paletteId,
-                        appearance = appearance,
-                        glass = glass,
-                        iconShape = iconShape,
-                        widgets = widgets.toList(),
-                        columns = columns,
-                        rows = rows,
-                        onDone = { step = 4 },
-                    )
+                            3 -> SetupStep(
+                                viewModel = viewModel,
+                                name = name,
+                                paletteId = paletteId,
+                                appearance = appearance,
+                                glass = glass,
+                                iconShape = iconShape,
+                                widgets = widgets.toList(),
+                                density = gridDensity,
+                                columns = columns,
+                                rows = rows,
+                                onDone = { step = 4 },
+                            )
 
-                    else -> HelpStep(
-                        name = name,
-                        onDone = {
-                            viewModel.markOnboarded()
-                            onFinished()
-                        },
-                    )
+                            else -> HelpStep(
+                                name = name,
+                                onDone = {
+                                    viewModel.markOnboarded()
+                                    onFinished()
+                                },
+                            )
+                        }
+                    }
                 }
             }
 

@@ -16,6 +16,9 @@ data class ZenithSettings(
     /** auto | light | dark */
     val appearance: String = "dark",
     val glass: Float = 0.8f,
+    /** compact | balanced | roomy — the cell size you asked for. */
+    val gridDensity: String = "balanced",
+    /** Derived from [gridDensity] and the screen; never edited directly. */
     val columns: Int = 4,
     val rows: Int = 5,
     val iconSize: Int = 56,
@@ -36,6 +39,7 @@ data class ZenithSettings(
         put("paletteId", paletteId)
         put("appearance", appearance)
         put("glass", glass.toDouble())
+        put("gridDensity", gridDensity)
         put("columns", columns)
         put("rows", rows)
         put("iconSize", iconSize)
@@ -51,14 +55,18 @@ data class ZenithSettings(
     companion object {
         fun fromJson(o: JSONObject): ZenithSettings {
             val d = ZenithSettings()
+            val columns = o.optInt("columns", d.columns)
+            val rows = o.optInt("rows", d.rows)
             return ZenithSettings(
                 onboarded = o.optBoolean("onboarded", d.onboarded),
                 userName = o.optString("userName", d.userName),
                 paletteId = o.optString("paletteId", d.paletteId),
                 appearance = o.optString("appearance", d.appearance),
                 glass = o.optDouble("glass", d.glass.toDouble()).toFloat(),
-                columns = o.optInt("columns", d.columns),
-                rows = o.optInt("rows", d.rows),
+                // Layouts saved before densities existed are matched to the nearest preset.
+                gridDensity = o.optString("gridDensity", GridDensity.fromGrid(columns, rows).id),
+                columns = columns,
+                rows = rows,
                 iconSize = o.optInt("iconSize", d.iconSize),
                 showLabels = o.optBoolean("showLabels", d.showLabels),
                 iconShape = o.optString("iconShape", d.iconShape),

@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -57,6 +58,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -647,6 +649,9 @@ fun DragGhost(
     }
 }
 
+/** Breathing room either side of a dock icon before the bar counts as over-wide. */
+private val DOCK_ICON_GAP = 36.dp
+
 @Composable
 fun DockBar(
     keys: List<String>,
@@ -657,40 +662,49 @@ fun DockBar(
     modifier: Modifier = Modifier,
 ) {
     val palette = LocalPalette.current
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .glass(ZenithShapes.panel, strength = 1.15f)
-            .padding(vertical = 12.dp, horizontal = 10.dp),
-        horizontalArrangement = if (keys.isEmpty()) Arrangement.Center else Arrangement.SpaceEvenly,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        if (keys.isEmpty()) {
-            Text(
-                text = "Long press an app to pin it here",
-                color = palette.onGlassMuted,
-                fontSize = 12.sp,
-                modifier = Modifier.padding(vertical = 10.dp),
-            )
-        }
-        keys.forEachIndexed { index, key ->
-            Box(
-                Modifier
-                    .appearIn(delayMillis = 90 + staggerDelay(index), riseFrom = 26f)
-                    .pointerInput(key) {
-                    detectTapGestures(
-                        onTap = { onOpen(key) },
-                        onLongPress = { onLongPress(key) },
-                    )
-                },
-            ) {
-                AppIcon(
-                    key = key,
-                    label = appsByKey[key]?.label ?: "",
-                    size = minOf(settings.iconSize.dp, 64.dp),
-                    shape = ZenithShapes.forIconShape(settings.iconShape),
-                    modifier = Modifier.pressBounce(),
+    val iconSize = minOf(settings.iconSize.dp, 64.dp)
+    // A dock is a row of icons, not a rail. Past the width its icons actually need, SpaceEvenly
+    // stops being spacing and starts being distance, so on a tablet the bar centres itself instead
+    // of flinging four icons into the corners.
+    val widest = if (keys.isEmpty()) Dp.Infinity else (iconSize + DOCK_ICON_GAP) * keys.size + 20.dp
+
+    Box(modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+        Row(
+            modifier = Modifier
+                .widthIn(max = widest)
+                .fillMaxWidth()
+                .glass(ZenithShapes.panel, strength = 1.15f)
+                .padding(vertical = 12.dp, horizontal = 10.dp),
+            horizontalArrangement = if (keys.isEmpty()) Arrangement.Center else Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (keys.isEmpty()) {
+                Text(
+                    text = "Long press an app to pin it here",
+                    color = palette.onGlassMuted,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(vertical = 10.dp),
                 )
+            }
+            keys.forEachIndexed { index, key ->
+                Box(
+                    Modifier
+                        .appearIn(delayMillis = 90 + staggerDelay(index), riseFrom = 26f)
+                        .pointerInput(key) {
+                        detectTapGestures(
+                            onTap = { onOpen(key) },
+                            onLongPress = { onLongPress(key) },
+                        )
+                    },
+                ) {
+                    AppIcon(
+                        key = key,
+                        label = appsByKey[key]?.label ?: "",
+                        size = iconSize,
+                        shape = ZenithShapes.forIconShape(settings.iconShape),
+                        modifier = Modifier.pressBounce(),
+                    )
+                }
             }
         }
     }

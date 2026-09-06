@@ -39,6 +39,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.gabriel.zenithui.data.GridDensity
 import com.gabriel.zenithui.data.IconShapes
 import com.gabriel.zenithui.data.WidgetSpec
 import com.gabriel.zenithui.data.Widgets
@@ -51,21 +52,17 @@ import com.gabriel.zenithui.ui.theme.glass
 @Composable
 fun WidgetStep(
     selected: List<String>,
+    density: GridDensity,
     columns: Int,
     rows: Int,
     iconShape: String,
     onToggle: (String) -> Unit,
-    onDensity: (Int, Int) -> Unit,
+    onDensity: (GridDensity) -> Unit,
     onIconShape: (String) -> Unit,
     onBack: () -> Unit,
     onContinue: () -> Unit,
 ) {
     val palette = LocalPalette.current
-    val density = when {
-        columns == 5 -> "compact"
-        rows == 4 -> "roomy"
-        else -> "balanced"
-    }
 
     Column(
         Modifier
@@ -110,15 +107,9 @@ fun WidgetStep(
             Spacer(Modifier.height(4.dp))
             SectionLabel("Grid")
             Segmented(
-                options = listOf("compact" to "Compact", "balanced" to "Balanced", "roomy" to "Roomy"),
-                selected = density,
-                onSelect = {
-                    when (it) {
-                        "compact" -> onDensity(5, 6)
-                        "roomy" -> onDensity(4, 4)
-                        else -> onDensity(4, 5)
-                    }
-                },
+                options = GridDensity.entries.map { it.id to it.label },
+                selected = density.id,
+                onSelect = { onDensity(GridDensity.byId(it)) },
             )
             Text(
                 text = "$columns columns · $rows rows per page",

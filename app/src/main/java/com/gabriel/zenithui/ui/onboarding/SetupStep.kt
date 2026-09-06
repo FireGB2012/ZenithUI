@@ -55,6 +55,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.gabriel.zenithui.data.GridDensity
 import com.gabriel.zenithui.ZenithViewModel
 import com.gabriel.zenithui.ui.common.GlassButton
 import com.gabriel.zenithui.ui.theme.LocalPalette
@@ -87,6 +88,7 @@ fun SetupStep(
     glass: Float,
     iconShape: String,
     widgets: List<String>,
+    density: GridDensity,
     columns: Int,
     rows: Int,
     onDone: () -> Unit,
@@ -97,7 +99,7 @@ fun SetupStep(
 
     LaunchedEffect(Unit) {
         val work = launch(Dispatchers.Default) {
-            viewModel.buildHome(name, paletteId, appearance, widgets, columns, rows)
+            viewModel.buildHome(name, paletteId, appearance, widgets, density, columns, rows)
         }
         var startNanos = 0L
         while (true) {

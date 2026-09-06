@@ -7,6 +7,7 @@ import com.gabriel.zenithui.data.AppCell
 import com.gabriel.zenithui.data.AppInfo
 import com.gabriel.zenithui.data.AppRepository
 import com.gabriel.zenithui.data.FolderCell
+import com.gabriel.zenithui.data.GridDensity
 import com.gabriel.zenithui.data.HomeItem
 import com.gabriel.zenithui.data.IconLoader
 import com.gabriel.zenithui.data.LayoutBuilder
@@ -91,6 +92,7 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
         paletteId: String,
         appearance: String,
         widgets: List<String>,
+        density: GridDensity,
         columns: Int,
         rows: Int,
     ) {
@@ -102,6 +104,7 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
                 userName = name.trim(),
                 paletteId = paletteId,
                 appearance = appearance,
+                gridDensity = density.id,
                 columns = columns,
                 rows = rows,
                 dock = dock,
@@ -130,6 +133,18 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
         if (after.columns != before.columns || after.rows != before.rows) {
             store.setLayout(LayoutBuilder.reflow(layout.value, after.columns, after.rows))
         }
+    }
+
+    /**
+     * Re-derives the grid for the screen we are actually on. Called whenever the window changes
+     * size — a fold opening, a rotation, a tablet — so cells keep the size the user asked for
+     * instead of stretching to fill whatever glass they are on.
+     */
+    fun resolveGrid(density: GridDensity, widthDp: Float, heightDp: Float) {
+        val (columns, rows) = density.gridFor(widthDp, heightDp)
+        val current = settings.value
+        if (columns == current.columns && rows == current.rows) return
+        updateSettings { it.copy(columns = columns, rows = rows) }
     }
 
     fun setNote(text: String) = store.update { it.copy(note = text) }

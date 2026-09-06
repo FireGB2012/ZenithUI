@@ -1,0 +1,155 @@
+package com.gabriel.zenithui
+
+import android.app.Activity
+import android.app.role.RoleManager
+import android.content.Intent
+import android.os.Bundle
+import android.provider.Settings
+import android.view.WindowManager
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.unit.IntSize
+import androidx.core.view.WindowCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import com.gabriel.zenithui.ui.common.LocalIconLoader
+import com.gabriel.zenithui.ui.home.HomeScreen
+import com.gabriel.zenithui.ui.onboarding.OnboardingFlow
+import com.gabriel.zenithui.ui.theme.Palettes
+import com.gabriel.zenithui.ui.theme.ZenithTheme
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
+
+class MainActivity : ComponentActivity() {
+
+    private val viewModel: ZenithViewModel by viewModels()
+
+    /** At most this many automatic prompts; after that the hint above the dock is the only ask. */
+    private val maxHomePrompts = 3
+    private var askedThisSession = false
+
+    private val homeRoleRequest = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) {
+        // Whatever the answer, re-read the world: as the default home app we can read the wallpaper.
+        viewModel.onEnvironmentChanged()
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        enableEdgeToEdge()
+        super.onCreate(savedInstanceState)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        window.setFlags(
+            WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER,
+            WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER,
+        )
+        setContent { ZenithApp(viewModel) }
+
+        // Ask as soon as the launcher is actually entered — including right after onboarding.
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                viewModel.settings.map { it.onboarded }.collect { onboarded ->
+                    if (onboarded) askToBeDefaultLauncher()
+                }
+            }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        viewModel.refreshWallpaper()
+        viewModel.refreshApps()
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        // Pressing home while already home: fold everything back to page one.
+        viewModel.onHomePressed()
+    }
+
+    /** Shows the system "default home app" dialog, falling back to the home settings screen. */
+    private fun askToBeDefaultLauncher() {
+        if (askedThisSession || isDefaultHome()) return
+        if (viewModel.settings.value.homePrompts >= maxHomePrompts) return
+        askedThisSession = true
+        viewModel.noteHomePrompt()
+
+        val roleManager = getSystemService(RoleManager::class.java)
+        val canRequestRole = roleManager != null &&
+            roleManager.isRoleAvailable(RoleManager.ROLE_HOME) &&
+            !roleManager.isRoleHeld(RoleManager.ROLE_HOME)
+
+        val launched = canRequestRole && runCatching {
+            homeRoleRequest.launch(roleManager.createRequestRoleIntent(RoleManager.ROLE_HOME))
+        }.isSuccess
+
+        if (!launched) {
+            runCatching { homeRoleRequest.launch(Intent(Settings.ACTION_HOME_SETTINGS)) }
+        }
+    }
+
+    private fun isDefaultHome(): Boolean = runCatching {
+        val home = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
+        packageManager.resolveActivity(home, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)
+            ?.activityInfo?.packageName == packageName
+    }.getOrDefault(true)
+}
+
+@Composable
+fun ZenithApp(viewModel: ZenithViewModel) {
+    val settings by viewModel.settings.collectAsState()
+    val backdrop by viewModel.backdrop.collectAsState()
+    var screenSize by remember { mutableStateOf(IntSize.Zero) }
+
+    val view = LocalView.current
+    val lightBars = when (settings.appearance) {
+        "light" -> true
+        "dark" -> false
+        else -> !Palettes.byId(settings.paletteId).dark
+    }
+    SideEffect {
+        val window = (view.context as? Activity)?.window ?: return@SideEffect
+        WindowCompat.getInsetsController(window, view).apply {
+            isAppearanceLightStatusBars = lightBars
+            isAppearanceLightNavigationBars = lightBars
+        }
+    }
+
+    Box(
+        Modifier
+            .fillMaxSize()
+            .onSizeChanged { screenSize = it }
+    ) {
+        CompositionLocalProvider(LocalIconLoader provides viewModel.icons) {
+            if (settings.onboarded) {
+                ZenithTheme(settings = settings, backdrop = backdrop, screenSize = screenSize) {
+                    HomeScreen(viewModel)
+                }
+            } else {
+                OnboardingFlow(
+                    viewModel = viewModel,
+                    backdrop = backdrop,
+                    screenSize = screenSize,
+                    onFinished = { },
+                )
+            }
+        }
+    }
+}

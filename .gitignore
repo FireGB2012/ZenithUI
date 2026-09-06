@@ -1,0 +1,23 @@
+# Signing material — never commit these. Losing them costs days; leaking them
+# lets someone else sign an update as you. They live in the Drive backup instead.
+*.jks
+*.keystore
+keystore.properties
+
+# Build output
+build/
+app/build/
+.gradle/
+.cxx/
+local.properties
+
+# Android Studio / IntelliJ
+.idea/
+*.iml
+.kotlin/
+captures/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini

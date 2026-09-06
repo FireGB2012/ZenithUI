@@ -268,6 +268,11 @@ fun HomePage(
             var cellRoot by remember { mutableStateOf(Offset.Zero) }
             var contentRoot by remember { mutableStateOf(Offset.Zero) }
             var travelled by remember { mutableStateOf(0f) }
+            // The gesture block below is keyed on the item's id and the cell geometry, none of
+            // which change when a widget is resized — so without this it would keep dragging the
+            // item at whatever span it had when the block was first launched.
+            val liveItem by rememberUpdatedState(item)
+            val liveItems by rememberUpdatedState(items)
             // A long press also ends in a pointer-up, which the tap detector would otherwise
             // report as a tap — opening an app or the clock behind the menu that just appeared.
             var longPressHandled by remember { mutableStateOf(false) }
@@ -313,19 +318,19 @@ fun HomePage(
                                     travelled = 0f
                                     longPressHandled = true
                                     haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    drag.begin(item, contentRoot + local, cellRoot)
+                                    drag.begin(liveItem, contentRoot + local, cellRoot)
                                 },
                                 onDrag = { change, delta ->
                                     change.consume()
                                     travelled += delta.getDistance()
                                     drag.pointer += delta
                                     drag.hoverCandidateId =
-                                        hoverTarget(drag, items, item, settings.columns, settings.rows * ROW_UNITS)
+                                        hoverTarget(drag, liveItems, liveItem, settings.columns, settings.rows * ROW_UNITS)
                                 },
                                 onDragEnd = {
                                     if (travelled < 24f) {
                                         drag.clear()
-                                        onItemMenu(item)
+                                        onItemMenu(liveItem)
                                     } else {
                                         onDrop()
                                     }

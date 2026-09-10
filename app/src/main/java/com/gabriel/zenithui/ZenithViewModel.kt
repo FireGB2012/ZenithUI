@@ -6,21 +6,32 @@ import androidx.lifecycle.viewModelScope
 import com.gabriel.zenithui.data.AppCell
 import com.gabriel.zenithui.data.AppInfo
 import com.gabriel.zenithui.data.AppRepository
+import com.gabriel.zenithui.data.Aura
+import com.gabriel.zenithui.data.AuraThemes
+import com.gabriel.zenithui.data.CheckIn
+import com.gabriel.zenithui.data.Backup
+import com.gabriel.zenithui.data.BillingRepository
 import com.gabriel.zenithui.data.FolderCell
 import com.gabriel.zenithui.data.GridDensity
 import com.gabriel.zenithui.data.HomeItem
 import com.gabriel.zenithui.data.IconLoader
 import com.gabriel.zenithui.data.LayoutBuilder
 import com.gabriel.zenithui.data.PageGrid
+import com.gabriel.zenithui.data.Plus
+import com.gabriel.zenithui.data.PlusStatus
 import com.gabriel.zenithui.data.ROW_UNITS
 import com.gabriel.zenithui.data.SettingsStore
 import com.gabriel.zenithui.data.WidgetCell
 import com.gabriel.zenithui.data.Widgets
 import com.gabriel.zenithui.data.WallpaperSource
 import com.gabriel.zenithui.data.ZenithSettings
+import com.gabriel.zenithui.data.trialDaysLeft
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 class ZenithViewModel(application: Application) : AndroidViewModel(application) {
@@ -29,11 +40,45 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
     val repository = AppRepository(application)
     val icons = IconLoader(application, repository)
     private val wallpaperSource = WallpaperSource(application)
+    val billing = BillingRepository(application)
 
     val settings: StateFlow<ZenithSettings> = store.settings
     val layout: StateFlow<List<HomeItem>> = store.layout
     val apps: StateFlow<List<AppInfo>> = repository.apps
     val backdrop = wallpaperSource.backdrop
+
+    /**
+     * What Zenith Plus is worth to this user right now. Play is the authority on the purchase,
+     * but the saved copy is what keeps Plus working on a plane or a dead network.
+     */
+    val plus: StateFlow<PlusStatus> = combine(
+        store.settings,
+        billing.purchased,
+        billing.subscribed,
+        billing.available,
+        billing.trialOffer,
+        billing.monthlyPrice,
+        billing.lifetimePrice,
+    ) { values ->
+        val settings = values[0] as ZenithSettings
+        val purchased = values[1] as Boolean
+        val subscribed = values[2] as Boolean
+        val available = values[3] as Boolean
+        val trialOffer = values[4] as Boolean
+        val monthly = values[5] as String
+        val lifetimeCost = values[6] as String
+        PlusStatus(
+            purchased = purchased || settings.plusPurchased,
+            lifetime = settings.plusPurchased,
+            subscribed = subscribed,
+            trialDaysLeft = trialDaysLeft(settings.plusTrialStart),
+            trialAvailable = settings.plusTrialStart == 0L,
+            monthlyPrice = monthly,
+            lifetimePrice = lifetimeCost,
+            purchasable = available,
+            playTrialOffer = trialOffer,
+        )
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, PlusStatus())
 
     private val _homePressed = MutableStateFlow(0)
 
@@ -73,6 +118,178 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
             repository.apps.collect { icons.invalidate() }
         }
         repository.observePackages { viewModelScope.launch { repository.refresh() } }
+        // A purchase is written down the first time Play mentions it, and never unwritten.
+        viewModelScope.launch {
+            billing.permanent.collect { bought ->
+                if (bought && !settings.value.plusPurchased) store.update { it.copy(plusPurchased = true) }
+            }
+        }
+        billing.refresh()
+    }
+
+    // ---------------------------------------------------------------- Aura
+
+    private val _checkIn = MutableStateFlow<CheckIn?>(null)
+
+    /** The last thing the daily check-in had to say, for the slide-down to show. */
+    val checkIn: StateFlow<CheckIn?> = _checkIn.asStateFlow()
+
+    /**
+     * Counts today, once.
+     *
+     * Called every time the launcher comes back to the foreground, which is many times a day, so
+     * everything past the first call is a no-op. A missed day resets the streak and pays nothing:
+     * today is spent, and tomorrow starts again at day one.
+     */
+    fun checkInForToday() {
+        val current = settings.value
+        if (!current.onboarded) return
+        val today = Aura.today()
+        val last = current.lastCheckIn
+
+        if (last == today) return
+
+        if (last == today - 1 || last == 0L) {
+            val streak = current.streak + 1
+            val award = Aura.dailyReward(streak)
+            store.update {
+                it.copy(
+                    streak = streak,
+                    lastCheckIn = today,
+                    aura = it.aura + award,
+                    referralCode = it.referralCode.ifEmpty { Aura.newReferralCode() },
+                )
+            }
+            _checkIn.value = CheckIn.Continued(streak = streak, awarded = award)
+        } else {
+            val lost = current.streak
+            store.update {
+                it.copy(
+                    streak = 0,
+                    lastCheckIn = today,
+                    referralCode = it.referralCode.ifEmpty { Aura.newReferralCode() },
+                )
+            }
+            _checkIn.value = CheckIn.Broken(previousStreak = lost)
+        }
+    }
+
+    /** The slide-down has been seen; do not show it again this session. */
+    fun clearCheckIn() {
+        _checkIn.value = null
+    }
+
+    /** Makes sure this install has a code to share, without waiting for a check-in. */
+    fun ensureReferralCode() {
+        if (settings.value.referralCode.isEmpty()) {
+            store.update { it.copy(referralCode = Aura.newReferralCode()) }
+        }
+    }
+
+    /** Buys a theme with points. False when it costs more than you have, or is already yours. */
+    fun unlockTheme(id: String): Boolean {
+        val theme = AuraThemes.byId(id) ?: return false
+        val current = settings.value
+        if (id in current.unlockedThemes) return false
+        if (current.aura < theme.price) return false
+        store.update {
+            it.copy(aura = it.aura - theme.price, unlockedThemes = it.unlockedThemes + id)
+        }
+        return true
+    }
+
+    /**
+     * Takes someone else's referral code, once ever.
+     *
+     * Only the person typing it can be paid: with no server there is nobody to tell that a code
+     * was used, so the friend who handed it out gets nothing. The wording in the app says so.
+     */
+    fun redeemReferral(code: String): String? {
+        val cleaned = Aura.cleanCode(code)
+        val current = settings.value
+        return when {
+            current.referredBy.isNotEmpty() -> "You have already used a code."
+            !Aura.isWellFormedCode(cleaned) -> "That is not a Zenith code."
+            cleaned == current.referralCode -> "That is your own code."
+            else -> {
+                store.update {
+                    it.copy(referredBy = cleaned, aura = it.aura + Aura.REFERRAL_REWARD)
+                }
+                null
+            }
+        }
+    }
+
+    // ---------------------------------------------------------------- Zenith Plus
+
+    /**
+     * Takes the free week. Offered at the end of setup and from the Plus sheet, never taken on
+     * someone's behalf: a trial that starts by itself is one you never knew you had.
+     */
+    fun startTrial() {
+        if (settings.value.plusTrialStart == 0L) {
+            store.update { it.copy(plusTrialStart = System.currentTimeMillis()) }
+        }
+    }
+
+    /**
+     * Unlocks Plus with a code. It writes the same flag a purchase does, so a redeemed unlock and
+     * a bought one behave identically for ever after — including offline and after a restore.
+     */
+    fun redeemCode(code: String): Boolean {
+        if (!Plus.isValidCode(code)) return false
+        store.update { it.copy(plusPurchased = true) }
+        return true
+    }
+
+    fun refreshPurchases() = billing.refresh()
+
+    /** The pass: one payment, kept for ever. */
+    fun buyLifetime(activity: android.app.Activity): Boolean = billing.buyLifetime(activity)
+
+    /** The monthly subscription. */
+    fun subscribe(activity: android.app.Activity): Boolean = billing.subscribe(activity)
+
+    /**
+     * Begins the trial the best way this phone can. When Play has the free-trial subscription it
+     * shows its own sheet - the "7 days free, then five pounds" one - and the week is Google's to
+     * count. Until that product exists, the week is counted here instead, which is what happens
+     * today. Returns true if Play took over.
+     */
+    fun startTrialViaPlayOrLocally(activity: android.app.Activity?): Boolean {
+        if (activity != null && billing.startPlayTrial(activity)) return true
+        startTrial()
+        return false
+    }
+
+    /** Hides an app from the drawer, or brings it back. */
+    fun toggleHidden(key: String) = store.update { current ->
+        val hidden = current.hiddenApps
+        current.copy(hiddenApps = if (key in hidden) hidden - key else hidden + key)
+    }
+
+    fun setHiddenPin(pin: String) = store.update { it.copy(hiddenPin = pin.filter { c -> c.isDigit() }.take(6)) }
+
+    fun backupText(): String = Backup.encode(settings.value, layout.value)
+
+    /**
+     * Puts a backup back. The trial and the purchase are deliberately taken from the phone you
+     * are restoring onto, never from the file, so a backup can neither hand out Plus nor take it
+     * away from someone who paid.
+     */
+    fun restoreBackup(text: String): Boolean {
+        val (restored, items) = Backup.decode(text) ?: return false
+        val current = settings.value
+        store.restore(
+            settings = restored.copy(
+                plusTrialStart = current.plusTrialStart,
+                plusPurchased = current.plusPurchased,
+                onboarded = true,
+            ),
+            items = items,
+        )
+        viewModelScope.launch { icons.configure(restored.iconPack, restored.iconShape) }
+        return true
     }
 
     override fun onCleared() {
@@ -152,7 +369,12 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
     // ---------------------------------------------------------------- launching
 
     fun open(key: String) {
-        if (!repository.launch(key)) refreshApps()
+        if (!repository.launch(key)) {
+            refreshApps()
+            return
+        }
+        // Remembered for the library's Suggestions. Kept short: only the latest dozen matter.
+        store.update { it.copy(recentLaunches = (listOf(key) + (it.recentLaunches - key)).take(12)) }
     }
 
     fun openAppInfo(key: String) = repository.openAppInfo(key)
@@ -160,6 +382,12 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
     fun uninstall(key: String) = repository.uninstall(key)
 
     // ---------------------------------------------------------------- home editing
+
+    /** Plus free placement: into a cell, but kept exactly where it was let go within it. */
+    fun placeItemFreely(id: String, page: Int, col: Int, row: Int, dx: Float, dy: Float) =
+        store.mutateLayout { items ->
+            items.map { if (it.id == id) it.moved(page, col, row).nudged(dx, dy) else it }
+        }
 
     fun moveItem(id: String, page: Int, col: Int, row: Int) = store.mutateLayout { items ->
         items.map { if (it.id == id) it.moved(page, col, row) else it }
@@ -175,25 +403,27 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun addAppToFirstFreeSlot(key: String): Boolean {
+    /** Puts an app in the first opening anywhere, and says which page that turned out to be. */
+    fun addAppToFirstFreeSlot(key: String): Int? {
         val parts = key.split('/', limit = 2)
-        if (parts.size != 2) return false
-        val slot = firstFreeSlot(1, ROW_UNITS, LayoutBuilder.ICON_ROW_STEP) ?: return false
+        if (parts.size != 2) return null
+        val slot = firstFreeSlot(1, ROW_UNITS, LayoutBuilder.ICON_ROW_STEP) ?: return null
         store.mutateLayout { items ->
             items + AppCell(LayoutBuilder.newId(), slot.first, slot.second, slot.third, parts[0], parts[1])
         }
-        return true
+        return slot.first
     }
 
-    fun addWidget(type: String): Boolean {
-        val spec = Widgets.byType(type) ?: return false
+    /** Adds a widget, returning the page it landed on, or null when nothing would fit. */
+    fun addWidget(type: String): Int? {
+        val spec = Widgets.byType(type) ?: return null
         val s = settings.value
         val (spanX, spanY) = Widgets.defaultSpan(spec, s.columns, s.rows)
-        val slot = firstFreeSlot(spanX, spanY) ?: return false
+        val slot = firstFreeSlot(spanX, spanY) ?: return null
         store.mutateLayout { items ->
             items + WidgetCell(LayoutBuilder.newId(), slot.first, slot.second, slot.third, spec.type, spanX, spanY)
         }
-        return true
+        return slot.first
     }
 
     /** Resizes a widget in whole grid cells, refusing sizes that would overlap or overflow. */
@@ -201,13 +431,60 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
         val widget = layout.value.firstOrNull { it.id == id } as? WidgetCell ?: return false
         val spec = Widgets.byType(widget.type) ?: return false
         val s = settings.value
-        val (targetX, targetY) = Widgets.clampSpan(spec, spanX, spanY, s.columns, s.rows)
+        // Free placement drops each widget's designed range: anything from one unit up to the
+        // whole page. Staying clear of other items still applies.
+        val (targetX, targetY) = if (s.freeform && plus.value.active) {
+            spanX.coerceIn(1, s.columns) to spanY.coerceIn(1, s.rows * ROW_UNITS)
+        } else {
+            Widgets.clampSpan(spec, spanX, spanY, s.columns, s.rows)
+        }
         if (targetX == widget.spanX && targetY == widget.spanY) return false
         if (!isSlotFree(widget.page, widget.col, widget.row, targetX, targetY, id)) return false
         store.mutateLayout { items ->
             items.map { if (it.id == id) widget.copy(spanX = targetX, spanY = targetY) else it }
         }
         return true
+    }
+
+    // ---------------------------------------------------------------- pages
+
+    /** How many pages the pager should show: the ones in use, or more if you asked for them. */
+    fun pageCount(): Int {
+        val used = (layout.value.maxOfOrNull { it.page } ?: 0) + 1
+        return maxOf(used, settings.value.pages).coerceIn(1, LayoutBuilder.MAX_PAGES)
+    }
+
+    /**
+     * Adds an empty page at the end and returns its index, or null when there is no room — which
+     * includes the case where the last page is already empty, so nobody ends up with a run of
+     * blank pages by leaning on the edge of the screen.
+     */
+    fun addPage(): Int? {
+        val next = pageCount()
+        if (next >= LayoutBuilder.MAX_PAGES) return null
+        if (next > 1 && layout.value.none { it.page == next - 1 }) return null
+        store.update { it.copy(pages = next + 1) }
+        return next
+    }
+
+    /** The first opening on one particular page, for an item that has been carried onto it. */
+    fun freeSlotOnPage(page: Int, spanX: Int, spanY: Int, rowStep: Int, ignoreId: String?): Pair<Int, Int>? {
+        val s = settings.value
+        val grid = PageGrid(s.columns, s.rows * ROW_UNITS)
+        layout.value.filter { it.page == page && it.id != ignoreId }
+            .forEach { grid.occupy(it.col, it.row, it.spanX, it.spanY) }
+        return grid.findSlot(spanX, spanY, rowStep)
+    }
+
+    /**
+     * Forgets trailing pages nobody put anything on, so an empty page you swiped away from does
+     * not linger for ever. [keep] is the page you are looking at, which is never taken away
+     * underneath you.
+     */
+    fun trimPages(keep: Int) {
+        val used = (layout.value.maxOfOrNull { it.page } ?: 0) + 1
+        val target = maxOf(1, used, keep + 1)
+        if (target < settings.value.pages) store.update { it.copy(pages = target) }
     }
 
     /** Returns page/col/row of the first opening big enough for the given span, in row units. */
@@ -348,4 +625,59 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun setDock(keys: List<String>) = store.update { it.copy(dock = keys.take(5)) }
+
+    /**
+     * Takes an app off the home screen and slots it into the dock at [index]. False when the dock
+     * is already full, in which case the app stays exactly where it was.
+     */
+    fun moveToDock(itemId: String, index: Int): Boolean {
+        val cell = layout.value.firstOrNull { it.id == itemId } as? AppCell ?: return false
+        val dock = settings.value.dock
+        if (cell.key !in dock) {
+            if (dock.size >= 5) return false
+            store.update { current ->
+                current.copy(dock = current.dock.toMutableList().apply { add(index.coerceIn(0, size), cell.key) })
+            }
+        }
+        removeItem(itemId)
+        return true
+    }
+
+    /** Moves a dock icon from one position to another. */
+    fun moveInDock(from: Int, to: Int) = store.update { current ->
+        if (from !in current.dock.indices) return@update current
+        val dock = current.dock.toMutableList()
+        val key = dock.removeAt(from)
+        dock.add(to.coerceIn(0, dock.size), key)
+        current.copy(dock = dock)
+    }
+
+    /**
+     * Lifts an app out of the dock onto [page], as close to the cell under the finger as there is
+     * room for. Returns the page it ended up on, which may be another one if this page is full.
+     */
+    fun moveDockToHome(key: String, page: Int, col: Int, row: Int, colWidthInRowUnits: Float): Int? {
+        if (key.split('/', limit = 2).size != 2) return null
+        val s = settings.value
+        val step = LayoutBuilder.ICON_ROW_STEP
+        // Icons live on whole rows, so the finger's row is rounded to the nearest one.
+        val snappedRow = ((row + step / 2) / step * step).coerceIn(0, (s.rows * ROW_UNITS - ROW_UNITS).coerceAtLeast(0))
+        val slot = nearestFreeSlot(
+            page = page,
+            col = col.coerceIn(0, s.columns - 1),
+            row = snappedRow,
+            spanX = 1,
+            spanY = ROW_UNITS,
+            ignoreId = null,
+            rowStep = step,
+            colWidthInRowUnits = colWidthInRowUnits,
+        ) ?: freeSlotOnPage(page, 1, ROW_UNITS, step, null)
+
+        store.update { it.copy(dock = it.dock - key) }
+        if (slot != null) {
+            addAppAt(key, page, slot.first, slot.second)
+            return page
+        }
+        return addAppToFirstFreeSlot(key)
+    }
 }

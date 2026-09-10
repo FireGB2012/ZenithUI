@@ -24,6 +24,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.IntSize
@@ -32,6 +33,8 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.gabriel.zenithui.data.GridDensity
+import com.gabriel.zenithui.data.RefreshRate
+import com.gabriel.zenithui.data.findActivity
 import com.gabriel.zenithui.ui.common.LocalIconLoader
 import com.gabriel.zenithui.ui.home.HomeScreen
 import com.gabriel.zenithui.ui.onboarding.OnboardingFlow
@@ -131,6 +134,14 @@ fun ZenithApp(viewModel: ZenithViewModel) {
             widthDp = screenSize.width / pixelsPerDp,
             heightDp = screenSize.height / pixelsPerDp,
         )
+    }
+
+    // Everybody draws at the full speed of the screen. This is not something Plus unlocks: a
+    // launcher that stutters reads as broken, and the free tier is the advert.
+    val activity = LocalContext.current.findActivity()
+    LaunchedEffect(activity) {
+        val host = activity ?: return@LaunchedEffect
+        RefreshRate.applyFullSpeed(host)
     }
 
     val view = LocalView.current

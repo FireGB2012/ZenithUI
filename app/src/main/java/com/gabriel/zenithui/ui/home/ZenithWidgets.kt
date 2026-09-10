@@ -53,6 +53,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.text.PlatformTextStyle
+import androidx.compose.ui.text.style.LineHeightStyle
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
@@ -96,7 +100,34 @@ fun ZenithWidget(
         return
     }
 
-    Box(modifier.glass(ZenithShapes.card, strength = 1f)) {
+    val palette = LocalPalette.current
+    Box(
+        modifier
+            .glass(ZenithShapes.card, strength = 1f)
+            .clip(ZenithShapes.card)
+            // Two soft pools of the theme's colours under the content, so every widget carries a
+            // little of the palette instead of being plain grey glass.
+            .drawBehind {
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        listOf(palette.accent.copy(alpha = 0.26f), Color.Transparent),
+                        center = Offset(size.width * 0.12f, size.height * 0.05f),
+                        radius = size.maxDimension * 0.75f,
+                    ),
+                    radius = size.maxDimension * 0.75f,
+                    center = Offset(size.width * 0.12f, size.height * 0.05f),
+                )
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        listOf(palette.accentAlt.copy(alpha = 0.16f), Color.Transparent),
+                        center = Offset(size.width * 0.95f, size.height),
+                        radius = size.maxDimension * 0.6f,
+                    ),
+                    radius = size.maxDimension * 0.6f,
+                    center = Offset(size.width * 0.95f, size.height),
+                )
+            }
+    ) {
         when (type) {
             "clock" -> ClockWidget(userName)
             "battery" -> BatteryWidget()
@@ -143,6 +174,14 @@ private fun ClockWidget(userName: String) {
                 .padding(horizontal = if (compact) 14.dp else 20.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.Center,
         ) {
+            Text(
+                text = now.dayOfWeek.getDisplayName(java.time.format.TextStyle.FULL, java.util.Locale.getDefault()).uppercase(),
+                color = palette.accent,
+                fontSize = if (compact) 10.sp else 11.sp,
+                fontWeight = FontWeight.SemiBold,
+                letterSpacing = 1.6.sp,
+                maxLines = 1,
+            )
             AnimatedContent(
                 targetState = time,
                 transitionSpec = {
@@ -151,12 +190,15 @@ private fun ClockWidget(userName: String) {
                 },
                 label = "clock",
             ) { value ->
+                // The time fades from the text colour into the accent, like light through glass.
                 Text(
                     text = value,
-                    color = palette.onGlass,
-                    fontSize = if (compact) 36.sp else 52.sp,
-                    fontWeight = FontWeight.Light,
-                    letterSpacing = (-1.5).sp,
+                    style = TextStyle(
+                        brush = Brush.linearGradient(listOf(palette.onGlass, palette.accent, palette.accentAlt)),
+                        fontSize = if (compact) 40.sp else 58.sp,
+                        fontWeight = FontWeight.Light,
+                        letterSpacing = (-1.5).sp,
+                    ),
                     maxLines = 1,
                 )
             }
@@ -249,53 +291,134 @@ private fun CalendarWidget() {
     val leading = remember(firstOfMonth) { (firstOfMonth.dayOfWeek.value - 1).coerceAtLeast(0) }
     val daysInMonth = remember(today) { today.lengthOfMonth() }
 
-    Column(
-        Modifier
-            .fillMaxSize()
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-    ) {
-        Text(
-            text = today.format(DateTimeFormatter.ofPattern("MMMM")).uppercase(),
-            color = palette.accent,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.SemiBold,
-            letterSpacing = 1.2.sp,
-        )
-        Spacer(Modifier.height(4.dp))
-        val cells = leading + daysInMonth
-        val weeks = (cells + 6) / 7
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.SpaceEvenly) {
-            repeat(weeks) { week ->
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    repeat(7) { dow ->
-                        val dayNumber = week * 7 + dow - leading + 1
-                        val isToday = dayNumber == today.dayOfMonth
-                        Box(
-                            Modifier
-                                .size(16.dp)
-                                .clip(RoundedCornerShape(percent = 50))
-                                .background(if (isToday) palette.accent else Color.Transparent),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            if (dayNumber in 1..daysInMonth) {
-                                Text(
-                                    text = dayNumber.toString(),
-                                    color = if (isToday) Color(0xFF0A0B12) else palette.onGlass.copy(alpha = 0.72f),
-                                    fontSize = 9.sp,
-                                    fontWeight = if (isToday) FontWeight.Bold else FontWeight.Normal,
-                                )
+    val remaining = ChronoUnit.DAYS.between(today, today.withDayOfMonth(daysInMonth))
+    val cells = leading + daysInMonth
+    val weeks = (cells + 6) / 7
+
+    // Numbers are drawn with no font padding and their line trimmed to the glyphs, so a digit
+    // sits in the exact middle of its cell — and of the dot behind today.
+    val dayStyle = TextStyle(
+        fontSize = 9.5.sp,
+        lineHeight = 10.sp,
+        textAlign = TextAlign.Center,
+        platformStyle = PlatformTextStyle(includeFontPadding = false),
+        lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.Both),
+    )
+
+    @Composable
+    fun monthGrid(modifier: Modifier) {
+        Column(modifier) {
+            Row(Modifier.fillMaxWidth()) {
+                listOf("M", "T", "W", "T", "F", "S", "S").forEach { letter ->
+                    Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                        Text(letter, style = dayStyle.copy(color = palette.onGlassMuted, fontWeight = FontWeight.SemiBold))
+                    }
+                }
+            }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.SpaceEvenly) {
+                repeat(weeks) { week ->
+                    Row(Modifier.fillMaxWidth()) {
+                        repeat(7) { dow ->
+                            val dayNumber = week * 7 + dow - leading + 1
+                            val isToday = dayNumber == today.dayOfMonth
+                            // Every cell takes an equal seventh, and the dot is centred in it.
+                            Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                                if (dayNumber in 1..daysInMonth) {
+                                    Box(
+                                        Modifier
+                                            .size(18.dp)
+                                            .clip(RoundedCornerShape(percent = 50))
+                                            .then(
+                                                if (isToday) {
+                                                    Modifier.background(
+                                                        Brush.linearGradient(listOf(palette.accent, palette.accentAlt))
+                                                    )
+                                                } else {
+                                                    Modifier
+                                                }
+                                            ),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Text(
+                                            text = dayNumber.toString(),
+                                            style = dayStyle.copy(
+                                                color = when {
+                                                    isToday -> Color(0xFF0A0B12)
+                                                    dow >= 5 -> palette.onGlass.copy(alpha = 0.5f)
+                                                    else -> palette.onGlass.copy(alpha = 0.8f)
+                                                },
+                                                fontWeight = if (isToday) FontWeight.Bold else FontWeight.Normal,
+                                            ),
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
                 }
             }
         }
-        val remaining = ChronoUnit.DAYS.between(today, today.withDayOfMonth(daysInMonth))
-        Text(
-            text = if (remaining <= 0) "Last day of the month" else "$remaining days left this month",
-            color = palette.onGlassMuted,
-            fontSize = 9.5.sp,
-        )
+    }
+
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val wide = maxWidth > 250.dp
+        if (wide) {
+            // Room for both: today in large type on the left, the month on the right.
+            Row(
+                Modifier
+                    .fillMaxSize()
+                    .padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(0.8f)) {
+                    Text(
+                        text = today.format(DateTimeFormatter.ofPattern("EEEE")).uppercase(),
+                        color = palette.accent,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        letterSpacing = 1.4.sp,
+                        maxLines = 1,
+                    )
+                    Text(
+                        text = today.dayOfMonth.toString(),
+                        style = TextStyle(
+                            brush = Brush.linearGradient(listOf(palette.onGlass, palette.accent)),
+                            fontSize = 52.sp,
+                            fontWeight = FontWeight.Light,
+                        ),
+                    )
+                    Text(
+                        text = today.format(DateTimeFormatter.ofPattern("MMMM")),
+                        color = palette.onGlass.copy(alpha = 0.85f),
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                    )
+                    Text(
+                        text = if (remaining <= 0) "Last day" else "$remaining days left",
+                        color = palette.onGlassMuted,
+                        fontSize = 11.sp,
+                    )
+                }
+                Spacer(Modifier.size(10.dp))
+                monthGrid(Modifier.weight(1.2f).fillMaxHeight())
+            }
+        } else {
+            Column(
+                Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 10.dp, vertical = 10.dp),
+            ) {
+                Text(
+                    text = today.format(DateTimeFormatter.ofPattern("MMMM")).uppercase(),
+                    color = palette.accent,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    letterSpacing = 1.2.sp,
+                    modifier = Modifier.padding(start = 4.dp, bottom = 4.dp),
+                )
+                monthGrid(Modifier.weight(1f).fillMaxWidth())
+            }
+        }
     }
 }
 

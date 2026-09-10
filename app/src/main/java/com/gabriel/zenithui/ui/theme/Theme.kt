@@ -48,7 +48,7 @@ fun ZenithTheme(
     screenSize: IntSize = IntSize.Zero,
     content: @Composable () -> Unit,
 ) {
-    val base = Palettes.byId(settings.paletteId)
+    val base = Palettes.resolve(settings)
     val systemDark = isSystemInDarkTheme()
     val dark = when (settings.appearance) {
         "light" -> false
@@ -98,7 +98,11 @@ fun ZenithTheme(
         )
     }
 
+    // One sensor for the whole launcher, read by every glass surface.
+    val tilt = rememberTilt(settings.glassShine)
+
     CompositionLocalProvider(
+        LocalTilt provides tilt,
         LocalPalette provides palette,
         LocalBackdrop provides backdrop,
         LocalScreenSize provides screenSize,

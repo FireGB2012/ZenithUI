@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -33,6 +34,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
@@ -58,6 +60,8 @@ fun OnboardingFlow(
     screenSize: IntSize,
     onFinished: () -> Unit,
 ) {
+    val context = LocalContext.current
+    val plus by viewModel.plus.collectAsState()
     var step by rememberSaveable { mutableStateOf(0) }
     var name by rememberSaveable { mutableStateOf("") }
     var paletteId by rememberSaveable { mutableStateOf("midnight") }
@@ -156,6 +160,18 @@ fun OnboardingFlow(
                                 columns = columns,
                                 rows = rows,
                                 onDone = { step = 4 },
+                            )
+
+                            4 -> PlusStep(
+                                name = name,
+                                status = plus,
+                                onStartTrial = {
+                                    // Play shows its own sheet once the trial subscription
+                                    // exists; until then the week is counted on the device.
+                                    viewModel.startTrialViaPlayOrLocally(context as? android.app.Activity)
+                                    step = 5
+                                },
+                                onSkip = { step = 5 },
                             )
 
                             else -> HelpStep(

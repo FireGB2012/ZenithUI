@@ -26,12 +26,54 @@ data class ZenithSettings(
     /** squircle | circle | rounded | square */
     val iconShape: String = "squircle",
     val iconPack: String = "",
+    /** The specular highlight that follows how you are holding the phone. */
+    val glassShine: Boolean = true,
+    /** What swiping up shows: drawer (every app, A to Z) | library (apps grouped by kind). */
+    val appsView: String = "drawer",
+    /** Apps you opened from Zenith, most recent first. Feeds Suggestions; never leaves the phone. */
+    val recentLaunches: List<String> = emptyList(),
+    /**
+     * Plus: put things anywhere. Icons on any quarter row rather than every half, and widgets at
+     * any size the grid can hold instead of their designed range. Nothing may overlap either way.
+     */
+    val freeform: Boolean = false,
     val dock: List<String> = emptyList(),
+    /** How many home pages you have asked for. Empty trailing ones are forgotten again. */
+    val pages: Int = 1,
     val note: String = "",
     /** How many times we have shown the system "default home app" prompt. */
     val homePrompts: Int = 0,
     /** 0 = rows only, 1 = rows divided into units. */
     val layoutVersion: Int = 0,
+
+    // ------------------------------------------------------------------ Zenith Plus
+    /** When the free trial began, in epoch millis. 0 means it has not started yet. */
+    val plusTrialStart: Long = 0L,
+    /** Play is the authority; this is the copy that keeps Plus working offline. */
+    val plusPurchased: Boolean = false,
+    /** Apps kept out of the drawer, as package/class keys. */
+    val hiddenApps: List<String> = emptyList(),
+    /** Digits asked for before the hidden list can be seen. Empty means no PIN. */
+    val hiddenPin: String = "",
+    // ------------------------------------------------------------------ Aura
+    /** Points in hand. */
+    val aura: Int = 0,
+    /** Days in a row, counting today once it has been checked in. */
+    val streak: Int = 0,
+    /** The day the streak was last counted, as an epoch day. 0 means never. */
+    val lastCheckIn: Long = 0L,
+    /** Themes bought with aura. */
+    val unlockedThemes: List<String> = emptyList(),
+    /** This install's own code, made once and kept. */
+    val referralCode: String = "",
+    /** Somebody else's code, once. */
+    val referredBy: String = "",
+
+    /** The palette you built yourself, used when [paletteId] is "custom". ARGB. */
+    val customAccent: Long = 0xFF7C6CFF,
+    val customAccentAlt: Long = 0xFF3ED2FF,
+    val customBackdrop: Long = 0xFF0A0B18,
+    val customDark: Boolean = true,
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("onboarded", onboarded)
@@ -46,7 +88,26 @@ data class ZenithSettings(
         put("showLabels", showLabels)
         put("iconShape", iconShape)
         put("iconPack", iconPack)
+        put("glassShine", glassShine)
+        put("appsView", appsView)
+        put("recentLaunches", JSONArray(recentLaunches))
+        put("freeform", freeform)
         put("dock", JSONArray(dock))
+        put("plusTrialStart", plusTrialStart)
+        put("plusPurchased", plusPurchased)
+        put("hiddenApps", JSONArray(hiddenApps))
+        put("hiddenPin", hiddenPin)
+        put("customAccent", customAccent)
+        put("customAccentAlt", customAccentAlt)
+        put("customBackdrop", customBackdrop)
+        put("customDark", customDark)
+        put("aura", aura)
+        put("streak", streak)
+        put("lastCheckIn", lastCheckIn)
+        put("unlockedThemes", JSONArray(unlockedThemes))
+        put("referralCode", referralCode)
+        put("referredBy", referredBy)
+        put("pages", pages)
         put("note", note)
         put("homePrompts", homePrompts)
         put("layoutVersion", layoutVersion)
@@ -71,7 +132,26 @@ data class ZenithSettings(
                 showLabels = o.optBoolean("showLabels", d.showLabels),
                 iconShape = o.optString("iconShape", d.iconShape),
                 iconPack = o.optString("iconPack", d.iconPack),
+                glassShine = o.optBoolean("glassShine", d.glassShine),
+                appsView = o.optString("appsView", d.appsView),
+                recentLaunches = o.optJSONArray("recentLaunches").toStringList(),
+                freeform = o.optBoolean("freeform", d.freeform),
                 dock = o.optJSONArray("dock").toStringList(),
+                plusTrialStart = o.optLong("plusTrialStart", d.plusTrialStart),
+                plusPurchased = o.optBoolean("plusPurchased", d.plusPurchased),
+                hiddenApps = o.optJSONArray("hiddenApps").toStringList(),
+                hiddenPin = o.optString("hiddenPin", d.hiddenPin),
+                customAccent = o.optLong("customAccent", d.customAccent),
+                customAccentAlt = o.optLong("customAccentAlt", d.customAccentAlt),
+                customBackdrop = o.optLong("customBackdrop", d.customBackdrop),
+                customDark = o.optBoolean("customDark", d.customDark),
+                aura = o.optInt("aura", d.aura),
+                streak = o.optInt("streak", d.streak),
+                lastCheckIn = o.optLong("lastCheckIn", d.lastCheckIn),
+                unlockedThemes = o.optJSONArray("unlockedThemes").toStringList(),
+                referralCode = o.optString("referralCode", d.referralCode),
+                referredBy = o.optString("referredBy", d.referredBy),
+                pages = o.optInt("pages", d.pages),
                 note = o.optString("note", d.note),
                 homePrompts = o.optInt("homePrompts", d.homePrompts),
                 layoutVersion = o.optInt("layoutVersion", d.layoutVersion),
@@ -106,6 +186,18 @@ class SettingsStore(context: Context) {
 
     fun mutateLayout(transform: (List<HomeItem>) -> List<HomeItem>) = setLayout(transform(_layout.value))
 
+    /** Puts a whole backup back in one step, so nothing is half restored. */
+    fun restore(settings: ZenithSettings, items: List<HomeItem>) {
+        _settings.value = settings
+        _layout.value = items
+        val arr = JSONArray()
+        items.forEach { arr.put(it.toJson()) }
+        prefs.edit()
+            .putString(KEY_SETTINGS, settings.toJson().toString())
+            .putString(KEY_LAYOUT, arr.toString())
+            .apply()
+    }
+
     fun reset() {
         prefs.edit().clear().apply()
         _settings.value = ZenithSettings()
@@ -126,6 +218,8 @@ class SettingsStore(context: Context) {
                 // Sizes are only checked against the spec once they are in row units; a layout
                 // still awaiting that upgrade is left exactly as saved.
                 if (!upgraded || item !is WidgetCell) return@map item
+                // Sizes made in free placement are deliberate; do not pull them back into range.
+                if (_settings.value.freeform) return@map item
                 val spec = Widgets.byType(item.type) ?: return@map item
                 item.copy(
                     spanX = item.spanX.coerceIn(spec.minSpanX, spec.maxSpanX),

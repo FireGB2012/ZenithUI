@@ -2,7 +2,10 @@ package com.gabriel.zenithui.ui.home
 
 import android.content.Intent
 import android.provider.Settings
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
@@ -40,6 +43,7 @@ import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.PushPin
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.AddHome
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Home
@@ -55,6 +59,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
@@ -64,13 +69,20 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.gabriel.zenithui.ZenithViewModel
 import com.gabriel.zenithui.data.AppCell
+import com.gabriel.zenithui.data.Backup
 import com.gabriel.zenithui.data.FolderCell
 import com.gabriel.zenithui.data.HomeItem
 import com.gabriel.zenithui.data.LayoutBuilder
@@ -82,9 +94,20 @@ import com.gabriel.zenithui.ui.common.pressBounce
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.ZenithShapes
 import com.gabriel.zenithui.ui.theme.glass
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.roundToInt
+
+/**
+ * How close to the side of the screen a dragged item has to be to turn the page. Wide enough to
+ * hit with a thumb that is already holding something, since you cannot see your finger under it.
+ */
+private val PAGE_FLIP_EDGE = 60.dp
+
+/** How long it has to stay there, so carrying an item past an edge does not flip anything. */
+private const val PAGE_FLIP_DELAY = 240L
 
 private sealed interface HomeSheet {
     data class Item(val id: String) : HomeSheet
@@ -94,6 +117,10 @@ private sealed interface HomeSheet {
     data object WidgetPicker : HomeSheet
     data object Preferences : HomeSheet
     data object Help : HomeSheet
+    data object Plus : HomeSheet
+    data object Aura : HomeSheet
+    data object ThemeMaker : HomeSheet
+    data object HiddenApps : HomeSheet
 }
 
 @Composable
@@ -105,6 +132,71 @@ fun HomeScreen(viewModel: ZenithViewModel) {
     val layout by viewModel.layout.collectAsState()
     val apps by viewModel.apps.collectAsState()
     val appsByKey = remember(apps) { apps.associateBy { it.key } }
+    val plus by viewModel.plus.collectAsState()
+    val checkIn by viewModel.checkIn.collectAsState()
+
+    // Counted once a day, on the way back to the launcher — which is every time you unlock the
+    // phone, so the strip lands on the first look of the morning and never again that day.
+    LaunchedEffect(settings.onboarded, viewModel.homePressed.collectAsState().value) {
+        viewModel.checkInForToday()
+        viewModel.ensureReferralCode()
+    }
+
+    // Hiding an app is a Plus feature, so when Plus lapses the apps come back rather than staying
+    // locked away — nobody loses sight of an app because a trial ran out.
+    val drawerApps = remember(apps, settings.hiddenApps, plus.active) {
+        if (!plus.active || settings.hiddenApps.isEmpty()) apps
+        else apps.filterNot { it.key in settings.hiddenApps }
+    }
+
+    // Biggest groups first; the catch-alls go last so the top of the library has actual groups.
+    // A group of one is mostly empty glass, so lone apps are folded into Other instead.
+    val libraryGroups: List<LibraryGroup>? = remember(drawerApps, settings.appsView, settings.recentLaunches) {
+        if (settings.appsView != "library") return@remember null
+        val byKind = drawerApps.groupBy { viewModel.repository.libraryCategory(it.key) }
+        val loners = byKind.filterValues { it.size < 2 }.values.flatten()
+        val kinds = byKind.filterValues { it.size >= 2 }
+            .let { kept -> if (loners.isEmpty()) kept else kept + ("Other" to (kept["Other"].orEmpty() + loners).sortedBy { it.label.lowercase() }) }
+            .map { (name, members) -> LibraryGroup(name, members) }
+            .sortedWith(compareBy({ it.name == "Utilities" || it.name == "Other" }, { -it.apps.size }))
+
+        // The two iOS shelves on top. Both are extra: an app in them still has its own folder.
+        val byKey = drawerApps.associateBy { it.key }
+        val suggestions = settings.recentLaunches.mapNotNull { byKey[it] }.take(8)
+        // Apps that came with the phone were all "installed" the day it was made, so they are
+        // left out; otherwise this would just be the factory apps in a random order.
+        val recentlyAdded = drawerApps
+            .filterNot { it.system }
+            .map { it to viewModel.repository.installedAt(it.key) }
+            .filter { it.second > 0L }
+            .sortedByDescending { it.second }
+            .take(8)
+            .map { it.first }
+
+        buildList<LibraryGroup> {
+            if (suggestions.isNotEmpty()) add(LibraryGroup("Suggestions", suggestions))
+            if (recentlyAdded.isNotEmpty()) add(LibraryGroup("Recently Added", recentlyAdded))
+            addAll(kinds)
+        }
+    }
+
+    val saveBackup = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument(Backup.MIME)
+    ) { uri ->
+        if (uri != null) {
+            val ok = Backup.write(context, uri, viewModel.backupText())
+            Toast.makeText(context, if (ok) "Home screen backed up" else "Could not write that file", Toast.LENGTH_SHORT).show()
+        }
+    }
+    // Some file pickers report a .json backup as a generic binary, so the filter is deliberately
+    // wide: a backup you cannot find is worse than a picker that lists too much.
+    val openBackup = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            val text = Backup.read(context, uri)
+            val ok = text != null && viewModel.restoreBackup(text)
+            Toast.makeText(context, if (ok) "Home screen restored" else "That is not a Zenith backup", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     val drag = remember { HomeDragState() }
     val scope = rememberCoroutineScope()
@@ -122,14 +214,29 @@ fun HomeScreen(viewModel: ZenithViewModel) {
     var sheetVisible by remember { mutableStateOf(false) }
 
     var drawerHeightPx by remember { mutableFloatStateOf(0f) }
-    val pageCount = ((layout.maxOfOrNull { it.page } ?: 0) + 1).coerceAtLeast(1)
+    var drawerWidthPx by remember { mutableFloatStateOf(0f) }
+    // The App Library lives past the last page, like on iOS; the drawer lives below.
+    val libraryMode = settings.appsView == "library"
+    // A page exists either because something is on it or because you asked for it.
+    val pageCount = maxOf((layout.maxOfOrNull { it.page } ?: 0) + 1, settings.pages)
+        .coerceIn(1, LayoutBuilder.MAX_PAGES)
     val pagerState = rememberPagerState(pageCount = { pageCount })
+    var pagerBounds by remember { mutableStateOf(androidx.compose.ui.geometry.Rect.Zero) }
+    var dockBounds by remember { mutableStateOf(androidx.compose.ui.geometry.Rect.Zero) }
+    // Only a single app goes in the dock; a folder or widget carried over it is ignored.
+    val overDock = drag.item is AppCell && !dockBounds.isEmpty && dockBounds.contains(drag.pointer)
+    val edgeFlipPx = with(LocalDensity.current) { PAGE_FLIP_EDGE.toPx() }
     val drawerProgress = if (dragging) dragProgress else drawer.value
     val drawerOpen = drawerProgress > 0.5f
 
     fun showSheet(next: HomeSheet) {
         sheet = next
         sheetVisible = true
+    }
+
+    /** Runs a Plus feature, or explains itself first. */
+    fun withPlus(action: () -> Unit) {
+        if (plus.active) action() else showSheet(HomeSheet.Plus)
     }
 
     fun hideSheet() {
@@ -157,19 +264,21 @@ fun HomeScreen(viewModel: ZenithViewModel) {
 
     /** Drag in pixels; positive is downward, which closes the drawer. */
     fun dragDrawer(delta: Float) {
-        if (drawerHeightPx <= 0f) return
+        val span = if (libraryMode) drawerWidthPx else drawerHeightPx
+        if (span <= 0f) return
         if (!dragging) {
             dragProgress = drawer.value
             dragging = true
             drawerEverOpened = true
             scope.launch { drawer.stop() }
         }
-        dragProgress = (dragProgress - delta / drawerHeightPx).coerceIn(0f, 1f)
+        dragProgress = (dragProgress - delta / span).coerceIn(0f, 1f)
     }
 
     /** On release a fling decides, otherwise the halfway point does. */
     fun settleDrawer(velocity: Float) {
-        if (drawerHeightPx <= 0f) return
+        val span = if (libraryMode) drawerWidthPx else drawerHeightPx
+        if (span <= 0f) return
         val from = if (dragging) dragProgress else drawer.value
         val target = when {
             velocity > 900f -> 1f
@@ -183,11 +292,42 @@ fun HomeScreen(viewModel: ZenithViewModel) {
             drawer.animateTo(
                 targetValue = target,
                 animationSpec = Motion.smooth(),
-                initialVelocity = velocity / drawerHeightPx,
+                initialVelocity = velocity / span,
             )
             if (target == 0f) focusSearch = false
         }
     }
+
+    // In library mode the pager hands over whatever it cannot use: a swipe left from the last page
+    // has nowhere to go, so it pulls the library in, and it follows the finger both ways from there.
+    val libraryPull = remember(libraryMode) {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                if (!libraryMode || !dragging || available.x <= 0f) return Offset.Zero
+                dragDrawer(available.x)
+                return Offset(available.x, 0f)
+            }
+
+            override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+                if (!libraryMode || source != NestedScrollSource.UserInput || available.x >= 0f) return Offset.Zero
+                dragDrawer(available.x)
+                return Offset(available.x, 0f)
+            }
+
+            override suspend fun onPreFling(available: Velocity): Velocity {
+                if (!libraryMode || !dragging) return Velocity.Zero
+                settleDrawer(-available.x)
+                return available
+            }
+        }
+    }
+
+    /**
+     * How finely an icon may be placed: every half row normally, every quarter row with Plus free
+     * placement on. Read live, because the drag gesture keeps the callbacks it started with.
+     */
+    fun iconRowStep(): Int =
+        if (settings.freeform && plus.active) 1 else LayoutBuilder.ICON_ROW_STEP
 
     /**
      * Where an item dragged over [col], [row] would actually come to rest — the closest opening,
@@ -203,7 +343,7 @@ fun HomeScreen(viewModel: ZenithViewModel) {
             spanX = item.spanX,
             spanY = item.spanY,
             ignoreId = item.id,
-            rowStep = if (item is WidgetCell) 1 else LayoutBuilder.ICON_ROW_STEP,
+            rowStep = if (item is WidgetCell) 1 else iconRowStep(),
             colWidthInRowUnits = if (drag.cellHeight > 0f) drag.cellWidth / drag.cellHeight else 2f,
         )
 
@@ -211,23 +351,143 @@ fun HomeScreen(viewModel: ZenithViewModel) {
         val item = drag.item
         if (item != null) {
             val hover = drag.hoverItemId
+            // Worked out here from live state, not from [overDock]: the page's drag gesture holds
+            // on to the drop callback it started with, so a value captured then would be stale.
+            val droppedOnDock = item is AppCell && !dockBounds.isEmpty && dockBounds.contains(drag.pointer)
             when {
+                droppedOnDock -> {
+                    // Where along the bar it was let go decides its place among the others.
+                    val slots = settings.dock.size + 1
+                    val index = ((drag.pointer.x - dockBounds.left) / dockBounds.width * slots).toInt()
+                    if (!viewModel.moveToDock(item.id, index)) {
+                        Toast.makeText(context, "The dock is full — drag one out first", Toast.LENGTH_SHORT).show()
+                    }
+                }
                 drag.removeArmed -> viewModel.removeItem(item.id)
                 hover != null -> viewModel.combine(item.id, hover)
                 else -> {
-                    val cell = drag.cellUnderItem(
+                    val rowStep = if (item is WidgetCell) 1 else iconRowStep()
+                    // Mid-turn the page under your finger is halfway across the screen, so the
+                    // cell it reports is meaningless. Fall through to the first free slot instead.
+                    val settled = abs(pagerState.currentPageOffsetFraction) < 0.01f
+                    val cell = if (!settled) null else drag.cellUnderItem(
                         columns = settings.columns,
                         rows = settings.rows * ROW_UNITS,
-                        rowStep = if (item is WidgetCell) 1 else LayoutBuilder.ICON_ROW_STEP,
+                        rowStep = rowStep,
                     )
+                    // Letting go off the grid leaves an item where it was — unless it has been
+                    // carried to another page, where dropping it back on the old one would look
+                    // like the launcher had swallowed it.
                     val slot = cell?.let { dropSlotFor(item, it.first, it.second) }
+                        ?: if (!settled || item.page != pagerState.currentPage) {
+                            viewModel.freeSlotOnPage(
+                                page = pagerState.currentPage,
+                                spanX = item.spanX,
+                                spanY = item.spanY,
+                                rowStep = rowStep,
+                                ignoreId = item.id,
+                            )
+                        } else {
+                            null
+                        }
                     if (slot != null) {
-                        viewModel.moveItem(item.id, pagerState.currentPage, slot.first, slot.second)
+                        val free = settings.freeform && plus.active
+                        if (free && cell != null && slot == cell && drag.cellWidth > 0f && drag.cellHeight > 0f) {
+                            // Free placement keeps the exact spot you let go of, not just the cell
+                            // it rounds to. Only when it landed in that cell — if it had to move
+                            // aside for a neighbour, an offset from the finger would mean nothing.
+                            val topLeft = drag.pointer - drag.grab
+                            val exactCol = (topLeft.x - drag.gridOrigin.x) / drag.cellWidth
+                            val exactRow = (topLeft.y - drag.gridOrigin.y) / drag.cellHeight
+                            viewModel.placeItemFreely(
+                                id = item.id,
+                                page = pagerState.currentPage,
+                                col = slot.first,
+                                row = slot.second,
+                                dx = (exactCol - slot.first).coerceIn(-0.49f, 0.49f),
+                                dy = (exactRow - slot.second).coerceIn(-0.49f, 0.49f),
+                            )
+                        } else {
+                            viewModel.moveItem(item.id, pagerState.currentPage, slot.first, slot.second)
+                        }
                     }
                 }
             }
         }
         drag.clear()
+    }
+
+    /**
+     * Turns to the page something has just been put on, so you never have to go looking for it.
+     * A page added this moment is not in the pager yet, hence the wait.
+     */
+    fun revealPage(page: Int?) {
+        if (page == null) return
+        scope.launch {
+            snapshotFlow { pagerState.pageCount }.first { it > page }
+            pagerState.animateScrollToPage(page)
+        }
+    }
+
+    /**
+     * Which way a page turn is being asked for: carrying an item to the very edge of the screen
+     * flips to the page beside it, and pushing past the last page makes a new one. Without this
+     * an item could never leave the page it started on.
+     */
+    val flipDirection = when {
+        !drag.isDragging || pagerBounds.isEmpty -> 0
+        drag.pointer.x < pagerBounds.left + edgeFlipPx -> -1
+        drag.pointer.x > pagerBounds.right - edgeFlipPx -> 1
+        else -> 0
+    }
+    /**
+     * A column is wider than the edge strip, so an icon in the first or last column is already
+     * inside it the moment you pick it up — and holding still would turn the page under you, and
+     * then keep turning. The edge only counts once you have carried the item away from it, which
+     * is exactly what taking something to the side of the screen means.
+     */
+    var flipArmed by remember { mutableStateOf(false) }
+
+    // One coroutine for the whole time you hold at the edge, and the only place the arming is
+    // decided — a second effect would not re-run when this one's keys are unchanged, which is how
+    // the edge went dead after the first drag. It must also not be keyed on the current page: a
+    // page turn changes that halfway through its own animation, which would cancel the scroll and
+    // leave the pager parked between two pages.
+    LaunchedEffect(flipDirection, drag.isDragging) {
+        if (!drag.isDragging) {
+            // Every pick-up starts disarmed, so an icon in the outer column sits still.
+            flipArmed = false
+            return@LaunchedEffect
+        }
+        if (flipDirection == 0) {
+            flipArmed = true
+            return@LaunchedEffect
+        }
+        if (!flipArmed) return@LaunchedEffect
+        while (true) {
+            // Long enough that merely sweeping past the edge does not turn the page.
+            delay(PAGE_FLIP_DELAY)
+            val next = pagerState.currentPage + flipDirection
+            if (next < 0) break
+            if (next >= pagerState.pageCount) {
+                // Past the last page: make one, and wait for the pager to hear about it.
+                viewModel.addPage() ?: break
+                snapshotFlow { pagerState.pageCount }.first { it > next }
+            }
+            pagerState.animateScrollToPage(next)
+        }
+    }
+
+    // Letting go always leaves a whole page on screen, never two halves.
+    LaunchedEffect(drag.isDragging) {
+        if (!drag.isDragging && pagerState.currentPageOffsetFraction != 0f) {
+            pagerState.animateScrollToPage(pagerState.currentPage)
+        }
+    }
+
+    // A page you added but left empty is forgotten once you swipe away from it.
+    LaunchedEffect(pagerState.settledPage, drag.isDragging) {
+        if (!drag.isDragging) viewModel.trimPages(pagerState.settledPage)
     }
 
     var hintDismissed by rememberSaveable { mutableStateOf(false) }
@@ -266,7 +526,10 @@ fun HomeScreen(viewModel: ZenithViewModel) {
     Box(
         Modifier
             .fillMaxSize()
-            .onSizeChanged { drawerHeightPx = it.height.toFloat() }
+            .onSizeChanged {
+                drawerHeightPx = it.height.toFloat()
+                drawerWidthPx = it.width.toFloat()
+            }
     ) {
 
         // ------------------------------------------------------------ home
@@ -297,6 +560,8 @@ fun HomeScreen(viewModel: ZenithViewModel) {
                         .weight(1f)
                         .draggable(
                             orientation = Orientation.Vertical,
+                            // With the library on the side, swiping up is left alone.
+                            enabled = !libraryMode,
                             state = rememberDraggableState { delta -> dragDrawer(delta) },
                             onDragStopped = { velocity -> settleDrawer(-velocity) },
                         )
@@ -309,8 +574,22 @@ fun HomeScreen(viewModel: ZenithViewModel) {
                 ) {
                     HorizontalPager(
                         state = pagerState,
-                        modifier = Modifier.fillMaxSize(),
-                        beyondViewportPageCount = 1,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .nestedScroll(libraryPull)
+                            .onGloballyPositioned { coords ->
+                                val topLeft = coords.positionInRoot()
+                                pagerBounds = androidx.compose.ui.geometry.Rect(
+                                    offset = topLeft,
+                                    size = androidx.compose.ui.geometry.Size(
+                                        coords.size.width.toFloat(),
+                                        coords.size.height.toFloat(),
+                                    ),
+                                )
+                            },
+                        // While something is in the air every page stays composed, so the gesture
+                        // carrying it survives being scrolled off screen.
+                        beyondViewportPageCount = if (drag.isDragging) LayoutBuilder.MAX_PAGES else 1,
                     ) { page ->
                         val offset = (pagerState.currentPage - page) + pagerState.currentPageOffsetFraction
                         HomePage(
@@ -330,6 +609,8 @@ fun HomeScreen(viewModel: ZenithViewModel) {
                             onAmbient = { ambient = true },
                             onDrop = { handleDrop() },
                             resolveDrop = { item, col, row -> dropSlotFor(item, col, row) },
+                            iconRowStep = iconRowStep(),
+                            freePlacement = settings.freeform && plus.active,
                             modifier = Modifier
                                 .fillMaxSize()
                                 .graphicsLayer {
@@ -345,7 +626,7 @@ fun HomeScreen(viewModel: ZenithViewModel) {
 
                     if (layout.isEmpty()) {
                         Text(
-                            text = "Swipe up to open your apps",
+                            text = if (libraryMode) "Swipe left to open your apps" else "Swipe up to open your apps",
                             color = palette.onGlassMuted,
                             fontSize = 14.sp,
                             modifier = Modifier.align(Alignment.Center),
@@ -372,6 +653,8 @@ fun HomeScreen(viewModel: ZenithViewModel) {
                 PageDots(
                     count = pageCount,
                     current = pagerState.currentPage,
+                    canAdd = pageCount < LayoutBuilder.MAX_PAGES,
+                    onAddPage = { revealPage(viewModel.addPage()) },
                     modifier = Modifier
                         .align(Alignment.CenterHorizontally)
                         .padding(vertical = 10.dp),
@@ -381,8 +664,25 @@ fun HomeScreen(viewModel: ZenithViewModel) {
                     keys = settings.dock,
                     appsByKey = appsByKey,
                     settings = settings,
+                    highlight = overDock,
                     onOpen = { viewModel.open(it) },
                     onLongPress = { showSheet(HomeSheet.DrawerApp(it)) },
+                    onReorder = { from, to -> viewModel.moveInDock(from, to) },
+                    onDragOut = { key, point ->
+                        // The finger's cell on the page in view, in the same units the grid uses.
+                        val col = if (drag.cellWidth > 0f) ((point.x - drag.gridOrigin.x) / drag.cellWidth).toInt() else 0
+                        val row = if (drag.cellHeight > 0f) ((point.y - drag.gridOrigin.y) / drag.cellHeight).toInt() else 0
+                        revealPage(
+                            viewModel.moveDockToHome(
+                                key = key,
+                                page = pagerState.currentPage,
+                                col = col,
+                                row = row,
+                                colWidthInRowUnits = if (drag.cellHeight > 0f) drag.cellWidth / drag.cellHeight else 2f,
+                            )
+                        )
+                    },
+                    onBounds = { dockBounds = it },
                     modifier = Modifier
                         .padding(horizontal = 14.dp)
                         .navigationBarsPadding()
@@ -394,7 +694,9 @@ fun HomeScreen(viewModel: ZenithViewModel) {
         // ------------------------------------------------------------ drawer
         if (drawerProgress > 0.002f || drawerEverOpened) {
             AppDrawer(
-                apps = apps,
+                apps = drawerApps,
+                groups = libraryGroups,
+                horizontal = libraryMode,
                 settings = settings,
                 focusSearch = focusSearch,
                 progress = drawerProgress,
@@ -475,6 +777,12 @@ fun HomeScreen(viewModel: ZenithViewModel) {
             DragGhost(drag = drag, settings = settings, appsByKey = appsByKey)
         }
 
+        StreakStrip(
+            state = checkIn,
+            onShown = { viewModel.clearCheckIn() },
+            modifier = Modifier.align(Alignment.TopCenter),
+        )
+
         if (ambient) {
             AmbientScreen(userName = settings.userName, onDismiss = { ambient = false })
         }
@@ -487,10 +795,8 @@ fun HomeScreen(viewModel: ZenithViewModel) {
                     visible = sheetVisible,
                     item = item,
                     appsByKey = appsByKey,
-                    inDock = (item as? AppCell)?.key in settings.dock,
                     onOpen = { viewModel.open(it) },
                     onAppInfo = { viewModel.openAppInfo(it) },
-                    onToggleDock = { viewModel.toggleDock(it) },
                     onRename = { showSheet(HomeSheet.Folder(it)) },
                     onResize = {
                         resizingId = item.id
@@ -529,7 +835,12 @@ fun HomeScreen(viewModel: ZenithViewModel) {
                         viewModel.open(current.key)
                         closeDrawer()
                     },
-                    onAddToHome = { viewModel.addAppToFirstFreeSlot(current.key) },
+                    onAddToHome = {
+                        // The app may well have gone onto a page you are not looking at, so put
+                        // the drawer away and take you to it.
+                        revealPage(viewModel.addAppToFirstFreeSlot(current.key))
+                        closeDrawer()
+                    },
                     onToggleDock = { viewModel.toggleDock(current.key) },
                     onAppInfo = { viewModel.openAppInfo(current.key) },
                     onUninstall = { viewModel.uninstall(current.key) },
@@ -566,7 +877,11 @@ fun HomeScreen(viewModel: ZenithViewModel) {
 
             HomeSheet.WidgetPicker -> WidgetPickerSheet(
                 visible = sheetVisible,
-                onAdd = { viewModel.addWidget(it) },
+                onAdd = { type ->
+                    val page = viewModel.addWidget(type)
+                    revealPage(page)
+                    page != null
+                },
                 onDismiss = { hideSheet() },
             )
 
@@ -578,8 +893,77 @@ fun HomeScreen(viewModel: ZenithViewModel) {
             HomeSheet.Preferences -> SettingsSheet(
                 visible = sheetVisible,
                 settings = settings,
+                plus = plus,
                 onChange = { transform -> viewModel.updateSettings(transform) },
+                onAura = { showSheet(HomeSheet.Aura) },
+                onFreeform = { on ->
+                    // Turning it on is the Plus part; turning it off is always allowed.
+                    if (on && !plus.active) showSheet(HomeSheet.Plus)
+                    else viewModel.updateSettings { it.copy(freeform = on) }
+                },
+                onThemeMaker = { withPlus { showSheet(HomeSheet.ThemeMaker) } },
+                onHiddenApps = { withPlus { showSheet(HomeSheet.HiddenApps) } },
+                onBackup = { withPlus { saveBackup.launch(Backup.fileName()) } },
+                onRestore = { withPlus { openBackup.launch(arrayOf("*/*")) } },
+                onPlus = { showSheet(HomeSheet.Plus) },
                 onReset = { viewModel.resetEverything() },
+                onDismiss = { hideSheet() },
+            )
+
+            HomeSheet.Plus -> PlusSheet(
+                visible = sheetVisible,
+                status = plus,
+                onStartTrial = {
+                    viewModel.startTrialViaPlayOrLocally(context as? android.app.Activity)
+                },
+                onBuyLifetime = {
+                    val activity = context as? android.app.Activity
+                    val started = activity != null && viewModel.buyLifetime(activity)
+                    if (!started) {
+                        Toast.makeText(context, "Play could not open the purchase just now", Toast.LENGTH_SHORT).show()
+                    }
+                },
+                onSubscribe = {
+                    val activity = context as? android.app.Activity
+                    val started = activity != null && viewModel.subscribe(activity)
+                    if (!started) {
+                        Toast.makeText(context, "Play could not open the subscription just now", Toast.LENGTH_SHORT).show()
+                    }
+                },
+                onRestore = {
+                    viewModel.refreshPurchases()
+                    Toast.makeText(context, "Checking your Play purchases…", Toast.LENGTH_SHORT).show()
+                },
+                onRedeem = { code ->
+                    val ok = viewModel.redeemCode(code)
+                    if (ok) Toast.makeText(context, "Zenith Plus unlocked", Toast.LENGTH_SHORT).show()
+                    ok
+                },
+                onDismiss = { hideSheet() },
+            )
+
+            HomeSheet.Aura -> AuraSheet(
+                visible = sheetVisible,
+                settings = settings,
+                onUnlock = { id -> viewModel.unlockTheme(id) },
+                onApply = { id -> viewModel.updateSettings { it.copy(paletteId = id) } },
+                onRedeem = { code -> viewModel.redeemReferral(code) },
+                onDismiss = { hideSheet() },
+            )
+
+            HomeSheet.ThemeMaker -> ThemeMakerSheet(
+                visible = sheetVisible,
+                settings = settings,
+                onChange = { transform -> viewModel.updateSettings(transform) },
+                onDismiss = { hideSheet() },
+            )
+
+            HomeSheet.HiddenApps -> HiddenAppsSheet(
+                visible = sheetVisible,
+                apps = apps,
+                settings = settings,
+                onToggle = { key -> viewModel.toggleHidden(key) },
+                onSetPin = { pin -> viewModel.setHiddenPin(pin) },
                 onDismiss = { hideSheet() },
             )
 
@@ -650,7 +1034,13 @@ private fun Greeting(name: String, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun PageDots(count: Int, current: Int, modifier: Modifier = Modifier) {
+private fun PageDots(
+    count: Int,
+    current: Int,
+    canAdd: Boolean,
+    onAddPage: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val palette = LocalPalette.current
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
         repeat(count) { index ->
@@ -668,6 +1058,28 @@ private fun PageDots(count: Int, current: Int, modifier: Modifier = Modifier) {
                     .clip(RoundedCornerShape(50))
                     .background(color)
             )
+        }
+
+        // The one control that makes another page. It sits where the next dot would appear, so
+        // it reads as "one more of these" rather than as a button bolted on.
+        if (canAdd) {
+            Box(
+                Modifier
+                    .padding(start = 2.dp)
+                    .size(18.dp)
+                    .clip(RoundedCornerShape(50))
+                    .background(palette.onGlass.copy(alpha = 0.12f))
+                    .pressBounce()
+                    .clickable { onAddPage() },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Add,
+                    contentDescription = "Add page",
+                    tint = palette.onGlass.copy(alpha = 0.55f),
+                    modifier = Modifier.size(12.dp),
+                )
+            }
         }
     }
 }
@@ -727,7 +1139,8 @@ private fun DrawerAppSheet(
     ZenithSheet(visible = visible, onDismiss = onDismiss, title = label) {
         MenuRow(Icons.AutoMirrored.Rounded.OpenInNew, "Open") { onOpen(); onDismiss() }
         MenuRow(Icons.Rounded.AddHome, "Add to home screen") { onAddToHome(); onDismiss() }
-        MenuRow(Icons.Rounded.PushPin, if (pinned) "Remove from dock" else "Pin to dock") { onToggleDock(); onDismiss() }
+        // Apps go into the dock by dragging them there; the menu only offers the way back out.
+        if (pinned) MenuRow(Icons.Rounded.PushPin, "Remove from dock") { onToggleDock(); onDismiss() }
         MenuRow(Icons.Rounded.Info, "App info") { onAppInfo(); onDismiss() }
         MenuRow(Icons.Rounded.Delete, "Uninstall", danger = true) { onUninstall(); onDismiss() }
     }

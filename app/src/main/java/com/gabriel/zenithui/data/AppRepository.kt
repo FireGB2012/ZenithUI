@@ -192,6 +192,27 @@ class AppRepository(context: Context) {
         return buckets.filterValues { it.size >= 3 }
     }
 
+    /**
+     * The App Library group an app belongs to. Unlike [categorise] every app gets one: whatever
+     * the store did not label goes to Utilities if it came with the phone, Other if you added it.
+     */
+    fun libraryCategory(key: String): String =
+        categoryName(applicationCategory(key))
+            ?: if (byKey(key)?.system == true) "Utilities" else "Other"
+
+    private val installTimes = HashMap<String, Long>()
+
+    /** When the app was first installed, in epoch millis; 0 if the system will not say. */
+    fun installedAt(key: String): Long {
+        val pkg = byKey(key)?.packageName ?: return 0L
+        return synchronized(installTimes) {
+            installTimes.getOrPut(pkg) {
+                runCatching { appContext.packageManager.getPackageInfo(pkg, 0).firstInstallTime }
+                    .getOrDefault(0L)
+            }
+        }
+    }
+
     private companion object {
         val GOOGLE_PACKAGES = listOf("com.google.android.googlequicksearchbox", "com.google.android.apps.search")
         val MAIL_PACKAGES = listOf("com.google.android.gm", "com.samsung.android.email.provider")

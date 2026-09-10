@@ -73,6 +73,9 @@ object LayoutBuilder {
         return items
     }
 
+    /** As many home pages as anyone sensibly needs, and few enough that the dots still fit. */
+    const val MAX_PAGES = 8
+
     /** Icons land on half-row boundaries, so rows stay tidy without wasting a slim widget's space. */
     const val ICON_ROW_STEP = ROW_UNITS / 2
 

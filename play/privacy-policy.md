@@ -23,9 +23,20 @@ The app saves the following in its own private storage, readable only by Zenith 
 - Your preferences: palette, light/dark mode, glass strength, grid size, icon size and shape, and
   the icon pack you selected.
 - The text of the Quick Note widget, if you use it.
+- Whether you have bought Zenith Plus, and the date your free trial began.
+- The palette you built, the apps you chose to hide, and the PIN you set for them, if you use those
+  features. The PIN keeps a list tidy; it is not a device security measure and is stored as typed.
 
 All of this stays on the device. Uninstalling the app, or clearing its storage in Android Settings,
 deletes it permanently.
+
+## Payments
+
+Zenith Plus is a single optional purchase made through Google Play. Google handles the payment and
+tells the app one thing: whether this account has bought it. Zenith UI never sees your card, your
+name or your address, and stores nothing about the payment beyond that yes or no. Google's own
+privacy policy covers what Play does with the transaction. A backup file you export contains your
+layout and settings, and is written only where you choose to put it.
 
 ## What Zenith UI reads from your device
 

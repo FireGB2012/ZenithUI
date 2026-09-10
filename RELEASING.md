@@ -52,6 +52,10 @@ Verify a build before uploading:
 2. Install the release APK on a real device and walk the first-run flow — R8 shrinking is only
    exercised in release builds.
 3. Update "What's new" in `play/listing.md`.
+4. If the purchase path changed, test it with a licence tester on a build installed from a Play
+   track. Play Billing does nothing in a sideloaded build, and nothing at all on an emulator with
+   no Play Store — the buy button says so rather than failing quietly, which is the expected
+   result there, not a bug.
 
 ## Play Console checklist
 
@@ -65,6 +69,15 @@ Verify a build before uploading:
 - [ ] Content rating questionnaire: no user-generated content, no ads, no data sharing.
 - [ ] Target audience: 13+ or Everyone; no ads declaration.
 - [ ] App access: no login required — tick "All functionality is available without special access".
+- [ ] Monetisation → In-app products: create `zenith_plus` (the $14.99 lifetime pass) exactly as
+      specified in `play/listing.md` and **activate** it.
+- [ ] Monetisation → Subscriptions: create `zenith_plus_monthly` at $1.99/month with a 7 day free
+      trial offer, and **activate** it. Do both before the first release reaches testers, or the
+      app will correctly report that the purchase is unavailable.
+- [ ] Setup → License testing: add your own Gmail address so you can test the buy flow for free.
+- [ ] Note: the moment `zenith_plus_monthly` has its free-trial offer, Play runs the seven days
+      instead of the app. No new build needed — see `play/listing.md`.
+- [ ] Declare in-app purchases on the store listing (the Ads answer stays "No").
 - [ ] Keep Play App Signing enabled (default) so Google holds the release key.
 
 ## Notes for the reviewer

@@ -40,6 +40,12 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.LocalFireDepartment
+import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.Restore
+import androidx.compose.material.icons.rounded.Save
+import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Dashboard
@@ -84,6 +90,7 @@ import com.gabriel.zenithui.data.AppInfo
 import com.gabriel.zenithui.data.FolderCell
 import com.gabriel.zenithui.data.HomeItem
 import com.gabriel.zenithui.data.IconPackInfo
+import com.gabriel.zenithui.data.PlusStatus
 import com.gabriel.zenithui.data.IconPacks
 import com.gabriel.zenithui.data.GridDensity
 import com.gabriel.zenithui.data.IconShapes
@@ -141,6 +148,10 @@ fun ZenithSheet(
                     .fillMaxWidth()
                     .heightIn(max = maxHeight)
                     .padding(10.dp)
+                    // A tinted floor under the glass, so busy icons behind the sheet do not show
+                    // through its lower rows.
+                    .clip(RoundedCornerShape(34.dp))
+                    .background(palette.backdrop.last().copy(alpha = 0.85f))
                     .glass(RoundedCornerShape(34.dp), strength = 1.2f, solid = 1f)
                     .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) { }
                     .pointerInput(Unit) {
@@ -214,10 +225,8 @@ fun ItemMenuSheet(
     visible: Boolean,
     item: HomeItem,
     appsByKey: Map<String, AppInfo>,
-    inDock: Boolean,
     onOpen: (String) -> Unit,
     onAppInfo: (String) -> Unit,
-    onToggleDock: (String) -> Unit,
     onRename: (String) -> Unit,
     onResize: () -> Unit,
     onRemove: () -> Unit,
@@ -234,10 +243,6 @@ fun ItemMenuSheet(
         when (item) {
             is AppCell -> {
                 MenuRow(Icons.AutoMirrored.Rounded.OpenInNew, "Open") { onOpen(item.key); onDismiss() }
-                MenuRow(
-                    icon = Icons.Rounded.PushPin,
-                    label = if (inDock) "Remove from dock" else "Pin to dock",
-                ) { onToggleDock(item.key); onDismiss() }
                 MenuRow(Icons.Rounded.Info, "App info") { onAppInfo(item.key); onDismiss() }
                 MenuRow(Icons.Rounded.Home, "Remove from home", danger = true) { onRemove(); onDismiss() }
                 MenuRow(Icons.Rounded.Delete, "Uninstall", danger = true) { onUninstall(item.key); onDismiss() }
@@ -394,7 +399,15 @@ fun FolderSheet(
 fun SettingsSheet(
     visible: Boolean,
     settings: ZenithSettings,
+    plus: PlusStatus,
     onChange: ((ZenithSettings) -> ZenithSettings) -> Unit,
+    onAura: () -> Unit,
+    onFreeform: (Boolean) -> Unit,
+    onThemeMaker: () -> Unit,
+    onHiddenApps: () -> Unit,
+    onBackup: () -> Unit,
+    onRestore: () -> Unit,
+    onPlus: () -> Unit,
     onReset: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -446,6 +459,14 @@ fun SettingsSheet(
                 }
             }
 
+            if (settings.paletteId == Palettes.CUSTOM) {
+                Text(
+                    "Using your own theme. Edit it under Zenith Plus below.",
+                    color = palette.onGlassMuted,
+                    fontSize = 12.sp,
+                )
+            }
+
             SectionLabel("Appearance")
             Segmented(
                 options = listOf("auto" to "Auto", "light" to "Light", "dark" to "Dark"),
@@ -459,6 +480,25 @@ fun SettingsSheet(
                 range = 0.2f..1.2f,
                 display = "${(settings.glass * 100).toInt()}%",
             ) { value -> onChange { it.copy(glass = value) } }
+
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Tilt shine", color = palette.onGlass, fontSize = 15.sp)
+                    Text(
+                        "Light slides across the glass as you move the phone.",
+                        color = palette.onGlassMuted,
+                        fontSize = 12.sp,
+                    )
+                }
+                Switch(
+                    checked = settings.glassShine,
+                    onCheckedChange = { value -> onChange { it.copy(glassShine = value) } },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color.White,
+                        checkedTrackColor = palette.accent,
+                    ),
+                )
+            }
 
             SectionLabel("Grid")
             Segmented(
@@ -493,6 +533,22 @@ fun SettingsSheet(
                 )
             }
 
+            SectionLabel("Swipe up for")
+            Segmented(
+                options = listOf("drawer" to "App drawer", "library" to "App Library"),
+                selected = settings.appsView,
+                onSelect = { value -> onChange { it.copy(appsView = value) } },
+            )
+            Text(
+                text = if (settings.appsView == "library") {
+                    "Swipe left past your last page. Suggestions, recently added, then folders by kind."
+                } else {
+                    "Every app in one list, A to Z."
+                },
+                color = palette.onGlassMuted,
+                fontSize = 12.sp,
+            )
+
             SectionLabel("Icon shape")
             Segmented(
                 options = IconShapes.ids.map { it to IconShapes.label(it) },
@@ -521,6 +577,84 @@ fun SettingsSheet(
                 )
             }
 
+            SectionLabel("Aura")
+            MenuRow(
+                icon = Icons.Rounded.LocalFireDepartment,
+                label = "Aura and themes",
+                subtitle = if (settings.streak > 0) {
+                    "${settings.aura} aura · ${settings.streak} day streak"
+                } else {
+                    "${settings.aura} aura · open daily to build a streak"
+                },
+            ) { onAura() }
+
+            SectionLabel("Zenith Plus")
+            MenuRow(
+                icon = Icons.Rounded.AutoAwesome,
+                label = if (plus.purchased) "Zenith Plus" else if (plus.inTrial) "Zenith Plus — free trial" else "Zenith Plus",
+                subtitle = when {
+                    plus.lifetime -> "Unlocked for good. Thank you."
+                    plus.subscribed -> "Subscribed, ${plus.monthlyPrice} a month"
+                    plus.trialDaysLeft > 1 -> "${plus.trialDaysLeft} days left of your free trial"
+                    plus.trialDaysLeft == 1 -> "Last day of your free trial"
+                    else -> "${plus.monthlyPrice} a month or ${plus.lifetimePrice} for good"
+                },
+            ) { onPlus() }
+            MenuRow(
+                icon = if (plus.active) Icons.Rounded.Palette else Icons.Rounded.Lock,
+                label = "Theme maker",
+                subtitle = "Build a palette of your own",
+            ) { onThemeMaker() }
+            MenuRow(
+                icon = if (plus.active) Icons.Rounded.VisibilityOff else Icons.Rounded.Lock,
+                label = "Hidden apps",
+                subtitle = if (settings.hiddenApps.isEmpty()) {
+                    "Keep chosen apps out of the drawer"
+                } else {
+                    "${settings.hiddenApps.size} hidden"
+                },
+            ) { onHiddenApps() }
+            MenuRow(
+                icon = if (plus.active) Icons.Rounded.Save else Icons.Rounded.Lock,
+                label = "Back up home screen",
+                subtitle = "Save everything to a file",
+            ) { onBackup() }
+            MenuRow(
+                icon = if (plus.active) Icons.Rounded.Restore else Icons.Rounded.Lock,
+                label = "Restore from a backup",
+                subtitle = "Replaces your current layout",
+            ) { onRestore() }
+
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("Free placement", color = palette.onGlass, fontSize = 15.sp)
+                    Text(
+                        text = if (plus.active) {
+                            "Put apps anywhere and size widgets however you like."
+                        } else {
+                            "Plus: put apps anywhere, any widget size."
+                        },
+                        color = palette.onGlassMuted,
+                        fontSize = 12.sp,
+                    )
+                }
+                Switch(
+                    // Shown off without Plus even if it was left on, since it is not in effect.
+                    checked = settings.freeform && plus.active,
+                    onCheckedChange = onFreeform,
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color.White,
+                        checkedTrackColor = palette.accent,
+                    ),
+                )
+            }
+
+            SectionLabel("Device")
             MenuRow(Icons.Rounded.Home, "Set as default launcher") {
                 runCatching {
                     context.startActivity(Intent(Settings.ACTION_HOME_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))

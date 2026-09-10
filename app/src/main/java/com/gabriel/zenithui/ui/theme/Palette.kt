@@ -2,6 +2,8 @@ package com.gabriel.zenithui.ui.theme
 
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
+import com.gabriel.zenithui.data.ZenithSettings
 
 @Immutable
 data class ZenithPalette(
@@ -83,5 +85,90 @@ object Palettes {
 
     val all = listOf(Midnight, Aurora, Sunset, Frost, Sakura, Graphite)
 
-    fun byId(id: String): ZenithPalette = all.firstOrNull { it.id == id } ?: Midnight
+    // ---------------------------------------------------------------- aura themes
+    // Bought with points rather than money. Kept apart from [all] so they never appear in the
+    // free row, and looked up by the same id the store sells.
+
+    val Ember = ZenithPalette(
+        id = "ember",
+        name = "Ember",
+        tagline = "Banked coals under dark iron",
+        accent = Color(0xFFFF7A3D),
+        accentAlt = Color(0xFFFFC46B),
+        backdrop = listOf(Color(0xFF120A07), Color(0xFF2C1109), Color(0xFF160B08)),
+        glassTint = Color(0xFFFF8A4C),
+    )
+
+    val Tide = ZenithPalette(
+        id = "tide",
+        name = "Tide",
+        tagline = "Deep water with a green shore",
+        accent = Color(0xFF34D6C8),
+        accentAlt = Color(0xFF6FE39A),
+        backdrop = listOf(Color(0xFF04121A), Color(0xFF072A33), Color(0xFF04161C)),
+        glassTint = Color(0xFF2FC9C0),
+    )
+
+    val Orchid = ZenithPalette(
+        id = "orchid",
+        name = "Orchid",
+        tagline = "Violet bloom on near-black",
+        accent = Color(0xFFB06CFF),
+        accentAlt = Color(0xFFFF7ADF),
+        backdrop = listOf(Color(0xFF0D0714), Color(0xFF23103A), Color(0xFF120820)),
+        glassTint = Color(0xFFA96BFF),
+    )
+
+    val Solstice = ZenithPalette(
+        id = "solstice",
+        name = "Solstice",
+        tagline = "Low sun, long gold shadows",
+        accent = Color(0xFFFFC24D),
+        accentAlt = Color(0xFFFF8E6E),
+        backdrop = listOf(Color(0xFF14100A), Color(0xFF2E2312), Color(0xFF19120B)),
+        glassTint = Color(0xFFFFB865),
+    )
+
+    val Obsidian = ZenithPalette(
+        id = "obsidian",
+        name = "Obsidian",
+        tagline = "Black glass with a gold rim",
+        accent = Color(0xFFE8C88A),
+        accentAlt = Color(0xFF8A93A8),
+        backdrop = listOf(Color(0xFF040406), Color(0xFF101014), Color(0xFF07070A)),
+        glassTint = Color(0xFFD8BE86),
+    )
+
+    val aura = listOf(Ember, Tide, Orchid, Solstice, Obsidian)
+
+    /** The id of the palette you built yourself, in the Plus theme maker. */
+    const val CUSTOM = "custom"
+
+    fun byId(id: String): ZenithPalette =
+        (all + aura).firstOrNull { it.id == id } ?: Midnight
+
+    /**
+     * The palette built from your own three colours. The backdrop is a gradient from the
+     * background you chose towards your accent, so the glass still has something to catch —
+     * a flat single colour behind frosted panels looks like a bug rather than a choice.
+     */
+    fun custom(settings: ZenithSettings): ZenithPalette {
+        val accent = Color(settings.customAccent.toInt())
+        val accentAlt = Color(settings.customAccentAlt.toInt())
+        val base = Color(settings.customBackdrop.toInt())
+        return ZenithPalette(
+            id = CUSTOM,
+            name = "Yours",
+            tagline = "Built in the theme maker",
+            accent = accent,
+            accentAlt = accentAlt,
+            backdrop = listOf(base, lerp(base, accent, 0.16f), lerp(base, accentAlt, 0.08f)),
+            glassTint = accent,
+            dark = settings.customDark,
+        )
+    }
+
+    /** Every palette by id, including the custom one when it is the one in use. */
+    fun resolve(settings: ZenithSettings): ZenithPalette =
+        if (settings.paletteId == CUSTOM) custom(settings) else byId(settings.paletteId)
 }

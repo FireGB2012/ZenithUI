@@ -17,6 +17,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.drawOutline
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.isSpecified
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
@@ -44,6 +46,7 @@ fun Modifier.glass(
     val backdrop = LocalBackdrop.current
     val screen = LocalScreenSize.current
     val glass = (LocalGlassStrength.current * strength).coerceIn(0f, 1.4f)
+    val tilt = LocalTilt.current
     val dark = palette.dark
     val tintColor = if (tint.isSpecified) tint else palette.glassTint
     var origin by remember { mutableStateOf(Offset.Zero) }
@@ -91,15 +94,66 @@ fun Modifier.glass(
                 )
             )
             drawRect(color = tintColor.copy(alpha = 0.07f * glass * opacity))
+
+            // The moving part: the rim, not the body. Glass gives itself away at its edge —
+            // the bevel picks up the light and carries a bright arc round with it as the panel
+            // turns, while the face itself stays the same frosted grey. Read inside the draw
+            // lambda, so a new sensor reading repaints without recomposing anything.
+            val lean = tilt.value
+            val leanLength = kotlin.math.hypot(lean.x, lean.y)
+            if (leanLength > 0.015f && glass > 0.05f) {
+                // The light is fixed in the room, so it sits on the side opposite the lean.
+                val unit = Offset(-lean.x / leanLength, -lean.y / leanLength)
+                val centre = Offset(size.width / 2f, size.height / 2f)
+                val reach = size.maxDimension * 0.55f
+                val lit = centre - unit * reach
+                val away = centre + unit * reach
+
+                // How lit the rim gets, tapering off as the panel comes back to flat so the
+                // highlight arrives and leaves rather than snapping on.
+                val heat = (leanLength * 2.4f).coerceAtMost(1f)
+                val hot = (if (dark) 0.50f else 0.42f) * heat * opacity
+                val outline = shape.createOutline(size, layoutDirection, this)
+
+                // A wide, soft pass first: the glow the edge throws onto its surroundings.
+                drawOutline(
+                    outline = outline,
+                    brush = Brush.linearGradient(
+                        colors = listOf(
+                            sheen.copy(alpha = hot * 0.22f),
+                            sheen.copy(alpha = hot * 0.06f),
+                            Color.Transparent,
+                        ),
+                        start = lit,
+                        end = away,
+                    ),
+                    style = Stroke(width = 3.dp.toPx()),
+                )
+
+                // Then the bright line itself, tight against the edge.
+                drawOutline(
+                    outline = outline,
+                    brush = Brush.linearGradient(
+                        colors = listOf(
+                            sheen.copy(alpha = hot),
+                            sheen.copy(alpha = hot * 0.18f),
+                            Color.Transparent,
+                        ),
+                        start = lit,
+                        end = away,
+                    ),
+                    style = Stroke(width = 1.dp.toPx()),
+                )
+            }
         }
         .then(
             if (!border) Modifier else Modifier.border(
                 width = 1.dp,
                 brush = Brush.linearGradient(
                     listOf(
-                        Color.White.copy(alpha = (if (dark) 0.42f else 0.85f) * opacity),
+                        Color.White.copy(alpha = (if (dark) 0.34f else 0.78f) * opacity),
                         Color.White.copy(alpha = 0.05f * opacity),
-                        Color.White.copy(alpha = (if (dark) 0.14f else 0.35f) * opacity),
+                        Color.White.copy(alpha = (if (dark) 0.12f else 0.32f) * opacity),
                     )
                 ),
                 shape = shape,

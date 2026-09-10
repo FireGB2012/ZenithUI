@@ -1,7 +1,9 @@
 package com.gabriel.zenithui.ui.onboarding
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -14,6 +16,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -58,12 +61,15 @@ import com.gabriel.zenithui.ui.theme.glass
 import kotlinx.coroutines.delay
 import kotlin.math.sin
 
-/** Milliseconds after the screen appears at which each piece arrives. */
-private val CUES = listOf(260, 1050, 1750, 2500, 2950, 3350)
+/**
+ * Milliseconds after the screen appears at which each piece arrives. Unhurried: each piece has
+ * finished settling before the next one starts, so the screen fills in like a slow exhale.
+ */
+private val CUES = listOf(300, 1000, 1700, 2300)
 
 /**
- * The opening. One thing arrives at a time — the mark, a hello, the name, the field — each on a
- * spring, with the column re-centring itself as the content grows. Tap to skip ahead.
+ * The opening: a hello, one line on what happens next, and your name. Everything sits in one
+ * calm column, the pieces arriving in quick succession. Tap to skip ahead.
  */
 @Composable
 fun WelcomeStep(
@@ -97,74 +103,74 @@ fun WelcomeStep(
                 .navigationBarsPadding()
                 .imePadding()
                 .padding(horizontal = 30.dp)
-                .animateContentSize(spring(dampingRatio = 0.72f, stiffness = 150f)),
+                .animateContentSize(tween(1100, easing = FastOutSlowInEasing)),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Spacer(Modifier.weight(0.9f))
+            Spacer(Modifier.weight(1f))
 
-            Arrival(visible = stage >= 1, rise = 40) {
-                ZenithMark()
+            Arrival(visible = stage >= 1, rise = 24) {
+                ZenithMark(size = 76.dp)
             }
 
-            Arrival(visible = stage >= 2, rise = 30) {
+            Arrival(visible = stage >= 2, rise = 20) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Spacer(Modifier.height(30.dp))
+                    Spacer(Modifier.height(26.dp))
                     Text(
-                        text = "Hey.",
+                        text = "Hi there 👋",
                         color = palette.onGlass,
-                        fontSize = 54.sp,
-                        fontWeight = FontWeight.Light,
-                        letterSpacing = (-2).sp,
+                        fontSize = 38.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        letterSpacing = (-0.8).sp,
                     )
-                }
-            }
-
-            Arrival(visible = stage >= 3, rise = 24) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Spacer(Modifier.height(10.dp))
                     Text(
-                        text = "This is",
-                        color = palette.onGlassMuted,
+                        text = "Welcome to Zenith. Let's make your home screen feel like yours — it only takes a minute.",
+                        color = palette.onGlass.copy(alpha = 0.75f),
                         fontSize = 15.sp,
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        text = "Zenith UI",
-                        fontSize = 40.sp,
-                        fontWeight = FontWeight.Light,
-                        letterSpacing = (-1.4).sp,
-                        color = palette.onGlass,
-                        modifier = Modifier.shimmer(),
+                        lineHeight = 22.sp,
+                        textAlign = TextAlign.Center,
                     )
                 }
             }
 
             Spacer(Modifier.weight(1f))
 
+            // The one question, in its own card, with the reassurance right where it is needed.
+            Arrival(visible = stage >= 3, rise = 22) {
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .glass(ZenithShapes.card, strength = 1f)
+                        .padding(horizontal = 18.dp, vertical = 20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Text(
+                        text = if (name.isBlank()) "What should we call you?" else "Nice to meet you, ${name.trim()}!",
+                        color = palette.onGlass,
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Medium,
+                        textAlign = TextAlign.Center,
+                    )
+                    NameField(
+                        name = name,
+                        onNameChange = onNameChange,
+                        onDone = { if (name.isNotBlank()) onContinue() },
+                    )
+                    Text(
+                        text = "Just a first name is fine. It stays on your phone.",
+                        color = palette.onGlassMuted,
+                        fontSize = 12.sp,
+                        textAlign = TextAlign.Center,
+                    )
+                }
+            }
+
             Arrival(visible = stage >= 4, rise = 26) {
-                Text(
-                    text = if (name.isBlank()) "What should we call you?" else "Nice to meet you, ${name.trim()}.",
-                    color = palette.onGlass,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Medium,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(bottom = 16.dp),
-                )
-            }
-
-            Arrival(visible = stage >= 5, rise = 30) {
-                NameField(
-                    name = name,
-                    onNameChange = onNameChange,
-                    onDone = { if (name.isNotBlank()) onContinue() },
-                )
-            }
-
-            Arrival(visible = stage >= 6, rise = 34) {
                 Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Spacer(Modifier.height(18.dp))
+                    Spacer(Modifier.height(16.dp))
                     GlassButton(
-                        text = if (name.isBlank()) "Enter your name" else "Continue",
+                        text = if (name.isBlank()) "Let's go" else "Continue as ${name.trim()}",
                         onClick = onContinue,
                         enabled = name.isNotBlank(),
                         filled = true,
@@ -173,19 +179,22 @@ fun WelcomeStep(
                 }
             }
 
-            Spacer(Modifier.height(34.dp))
+            Spacer(Modifier.height(28.dp))
         }
     }
 }
 
-/** One piece of the opening arriving: fade, rise and a touch of scale, all on the same spring. */
+/**
+ * One piece of the opening arriving: a long fade with a short glide up and the faintest growth.
+ * No springs, so nothing bounces or overshoots — it just eases into place.
+ */
 @Composable
 private fun Arrival(visible: Boolean, rise: Int, content: @Composable () -> Unit) {
     AnimatedVisibility(
         visible = visible,
-        enter = fadeIn(tween(560)) +
-            slideInVertically(spring(dampingRatio = 0.58f, stiffness = 170f)) { rise * 4 } +
-            scaleIn(spring(dampingRatio = 0.52f, stiffness = 160f), initialScale = 0.90f),
+        enter = fadeIn(tween(1000, easing = LinearOutSlowInEasing)) +
+            slideInVertically(tween(1200, easing = FastOutSlowInEasing)) { rise * 2 } +
+            scaleIn(tween(1200, easing = FastOutSlowInEasing), initialScale = 0.97f),
     ) {
         content()
     }

@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Apps
 import androidx.compose.material.icons.rounded.Dashboard
 import androidx.compose.material.icons.rounded.DragIndicator
@@ -41,7 +42,8 @@ private data class Tip(val icon: ImageVector, val title: String, val body: Strin
 
 private val TIPS = listOf(
     Tip(Icons.Rounded.Apps, "Swipe up for everything", "All your apps live one swipe up. The search bar sits at the bottom and searches apps or Google."),
-    Tip(Icons.Rounded.DragIndicator, "Hold and drag to arrange", "Long press any icon and drag it to any free cell, on any page."),
+    Tip(Icons.Rounded.DragIndicator, "Hold and drag to arrange", "Long press any icon and drag it to any free cell, or down into the dock. Hold it against the side of the screen to carry it to the next page."),
+    Tip(Icons.Rounded.Add, "More pages when you need them", "Tap the + beside the page dots for another page. Pages you leave empty tidy themselves away."),
     Tip(Icons.Rounded.Folder, "Drop to make a folder", "Drop one app onto another and Zenith makes a folder. Drag to the top to remove."),
     Tip(Icons.Rounded.OpenInFull, "Resize your widgets", "Long press a widget, tap Resize, then drag its handles. It snaps to the grid."),
     Tip(Icons.Rounded.Dashboard, "Add more any time", "Long press an empty spot for wallpaper, widgets and settings."),
@@ -71,7 +73,7 @@ fun HelpStep(name: String, onDone: () -> Unit) {
         )
         Spacer(Modifier.height(6.dp))
         Text(
-            text = "Six gestures and you know the whole launcher.",
+            text = "Seven gestures and you know the whole launcher.",
             color = palette.onGlassMuted,
             fontSize = 14.sp,
             modifier = Modifier.appearIn(delayMillis = 60),

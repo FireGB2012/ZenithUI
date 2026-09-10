@@ -35,7 +35,18 @@ sealed interface HomeItem {
     val spanX: Int
     val spanY: Int
 
+    /**
+     * Free placement (Plus): how far off its cell the item was let go, as a fraction of a cell
+     * across and a row unit down, within half a cell either way. Zero for anything placed normally.
+     */
+    val dx: Float
+    val dy: Float
+
+    /** Moves to a cell, dropping any free-placement offset. */
     fun moved(page: Int, col: Int, row: Int): HomeItem
+
+    /** Keeps the cell, sets the free-placement offset. */
+    fun nudged(dx: Float, dy: Float): HomeItem
     fun toJson(): JSONObject
 }
 
@@ -47,16 +58,21 @@ data class AppCell(
     override val row: Int,
     val packageName: String,
     val className: String,
+    override val dx: Float = 0f,
+    override val dy: Float = 0f,
 ) : HomeItem {
     override val spanX: Int get() = 1
     override val spanY: Int get() = ROW_UNITS
     val key: String get() = "$packageName/$className"
 
-    override fun moved(page: Int, col: Int, row: Int) = copy(page = page, col = col, row = row)
+    override fun moved(page: Int, col: Int, row: Int) = copy(page = page, col = col, row = row, dx = 0f, dy = 0f)
+
+    override fun nudged(dx: Float, dy: Float) = copy(dx = dx, dy = dy)
 
     override fun toJson(): JSONObject = JSONObject().apply {
         put("t", "app")
         put("id", id); put("p", page); put("c", col); put("r", row)
+        if (dx != 0f || dy != 0f) { put("dx", dx.toDouble()); put("dy", dy.toDouble()) }
         put("pkg", packageName); put("cls", className)
     }
 }
@@ -69,15 +85,20 @@ data class FolderCell(
     override val row: Int,
     val title: String,
     val keys: List<String>,
+    override val dx: Float = 0f,
+    override val dy: Float = 0f,
 ) : HomeItem {
     override val spanX: Int get() = 1
     override val spanY: Int get() = ROW_UNITS
 
-    override fun moved(page: Int, col: Int, row: Int) = copy(page = page, col = col, row = row)
+    override fun moved(page: Int, col: Int, row: Int) = copy(page = page, col = col, row = row, dx = 0f, dy = 0f)
+
+    override fun nudged(dx: Float, dy: Float) = copy(dx = dx, dy = dy)
 
     override fun toJson(): JSONObject = JSONObject().apply {
         put("t", "folder")
         put("id", id); put("p", page); put("c", col); put("r", row)
+        if (dx != 0f || dy != 0f) { put("dx", dx.toDouble()); put("dy", dy.toDouble()) }
         put("title", title)
         put("keys", JSONArray(keys))
     }
@@ -92,12 +113,17 @@ data class WidgetCell(
     val type: String,
     override val spanX: Int,
     override val spanY: Int,
+    override val dx: Float = 0f,
+    override val dy: Float = 0f,
 ) : HomeItem {
-    override fun moved(page: Int, col: Int, row: Int) = copy(page = page, col = col, row = row)
+    override fun moved(page: Int, col: Int, row: Int) = copy(page = page, col = col, row = row, dx = 0f, dy = 0f)
+
+    override fun nudged(dx: Float, dy: Float) = copy(dx = dx, dy = dy)
 
     override fun toJson(): JSONObject = JSONObject().apply {
         put("t", "widget")
         put("id", id); put("p", page); put("c", col); put("r", row)
+        if (dx != 0f || dy != 0f) { put("dx", dx.toDouble()); put("dy", dy.toDouble()) }
         put("type", type); put("sx", spanX); put("sy", spanY)
     }
 }
@@ -174,7 +200,15 @@ object Widgets {
     }
 }
 
-fun homeItemFromJson(o: JSONObject): HomeItem? = when (o.optString("t")) {
+fun homeItemFromJson(o: JSONObject): HomeItem? =
+    baseItemFromJson(o)?.let { item ->
+        // Only items placed freely carry an offset; everything else reads back exactly as before.
+        val dx = o.optDouble("dx", 0.0).toFloat()
+        val dy = o.optDouble("dy", 0.0).toFloat()
+        if (dx == 0f && dy == 0f) item else item.nudged(dx, dy)
+    }
+
+private fun baseItemFromJson(o: JSONObject): HomeItem? = when (o.optString("t")) {
     "app" -> AppCell(
         id = o.optString("id"), page = o.optInt("p"), col = o.optInt("c"), row = o.optInt("r"),
         packageName = o.optString("pkg"), className = o.optString("cls"),

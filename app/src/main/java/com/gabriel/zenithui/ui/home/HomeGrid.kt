@@ -4,7 +4,11 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.VectorConverter
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animateIntOffsetAsState
+import androidx.compose.animation.core.AnimationSpec
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.zIndex
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -172,6 +176,10 @@ fun HomePage(
     onAmbient: () -> Unit,
     onDrop: () -> Unit,
     resolveDrop: (HomeItem, Int, Int) -> Pair<Int, Int>?,
+    /** Row units between the positions an icon may take; smaller with free placement. */
+    iconRowStep: Int = LayoutBuilder.ICON_ROW_STEP,
+    /** Plus free placement is on: the drop hint follows the exact spot, not the cell. */
+    freePlacement: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val palette = LocalPalette.current
@@ -211,19 +219,40 @@ fun HomePage(
             val cell = drag.cellUnderItem(
                 columns = settings.columns,
                 rows = settings.rows * ROW_UNITS,
-                rowStep = if (dragged is WidgetCell) 1 else LayoutBuilder.ICON_ROW_STEP,
+                rowStep = if (dragged is WidgetCell) 1 else iconRowStep,
             )
             // The cell under your finger may be taken, in which case the drop lands beside it.
             // Point at that opening instead: a hint showing somewhere the item will not go is
             // worse than no hint at all.
             val target = cell?.let { resolveDrop(dragged, it.first, it.second) }
             if (target != null && drag.hoverItemId == null) {
-                val hintOffset by animateIntOffsetAsState(
-                    targetValue = IntOffset(
+                // With free placement the item keeps the exact spot it is let go at, so the hint
+                // shows that spot — worked out the same way the drop does — and glides after the
+                // finger. It only jumps to a cell when the one under the finger is taken, which
+                // is exactly when the drop would jump there too.
+                val exact = freePlacement && target == cell
+                val hintTarget = if (exact) {
+                    val topLeft = drag.pointer - drag.grab - drag.gridOrigin
+                    val offX = (topLeft.x / cellWidthPx - target.first).coerceIn(-0.49f, 0.49f)
+                    val offY = (topLeft.y / cellHeightPx - target.second).coerceIn(-0.49f, 0.49f)
+                    IntOffset(
+                        ((target.first + offX) * cellWidthPx).roundToInt(),
+                        ((target.second + offY) * cellHeightPx).roundToInt(),
+                    )
+                } else {
+                    IntOffset(
                         (target.first * cellWidthPx).roundToInt(),
                         (target.second * cellHeightPx).roundToInt(),
-                    ),
-                    animationSpec = Motion.cell,
+                    )
+                }
+                val hintSpec: AnimationSpec<IntOffset> = if (freePlacement) {
+                    spring(dampingRatio = 1f, stiffness = 420f)
+                } else {
+                    Motion.cell
+                }
+                val hintOffset by animateIntOffsetAsState(
+                    targetValue = hintTarget,
+                    animationSpec = hintSpec,
                     label = "dropHint",
                 )
 
@@ -279,9 +308,11 @@ fun HomePage(
             val hovered = drag.hoverItemId == item.id
             val scale by animateFloatAsState(if (hovered) 1.18f else 1f, Motion.bouncy(), label = "hover")
             // Glide when the item changes cell, but snap when the grid itself is re-measured.
+            // The cell plus any free-placement offset, so a freely placed item sits exactly where
+            // it was let go rather than on the grid line.
             val target = IntOffset(
-                (item.col * cellWidthPx).roundToInt(),
-                (item.row * cellHeightPx).roundToInt(),
+                ((item.col + item.dx) * cellWidthPx).roundToInt(),
+                ((item.row + item.dy) * cellHeightPx).roundToInt(),
             )
             val cellOffset = remember { Animatable(target, IntOffset.VectorConverter) }
             var lastGeometry by remember { mutableStateOf(cellWidthPx to cellHeightPx) }
@@ -662,57 +693,181 @@ fun DragGhost(
 /** Breathing room either side of a dock icon before the bar counts as over-wide. */
 private val DOCK_ICON_GAP = 36.dp
 
+/**
+ * The dock. Apps arrive by being dragged onto it from the home screen, and once there they are
+ * rearranged the same way: hold one, slide it along and the others make room; lift it up off the
+ * bar and it goes back to the home screen. Holding without moving still opens the app's menu.
+ */
 @Composable
 fun DockBar(
     keys: List<String>,
     appsByKey: Map<String, AppInfo>,
     settings: ZenithSettings,
+    /** Something from the home screen is being carried over the dock right now. */
+    highlight: Boolean,
     onOpen: (String) -> Unit,
     onLongPress: (String) -> Unit,
+    onReorder: (from: Int, to: Int) -> Unit,
+    /** An app was lifted off the dock and let go at this point on screen. */
+    onDragOut: (key: String, pointerRoot: Offset) -> Unit,
+    onBounds: (Rect) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val palette = LocalPalette.current
+    val haptics = LocalHapticFeedback.current
+    val density = LocalDensity.current
     val iconSize = minOf(settings.iconSize.dp, 64.dp)
+    val iconSizePx = with(density) { iconSize.toPx() }
     // A dock is a row of icons, not a rail. Past the width its icons actually need, SpaceEvenly
     // stops being spacing and starts being distance, so on a tablet the bar centres itself instead
     // of flinging four icons into the corners.
     val widest = if (keys.isEmpty()) Dp.Infinity else (iconSize + DOCK_ICON_GAP) * keys.size + 20.dp
+
+    // Where each icon sits at rest, measured only while nothing is moving so a dragged icon's own
+    // offset never feeds back into the maths.
+    val slots = remember { androidx.compose.runtime.mutableStateMapOf<Int, Rect>() }
+    var draggingIndex by remember { mutableStateOf<Int?>(null) }
+    var dragOffset by remember { mutableStateOf(Offset.Zero) }
+    var grabRoot by remember { mutableStateOf(Offset.Zero) }
+    var suppressTap by remember { mutableStateOf(false) }
+
+    // The gesture below is set up once and outlives recompositions, so everything it asks at the
+    // moment of release is read from live state through these, never from values captured then.
+    val currentKeys by rememberUpdatedState(keys)
+    val currentOnReorder by rememberUpdatedState(onReorder)
+    val currentOnDragOut by rememberUpdatedState(onDragOut)
+    val currentOnLongPress by rememberUpdatedState(onLongPress)
+
+    /** Carried far enough up to leave the dock. */
+    fun liftedNow(): Boolean = draggingIndex != null && dragOffset.y < -iconSizePx * 1.2f
+
+    /** The index the carried icon would take if let go now. */
+    fun targetNow(): Int? {
+        val carriedFrom = draggingIndex ?: return null
+        if (liftedNow()) return carriedFrom
+        val carried = (slots[carriedFrom]?.center?.x ?: 0f) + dragOffset.x
+        return currentKeys.indices.count { it != carriedFrom && (slots[it]?.center?.x ?: 0f) < carried }
+    }
+
+    val from = draggingIndex
+    val spacing = if (keys.size > 1) {
+        val a = slots[0]
+        val b = slots[1]
+        if (a != null && b != null) b.center.x - a.center.x else iconSizePx
+    } else {
+        iconSizePx
+    }
+    val lifted = liftedNow()
+    val target = targetNow()
+
+    val rim by animateFloatAsState(if (highlight) 1f else 0f, tween(220), label = "dockRim")
 
     Box(modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
         Row(
             modifier = Modifier
                 .widthIn(max = widest)
                 .fillMaxWidth()
+                .onGloballyPositioned { onBounds(it.boundsInRoot()) }
+                .graphicsLayer {
+                    val grow = 1f + 0.03f * rim
+                    scaleX = grow
+                    scaleY = grow
+                }
                 .glass(ZenithShapes.panel, strength = 1.15f)
+                .then(
+                    if (rim > 0.01f) {
+                        Modifier.border(2.dp, palette.accent.copy(alpha = 0.85f * rim), ZenithShapes.panel)
+                    } else {
+                        Modifier
+                    }
+                )
                 .padding(vertical = 12.dp, horizontal = 10.dp),
             horizontalArrangement = if (keys.isEmpty()) Arrangement.Center else Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (keys.isEmpty()) {
                 Text(
-                    text = "Long press an app to pin it here",
+                    text = if (highlight) "Let go to add it" else "Drag an app here to add it to the dock",
                     color = palette.onGlassMuted,
                     fontSize = 12.sp,
                     modifier = Modifier.padding(vertical = 10.dp),
                 )
             }
             keys.forEachIndexed { index, key ->
+                val isCarried = index == from
+                // Neighbours step aside to show where the carried icon will land.
+                val shift = when {
+                    from == null || target == null || isCarried -> 0f
+                    from < target && index in (from + 1)..target -> -spacing
+                    from > target && index in target until from -> spacing
+                    else -> 0f
+                }
+                val shiftAnimated by animateFloatAsState(shift, spring(dampingRatio = 0.75f, stiffness = 400f), label = "dockShift")
+
                 Box(
                     Modifier
                         .appearIn(delayMillis = 90 + staggerDelay(index), riseFrom = 26f)
+                        .zIndex(if (isCarried) 1f else 0f)
+                        .onGloballyPositioned { coords ->
+                            if (draggingIndex == null) slots[index] = coords.boundsInRoot()
+                        }
+                        .graphicsLayer {
+                            if (isCarried) {
+                                translationX = dragOffset.x
+                                translationY = dragOffset.y
+                                scaleX = 1.14f
+                                scaleY = 1.14f
+                            } else {
+                                translationX = shiftAnimated
+                            }
+                        }
                         .pointerInput(key) {
-                        detectTapGestures(
-                            onTap = { onOpen(key) },
-                            onLongPress = { onLongPress(key) },
-                        )
-                    },
+                            detectTapGestures(
+                                onPress = { suppressTap = false },
+                                onTap = { if (!suppressTap) onOpen(key) },
+                            )
+                        }
+                        .pointerInput(key, index) {
+                            detectDragGesturesAfterLongPress(
+                                onDragStart = { local ->
+                                    suppressTap = true
+                                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    grabRoot = (slots[index]?.topLeft ?: Offset.Zero) + local
+                                    dragOffset = Offset.Zero
+                                    draggingIndex = index
+                                },
+                                onDrag = { change, amount ->
+                                    change.consume()
+                                    dragOffset += amount
+                                },
+                                onDragEnd = {
+                                    val moved = dragOffset.getDistance()
+                                    val start = draggingIndex
+                                    val end = targetNow()
+                                    when {
+                                        // Held still: that is a long press, so show the menu.
+                                        moved < iconSizePx * 0.25f -> currentOnLongPress(key)
+                                        liftedNow() -> currentOnDragOut(key, grabRoot + dragOffset)
+                                        start != null && end != null && end != start -> currentOnReorder(start, end)
+                                    }
+                                    draggingIndex = null
+                                    dragOffset = Offset.Zero
+                                },
+                                onDragCancel = {
+                                    draggingIndex = null
+                                    dragOffset = Offset.Zero
+                                },
+                            )
+                        },
                 ) {
                     AppIcon(
                         key = key,
                         label = appsByKey[key]?.label ?: "",
                         size = iconSize,
                         shape = ZenithShapes.forIconShape(settings.iconShape),
-                        modifier = Modifier.pressBounce(),
+                        modifier = Modifier
+                            .pressBounce()
+                            .graphicsLayer { alpha = if (isCarried && lifted) 0.75f else 1f },
                     )
                 }
             }

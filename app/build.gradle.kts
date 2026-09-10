@@ -22,8 +22,8 @@ android {
         applicationId = "com.gabriel.zenithui"
         minSdk = 31
         targetSdk = 37
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 19
+        versionName = "2.8"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -83,6 +83,8 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.core.ktx)
     implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.billing.ktx)
+    implementation(libs.androidx.fragment)
     debugImplementation(libs.compose.ui.tooling)
 
     testImplementation(libs.junit)

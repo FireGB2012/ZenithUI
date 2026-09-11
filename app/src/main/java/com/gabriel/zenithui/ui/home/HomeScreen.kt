@@ -67,6 +67,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.geometry.Offset
@@ -214,6 +217,8 @@ fun HomeScreen(viewModel: ZenithViewModel) {
     var sheetVisible by remember { mutableStateOf(false) }
 
     var drawerHeightPx by remember { mutableFloatStateOf(0f) }
+    var homeOrigin by remember { mutableStateOf(Offset.Zero) }
+    val homeFocus = androidx.compose.ui.platform.LocalFocusManager.current
     var drawerWidthPx by remember { mutableFloatStateOf(0f) }
     // The App Library lives past the last page, like on iOS; the drawer lives below.
     val libraryMode = settings.appsView == "library"
@@ -529,6 +534,20 @@ fun HomeScreen(viewModel: ZenithViewModel) {
             .onSizeChanged {
                 drawerHeightPx = it.height.toFloat()
                 drawerWidthPx = it.width.toFloat()
+            }
+            .onGloballyPositioned { homeOrigin = it.positionInRoot() }
+            // Watches every touch before anything else handles it, and never consumes one. While
+            // a note is being typed in, a touch anywhere outside it ends the typing and puts the
+            // keyboard away — the way a text field on any other screen behaves.
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                    val typing = HomeTypingArea.bounds
+                    if (typing != null && !typing.contains(down.position + homeOrigin)) {
+                        HomeTypingArea.bounds = null
+                        homeFocus.clearFocus(force = true)
+                    }
+                }
             }
     ) {
 

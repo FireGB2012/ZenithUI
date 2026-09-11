@@ -58,6 +58,10 @@ import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -422,9 +426,24 @@ private fun CalendarWidget() {
     }
 }
 
+/**
+ * Where on screen the home-screen text field you are typing in sits, or null when you are not
+ * typing. The home screen reads it to end typing when a touch lands anywhere else. There is only
+ * ever one home screen, so a single shared instance is enough.
+ */
+class TypingArea {
+    var bounds by mutableStateOf<Rect?>(null)
+}
+
+val HomeTypingArea = TypingArea()
+
 @Composable
 private fun NotesWidget(note: String, onNoteChange: (String) -> Unit) {
     val palette = LocalPalette.current
+    var focused by remember { mutableStateOf(false) }
+    var fieldBounds by remember { mutableStateOf(Rect.Zero) }
+    // A note scrolled off with its page, or removed, must not leave a stale area behind.
+    DisposableEffect(Unit) { onDispose { if (focused) HomeTypingArea.bounds = null } }
     Column(
         Modifier
             .fillMaxSize()
@@ -437,7 +456,16 @@ private fun NotesWidget(note: String, onNoteChange: (String) -> Unit) {
             onValueChange = onNoteChange,
             textStyle = TextStyle(color = palette.onGlass, fontSize = 13.sp, lineHeight = 18.sp),
             cursorBrush = SolidColor(palette.accent),
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .onGloballyPositioned { coords ->
+                    fieldBounds = coords.boundsInRoot()
+                    if (focused) HomeTypingArea.bounds = fieldBounds
+                }
+                .onFocusChanged { state ->
+                    focused = state.isFocused
+                    HomeTypingArea.bounds = if (state.isFocused) fieldBounds else null
+                },
             decorationBox = { inner ->
                 Box(Modifier.fillMaxSize()) {
                     if (note.isEmpty()) {

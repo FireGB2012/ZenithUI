@@ -60,10 +60,14 @@ data class AppCell(
     val className: String,
     override val dx: Float = 0f,
     override val dy: Float = 0f,
+    /** One column by one row normally, or two columns by one row for a super icon. */
+    override val spanX: Int = 1,
+    override val spanY: Int = ROW_UNITS,
 ) : HomeItem {
-    override val spanX: Int get() = 1
-    override val spanY: Int get() = ROW_UNITS
     val key: String get() = "$packageName/$className"
+
+    /** An ordinary one-cell icon: the only kind that folders are made from. */
+    val isPlainIcon: Boolean get() = spanX == 1 && spanY == ROW_UNITS
 
     override fun moved(page: Int, col: Int, row: Int) = copy(page = page, col = col, row = row, dx = 0f, dy = 0f)
 
@@ -74,6 +78,7 @@ data class AppCell(
         put("id", id); put("p", page); put("c", col); put("r", row)
         if (dx != 0f || dy != 0f) { put("dx", dx.toDouble()); put("dy", dy.toDouble()) }
         put("pkg", packageName); put("cls", className)
+        if (spanX != 1 || spanY != ROW_UNITS) { put("sx", spanX); put("sy", spanY) }
     }
 }
 
@@ -212,6 +217,7 @@ private fun baseItemFromJson(o: JSONObject): HomeItem? = when (o.optString("t"))
     "app" -> AppCell(
         id = o.optString("id"), page = o.optInt("p"), col = o.optInt("c"), row = o.optInt("r"),
         packageName = o.optString("pkg"), className = o.optString("cls"),
+        spanX = o.optInt("sx", 1), spanY = o.optInt("sy", ROW_UNITS),
     )
 
     "folder" -> FolderCell(

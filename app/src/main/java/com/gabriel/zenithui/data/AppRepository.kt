@@ -99,7 +99,7 @@ class AppRepository(context: Context) {
                     .addCategory(Intent.CATEGORY_LAUNCHER)
                     .setComponent(component)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
-                appContext.startActivity(intent)
+                appContext.startActivity(intent, opts)
                 true
             }.getOrDefault(false)
         }

@@ -28,6 +28,8 @@ data class ZenithSettings(
     val iconPack: String = "",
     /** The specular highlight that follows how you are holding the phone. */
     val glassShine: Boolean = true,
+    /** How an app grows out of its icon: colour (a card in the icon's colour) | glass (grey liquid glass). */
+    val openAnimation: String = "colour",
     /** What swiping up shows: drawer (every app, A to Z) | library (apps grouped by kind). */
     val appsView: String = "drawer",
     /** Apps you opened from Zenith, most recent first. Feeds Suggestions; never leaves the phone. */
@@ -38,6 +40,10 @@ data class ZenithSettings(
      */
     val freeform: Boolean = false,
     val dock: List<String> = emptyList(),
+    /** Whether the dock is shown. Its apps are kept either way, so turning it back on restores them. */
+    val showDock: Boolean = true,
+    /** The controls the Quick Toggles widget shows, in the order they appear. */
+    val toggles: List<String> = listOf("torch", "wifi", "bluetooth", "focus"),
     /** How many home pages you have asked for. Empty trailing ones are forgotten again. */
     val pages: Int = 1,
     val note: String = "",
@@ -89,10 +95,13 @@ data class ZenithSettings(
         put("iconShape", iconShape)
         put("iconPack", iconPack)
         put("glassShine", glassShine)
+        put("openAnimation", openAnimation)
         put("appsView", appsView)
         put("recentLaunches", JSONArray(recentLaunches))
         put("freeform", freeform)
         put("dock", JSONArray(dock))
+        put("showDock", showDock)
+        put("toggles", JSONArray(toggles))
         put("plusTrialStart", plusTrialStart)
         put("plusPurchased", plusPurchased)
         put("hiddenApps", JSONArray(hiddenApps))
@@ -133,10 +142,13 @@ data class ZenithSettings(
                 iconShape = o.optString("iconShape", d.iconShape),
                 iconPack = o.optString("iconPack", d.iconPack),
                 glassShine = o.optBoolean("glassShine", d.glassShine),
+                openAnimation = o.optString("openAnimation", d.openAnimation),
                 appsView = o.optString("appsView", d.appsView),
                 recentLaunches = o.optJSONArray("recentLaunches").toStringList(),
                 freeform = o.optBoolean("freeform", d.freeform),
                 dock = o.optJSONArray("dock").toStringList(),
+                showDock = o.optBoolean("showDock", d.showDock),
+                toggles = o.optJSONArray("toggles").toStringList().ifEmpty { d.toggles },
                 plusTrialStart = o.optLong("plusTrialStart", d.plusTrialStart),
                 plusPurchased = o.optBoolean("plusPurchased", d.plusPurchased),
                 hiddenApps = o.optJSONArray("hiddenApps").toStringList(),
@@ -209,23 +221,12 @@ class SettingsStore(context: Context) {
     }.getOrNull() ?: ZenithSettings()
 
     private fun readLayout(): List<HomeItem> = runCatching {
-        val upgraded = _settings.value.layoutVersion >= 1
         val raw = prefs.getString(KEY_LAYOUT, null) ?: return@runCatching emptyList()
         val arr = JSONArray(raw)
-        (0 until arr.length())
-            .mapNotNull { homeItemFromJson(arr.getJSONObject(it)) }
-            .map { item ->
-                // Sizes are only checked against the spec once they are in row units; a layout
-                // still awaiting that upgrade is left exactly as saved.
-                if (!upgraded || item !is WidgetCell) return@map item
-                // Sizes made in free placement are deliberate; do not pull them back into range.
-                if (_settings.value.freeform) return@map item
-                val spec = Widgets.byType(item.type) ?: return@map item
-                item.copy(
-                    spanX = item.spanX.coerceIn(spec.minSpanX, spec.maxSpanX),
-                    spanY = item.spanY.coerceIn(spec.minSpanY, spec.maxSpanY),
-                )
-            }
+        // Read back exactly as saved. Sizes and positions are put right by the view model, which
+        // can see the grid and everything else on the page; enlarging one widget here, blind to its
+        // neighbours, is what let widgets grow over the icons around them.
+        (0 until arr.length()).mapNotNull { homeItemFromJson(arr.getJSONObject(it)) }
     }.getOrNull() ?: emptyList()
 
     private companion object {

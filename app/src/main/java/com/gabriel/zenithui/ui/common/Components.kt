@@ -24,6 +24,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
@@ -104,8 +105,10 @@ fun AppIcon(
     val loader = LocalIconLoader.current
     val version by loader.version.collectAsState()
     val px = with(LocalDensity.current) { size.roundToPx() }.coerceIn(48, 288)
-    val bitmap by produceState<ImageBitmap?>(initialValue = null, key, px, version) {
-        value = loader.load(key, px)
+    // Starts from the icon already to hand, so returning home or scrolling never flashes a blank.
+    val ready = remember(key, px, version) { loader.peek(key, px) }
+    val bitmap by produceState(initialValue = ready, key, px, version) {
+        value = loader.load(key, px) ?: value
     }
     val palette = LocalPalette.current
 

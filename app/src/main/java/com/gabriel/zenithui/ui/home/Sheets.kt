@@ -231,6 +231,8 @@ fun ItemMenuSheet(
     onResize: () -> Unit,
     onRemove: () -> Unit,
     onUninstall: (String) -> Unit,
+    onIconSize: (spanX: Int) -> Unit,
+    onChooseToggles: () -> Unit = {},
     onDismiss: () -> Unit,
 ) {
     val title = when (item) {
@@ -242,6 +244,14 @@ fun ItemMenuSheet(
     ZenithSheet(visible = visible, onDismiss = onDismiss, title = title) {
         when (item) {
             is AppCell -> {
+                SectionLabel("Icon size")
+                Segmented(
+                    options = listOf("normal" to "Normal 1×1", "super" to "Super 2×1"),
+                    selected = if (item.spanX >= 2) "super" else "normal",
+                    // The sheet stays open, so you see the icon change behind it and can switch back.
+                    onSelect = { size -> onIconSize(if (size == "super") 2 else 1) },
+                )
+                Spacer(Modifier.height(10.dp))
                 MenuRow(Icons.AutoMirrored.Rounded.OpenInNew, "Open") { onOpen(item.key); onDismiss() }
                 MenuRow(Icons.Rounded.Info, "App info") { onAppInfo(item.key); onDismiss() }
                 MenuRow(Icons.Rounded.Home, "Remove from home", danger = true) { onRemove(); onDismiss() }
@@ -254,6 +264,9 @@ fun ItemMenuSheet(
             }
 
             is WidgetCell -> {
+                if (item.type == "toggles") {
+                    MenuRow(Icons.Rounded.Tune, "Choose buttons", "Pick which controls it shows") { onChooseToggles() }
+                }
                 MenuRow(Icons.Rounded.OpenInFull, "Resize", "Drag the handles to change its size") { onResize() }
                 MenuRow(Icons.Rounded.Home, "Remove widget", danger = true) { onRemove(); onDismiss() }
             }
@@ -500,6 +513,22 @@ fun SettingsSheet(
                 )
             }
 
+            Text("Opening apps", color = palette.onGlass, fontSize = 15.sp)
+            Segmented(
+                options = listOf("colour" to "Colour", "glass" to "Liquid glass"),
+                selected = settings.openAnimation,
+                onSelect = { value -> onChange { it.copy(openAnimation = value) } },
+            )
+            Text(
+                text = if (settings.openAnimation == "glass") {
+                    "The icon grows into grey glass over a frosted home screen."
+                } else {
+                    "The icon grows into a card in its own colour."
+                },
+                color = palette.onGlassMuted,
+                fontSize = 12.sp,
+            )
+
             SectionLabel("Grid")
             Segmented(
                 options = GridDensity.entries.map { it.id to it.label },
@@ -526,6 +555,25 @@ fun SettingsSheet(
                 Switch(
                     checked = settings.showLabels,
                     onCheckedChange = { value -> onChange { it.copy(showLabels = value) } },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color.White,
+                        checkedTrackColor = palette.accent,
+                    ),
+                )
+            }
+
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Show dock", color = palette.onGlass, fontSize = 15.sp)
+                    Text(
+                        "The bar of apps along the bottom. Its apps are kept while it is hidden.",
+                        color = palette.onGlassMuted,
+                        fontSize = 12.sp,
+                    )
+                }
+                Switch(
+                    checked = settings.showDock,
+                    onCheckedChange = { value -> onChange { it.copy(showDock = value) } },
                     colors = SwitchDefaults.colors(
                         checkedThumbColor = Color.White,
                         checkedTrackColor = palette.accent,
@@ -655,6 +703,26 @@ fun SettingsSheet(
             }
 
             SectionLabel("Device")
+            // Android may close any app in the background, a launcher included; then coming home
+            // has to start Zenith again. Exempting it from battery optimisation stops that.
+            val powerManager = remember { context.getSystemService(android.os.PowerManager::class.java) }
+            val keptLoaded = powerManager?.isIgnoringBatteryOptimizations(context.packageName) == true
+            MenuRow(
+                icon = Icons.Rounded.RestartAlt,
+                label = "Keep Zenith loaded",
+                subtitle = if (keptLoaded) {
+                    "On. Android will not put Zenith to sleep."
+                } else {
+                    "Off. Open Battery and choose Unrestricted."
+                },
+            ) {
+                runCatching {
+                    context.startActivity(
+                        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.parse("package:${context.packageName}"))
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    )
+                }
+            }
             MenuRow(Icons.Rounded.Home, "Set as default launcher") {
                 runCatching {
                     context.startActivity(Intent(Settings.ACTION_HOME_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))

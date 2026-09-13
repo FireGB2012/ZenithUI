@@ -35,8 +35,20 @@ class IconLoader(context: Context, private val repo: AppRepository) {
 
     private val appContext = context.applicationContext
     private val density = appContext.resources.displayMetrics.densityDpi
-    private val cache = LruCache<String, ImageBitmap>(400)
+    /** Sized by memory rather than count, so a big cache never makes Zenith the first thing Android closes. */
+    private val cache = object : LruCache<String, ImageBitmap>((Runtime.getRuntime().maxMemory() / 8).toInt()) {
+        override fun sizeOf(key: String, value: ImageBitmap) = value.width * value.height * 4
+    }
     private val lock = Mutex()
+
+    /** Rendered icons are also saved here, so a fresh start draws the home screen complete at once. */
+    private val diskDir = java.io.File(appContext.cacheDir, "icons").apply { mkdirs() }
+
+    /** Icons rendered by this run, as opposed to copies read back from an earlier one. */
+    private val fresh = java.util.Collections.synchronizedSet(HashSet<String>())
+
+    /** False until the icon pack has actually been loaded; icons are not rendered before then. */
+    @Volatile private var configured = false
 
     private var pack: IconPack? = null
     private var packName: String = ""
@@ -47,32 +59,77 @@ class IconLoader(context: Context, private val repo: AppRepository) {
     /** Bumped whenever the rendered look of every icon changes. */
     val version: StateFlow<Int> = _version.asStateFlow()
 
+    /**
+     * Sets which look saved icons belong to, before anything is drawn, so they can be found on the
+     * very first frame. The pack itself is loaded later by [configure].
+     */
+    fun prime(iconPack: String, iconShape: String) {
+        if (configured) return
+        packName = iconPack
+        shape = iconShape
+    }
+
     suspend fun configure(iconPack: String, iconShape: String) {
-        if (iconPack == packName && iconShape == shape) return
+        if (configured && iconPack == packName && iconShape == shape) return
         withContext(Dispatchers.IO) {
             lock.withLock {
+                val lookChanged = configured && (iconPack != packName || iconShape != shape)
+                val loadPack = !configured || iconPack != packName
                 shape = iconShape
-                if (iconPack != packName) {
-                    packName = iconPack
+                packName = iconPack
+                if (loadPack) {
                     pack = if (iconPack.isEmpty()) null else IconPack(appContext, iconPack).takeIf { it.load() }
                 }
-                cache.evictAll()
+                if (lookChanged) {
+                    cache.evictAll()
+                    fresh.clear()
+                    diskDir.listFiles()?.forEach { it.delete() }
+                }
+                configured = true
             }
         }
         _version.value = _version.value + 1
     }
 
-    suspend fun load(key: String, sizePx: Int): ImageBitmap? {
-        val cacheKey = "$key|$sizePx|$shape|$packName"
+    /**
+     * The icon at once if there is one to hand — in memory, or saved by an earlier run — so the home
+     * screen never draws a blank and then fills in icon by icon.
+     */
+    fun peek(key: String, sizePx: Int): ImageBitmap? {
+        val cacheKey = cacheKey(key, sizePx)
         cache.get(cacheKey)?.let { return it }
+        val file = fileFor(cacheKey)
+        if (!file.exists()) return null
+        val saved = runCatching { android.graphics.BitmapFactory.decodeFile(file.path)?.asImageBitmap() }.getOrNull()
+            ?: return null
+        cache.put(cacheKey, saved)
+        return saved
+    }
+
+    suspend fun load(key: String, sizePx: Int): ImageBitmap? {
+        val cacheKey = cacheKey(key, sizePx)
+        // A saved copy is shown straight away, but rendered once more each run in case the app has
+        // changed its icon since.
+        if (cacheKey in fresh) cache.get(cacheKey)?.let { return it }
+        if (!configured) return peek(key, sizePx)
         return withContext(Dispatchers.IO) {
-            val drawable = drawableFor(key) ?: return@withContext null
-            val rendered = runCatching { render(drawable, sizePx).asImageBitmap() }.getOrNull()
-                ?: return@withContext null
+            val drawable = drawableFor(key) ?: return@withContext peek(key, sizePx)
+            val bitmap = runCatching { render(drawable, sizePx) }.getOrNull()
+                ?: return@withContext peek(key, sizePx)
+            val rendered = bitmap.asImageBitmap()
             cache.put(cacheKey, rendered)
+            fresh += cacheKey
+            runCatching {
+                fileFor(cacheKey).outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+            }
             rendered
         }
     }
+
+    private fun cacheKey(key: String, sizePx: Int) = "$key|$sizePx|$shape|$packName"
+
+    private fun fileFor(cacheKey: String) =
+        java.io.File(diskDir, Integer.toHexString(cacheKey.hashCode()) + "-" + cacheKey.length + ".png")
 
     /**
      * Icons are asked for the moment the home screen composes, which can be before the app list

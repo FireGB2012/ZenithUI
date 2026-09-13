@@ -1,6 +1,7 @@
 package com.gabriel.zenithui.data
 
 import java.util.UUID
+import kotlin.math.roundToInt
 
 /** Occupancy map for one home page. */
 class PageGrid(private val columns: Int, private val rows: Int) {
@@ -36,6 +37,31 @@ class PageGrid(private val columns: Int, private val rows: Int) {
 
     fun place(spanX: Int, spanY: Int, rowStep: Int = 1): Pair<Int, Int>? =
         findSlot(spanX, spanY, rowStep)?.also { (c, r) -> occupy(c, r, spanX, spanY) }
+
+    /**
+     * The opening closest to [col], [row], or null when nothing that size fits. A column counts as
+     * two row units of distance — roughly the shape of a cell — so "closest" matches what you see.
+     */
+    fun nearestSlot(col: Int, row: Int, spanX: Int, spanY: Int, rowStep: Int = 1): Pair<Int, Int>? {
+        if (isFree(col, row, spanX, spanY)) return col to row
+        var best: Pair<Int, Int>? = null
+        var bestDistance = Int.MAX_VALUE
+        var r = 0
+        while (r <= rows - spanY) {
+            for (c in 0..columns - spanX) {
+                if (!isFree(c, r, spanX, spanY)) continue
+                val dx = (c - col) * 2
+                val dy = r - row
+                val distance = dx * dx + dy * dy
+                if (distance < bestDistance) {
+                    bestDistance = distance
+                    best = c to r
+                }
+            }
+            r += rowStep
+        }
+        return best
+    }
 }
 
 /**
@@ -79,46 +105,102 @@ object LayoutBuilder {
     /** Icons land on half-row boundaries, so rows stay tidy without wasting a slim widget's space. */
     const val ICON_ROW_STEP = ROW_UNITS / 2
 
-    /** Re-flows an existing layout when the grid size changes so nothing falls off the page. */
-    fun reflow(items: List<HomeItem>, columns: Int, rows: Int): List<HomeItem> {
+    /**
+     * Puts every item somewhere it may be on a [columns] by [rows] grid, moving as little as it
+     * can. Items are taken from the top of each page down, so whatever sits higher keeps its place
+     * and anything overlapping it moves to the closest opening — not the first gap on the page,
+     * which is what used to shuffle icons around.
+     *
+     * With [free] false it also undoes free placement: an offset folds into the nearest cell, icons
+     * go back to half-row steps and widgets back to the sizes they are designed for. A layout that
+     * already follows the rules comes back unchanged, so it is always safe to run again.
+     */
+    fun settle(items: List<HomeItem>, columns: Int, rows: Int, free: Boolean): List<HomeItem> {
+        val unitRows = rows * ROW_UNITS
         val grids = HashMap<Int, PageGrid>()
-        val result = mutableListOf<HomeItem>()
+        fun grid(page: Int) = grids.getOrPut(page) { PageGrid(columns, unitRows) }
+        fun stepFor(item: HomeItem) = if (free || item is WidgetCell) 1 else ICON_ROW_STEP
+
+        val placed = HashMap<String, HomeItem>()
         val overflow = mutableListOf<HomeItem>()
-
-        fun grid(page: Int) = grids.getOrPut(page) { PageGrid(columns, rows * ROW_UNITS) }
-
-        for (item in items.sortedWith(compareBy({ it.page }, { it.row }, { it.col }))) {
-            val spanX = item.spanX.coerceAtMost(columns)
-            val spanY = item.spanY.coerceAtMost(rows * ROW_UNITS)
+        val topDown = items.map { fit(it, columns, rows, free) }
+            .sortedWith(compareBy({ it.page }, { it.row }, { it.col }))
+        for (item in topDown) {
             val g = grid(item.page)
-            if (g.isFree(item.col, item.row, spanX, spanY)) {
-                g.occupy(item.col, item.row, spanX, spanY)
-                result += item
+            val slot = g.nearestSlot(item.col, item.row, item.spanX, item.spanY, stepFor(item))
+            if (slot == null) {
+                overflow += item
+                continue
+            }
+            g.occupy(slot.first, slot.second, item.spanX, item.spanY)
+            placed[item.id] = if (slot.first == item.col && slot.second == item.row) {
+                item
             } else {
-                val slot = g.findSlot(spanX, spanY, ICON_ROW_STEP)
-                if (slot != null) {
-                    g.occupy(slot.first, slot.second, spanX, spanY)
-                    result += item.moved(item.page, slot.first, slot.second)
-                } else {
-                    overflow += item
-                }
+                item.moved(item.page, slot.first, slot.second)
             }
         }
 
-        var page = (result.maxOfOrNull { it.page } ?: 0)
+        // Anything with no room left on its own page goes to the next page that has some.
+        var page = items.maxOfOrNull { it.page } ?: 0
         for (item in overflow) {
-            val spanX = item.spanX.coerceAtMost(columns)
-            val spanY = item.spanY.coerceAtMost(rows * ROW_UNITS)
-            var slot = grid(page).findSlot(spanX, spanY, ICON_ROW_STEP)
-            while (slot == null && page < 8) {
+            var slot = grid(page).findSlot(item.spanX, item.spanY, stepFor(item))
+            while (slot == null && page < MAX_PAGES - 1) {
                 page += 1
-                slot = grid(page).findSlot(spanX, spanY, ICON_ROW_STEP)
+                slot = grid(page).findSlot(item.spanX, item.spanY, stepFor(item))
             }
             if (slot == null) continue
-            grid(page).occupy(slot.first, slot.second, spanX, spanY)
-            result += item.moved(page, slot.first, slot.second)
+            grid(page).occupy(slot.first, slot.second, item.spanX, item.spanY)
+            placed[item.id] = item.moved(page, slot.first, slot.second)
         }
-        return result
+
+        // Kept in the original order, so nothing is drawn in a different stacking; and nothing is
+        // ever dropped — an item with no room anywhere simply stays as it was.
+        return items.map { placed[it.id] ?: it }
+    }
+
+    /** One item made legal on its own: sized for the grid, on the page, and snapped unless [free]. */
+    private fun fit(item: HomeItem, columns: Int, rows: Int, free: Boolean): HomeItem {
+        val unitRows = rows * ROW_UNITS
+        val sized: HomeItem = if (item is WidgetCell) {
+            if (free) {
+                item.copy(spanX = item.spanX.coerceIn(1, columns), spanY = item.spanY.coerceIn(1, unitRows))
+            } else {
+                val spec = Widgets.byType(item.type)
+                val (spanX, spanY) = if (spec != null) {
+                    Widgets.clampSpan(spec, item.spanX, item.spanY, columns, rows)
+                } else {
+                    item.spanX.coerceIn(1, columns) to item.spanY.coerceIn(1, unitRows)
+                }
+                item.copy(spanX = spanX, spanY = spanY)
+            }
+        } else if (item is AppCell && (item.spanX > minOf(2, columns) || item.spanY != ROW_UNITS)) {
+            // App icons come in two sizes: one cell, or a super icon two cells wide and one row tall.
+            item.copy(spanX = item.spanX.coerceIn(1, minOf(2, columns)), spanY = ROW_UNITS)
+        } else {
+            item
+        }
+        val maxCol = (columns - sized.spanX).coerceAtLeast(0)
+        val maxRow = (unitRows - sized.spanY).coerceAtLeast(0)
+
+        if (free) {
+            val col = sized.col.coerceIn(0, maxCol)
+            val row = sized.row.coerceIn(0, maxRow)
+            return if (col == sized.col && row == sized.row) {
+                sized
+            } else {
+                sized.moved(sized.page, col, row).nudged(sized.dx, sized.dy)
+            }
+        }
+
+        // Where the item is actually drawn, rounded to the closest spot normal placement allows.
+        val step = if (sized is WidgetCell) 1 else ICON_ROW_STEP
+        val col = (sized.col + sized.dx).roundToInt().coerceIn(0, maxCol)
+        val row = (((sized.row + sized.dy) / step).roundToInt() * step).coerceIn(0, maxRow)
+        return if (col == sized.col && row == sized.row && sized.dx == 0f && sized.dy == 0f) {
+            sized
+        } else {
+            sized.moved(sized.page, col, row)
+        }
     }
 
     fun newId(): String = UUID.randomUUID().toString().take(8)
@@ -130,5 +212,26 @@ object LayoutBuilder {
             is AppCell -> item.copy(row = item.row * ROW_UNITS)
             is FolderCell -> item.copy(row = item.row * ROW_UNITS)
         }
+    }
+
+    /**
+     * Reverses [upgradeToRowUnits] on a layout that was already in row units when it ran, which
+     * every home screen rebuilt by rerunning setup went through on its next launch. The tell cannot
+     * come from a real layout: things lie past the bottom of the page, yet every row and every
+     * height is a whole multiple of [ROW_UNITS], and dividing back down makes all of it fit.
+     * Anything else is returned untouched.
+     */
+    fun undoDoubleUpgrade(items: List<HomeItem>, rows: Int): List<HomeItem> {
+        val unitRows = rows * ROW_UNITS
+        if (items.none { it.row + it.spanY > unitRows }) return items
+        if (items.any { it.row % ROW_UNITS != 0 || it.spanY % ROW_UNITS != 0 }) return items
+        val shrunk = items.map { item ->
+            when (item) {
+                is WidgetCell -> item.copy(row = item.row / ROW_UNITS, spanY = item.spanY / ROW_UNITS)
+                is AppCell -> item.copy(row = item.row / ROW_UNITS)
+                is FolderCell -> item.copy(row = item.row / ROW_UNITS)
+            }
+        }
+        return if (shrunk.all { it.row + it.spanY <= unitRows }) shrunk else items
     }
 }

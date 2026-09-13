@@ -22,8 +22,8 @@ android {
         applicationId = "com.gabriel.zenithui"
         minSdk = 31
         targetSdk = 37
-        versionCode = 20
-        versionName = "2.9"
+        versionCode = 24
+        versionName = "3.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

@@ -91,6 +91,8 @@ import com.gabriel.zenithui.data.HomeItem
 import com.gabriel.zenithui.data.LayoutBuilder
 import com.gabriel.zenithui.data.ROW_UNITS
 import com.gabriel.zenithui.data.WidgetCell
+import com.gabriel.zenithui.data.findActivity
+import com.gabriel.zenithui.ui.common.LaunchOrigin
 import com.gabriel.zenithui.ui.common.Motion
 import com.gabriel.zenithui.ui.common.appearIn
 import com.gabriel.zenithui.ui.common.pressBounce
@@ -124,6 +126,7 @@ private sealed interface HomeSheet {
     data object Aura : HomeSheet
     data object ThemeMaker : HomeSheet
     data object HiddenApps : HomeSheet
+    data object Toggles : HomeSheet
 }
 
 @Composable
@@ -137,6 +140,8 @@ fun HomeScreen(viewModel: ZenithViewModel) {
     val appsByKey = remember(apps) { apps.associateBy { it.key } }
     val plus by viewModel.plus.collectAsState()
     val checkIn by viewModel.checkIn.collectAsState()
+    // Only true the first time the home screen appears after setup.
+    val entrance = remember { viewModel.consumeHomeEntrance() }
 
     // Counted once a day, on the way back to the launcher — which is every time you unlock the
     // phone, so the strip lands on the first look of the morning and never again that day.
@@ -228,6 +233,10 @@ fun HomeScreen(viewModel: ZenithViewModel) {
     val pagerState = rememberPagerState(pageCount = { pageCount })
     var pagerBounds by remember { mutableStateOf(androidx.compose.ui.geometry.Rect.Zero) }
     var dockBounds by remember { mutableStateOf(androidx.compose.ui.geometry.Rect.Zero) }
+    // A hidden dock must not keep catching drops at the place it used to be.
+    LaunchedEffect(settings.showDock) {
+        if (!settings.showDock) dockBounds = androidx.compose.ui.geometry.Rect.Zero
+    }
     // Only a single app goes in the dock; a folder or widget carried over it is ignored.
     val overDock = drag.item is AppCell && !dockBounds.isEmpty && dockBounds.contains(drag.pointer)
     val edgeFlipPx = with(LocalDensity.current) { PAGE_FLIP_EDGE.toPx() }
@@ -246,6 +255,49 @@ fun HomeScreen(viewModel: ZenithViewModel) {
 
     fun hideSheet() {
         sheetVisible = false
+    }
+
+    val hostView = androidx.compose.ui.platform.LocalView.current
+    var expansion by remember { mutableStateOf<AppExpansion?>(null) }
+
+    /**
+     * Opens an app the way iOS and One UI do: the icon that was just touched grows until it fills
+     * the screen, and the app fades in over it. An app opened any other way simply opens.
+     */
+    var preparingLaunch by remember { mutableStateOf(false) }
+
+    fun launchApp(key: String) {
+        if (expansion != null || preparingLaunch) return
+        val from = LaunchOrigin.boundsFor(key)
+        if (from == null) {
+            viewModel.open(key)
+            return
+        }
+        // The icon is fetched first (it is almost always cached already), so the card never
+        // starts out as a blank dark shape while its picture loads.
+        preparingLaunch = true
+        scope.launch {
+            val icon = runCatching { viewModel.icons.load(key, 192) }.getOrNull()
+            expansion = AppExpansion(key = key, from = from, icon = icon)
+            preparingLaunch = false
+        }
+    }
+
+    // Once the app has covered Zenith, Zenith is stopped: the card goes then, so coming back home
+    // shows the home screen and not a full-screen icon.
+    val hostLifecycle = remember(context) { (context.findActivity() as? androidx.lifecycle.LifecycleOwner)?.lifecycle }
+    androidx.compose.runtime.DisposableEffect(hostLifecycle) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            when (event) {
+                androidx.lifecycle.Lifecycle.Event.ON_STOP -> expansion = null
+                // A stopped window keeps its last picture. Redraw straight away on the way back, or
+                // the full-screen card from the moment the app opened flashes up over the home screen.
+                androidx.lifecycle.Lifecycle.Event.ON_START -> hostView.invalidate()
+                else -> Unit
+            }
+        }
+        hostLifecycle?.addObserver(observer)
+        onDispose { hostLifecycle?.removeObserver(observer) }
     }
 
     fun openDrawer(search: Boolean = false) {
@@ -504,7 +556,8 @@ fun HomeScreen(viewModel: ZenithViewModel) {
     }
 
     val homeBlur by animateDpAsState(
-        targetValue = if (drawerProgress > 0.55f) 20.dp else 0.dp,
+        // The liquid glass opening frosts the home screen behind the growing glass.
+        targetValue = if (drawerProgress > 0.55f || (expansion != null && settings.openAnimation == "glass")) 20.dp else 0.dp,
         animationSpec = tween(420),
         label = "homeBlur",
     )
@@ -620,7 +673,7 @@ fun HomeScreen(viewModel: ZenithViewModel) {
                             drag = drag,
                             resizingId = resizingId,
                             onResize = { id, spanX, spanY -> viewModel.resizeWidget(id, spanX, spanY) },
-                            onOpenApp = { viewModel.open(it) },
+                            onOpenApp = { launchApp(it) },
                             onOpenFolder = { showSheet(HomeSheet.Folder(it.id)) },
                             onItemMenu = { showSheet(HomeSheet.Item(it.id)) },
                             onSearch = { openDrawer(search = true) },
@@ -630,6 +683,7 @@ fun HomeScreen(viewModel: ZenithViewModel) {
                             resolveDrop = { item, col, row -> dropSlotFor(item, col, row) },
                             iconRowStep = iconRowStep(),
                             freePlacement = settings.freeform && plus.active,
+                            animateEntrance = entrance,
                             modifier = Modifier
                                 .fillMaxSize()
                                 .graphicsLayer {
@@ -679,12 +733,15 @@ fun HomeScreen(viewModel: ZenithViewModel) {
                         .padding(vertical = 10.dp),
                 )
 
-                DockBar(
+                if (settings.showDock) DockBar(
                     keys = settings.dock,
                     appsByKey = appsByKey,
                     settings = settings,
                     highlight = overDock,
-                    onOpen = { viewModel.open(it) },
+                    animateEntrance = entrance,
+                    columns = settings.columns,
+                    pageIconSize = drag.iconSize,
+                    onOpen = { launchApp(it) },
                     onLongPress = { showSheet(HomeSheet.DrawerApp(it)) },
                     onReorder = { from, to -> viewModel.moveInDock(from, to) },
                     onDragOut = { key, point ->
@@ -703,10 +760,13 @@ fun HomeScreen(viewModel: ZenithViewModel) {
                     },
                     onBounds = { dockBounds = it },
                     modifier = Modifier
-                        .padding(horizontal = 14.dp)
+                        .padding(horizontal = 12.dp)
                         .navigationBarsPadding()
                         .padding(bottom = 10.dp),
-                )
+                ) else {
+                    // Without the dock the pages reach down to the gesture bar instead.
+                    Spacer(Modifier.navigationBarsPadding().height(10.dp))
+                }
             }
         }
 
@@ -722,7 +782,7 @@ fun HomeScreen(viewModel: ZenithViewModel) {
                 onDrag = { delta -> dragDrawer(delta) },
                 onDragStopped = { velocity -> settleDrawer(velocity) },
                 onOpen = {
-                    viewModel.open(it)
+                    launchApp(it)
                     closeDrawer()
                 },
                 onLongPress = { showSheet(HomeSheet.DrawerApp(it.key)) },
@@ -806,6 +866,23 @@ fun HomeScreen(viewModel: ZenithViewModel) {
             AmbientScreen(userName = settings.userName, onDismiss = { ambient = false })
         }
 
+        expansion?.let { opening ->
+            AppExpansionOverlay(
+                expansion = opening,
+                glass = settings.openAnimation == "glass",
+                onFilled = {
+                    viewModel.open(
+                        opening.key,
+                        LaunchOrigin.toScreen(hostView, opening.from),
+                        android.app.ActivityOptions
+                            .makeCustomAnimation(context, com.gabriel.zenithui.R.anim.zenith_app_enter, 0)
+                            .toBundle(),
+                    )
+                },
+                onDone = { expansion = null },
+            )
+        }
+
         // ------------------------------------------------------------ sheets
         when (val current = sheet) {
             is HomeSheet.Item -> {
@@ -814,8 +891,14 @@ fun HomeScreen(viewModel: ZenithViewModel) {
                     visible = sheetVisible,
                     item = item,
                     appsByKey = appsByKey,
-                    onOpen = { viewModel.open(it) },
+                    onOpen = { launchApp(it) },
                     onAppInfo = { viewModel.openAppInfo(it) },
+                    onIconSize = { spanX ->
+                        if (!viewModel.resizeApp(item.id, spanX)) {
+                            Toast.makeText(context, "No room for that size on this page", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    onChooseToggles = { showSheet(HomeSheet.Toggles) },
                     onRename = { showSheet(HomeSheet.Folder(it)) },
                     onResize = {
                         resizingId = item.id
@@ -837,7 +920,7 @@ fun HomeScreen(viewModel: ZenithViewModel) {
                     folder = folder,
                     appsByKey = appsByKey,
                     settings = settings,
-                    onOpen = { viewModel.open(it) },
+                    onOpen = { launchApp(it) },
                     onRemoveApp = { viewModel.removeFromFolder(folder.id, it) },
                     onRename = { viewModel.renameFolder(folder.id, it) },
                     onDismiss = { hideSheet() },
@@ -851,7 +934,7 @@ fun HomeScreen(viewModel: ZenithViewModel) {
                     label = app?.label ?: current.key,
                     pinned = current.key in settings.dock,
                     onOpen = {
-                        viewModel.open(current.key)
+                        launchApp(current.key)
                         closeDrawer()
                     },
                     onAddToHome = {
@@ -958,6 +1041,13 @@ fun HomeScreen(viewModel: ZenithViewModel) {
                     if (ok) Toast.makeText(context, "Zenith Plus unlocked", Toast.LENGTH_SHORT).show()
                     ok
                 },
+                onDismiss = { hideSheet() },
+            )
+
+            HomeSheet.Toggles -> TogglesSheet(
+                visible = sheetVisible,
+                selected = settings.toggles,
+                onChange = { chosen -> viewModel.updateSettings { it.copy(toggles = chosen) } },
                 onDismiss = { hideSheet() },
             )
 

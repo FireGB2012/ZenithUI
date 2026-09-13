@@ -89,6 +89,7 @@ import com.gabriel.zenithui.data.ZenithSettings
 import com.gabriel.zenithui.ui.common.AppIcon
 import com.gabriel.zenithui.ui.common.Motion
 import com.gabriel.zenithui.ui.common.appearIn
+import com.gabriel.zenithui.ui.common.launchOrigin
 import com.gabriel.zenithui.ui.common.pressBounce
 import com.gabriel.zenithui.ui.common.staggerDelay
 import com.gabriel.zenithui.ui.theme.LocalPalette
@@ -362,6 +363,7 @@ fun AppDrawer(
                                     scaleY = edgeScale
                                     transformOrigin = TransformOrigin(0.5f, if (itemTop < 0f) 1f else 0f)
                                 }
+                                .launchOrigin(app.key)
                                 .pointerInput(app.key) {
                                     detectTapGestures(
                                         onTap = { onOpen(app.key) },
@@ -557,6 +559,7 @@ private fun LibraryCard(
                                         shape = shape,
                                         modifier = Modifier
                                             .pressBounce()
+                                            .launchOrigin(app.key)
                                             .pointerInput(app.key) {
                                                 detectTapGestures(
                                                     onTap = { onOpen(app.key) },

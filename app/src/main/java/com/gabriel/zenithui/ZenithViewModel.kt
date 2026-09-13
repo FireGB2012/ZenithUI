@@ -107,6 +107,18 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
             if (layout.value.isNotEmpty()) store.setLayout(LayoutBuilder.upgradeToRowUnits(layout.value))
             store.update { it.copy(layoutVersion = 1) }
         }
+        // Undo that fourfold rescale on a home screen that already went through it.
+        LayoutBuilder.undoDoubleUpgrade(layout.value, settings.value.rows).let { fixed ->
+            if (fixed != layout.value) store.setLayout(fixed)
+        }
+        // A layout left in a state normal placement does not allow — offsets from free placement,
+        // widgets grown over their neighbours — is put right once, as soon as it is loaded.
+        if (!settings.value.freeform) {
+            val current = settings.value
+            val settled = LayoutBuilder.settle(layout.value, current.columns, current.rows, free = false)
+            if (settled != layout.value) store.setLayout(settled)
+        }
+        icons.prime(settings.value.iconPack, settings.value.iconShape)
         viewModelScope.launch { repository.refresh() }
         viewModelScope.launch { wallpaperSource.refresh() }
         viewModelScope.launch {
@@ -325,13 +337,25 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
                 columns = columns,
                 rows = rows,
                 dock = dock,
+                // Built just now, so already in row units. Without this a rerun of setup left the
+                // version at 0, and the next launch rescaled the new layout as if it were an old
+                // whole-row one — every widget four times too tall, every app below the page.
+                layoutVersion = 1,
             )
         }
         store.setLayout(items)
         wallpaperSource.refresh()
     }
 
-    fun markOnboarded() = store.update { it.copy(onboarded = true) }
+    /** Set when setup has just finished, so the home screen's first appearance gets its entrance. */
+    private var homeEntrancePending = false
+
+    fun consumeHomeEntrance(): Boolean = homeEntrancePending.also { homeEntrancePending = false }
+
+    fun markOnboarded() {
+        homeEntrancePending = true
+        store.update { it.copy(onboarded = true) }
+    }
 
     fun resetEverything() {
         store.reset()
@@ -347,8 +371,13 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
         if (after.iconPack != before.iconPack || after.iconShape != before.iconShape) {
             viewModelScope.launch { icons.configure(after.iconPack, after.iconShape) }
         }
-        if (after.columns != before.columns || after.rows != before.rows) {
-            store.setLayout(LayoutBuilder.reflow(layout.value, after.columns, after.rows))
+        val gridChanged = after.columns != before.columns || after.rows != before.rows
+        // Leaving free placement puts everything back on the grid in one go, instead of leaving
+        // half-cell offsets and odd sizes behind for the next drag to trip over.
+        val leftFreePlacement = before.freeform && !after.freeform
+        if (gridChanged || leftFreePlacement) {
+            val settled = LayoutBuilder.settle(layout.value, after.columns, after.rows, free = after.freeform)
+            if (settled != layout.value) store.setLayout(settled)
         }
     }
 
@@ -368,8 +397,9 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
 
     // ---------------------------------------------------------------- launching
 
-    fun open(key: String) {
-        if (!repository.launch(key)) {
+    /** Opens an app. [sourceBounds] and [options] let its window grow out of the icon that was touched. */
+    fun open(key: String, sourceBounds: android.graphics.Rect? = null, options: android.os.Bundle? = null) {
+        if (!repository.launch(key, sourceBounds, options)) {
             refreshApps()
             return
         }
@@ -442,6 +472,41 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
         if (!isSlotFree(widget.page, widget.col, widget.row, targetX, targetY, id)) return false
         store.mutateLayout { items ->
             items.map { if (it.id == id) widget.copy(spanX = targetX, spanY = targetY) else it }
+        }
+        return true
+    }
+
+    /**
+     * Makes an app icon ordinary (1 by 1) or a super icon (2 by 1), as HyperOS does. It grows from
+     * where it is when there is room, and otherwise moves to the nearest spot on its page that
+     * fits. False when nothing that size fits on the page; then nothing changes.
+     */
+    fun resizeApp(id: String, spanX: Int): Boolean {
+        val app = layout.value.firstOrNull { it.id == id } as? AppCell ?: return false
+        val s = settings.value
+        val unitRows = s.rows * ROW_UNITS
+        val sx = spanX.coerceIn(1, minOf(2, s.columns))
+        val sy = ROW_UNITS
+        if (sx == app.spanX && sy == app.spanY) return true
+        val step = if (s.freeform && plus.value.active) 1 else LayoutBuilder.ICON_ROW_STEP
+        val slot = nearestFreeSlot(
+            page = app.page,
+            col = app.col.coerceAtMost(s.columns - sx),
+            row = app.row.coerceAtMost(unitRows - sy),
+            spanX = sx,
+            spanY = sy,
+            ignoreId = id,
+            rowStep = step,
+        ) ?: return false
+        val resized = app.copy(spanX = sx, spanY = sy)
+        store.mutateLayout { items ->
+            items.map {
+                when {
+                    it.id != id -> it
+                    slot.first == app.col && slot.second == app.row -> resized
+                    else -> resized.moved(app.page, slot.first, slot.second)
+                }
+            }
         }
         return true
     }

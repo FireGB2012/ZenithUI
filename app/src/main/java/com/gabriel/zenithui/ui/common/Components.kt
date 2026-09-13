@@ -1,5 +1,6 @@
 package com.gabriel.zenithui.ui.common
 
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.RepeatMode
@@ -92,6 +93,38 @@ fun AuroraBackdrop(modifier: Modifier = Modifier, intensity: Float = 1f) {
                 }
             }
     )
+}
+
+/** A super icon: the app's icon stretched to fill [modifier]'s width, as HyperOS draws them. */
+@Composable
+fun WideAppIcon(key: String, label: String, modifier: Modifier = Modifier) {
+    val loader = LocalIconLoader.current
+    val version by loader.version.collectAsState()
+    val palette = LocalPalette.current
+    BoxWithConstraints(modifier, contentAlignment = Alignment.Center) {
+        val density = LocalDensity.current
+        val widthPx = with(density) { maxWidth.roundToPx() }
+        val heightPx = with(density) { maxHeight.roundToPx() }
+        val ready = remember(key, widthPx, heightPx, version) { loader.peekWide(key, widthPx, heightPx) }
+        val bitmap by produceState(initialValue = ready, key, widthPx, heightPx, version) {
+            value = loader.loadWide(key, widthPx, heightPx) ?: value
+        }
+        val image = bitmap
+        val tall = maxHeight
+        if (image != null) {
+            Image(bitmap = image, contentDescription = label, modifier = Modifier.fillMaxSize())
+        } else {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .clip(RoundedCornerShape(tall * 0.26f))
+                    .background(palette.onGlass.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                AppIcon(key = key, label = label, size = tall * 0.8f)
+            }
+        }
+    }
 }
 
 @Composable

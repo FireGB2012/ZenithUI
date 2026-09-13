@@ -1,14 +1,12 @@
 package com.gabriel.zenithui.ui.home
 
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.AnimationSpec
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -19,76 +17,71 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.gabriel.zenithui.ui.theme.LocalPalette
-import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 
 /**
- * An app on its way open: which one, where its icon was when it was tapped, and the icon itself —
- * loaded before the card appears, so its very first frame already has the right colour and logo.
+ * An app on its way open or closed: which one, where its icon sits, and the icon itself — loaded
+ * before the card appears, so its very first frame already has the right colour and logo.
  */
 @Immutable
 data class AppExpansion(val key: String, val from: Rect, val icon: ImageBitmap?)
 
-/** How long the icon takes to grow until it fills the screen. */
-private const val GROW_MS = 320
-
 /**
- * How long after the app is asked to open the card is taken away. By then the app's own opening
- * screen covers it, and Zenith is still drawing, so the home screen underneath is ready before you
- * come back to it. It also clears the card if the app never opened at all.
+ * The spring every opening and closing runs on. A spring, not a timer, is what lets the card be
+ * turned round mid-flight: it carries on from wherever it is at whatever speed it has, so opening
+ * and closing an app over and over stays one continuous, fluid motion — the way iOS and HyperOS do.
  */
-private const val GIVE_UP_MS = 700L
+fun launchSpring(): AnimationSpec<Float> = spring(dampingRatio = 0.86f, stiffness = 280f)
+
+/** How far the card has to grow before the app itself is asked to open, so it is ready as the card fills. */
+const val LAUNCH_AT = 0.55f
 
 /**
- * Opening an app the way iOS and One UI do. Android does not let a launcher that is not built
- * into the phone animate another app's window, so Zenith draws the growth itself: a card in the
- * icon's own colour, carrying the icon, grows from where the icon was until it fills the screen.
- * [onFilled] then opens the app, which fades in over the card.
+ * Opening and closing an app the way iOS and One UI do. Android does not let a launcher that is not
+ * built into the phone move another app's window, so Zenith draws the motion itself: a card in the
+ * icon's own colour, carrying the icon, between the icon's place ([progress] 0) and the whole
+ * screen ([progress] 1). The card only draws; whoever owns [progress] decides where it goes.
  */
 @Composable
-fun AppExpansionOverlay(
-    expansion: AppExpansion,
+fun AppLaunchCard(
+    card: AppExpansion,
+    /** 0 is the icon, 1 is the whole screen. Read while drawing, so every frame is smooth. */
+    progress: () -> Float,
     /** Grey liquid glass instead of a card in the icon's own colour. */
-    glass: Boolean = false,
-    onFilled: () -> Unit,
-    onDone: () -> Unit,
+    glass: Boolean,
+    /** While an app is opening the card catches taps, so tapping it sends the app back. */
+    catchTaps: Boolean,
+    onTap: () -> Unit,
 ) {
     val palette = LocalPalette.current
-    val progress = remember(expansion) { Animatable(0f) }
-    val icon = expansion.icon
+    val icon = card.icon
     val fill = remember(icon) { icon?.let(::backgroundColourOf) } ?: palette.backdrop.last()
-    val filled by rememberUpdatedState(onFilled)
-    val done by rememberUpdatedState(onDone)
-
-    LaunchedEffect(expansion) {
-        progress.animateTo(1f, tween(GROW_MS, easing = FastOutSlowInEasing))
-        filled()
-        delay(GIVE_UP_MS)
-        done()
-    }
+    val tapped by rememberUpdatedState(onTap)
 
     Canvas(
         Modifier
             .fillMaxSize()
-            // Nothing behind the card can be tapped while an app is opening.
-            .pointerInput(expansion) { detectTapGestures { } },
+            .then(
+                if (catchTaps) Modifier.pointerInput(card.key) { detectTapGestures { tapped() } } else Modifier
+            ),
     ) {
-        val p = progress.value
-        val from = expansion.from
+        val p = progress().coerceIn(0f, 1.04f)
+        if (p <= 0.002f) return@Canvas
+        val from = card.from
         val left = mix(from.left, 0f, p)
         val top = mix(from.top, 0f, p)
         val right = mix(from.right, size.width, p)
         val bottom = mix(from.bottom, size.height, p)
         // An icon's own rounding at the start, the phone's screen corners at the end.
-        val radius = mix(from.minDimension * 0.24f, 28.dp.toPx(), p)
+        val radius = mix(from.minDimension * 0.24f, 28.dp.toPx(), p.coerceIn(0f, 1f))
         val cardTopLeft = Offset(left, top)
         val cardSize = Size(right - left, bottom - top)
         val corners = CornerRadius(radius, radius)
@@ -96,7 +89,7 @@ fun AppExpansionOverlay(
             // Grey liquid glass: a see-through tint over the home screen, which blurs behind it, a
             // soft sheen falling from the top and a thin bright rim.
             drawRoundRect(
-                color = GLASS_TINT.copy(alpha = 0.42f + 0.22f * p),
+                color = GLASS_TINT.copy(alpha = 0.42f + 0.22f * p.coerceIn(0f, 1f)),
                 topLeft = cardTopLeft,
                 size = cardSize,
                 cornerRadius = corners,
@@ -123,7 +116,9 @@ fun AppExpansionOverlay(
         }
 
         val bitmap = icon ?: return@Canvas
-        val side = mix(from.minDimension, 96.dp.toPx(), p)
+        // The logo grows more slowly than the card, easing towards the size an app's own opening
+        // screen shows it at, so the hand-over to the app is seamless.
+        val side = mix(from.minDimension, 96.dp.toPx(), p.coerceIn(0f, 1f))
         val centreX = (left + right) / 2f
         val centreY = (top + bottom) / 2f
         drawImage(

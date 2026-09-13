@@ -111,6 +111,12 @@ import kotlin.math.roundToInt
  */
 private val PAGE_FLIP_EDGE = 60.dp
 
+/** How far the home screen sinks back while an app opens out of it. */
+private const val HOME_SUNK = 0.9f
+
+/** Coming home longer than this after opening an app does not shrink it back into its icon. */
+private const val CLOSE_WINDOW_MS = 30 * 60 * 1000L
+
 /** How long it has to stay there, so carrying an item past an edge does not flip anything. */
 private const val PAGE_FLIP_DELAY = 240L
 
@@ -258,46 +264,135 @@ fun HomeScreen(viewModel: ZenithViewModel) {
     }
 
     val hostView = androidx.compose.ui.platform.LocalView.current
-    var expansion by remember { mutableStateOf<AppExpansion?>(null) }
+    val hostLifecycle = remember(context) { (context.findActivity() as? androidx.lifecycle.LifecycleOwner)?.lifecycle }
 
     /**
-     * Opens an app the way iOS and One UI do: the icon that was just touched grows until it fills
-     * the screen, and the app fades in over it. An app opened any other way simply opens.
+     * The one card an app opens and closes through. It is never replaced mid-flight: opening sends
+     * [cardProgress] towards 1 and closing towards 0, and a spring carries it from wherever it is
+     * with the speed it already has. That is what makes opening and closing an app over and over
+     * one smooth, unbroken motion instead of a string of restarts.
      */
+    var card by remember { mutableStateOf<AppExpansion?>(null) }
+    val cardProgress = remember { Animatable(0f) }
+    /** Heading open (true) or back into the icon (false). */
+    var cardOpening by remember { mutableStateOf(false) }
+    /** When the app was asked to open, or 0 while it has not been. */
+    val launchedAt = remember { LongArray(1) }
+    val cardJob = remember { arrayOfNulls<kotlinx.coroutines.Job>(1) }
     var preparingLaunch by remember { mutableStateOf(false) }
 
+    fun steerCard(block: suspend kotlinx.coroutines.CoroutineScope.() -> Unit) {
+        cardJob[0]?.cancel()
+        cardJob[0] = scope.launch(block = block)
+    }
+
+    /** Sends the card back into its icon from wherever it is, and stops the app opening if it has not yet. */
+    fun closeCard() {
+        if (card == null) return
+        cardOpening = false
+        steerCard {
+            cardProgress.animateTo(0f, launchSpring())
+            card = null
+            launchedAt[0] = 0L
+        }
+    }
+
+    /** Sends the card towards the whole screen, asking the app to open on the way. */
+    fun openCard(target: AppExpansion) {
+        card = target
+        cardOpening = true
+        steerCard {
+            // The app is asked to open partway up, so it is already on its way as the card fills.
+            launch {
+                snapshotFlow { cardProgress.value }.first { it >= LAUNCH_AT }
+                launchedAt[0] = android.os.SystemClock.uptimeMillis()
+                viewModel.open(
+                    target.key,
+                    LaunchOrigin.toScreen(hostView, target.from),
+                    android.app.ActivityOptions
+                        .makeCustomAnimation(context, com.gabriel.zenithui.R.anim.zenith_app_enter, 0)
+                        .toBundle(),
+                )
+            }
+            cardProgress.animateTo(1f, launchSpring())
+            // The app should now cover Zenith. If Zenith is still in front, it never opened: come back.
+            delay(900)
+            if (hostLifecycle?.currentState?.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED) == true) {
+                cardOpening = false
+                cardProgress.animateTo(0f, launchSpring())
+                card = null
+                launchedAt[0] = 0L
+            }
+        }
+    }
+
+    /**
+     * Opens an app the way iOS and One UI do: the icon grows until it fills the screen and the app
+     * appears over it. Tapping the same icon while its card is still moving turns the card round
+     * rather than starting again. An app opened any other way simply opens.
+     */
     fun launchApp(key: String) {
-        if (expansion != null || preparingLaunch) return
+        val current = card
+        if (current != null && current.key == key) {
+            openCard(current)
+            return
+        }
         val from = LaunchOrigin.boundsFor(key)
         if (from == null) {
             viewModel.open(key)
             return
         }
+        if (preparingLaunch) return
         // The icon is fetched first (it is almost always cached already), so the card never
         // starts out as a blank dark shape while its picture loads.
         preparingLaunch = true
         scope.launch {
             val icon = runCatching { viewModel.icons.load(key, 192) }.getOrNull()
-            expansion = AppExpansion(key = key, from = from, icon = icon)
             preparingLaunch = false
+            // A different app starts from its own icon.
+            if (card != null) {
+                cardJob[0]?.cancel()
+                cardProgress.snapTo(0f)
+            }
+            launchedAt[0] = 0L
+            openCard(AppExpansion(key = key, from = from, icon = icon))
         }
     }
 
-    // Once the app has covered Zenith, Zenith is stopped: the card goes then, so coming back home
-    // shows the home screen and not a full-screen icon.
-    val hostLifecycle = remember(context) { (context.findActivity() as? androidx.lifecycle.LifecycleOwner)?.lifecycle }
     androidx.compose.runtime.DisposableEffect(hostLifecycle) {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
-            when (event) {
-                androidx.lifecycle.Lifecycle.Event.ON_STOP -> expansion = null
-                // A stopped window keeps its last picture. Redraw straight away on the way back, or
-                // the full-screen card from the moment the app opened flashes up over the home screen.
-                androidx.lifecycle.Lifecycle.Event.ON_START -> hostView.invalidate()
-                else -> Unit
+            if (event != androidx.lifecycle.Lifecycle.Event.ON_START) return@LifecycleEventObserver
+            // A stopped window keeps its last picture; redraw straight away on the way back.
+            hostView.invalidate()
+            // Coming back from an app opened from its icon: the card is still over the screen, so it
+            // shrinks back into that icon while the home screen comes forward, the way iOS closes
+            // an app. It picks up from wherever it was, even if the app had only just opened.
+            val recent = launchedAt[0] != 0L &&
+                android.os.SystemClock.uptimeMillis() - launchedAt[0] < CLOSE_WINDOW_MS
+            if (card != null && recent) {
+                closeCard()
+            } else if (card != null && !cardOpening) {
+                cardJob[0]?.cancel()
+                scope.launch { cardProgress.snapTo(0f) }
+                card = null
             }
         }
         hostLifecycle?.addObserver(observer)
         onDispose { hostLifecycle?.removeObserver(observer) }
+    }
+
+    // Parallax for the real wallpaper: tell Android how far across the pages we are, so a
+    // wallpaper wider than the screen slides slowly behind them, as on any stock launcher.
+    val wallpaperManager = remember(context) { android.app.WallpaperManager.getInstance(context) }
+    LaunchedEffect(pagerState, pageCount) {
+        snapshotFlow { pagerState.currentPage + pagerState.currentPageOffsetFraction }.collect { position ->
+            val token = hostView.windowToken ?: return@collect
+            val last = (pageCount - 1).coerceAtLeast(1)
+            runCatching {
+                wallpaperManager.setWallpaperOffsetSteps(1f / last, 1f)
+                wallpaperManager.setWallpaperOffsets(token, if (pageCount > 1) (position / last).coerceIn(0f, 1f) else 0.5f, 0.5f)
+            }
+        }
     }
 
     fun openDrawer(search: Boolean = false) {
@@ -557,8 +652,9 @@ fun HomeScreen(viewModel: ZenithViewModel) {
 
     val homeBlur by animateDpAsState(
         // The liquid glass opening frosts the home screen behind the growing glass.
-        targetValue = if (drawerProgress > 0.55f || (expansion != null && settings.openAnimation == "glass")) 20.dp else 0.dp,
-        animationSpec = tween(420),
+        targetValue = if (drawerProgress > 0.55f || (card != null && settings.openAnimation == "glass")) 20.dp else 0.dp,
+        // A quick frost in and out, so opening and closing apps never feels held up by it.
+        animationSpec = tween(110),
         label = "homeBlur",
     )
     val homePressed by viewModel.homePressed.collectAsState()
@@ -566,14 +662,17 @@ fun HomeScreen(viewModel: ZenithViewModel) {
     val isDefaultLauncher = remember(homePressed, environmentTick) { isDefaultLauncher(context) }
     LaunchedEffect(homePressed) {
         if (homePressed > 0) {
+            // Home while an app is still opening sends it straight back into its icon.
+            if (card != null && cardOpening) closeCard()
             hideSheet()
             closeDrawer()
             if (pagerState.currentPage != 0) pagerState.animateScrollToPage(0)
         }
     }
 
-    BackHandler(enabled = drawerProgress > 0.002f || sheetVisible || resizingId != null || ambient) {
+    BackHandler(enabled = (card != null && cardOpening) || drawerProgress > 0.002f || sheetVisible || resizingId != null || ambient) {
         when {
+            card != null && cardOpening -> closeCard()
             ambient -> ambient = false
             sheetVisible -> hideSheet()
             resizingId != null -> resizingId = null
@@ -609,10 +708,14 @@ fun HomeScreen(viewModel: ZenithViewModel) {
             Modifier
                 .fillMaxSize()
                 .graphicsLayer {
-                    val scale = 1f - 0.06f * drawerProgress
+                    // The home screen sinks back as the card grows and comes forward as it shrinks,
+                    // on the very same spring, so both always move together.
+                    val zoom = 1f - (1f - HOME_SUNK) * cardProgress.value.coerceIn(0f, 1f)
+                    val scale = (1f - 0.06f * drawerProgress) * zoom
                     scaleX = scale
                     scaleY = scale
-                    alpha = 1f - 0.55f * drawerProgress
+                    val sunk = ((1f - zoom) / (1f - HOME_SUNK)).coerceIn(0f, 1f)
+                    alpha = (1f - 0.55f * drawerProgress) * (1f - 0.45f * sunk)
                 }
                 // The blur is its own short animation rather than a per-frame effect rebuild:
                 // recreating a full screen RenderEffect on every drag frame is what made the
@@ -684,6 +787,7 @@ fun HomeScreen(viewModel: ZenithViewModel) {
                             iconRowStep = iconRowStep(),
                             freePlacement = settings.freeform && plus.active,
                             animateEntrance = entrance,
+                            pageOffset = offset,
                             modifier = Modifier
                                 .fillMaxSize()
                                 .graphicsLayer {
@@ -866,20 +970,13 @@ fun HomeScreen(viewModel: ZenithViewModel) {
             AmbientScreen(userName = settings.userName, onDismiss = { ambient = false })
         }
 
-        expansion?.let { opening ->
-            AppExpansionOverlay(
-                expansion = opening,
+        card?.let { moving ->
+            AppLaunchCard(
+                card = moving,
+                progress = { cardProgress.value },
                 glass = settings.openAnimation == "glass",
-                onFilled = {
-                    viewModel.open(
-                        opening.key,
-                        LaunchOrigin.toScreen(hostView, opening.from),
-                        android.app.ActivityOptions
-                            .makeCustomAnimation(context, com.gabriel.zenithui.R.anim.zenith_app_enter, 0)
-                            .toBundle(),
-                    )
-                },
-                onDone = { expansion = null },
+                catchTaps = cardOpening,
+                onTap = { closeCard() },
             )
         }
 

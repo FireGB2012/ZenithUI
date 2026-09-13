@@ -1,5 +1,6 @@
 package com.gabriel.zenithui.ui.home
 
+import com.gabriel.zenithui.ui.common.WideAppIcon
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.VectorConverter
 import androidx.compose.animation.core.animateFloatAsState
@@ -187,6 +188,8 @@ fun HomePage(
     freePlacement: Boolean = false,
     /** Right after setup the page flies in; any other time it is simply there. */
     animateEntrance: Boolean = false,
+    /** How far this page is from the middle of the screen while swiping, -1 to 1. */
+    pageOffset: Float = 0f,
     modifier: Modifier = Modifier,
 ) {
     val palette = LocalPalette.current
@@ -351,6 +354,10 @@ fun HomePage(
                         // grey copy under your finger that moves.
                         scaleX = scale
                         scaleY = scale
+                        // Parallax: while pages slide, items drift apart from the middle of the page
+                        // and settle back together as it lands, so the page has depth.
+                        translationX = pageOffset * cellWidthPx * PAGE_PARALLAX *
+                            (item.col + item.spanX / 2f - settings.columns / 2f)
                     },
                 contentAlignment = Alignment.Center,
             ) {
@@ -427,6 +434,7 @@ fun HomePage(
                             item = item,
                             cellWidthPx = cellWidthPx,
                             cellHeightPx = cellHeightPx,
+                            lines = lines,
                             onResize = onResize,
                         )
                     }
@@ -473,7 +481,7 @@ fun HomeItemContent(
             val shape = ZenithShapes.forIconShape(settings.iconShape)
             when {
                 item.spanX >= 2 ->
-                    SuperAppTile(key = item.key, label = label, iconSize = iconSize, shape = shape, lines = lines)
+                    SuperAppTile(key = item.key, label = label, iconSize = iconSize, lines = lines, showLabel = settings.showLabels)
                 else -> AppTile(
                     key = item.key,
                     label = label,
@@ -518,45 +526,52 @@ fun HomeItemContent(
 }
 
 /**
- * A super icon, as on HyperOS: two columns wide and one row tall. The icon keeps its usual size
- * and sits exactly where an ordinary icon in the first column would; the glass tile ends where the
- * icon in the second column would end. So it lines up with every icon and widget around it.
+ * A super icon, as on HyperOS: the app's icon stretched two columns wide, its background filling
+ * the whole shape and its logo in the middle, with the name underneath like any other icon. It
+ * starts at the left edge of the icon in its first column and ends at the right edge of the icon
+ * in its second, on the same top line as every icon in the row.
  */
 @Composable
 private fun SuperAppTile(
     key: String,
     label: String,
     iconSize: Dp,
-    shape: androidx.compose.ui.graphics.Shape,
     lines: IconLines?,
+    showLabel: Boolean,
 ) {
     val palette = LocalPalette.current
-    Box(
+    Column(
         Modifier
             .fillMaxSize()
-            .then(if (lines != null) Modifier.toIconLines(lines, ROW_UNITS) else Modifier.padding(horizontal = 6.dp)),
-        contentAlignment = Alignment.CenterStart,
+            .then(
+                if (lines != null) {
+                    Modifier.padding(start = lines.side, end = lines.side, top = lines.top)
+                } else {
+                    Modifier.padding(horizontal = 6.dp, vertical = 4.dp)
+                }
+            ),
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Row(
-            Modifier
+        WideAppIcon(
+            key = key,
+            label = label,
+            modifier = Modifier
                 .fillMaxWidth()
                 .height(iconSize)
                 .launchOrigin(key)
-                .pressBounce(0.96f)
-                .glass(RoundedCornerShape(iconSize * 0.26f), strength = 0.9f),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            AppIcon(key = key, label = label, size = iconSize, shape = shape)
-            Text(
-                text = label,
-                color = palette.onGlass,
-                fontSize = 14.sp,
-                lineHeight = 17.sp,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(horizontal = 12.dp),
-            )
+                .pressBounce(0.96f),
+        )
+        if (showLabel) {
+            Box(Modifier.height(LABEL_LINE_HEIGHT), contentAlignment = Alignment.BottomCenter) {
+                Text(
+                    text = label,
+                    color = palette.onGlass,
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    fontWeight = FontWeight.Medium,
+                )
+            }
         }
     }
 }
@@ -688,6 +703,7 @@ private fun BoxScope.ResizeFrame(
     item: WidgetCell,
     cellWidthPx: Float,
     cellHeightPx: Float,
+    lines: IconLines,
     onResize: (String, Int, Int) -> Boolean,
 ) {
     val palette = LocalPalette.current
@@ -696,7 +712,7 @@ private fun BoxScope.ResizeFrame(
     Box(
         Modifier
             .matchParentSize()
-            .padding(4.dp)
+            .toIconLines(lines, item.spanY)
             .appearIn(fromScale = 0.94f, riseFrom = 0f)
             .border(2.dp, palette.accent, ZenithShapes.card)
     )
@@ -762,7 +778,10 @@ fun DragGhost(
     val height = with(density) { (drag.cellHeight * item.spanY).toDp() }
     val topLeft = drag.pointer - drag.grab
     val lift = remember { Animatable(1f) }
-    LaunchedEffect(item.id) { lift.animateTo(1.14f, spring(dampingRatio = 0.38f, stiffness = 260f)) }
+    LaunchedEffect(item.id) {
+        val target = if (item is WidgetCell || (item is AppCell && !item.isPlainIcon)) 1.02f else 1.14f
+        lift.animateTo(target, spring(dampingRatio = 0.38f, stiffness = 260f))
+    }
     val ghostAlpha by animateFloatAsState(if (drag.overRemove) 0.32f else 0.62f, Motion.smooth(), label = "ghost")
     // Colour is drained out of the copy under your finger so it reads as a placeholder.
     val greyPaint = remember {
@@ -1003,6 +1022,9 @@ fun DockBar(
         }
     }
 }
+
+/** How far items spread apart, in cells per cell from the middle, as a page slides fully away. */
+private const val PAGE_PARALLAX = 0.35f
 
 /** Height of a single 11sp app label line, plus its spacer — the hint lines up with it. */
 private val LABEL_LINE_HEIGHT = 20.dp

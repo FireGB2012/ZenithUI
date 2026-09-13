@@ -81,6 +81,19 @@ class AppRepository(context: Context) {
 
     fun activityInfo(key: String): LauncherActivityInfo? = synchronized(activities) { activities[key] }
 
+    /**
+     * The icon the app itself ships, read straight from its resources. Some phones — Xiaomi's MIUI
+     * and HyperOS among them — hand launchers a themed copy instead, which is why icons looked like
+     * MIUI's. Null when the app's icon cannot be read that way; then [systemIcon] is used.
+     */
+    fun originalIcon(key: String, densityDpi: Int): Drawable? = runCatching {
+        val info = activityInfo(key)?.activityInfo ?: return@runCatching null
+        val id = info.iconResource.takeIf { it != 0 } ?: return@runCatching null
+        appContext.packageManager
+            .getResourcesForApplication(info.applicationInfo)
+            .getDrawableForDensity(id, densityDpi, null)
+    }.getOrNull()
+
     fun systemIcon(key: String, densityDpi: Int): Drawable? =
         runCatching { activityInfo(key)?.getIcon(densityDpi) }.getOrNull()
 

@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -276,7 +277,21 @@ fun HomePage(
                         .requiredSize(cellWidthDp * dragged.spanX, cellHeightDp * dragged.spanY),
                     contentAlignment = Alignment.Center,
                 ) {
-                    if (dragged is WidgetCell || (dragged is AppCell && !dragged.isPlainIcon)) {
+                    if (dragged is AppCell && dragged.spanY > ROW_UNITS) {
+                        // A tall icon's hint is the icon itself, not the two rows around it.
+                        val frame = tallIconFrame(cellWidthDp, rowHeightDp, iconSize)
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+                            Box(
+                                Modifier
+                                    .padding(top = lines.top + frame.drop)
+                                    .width(cellWidthDp - lines.side * 2)
+                                    .height(frame.height)
+                                    .appearIn(fromScale = 0.8f, riseFrom = 0f)
+                                    .clip(RoundedCornerShape((cellWidthDp - lines.side * 2) * 0.26f))
+                                    .background(palette.onGlass.copy(alpha = 0.12f))
+                            )
+                        }
+                    } else if (dragged is WidgetCell || (dragged is AppCell && !dragged.isPlainIcon)) {
                         Box(
                             Modifier
                                 .fillMaxSize()
@@ -351,9 +366,12 @@ fun HomePage(
                     )
                     .graphicsLayer {
                         // The real item stays put, in full colour, until you let go — it is the
-                        // grey copy under your finger that moves.
-                        scaleX = scale
-                        scaleY = scale
+                        // grey copy under your finger that moves. An app that has just been closed
+                        // lands back into its place, super icons included.
+                        val landing = if (item is AppCell) AppLanding.scaleFor(item.key) else 1f
+                        scaleX = scale * landing
+                        scaleY = scale * landing
+                        if (item is AppCell) alpha = AppLanding.alphaFor(item.key)
                         // Parallax: while pages slide, items drift apart from the middle of the page
                         // and settle back together as it lands, so the page has depth.
                         translationX = pageOffset * cellWidthPx * PAGE_PARALLAX *
@@ -480,8 +498,15 @@ fun HomeItemContent(
             val label = app?.label ?: item.packageName.substringAfterLast('.')
             val shape = ZenithShapes.forIconShape(settings.iconShape)
             when {
-                item.spanX >= 2 ->
-                    SuperAppTile(key = item.key, label = label, iconSize = iconSize, lines = lines, showLabel = settings.showLabels)
+                !item.isPlainIcon ->
+                    SuperAppTile(
+                        key = item.key,
+                        label = label,
+                        iconSize = iconSize,
+                        lines = lines,
+                        showLabel = settings.showLabels,
+                        tall = item.spanY > ROW_UNITS,
+                    )
                 else -> AppTile(
                     key = item.key,
                     label = label,
@@ -526,10 +551,11 @@ fun HomeItemContent(
 }
 
 /**
- * A super icon, as on HyperOS: the app's icon stretched two columns wide, its background filling
- * the whole shape and its logo in the middle, with the name underneath like any other icon. It
- * starts at the left edge of the icon in its first column and ends at the right edge of the icon
- * in its second, on the same top line as every icon in the row.
+ * A super icon, as on HyperOS: the app's icon stretched two columns wide or two rows tall, its
+ * background filling the whole shape and its logo in the middle, with the name underneath like any
+ * other icon. A wide one runs from the left edge of the icon in its first column to the right edge
+ * of the icon in its second; a tall one from the top of the icon in its first row to the bottom of
+ * the icon in its second. Either way it sits on the same lines as every icon around it.
  */
 @Composable
 private fun SuperAppTile(
@@ -538,42 +564,64 @@ private fun SuperAppTile(
     iconSize: Dp,
     lines: IconLines?,
     showLabel: Boolean,
+    tall: Boolean = false,
 ) {
     val palette = LocalPalette.current
-    Column(
-        Modifier
-            .fillMaxSize()
-            .then(
-                if (lines != null) {
-                    Modifier.padding(start = lines.side, end = lines.side, top = lines.top)
-                } else {
-                    Modifier.padding(horizontal = 6.dp, vertical = 4.dp)
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val frame = tallIconFrame(cellWidth = maxWidth, rowHeight = maxHeight / 2, iconSize = iconSize)
+        val iconHeight = if (tall) frame.height else iconSize
+        val drop = if (tall) frame.drop else 0.dp
+        Column(
+            Modifier
+                .fillMaxSize()
+                .then(
+                    if (lines != null) {
+                        Modifier.padding(start = lines.side, end = lines.side, top = lines.top + drop)
+                    } else {
+                        Modifier.padding(start = 6.dp, end = 6.dp, top = 4.dp + drop, bottom = 4.dp)
+                    }
+                ),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            WideAppIcon(
+                key = key,
+                label = label,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(iconHeight)
+                    .launchOrigin(key)
+                    .pressBounce(0.9f),
+            )
+            if (showLabel) {
+                Box(Modifier.height(LABEL_LINE_HEIGHT), contentAlignment = Alignment.BottomCenter) {
+                    Text(
+                        text = label,
+                        color = palette.onGlass,
+                        fontSize = 11.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        fontWeight = FontWeight.Medium,
+                    )
                 }
-            ),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        WideAppIcon(
-            key = key,
-            label = label,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(iconSize)
-                .launchOrigin(key)
-                .pressBounce(0.96f),
-        )
-        if (showLabel) {
-            Box(Modifier.height(LABEL_LINE_HEIGHT), contentAlignment = Alignment.BottomCenter) {
-                Text(
-                    text = label,
-                    color = palette.onGlass,
-                    fontSize = 11.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    fontWeight = FontWeight.Medium,
-                )
             }
         }
     }
+}
+
+/** How tall a tall super icon is, and how far below its row's icon line it starts. */
+@Immutable
+data class TallIconFrame(val height: Dp, val drop: Dp)
+
+/**
+ * A tall super icon is the wide one turned on its side: as tall as a wide one is long (one cell
+ * plus an icon), so it keeps the same proportions instead of stretching down two whole rows. It
+ * sits centred in the space between the top of its first row's icon and the bottom of its
+ * second's. The icon and its drop hint both come from here, so they are always the same size.
+ */
+fun tallIconFrame(cellWidth: Dp, rowHeight: Dp, iconSize: Dp): TallIconFrame {
+    val span = rowHeight + iconSize
+    val height = minOf(cellWidth + iconSize, span)
+    return TallIconFrame(height = height, drop = (span - height) / 2)
 }
 
 /**
@@ -1015,7 +1063,13 @@ fun DockBar(
                         modifier = Modifier
                             .launchOrigin(key)
                             .pressBounce()
-                            .graphicsLayer { alpha = if (isCarried && lifted) 0.75f else 1f },
+                            .graphicsLayer {
+                                // A dock app that has just been closed lands back into its place.
+                                val landing = AppLanding.scaleFor(key)
+                                scaleX = landing
+                                scaleY = landing
+                                alpha = (if (isCarried && lifted) 0.75f else 1f) * AppLanding.alphaFor(key)
+                            },
                     )
                 }
             }

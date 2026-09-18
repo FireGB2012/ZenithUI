@@ -96,6 +96,7 @@ import com.gabriel.zenithui.data.GridDensity
 import com.gabriel.zenithui.data.IconShapes
 import com.gabriel.zenithui.data.AppCell
 import com.gabriel.zenithui.data.WidgetCell
+import com.gabriel.zenithui.data.ROW_UNITS
 import com.gabriel.zenithui.data.Widgets
 import com.gabriel.zenithui.data.ZenithSettings
 import com.gabriel.zenithui.ui.common.Motion
@@ -231,7 +232,8 @@ fun ItemMenuSheet(
     onResize: () -> Unit,
     onRemove: () -> Unit,
     onUninstall: (String) -> Unit,
-    onIconSize: (spanX: Int) -> Unit,
+    /** "normal", "wide" (two columns) or "tall" (two rows). */
+    onIconSize: (size: String) -> Unit,
     onChooseToggles: () -> Unit = {},
     onDismiss: () -> Unit,
 ) {
@@ -246,10 +248,14 @@ fun ItemMenuSheet(
             is AppCell -> {
                 SectionLabel("Icon size")
                 Segmented(
-                    options = listOf("normal" to "Normal 1×1", "super" to "Super 2×1"),
-                    selected = if (item.spanX >= 2) "super" else "normal",
+                    options = listOf("normal" to "1×1", "wide" to "Wide 2×1", "tall" to "Tall 1×2"),
+                    selected = when {
+                        item.spanX >= 2 -> "wide"
+                        item.spanY > ROW_UNITS -> "tall"
+                        else -> "normal"
+                    },
                     // The sheet stays open, so you see the icon change behind it and can switch back.
-                    onSelect = { size -> onIconSize(if (size == "super") 2 else 1) },
+                    onSelect = onIconSize,
                 )
                 Spacer(Modifier.height(10.dp))
                 MenuRow(Icons.AutoMirrored.Rounded.OpenInNew, "Open") { onOpen(item.key); onDismiss() }

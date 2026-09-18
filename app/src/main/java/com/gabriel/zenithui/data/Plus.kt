@@ -80,7 +80,7 @@ object Plus {
     }
 
     val FEATURES = listOf(
-        "Theme maker" to "Build your own palette — any accent, any glass, any background.",
+        "Theme maker" to "Build your own palette: any accent, any glass, any background.",
         "Hidden apps" to "Keep chosen apps out of the drawer, behind a PIN.",
         "Backup & restore" to "Save your whole home screen to a file and put it back any time.",
     )
@@ -209,8 +209,18 @@ class BillingRepository(context: Context) {
             runCatching {
                 val params = QueryPurchasesParams.newBuilder().setProductType(type).build()
                 client.queryPurchasesAsync(params) { result, purchases ->
-                    if (result.responseCode == BillingClient.BillingResponseCode.OK) {
-                        purchases.forEach { record(it) }
+                    if (result.responseCode != BillingClient.BillingResponseCode.OK) return@queryPurchasesAsync
+                    purchases.forEach { record(it) }
+                    // Play's answer for subscriptions is the whole truth, so one missing from it has
+                    // lapsed or been cancelled. A launcher process lives for days; without this a
+                    // lapsed subscriber would keep Plus until the process happened to die.
+                    if (type == BillingClient.ProductType.SUBS) {
+                        val live = purchases.any { purchase ->
+                            purchase.products.contains(Plus.MONTHLY_ID) &&
+                                purchase.purchaseState == Purchase.PurchaseState.PURCHASED
+                        }
+                        _subscribed.value = live
+                        _purchased.value = _permanent.value || live
                     }
                 }
             }

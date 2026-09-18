@@ -82,6 +82,9 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         viewModel.refreshWallpaper()
         viewModel.refreshApps()
+        // Coming home is the natural moment to re-ask Play: it is how a cancelled subscription
+        // stops unlocking Plus without waiting for the launcher process to be killed.
+        viewModel.refreshPurchases()
     }
 
     override fun onNewIntent(intent: Intent) {

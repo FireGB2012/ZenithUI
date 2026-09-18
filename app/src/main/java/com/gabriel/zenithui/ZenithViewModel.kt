@@ -481,12 +481,13 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
      * where it is when there is room, and otherwise moves to the nearest spot on its page that
      * fits. False when nothing that size fits on the page; then nothing changes.
      */
-    fun resizeApp(id: String, spanX: Int): Boolean {
+    /** [tall] makes a super icon two rows high instead of two columns wide. Never both. */
+    fun resizeApp(id: String, spanX: Int, tall: Boolean = false): Boolean {
         val app = layout.value.firstOrNull { it.id == id } as? AppCell ?: return false
         val s = settings.value
         val unitRows = s.rows * ROW_UNITS
-        val sx = spanX.coerceIn(1, minOf(2, s.columns))
-        val sy = ROW_UNITS
+        val sx = if (tall) 1 else spanX.coerceIn(1, minOf(2, s.columns))
+        val sy = if (tall && unitRows >= 2 * ROW_UNITS) 2 * ROW_UNITS else ROW_UNITS
         if (sx == app.spanX && sy == app.spanY) return true
         val step = if (s.freeform && plus.value.active) 1 else LayoutBuilder.ICON_ROW_STEP
         val slot = nearestFreeSlot(

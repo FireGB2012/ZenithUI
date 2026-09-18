@@ -156,8 +156,9 @@ class IconLoader(context: Context, private val repo: AppRepository) {
     fun peekWide(key: String, widthPx: Int, heightPx: Int): ImageBitmap? = wideCache.get(wideKey(key, widthPx, heightPx))
 
     /**
-     * An app's icon stretched into a wide super icon, the way HyperOS draws them: the icon's own
-     * background fills the whole wide shape and its logo sits in the middle at the usual size.
+     * An app's icon stretched into a super icon, the way HyperOS draws them: the icon's own
+     * background fills the whole shape — wide or tall — and its logo sits in the middle at the
+     * usual size.
      */
     suspend fun loadWide(key: String, widthPx: Int, heightPx: Int): ImageBitmap? {
         if (widthPx <= 0 || heightPx <= 0) return null
@@ -176,25 +177,28 @@ class IconLoader(context: Context, private val repo: AppRepository) {
     private fun renderWide(drawable: Drawable, width: Int, height: Int): Bitmap {
         val output = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(output)
-        val radius = height * 0.26f
+        // The short side is what an ordinary icon would be; the long side is the stretch.
+        val side = minOf(width, height)
+        val radius = side * 0.26f
         canvas.clipPath(Path().apply {
             addRoundRect(RectF(0f, 0f, width.toFloat(), height.toFloat()), radius, radius, Path.Direction.CW)
         })
+        val left = (width - side) / 2
+        val top = (height - side) / 2
 
         val adaptive = drawable as? AdaptiveIconDrawable
         if (adaptive != null) {
             // The background covers the whole shape without being squashed: it is drawn square, as
-            // wide as the icon plus its usual overscan, and centred.
-            val cover = (width * 1.5f).toInt()
+            // long as the icon plus its usual overscan, and centred.
+            val cover = (maxOf(width, height) * 1.5f).toInt()
             adaptive.background?.let {
                 it.bounds = Rect((width - cover) / 2, (height - cover) / 2, (width + cover) / 2, (height + cover) / 2)
                 it.draw(canvas)
             }
             // The logo at exactly the size it has on an ordinary icon, in the middle.
-            val inset = (height * 0.25f).toInt()
-            val left = (width - height) / 2
+            val inset = (side * 0.25f).toInt()
             adaptive.foreground?.let {
-                it.bounds = Rect(left - inset, -inset, left + height + inset, height + inset)
+                it.bounds = Rect(left - inset, top - inset, left + side + inset, top + side + inset)
                 it.draw(canvas)
             }
             return output
@@ -202,10 +206,10 @@ class IconLoader(context: Context, private val repo: AppRepository) {
 
         // An icon with no separate background: its tile colour fills the shape and the icon sits
         // in the middle.
-        val square = render(drawable, height)
-        val edge = square.getPixel((height * 0.14f).toInt(), height / 2)
+        val square = render(drawable, side)
+        val edge = square.getPixel((side * 0.14f).toInt(), side / 2)
         canvas.drawColor(if (Color.alpha(edge) > 200) edge else blend(edge, Color.WHITE, 0.5f))
-        canvas.drawBitmap(square, (width - height) / 2f, 0f, Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG))
+        canvas.drawBitmap(square, left.toFloat(), top.toFloat(), Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG))
         square.recycle()
         return output
     }

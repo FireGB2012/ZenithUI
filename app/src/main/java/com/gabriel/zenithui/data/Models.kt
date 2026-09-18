@@ -60,7 +60,7 @@ data class AppCell(
     val className: String,
     override val dx: Float = 0f,
     override val dy: Float = 0f,
-    /** One column by one row normally, or two columns by one row for a super icon. */
+    /** One column by one row normally; a super icon is two columns wide or two rows tall. */
     override val spanX: Int = 1,
     override val spanY: Int = ROW_UNITS,
 ) : HomeItem {

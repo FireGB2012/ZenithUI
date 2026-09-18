@@ -1,5 +1,6 @@
 package com.gabriel.zenithui.ui.home
 
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationSpec
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Canvas
@@ -8,6 +9,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
@@ -32,14 +35,26 @@ import kotlin.math.roundToInt
  * before the card appears, so its very first frame already has the right colour and logo.
  */
 @Immutable
-data class AppExpansion(val key: String, val from: Rect, val icon: ImageBitmap?)
+data class AppExpansion(
+    val key: String,
+    val from: Rect,
+    val icon: ImageBitmap?,
+    /** A super icon's own stretched picture, so the card leaves it looking exactly like it. */
+    val wideIcon: ImageBitmap? = null,
+)
 
 /**
  * The spring every opening and closing runs on. A spring, not a timer, is what lets the card be
  * turned round mid-flight: it carries on from wherever it is at whatever speed it has, so opening
  * and closing an app over and over stays one continuous, fluid motion — the way iOS and HyperOS do.
  */
-fun launchSpring(): AnimationSpec<Float> = spring(dampingRatio = 0.86f, stiffness = 280f)
+fun launchSpring(): AnimationSpec<Float> = spring(dampingRatio = 0.8f, stiffness = 300f)
+
+/**
+ * The home screen coming forward again after an app closes. A touch under-damped, so it swells a
+ * hair past full size and settles, the way One UI's grid expands back when you go home.
+ */
+fun homeReturnSpring(): AnimationSpec<Float> = spring(dampingRatio = 0.72f, stiffness = 320f)
 
 /** How far the card has to grow before the app itself is asked to open, so it is ready as the card fills. */
 const val LAUNCH_AT = 0.55f
@@ -80,8 +95,11 @@ fun AppLaunchCard(
         val top = mix(from.top, 0f, p)
         val right = mix(from.right, size.width, p)
         val bottom = mix(from.bottom, size.height, p)
-        // An icon's own rounding at the start, the phone's screen corners at the end.
-        val radius = mix(from.minDimension * 0.24f, 28.dp.toPx(), p.coerceIn(0f, 1f))
+        val wide = card.wideIcon
+        // An icon's own rounding at the start, the phone's screen corners at the end. A super icon
+        // starts from its own flatter rounding, so the card leaves it without a jump.
+        val startRadius = from.minDimension * if (wide != null) 0.26f else 0.24f
+        val radius = mix(startRadius, 28.dp.toPx(), p.coerceIn(0f, 1f))
         val cardTopLeft = Offset(left, top)
         val cardSize = Size(right - left, bottom - top)
         val corners = CornerRadius(radius, radius)
@@ -115,10 +133,29 @@ fun AppLaunchCard(
             drawRoundRect(color = fill, topLeft = cardTopLeft, size = cardSize, cornerRadius = corners)
         }
 
+        if (wide != null) {
+            // A super icon begins as itself: its own stretched picture fills the card at first and
+            // fades as the card grows, handing over to the logo the app opens on.
+            val wideAlpha = (1f - p / 0.45f).coerceIn(0f, 1f)
+            if (wideAlpha > 0f) {
+                drawImage(
+                    image = wide,
+                    srcOffset = IntOffset.Zero,
+                    srcSize = IntSize(wide.width, wide.height),
+                    dstOffset = IntOffset(left.roundToInt(), top.roundToInt()),
+                    dstSize = IntSize((right - left).roundToInt(), (bottom - top).roundToInt()),
+                    alpha = wideAlpha,
+                )
+            }
+        }
+
         val bitmap = icon ?: return@Canvas
         // The logo grows more slowly than the card, easing towards the size an app's own opening
         // screen shows it at, so the hand-over to the app is seamless.
-        val side = mix(from.minDimension, 96.dp.toPx(), p.coerceIn(0f, 1f))
+        val startSide = if (wide != null) from.minDimension * 0.62f else from.minDimension
+        val side = mix(startSide, 96.dp.toPx(), p.coerceIn(0f, 1f))
+        val logoAlpha = if (wide != null) ((p - 0.15f) / 0.35f).coerceIn(0f, 1f) else 1f
+        if (logoAlpha <= 0f) return@Canvas
         val centreX = (left + right) / 2f
         val centreY = (top + bottom) / 2f
         drawImage(
@@ -127,11 +164,42 @@ fun AppLaunchCard(
             srcSize = IntSize(bitmap.width, bitmap.height),
             dstOffset = IntOffset((centreX - side / 2f).roundToInt(), (centreY - side / 2f).roundToInt()),
             dstSize = IntSize(side.roundToInt(), side.roundToInt()),
+            alpha = logoAlpha,
         )
     }
 }
 
 private fun mix(from: Float, to: Float, amount: Float) = from + (to - from) * amount
+
+/**
+ * The app that has just been closed, so its icon can land back in its place the way One UI's does:
+ * it arrives a little large and faint and settles with a small bounce while the home screen comes
+ * forward around it. Android only lets the phone's own launcher shrink an app's real window into
+ * its icon, so this is the half of that motion a launcher like Zenith is allowed to draw.
+ *
+ * Kept outside composition, like [com.gabriel.zenithui.ui.common.LaunchOrigin], because the grid,
+ * super icons and the dock all read it while drawing.
+ */
+object AppLanding {
+    var key by mutableStateOf<String?>(null)
+        private set
+
+    private val progress = Animatable(1f)
+
+    /** Lands [key]'s icon. Must run on a scope with a frame clock, such as a composition's. */
+    suspend fun land(key: String) {
+        this.key = key
+        progress.snapTo(0f)
+        progress.animateTo(1f, spring(dampingRatio = 0.5f, stiffness = 380f))
+        if (this.key == key) this.key = null
+    }
+
+    /** How large [itemKey]'s icon should be drawn right now. Read while drawing. */
+    fun scaleFor(itemKey: String): Float = if (itemKey != key) 1f else 1.22f - 0.22f * progress.value
+
+    fun alphaFor(itemKey: String): Float =
+        if (itemKey != key) 1f else (0.35f + 1.04f * progress.value).coerceIn(0f, 1f)
+}
 
 /** The grey of the liquid glass opening. */
 private val GLASS_TINT = Color(0xFF7C818C)

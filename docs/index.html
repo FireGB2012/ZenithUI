@@ -67,14 +67,17 @@
 <body>
 <main>
   <h1>Privacy Policy — Zenith UI</h1>
-  <p class="updated">Last updated: 6 September 2026</p>
+  <p class="updated">Last updated: 15 September 2026</p>
 
   <p class="lede">Zenith UI is a home screen replacement (launcher) for Android. This policy explains
-  what the app does with your information. The short version: nothing leaves your phone.</p>
+  what the app does with your information. The short version: nothing you do in Zenith leaves your
+  phone.</p>
 
   <h2>What Zenith UI collects</h2>
-  <p><strong>Nothing.</strong> Zenith UI has no accounts, no analytics, no advertising, no crash
-  reporting and no network permission of its own. No personal data is collected, transmitted or sold.</p>
+  <p><strong>Nothing.</strong> Zenith UI has no accounts, no analytics, no advertising and no crash
+  reporting. No personal data is collected, transmitted or sold. The only network traffic the app
+  produces is Google Play Billing checking with Google Play whether you own Zenith Plus — see
+  Payments below.</p>
 
   <h2>What is stored on your device</h2>
   <p>The app saves the following in its own private storage, readable only by Zenith UI:</p>
@@ -84,20 +87,28 @@
     <li>Your preferences: palette, light/dark mode, glass strength, grid size, icon size and shape,
       and the icon pack you selected.</li>
     <li>The text of the Quick Note widget, if you use it.</li>
-    <li>Whether you have bought Zenith Plus, and the date your free trial began.</li>
+    <li>Whether you own Zenith Plus, and the date your free trial began.</li>
     <li>The palette you built, the apps you chose to hide, and the PIN you set for them, if you use
       those features. The PIN keeps a list tidy; it is not a device security measure and is stored
       as you typed it.</li>
+    <li>Your Aura points, your daily streak and the day you last checked in, the themes you unlocked
+      with points, your own referral code, and whether you have already redeemed someone else's. Aura
+      has no account and no server: none of this is sent anywhere, and nothing is shared with the
+      person whose code you used.</li>
   </ul>
   <p>All of this stays on the device. Uninstalling the app, or clearing its storage in Android
   Settings, deletes it permanently.</p>
 
   <h2>Payments</h2>
-  <p>Zenith Plus is a single optional purchase made through Google Play. Google handles the payment
-  and tells the app one thing: whether this account has bought it. Zenith UI never sees your card,
-  your name or your address, and stores nothing about the payment beyond that yes or no. Google's
-  own privacy policy covers what Play does with the transaction. A backup file you export contains
-  your layout and settings, and is written only where you choose to put it.</p>
+  <p>Zenith Plus is optional and sold through Google Play in two forms: a monthly subscription and a
+  one-time lifetime pass. Google handles the payment and tells the app one thing: whether this Google
+  account currently owns Plus. Zenith UI never sees your card, your name or your address, and stores
+  nothing about the payment beyond that yes or no. Subscriptions are managed and cancelled in the
+  Google Play app. Google's own privacy policy covers what Play does with the transaction.</p>
+  <p>The seven-day free trial is counted on your phone from the moment you accept it, unless Google
+  Play offers it as part of the subscription, in which case Google counts it.</p>
+  <p>A backup file you export contains your layout and settings, and is written only where you choose
+  to put it. Restoring a backup never changes your purchase or your trial.</p>
 
   <h2>What Zenith UI reads from your device</h2>
   <p>To work as a launcher, the app reads:</p>
@@ -113,6 +124,9 @@
       calendar access. The titles and times are read each time the screen is shown, displayed on your
       device, and never stored by Zenith UI or sent anywhere. Declining leaves every other feature
       working.</li>
+    <li><strong>The motion sensor (accelerometer)</strong>, only while the home screen is showing, so
+      the light on the glass panels moves as you tilt the phone. Readings are used for drawing and are
+      never stored or sent anywhere.</li>
   </ul>
 
   <h2>Permissions</h2>
@@ -123,11 +137,12 @@
         <tr><td><code>SET_WALLPAPER</code></td><td>Opens the system wallpaper picker when you choose "Wallpaper" in the Customise sheet</td></tr>
         <tr><td><code>VIBRATE</code></td><td>Provides a short haptic tick when you pick up an icon or resize a widget</td></tr>
         <tr><td><code>READ_CALENDAR</code></td><td>Optional. Asked for only when you tap "Allow calendar" on the bedside clock, so it can list today's events</td></tr>
+        <tr><td><code>com.android.vending.BILLING</code></td><td>Lets Google Play sell Zenith Plus inside the app</td></tr>
+        <tr><td><code>INTERNET</code>, <code>ACCESS_NETWORK_STATE</code></td><td>Added by Google's Play Billing library so it can reach Google Play. Zenith UI itself opens no network connections</td></tr>
       </tbody>
     </table>
   </div>
-  <p>Zenith UI does not request internet, location, contacts, storage, camera or microphone
-  permissions. Calendar access is optional, requested only in the bedside clock, and can be revoked
+  <p>Zenith UI does not request location, contacts, storage, camera or microphone permissions. Calendar access is optional, requested only in the bedside clock, and can be revoked
   at any time in Android Settings without affecting the rest of the launcher. The torch tile uses the
   system camera flash API, which needs no permission.</p>
 

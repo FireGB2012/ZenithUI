@@ -50,7 +50,7 @@ AURA
 Open Zenith once a day and the streak pays you: ten points on day one, more for every day in a row, up to fifty. Points buy themes — five to start with, from Ember to Obsidian, and more to come. Miss a day and the streak starts again; nothing you have earned or bought is ever taken back. It is all counted on your phone, with no account and nothing sent anywhere.
 
 MAKE IT YOURS
-Six palettes, light/dark/auto, adjustable glass, grid from 3x4 to 6x7, icon size, labels on or off, four icon shapes, and support for any Nova or ADW compatible icon pack.
+Six palettes, light/dark/auto, adjustable glass, Compact, Balanced or Roomy grids that size themselves to your screen, icon size, labels on or off, four icon shapes, and support for any Nova or ADW compatible icon pack.
 
 BEDSIDE CLOCK
 Tap the clock widget for a dimmed full screen clock with the date and today's calendar — a quiet bedside face that keeps the screen awake while it is open.
@@ -59,9 +59,9 @@ SMOOTH BY DESIGN, FOR EVERYONE
 Nothing snaps. Icons glide to their new cell, sheets spring up from the edge, palettes cross-fade, and the whole launcher runs on one spring vocabulary tuned for high refresh rate screens — at your screen's full rate, up to 120Hz, whether or not you ever buy anything.
 
 PRIVATE BY DEFAULT
-No account, no analytics, no ads, no network access. Your name, layout and settings never leave your phone.
+No account, no analytics, no ads. Your name, layout, streak and settings never leave your phone — the only thing that goes online is Google Play checking whether you own Zenith Plus.
 
-Zenith UI needs no special permissions beyond setting your wallpaper and a short vibration when you pick up an icon. Calendar access is optional and only asked for if you want the bedside clock to list today's events.
+Beyond Google Play's own billing permissions, Zenith UI only asks to set your wallpaper and to vibrate briefly when you pick up an icon. Calendar access is optional and only asked for if you want the bedside clock to list today's events.
 ```
 
 ## What's new (500 characters max)
@@ -136,7 +136,9 @@ address, then buy from a build signed with the upload key and installed from a P
 
 - **Does your app collect or share any of the required user data types?** No. The Zenith Plus
   purchase is handled entirely by Google Play; the app never sees or stores a payment detail, and
-  records only a single "purchased" flag on the device.
+  records only a single "purchased" flag on the device. The `INTERNET`, `ACCESS_NETWORK_STATE` and
+  `BILLING` permissions in the manifest come from Google's Play Billing library and carry only
+  Play's own purchase check; Zenith UI opens no network connections itself.
 - **Is all of the user data collected by your app encrypted in transit?** Not applicable — no data leaves the device.
 - **Do you provide a way for users to request that their data is deleted?** Not applicable; clearing app storage removes everything.
 - Note for the reviewer, if asked: the launcher reads the list of installed applications through `LauncherApps` in order to display them, and — only with the user's consent — today's calendar entries for the bedside clock. Neither is transmitted, logged or stored off-device.
@@ -148,6 +150,8 @@ address, then buy from a build signed with the upload key and installed from a P
 | `SET_WALLPAPER` | The Customise sheet opens the system wallpaper picker |
 | `VIBRATE` | A short tick when you pick up an icon or resize a widget |
 | `READ_CALENDAR` | Optional. Requested at runtime the first time you ask the bedside clock to show today's events; the launcher works fully without it |
+| `com.android.vending.BILLING` | Selling Zenith Plus through Google Play |
+| `INTERNET`, `ACCESS_NETWORK_STATE` | Merged in by the Play Billing library so it can reach Google Play; the app's own code makes no network calls |
 
 `READ_CALENDAR` is in the "personal and sensitive" family, so the listing must explain it: the bedside clock shows today's events on a dimmed screen, the data is read on the device and never leaves it, and every other feature works if you decline.
 

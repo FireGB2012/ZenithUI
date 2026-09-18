@@ -12,7 +12,7 @@ Paste these into Play Console → Grow → Store presence → Main store listing
 | Tags | Launcher, Home screen, Widgets |
 | Contact email | gabrieltinndahn06@gmail.com |
 | Website | *(optional)* |
-| Privacy policy URL | `https://firegb2012.github.io/ZenithUI/` (served from `docs/index.html` via GitHub Pages) |
+| Privacy policy URL | `https://firegb2012.github.io/zenith-privacy/` (served from `docs/index.html` via GitHub Pages) |
 | Ads | No |
 | In-app purchases | Yes — a $1.99/month subscription and a $14.99 lifetime pass |
 | Content rating | Everyone (questionnaire: no user-generated content, no data sharing) |
@@ -87,7 +87,7 @@ First release.
 | Feature graphic | `play/feature-graphic-1024x500.png` | 1024×500 PNG |
 | Phone screenshots | `play/screenshots/*.png` | 1080×2424, at least 2, up to 8 |
 
-Screenshots included: welcome, home screen, app drawer, Customise sheet, Zenith settings.
+Screenshots included (8, in upload order): home screen, wallpaper gallery, setup — pick a colour, setup — the finished page, app drawer, settings, settings — Look, Zenith Plus.
 
 ## In-app products
 

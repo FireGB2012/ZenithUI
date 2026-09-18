@@ -378,7 +378,7 @@ fun AppDrawer(
                             AppTile(
                                 key = app.key,
                                 label = app.label,
-                                iconSize = settings.iconSize.dp,
+                                iconSize = STANDARD_ICON_SIZE,
                                 showLabel = true,
                                 shape = ZenithShapes.forIconShape(settings.iconShape),
                             )

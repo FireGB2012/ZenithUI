@@ -119,10 +119,12 @@ fun ZenithSheet(
     visible: Boolean,
     onDismiss: () -> Unit,
     title: String? = null,
+    /** How much of the screen the sheet may take. Settings, with its pages, gets more. */
+    maxHeightFraction: Float = 0.72f,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val palette = LocalPalette.current
-    val maxHeight = LocalConfiguration.current.screenHeightDp.dp * 0.72f
+    val maxHeight = LocalConfiguration.current.screenHeightDp.dp * maxHeightFraction
 
     Box(Modifier.fillMaxSize()) {
         AnimatedVisibility(
@@ -235,6 +237,8 @@ fun ItemMenuSheet(
     /** "normal", "wide" (two columns) or "tall" (two rows). */
     onIconSize: (size: String) -> Unit,
     onChooseToggles: () -> Unit = {},
+    /** Opens Customise: on a full page, this is the easy way there. */
+    onCustomize: () -> Unit = {},
     onDismiss: () -> Unit,
 ) {
     val title = when (item) {
@@ -277,6 +281,7 @@ fun ItemMenuSheet(
                 MenuRow(Icons.Rounded.Home, "Remove widget", danger = true) { onRemove(); onDismiss() }
             }
         }
+        MenuRow(Icons.Rounded.Tune, "Customise home screen", "Widgets, wallpaper and settings") { onCustomize() }
     }
 }
 
@@ -291,18 +296,55 @@ fun CustomizeSheet(
     onDefaultLauncher: () -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val context = LocalContext.current
+    val isHome = remember(visible) {
+        context.getSystemService(android.app.role.RoleManager::class.java)
+            ?.isRoleHeld(android.app.role.RoleManager.ROLE_HOME) == true
+    }
     ZenithSheet(visible = visible, onDismiss = onDismiss, title = "Customise") {
-        MenuRow(Icons.Rounded.Image, "Wallpaper", "Pick a new backdrop", index = 0) { onWallpaper(); onDismiss() }
-        MenuRow(
-            icon = Icons.Rounded.Bedtime,
-            label = "Bedside clock",
-            subtitle = "Dimmed clock with today's calendar",
-            index = 1,
-        ) { onAmbient() }
-        MenuRow(Icons.Rounded.Dashboard, "Widgets", "Add a Zenith widget to this page") { onWidgets() }
-        MenuRow(Icons.Rounded.Tune, "Zenith settings", "Grid, glass, icons and themes") { onSettings() }
-        MenuRow(Icons.Rounded.Home, "Set as default launcher") { onDefaultLauncher(); onDismiss() }
-        MenuRow(Icons.Rounded.HelpOutline, "How it works", "Every gesture in one page") { onHelp() }
+        // The four things people come here for, as big targets; the rest underneath.
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            QuickTile(Icons.Rounded.Dashboard, "Widgets", index = 0, modifier = Modifier.weight(1f)) { onWidgets() }
+            QuickTile(Icons.Rounded.Image, "Wallpaper", index = 1, modifier = Modifier.weight(1f)) { onWallpaper() }
+        }
+        Spacer(Modifier.height(10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            QuickTile(Icons.Rounded.Tune, "Settings", index = 2, modifier = Modifier.weight(1f)) { onSettings() }
+            QuickTile(Icons.Rounded.Bedtime, "Bedside clock", index = 3, modifier = Modifier.weight(1f)) { onAmbient() }
+        }
+        Spacer(Modifier.height(8.dp))
+        if (!isHome) {
+            MenuRow(Icons.Rounded.Home, "Make Zenith your home screen", index = 4) { onDefaultLauncher(); onDismiss() }
+        }
+        MenuRow(Icons.Rounded.HelpOutline, "How it works", "Every gesture in one page", index = 5) { onHelp() }
+    }
+}
+
+/** A big square-ish button: the icon in the corner, the name underneath, lit with the accent. */
+@Composable
+private fun QuickTile(icon: ImageVector, label: String, index: Int, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    val palette = LocalPalette.current
+    Column(
+        modifier
+            .height(96.dp)
+            .appearIn(delayMillis = staggerDelay(index), riseFrom = 18f)
+            .pressBounce(0.95f)
+            .clip(RoundedCornerShape(22.dp))
+            .background(palette.onGlass.copy(alpha = 0.07f))
+            .clickable(onClick = onClick)
+            .padding(14.dp),
+        verticalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Box(
+            Modifier
+                .size(36.dp)
+                .clip(RoundedCornerShape(11.dp))
+                .background(palette.accent.copy(alpha = 0.18f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(icon, contentDescription = null, tint = palette.accent, modifier = Modifier.size(20.dp))
+        }
+        Text(label, color = palette.onGlass, fontSize = 15.sp, fontWeight = FontWeight.Medium)
     }
 }
 
@@ -398,7 +440,7 @@ fun FolderSheet(
                     AppTile(
                         key = key,
                         label = appsByKey[key]?.label ?: "",
-                        iconSize = settings.iconSize.dp,
+                        iconSize = STANDARD_ICON_SIZE,
                         showLabel = true,
                         shape = ZenithShapes.forIconShape(settings.iconShape),
                     )
@@ -413,406 +455,3 @@ fun FolderSheet(
         )
     }
 }
-
-@Composable
-fun SettingsSheet(
-    visible: Boolean,
-    settings: ZenithSettings,
-    plus: PlusStatus,
-    onChange: ((ZenithSettings) -> ZenithSettings) -> Unit,
-    onAura: () -> Unit,
-    onFreeform: (Boolean) -> Unit,
-    onThemeMaker: () -> Unit,
-    onHiddenApps: () -> Unit,
-    onBackup: () -> Unit,
-    onRestore: () -> Unit,
-    onPlus: () -> Unit,
-    onReset: () -> Unit,
-    onDismiss: () -> Unit,
-) {
-    val palette = LocalPalette.current
-    val context = LocalContext.current
-    val packs by produceState(initialValue = emptyList<IconPackInfo>()) {
-        value = withContext(Dispatchers.IO) { IconPacks.installed(context) }
-    }
-
-    ZenithSheet(visible = visible, onDismiss = onDismiss, title = "Zenith settings") {
-        Column(
-            Modifier.verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            SectionLabel("Palette")
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .horizontalScrollRow(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                Palettes.all.forEach { option ->
-                    val selected = option.id == settings.paletteId
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        val swatch by animateDpAsState(
-                            targetValue = if (selected) 46.dp else 40.dp,
-                            animationSpec = Motion.bouncy(),
-                            label = "swatch",
-                        )
-                        Box(
-                            Modifier
-                                .size(swatch)
-                                .pressBounce(0.9f)
-                                .clip(RoundedCornerShape(percent = 50))
-                                .background(
-                                    androidx.compose.ui.graphics.Brush.linearGradient(
-                                        listOf(option.accent, option.accentAlt)
-                                    )
-                                )
-                                .clickable { onChange { it.copy(paletteId = option.id) } }
-                        )
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            option.name,
-                            color = if (selected) palette.onGlass else palette.onGlassMuted,
-                            fontSize = 10.sp,
-                        )
-                    }
-                }
-            }
-
-            if (settings.paletteId == Palettes.CUSTOM) {
-                Text(
-                    "Using your own theme. Edit it under Zenith Plus below.",
-                    color = palette.onGlassMuted,
-                    fontSize = 12.sp,
-                )
-            }
-
-            SectionLabel("Appearance")
-            Segmented(
-                options = listOf("auto" to "Auto", "light" to "Light", "dark" to "Dark"),
-                selected = settings.appearance,
-                onSelect = { value -> onChange { it.copy(appearance = value) } },
-            )
-
-            LabeledSlider(
-                label = "Glass",
-                value = settings.glass,
-                range = 0.2f..1.2f,
-                display = "${(settings.glass * 100).toInt()}%",
-            ) { value -> onChange { it.copy(glass = value) } }
-
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("Tilt shine", color = palette.onGlass, fontSize = 15.sp)
-                    Text(
-                        "Light slides across the glass as you move the phone.",
-                        color = palette.onGlassMuted,
-                        fontSize = 12.sp,
-                    )
-                }
-                Switch(
-                    checked = settings.glassShine,
-                    onCheckedChange = { value -> onChange { it.copy(glassShine = value) } },
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = Color.White,
-                        checkedTrackColor = palette.accent,
-                    ),
-                )
-            }
-
-            Text("Opening apps", color = palette.onGlass, fontSize = 15.sp)
-            Segmented(
-                options = listOf("colour" to "Colour", "glass" to "Liquid glass"),
-                selected = settings.openAnimation,
-                onSelect = { value -> onChange { it.copy(openAnimation = value) } },
-            )
-            Text(
-                text = if (settings.openAnimation == "glass") {
-                    "The icon grows into grey glass over a frosted home screen."
-                } else {
-                    "The icon grows into a card in its own colour."
-                },
-                color = palette.onGlassMuted,
-                fontSize = 12.sp,
-            )
-
-            SectionLabel("Grid")
-            Segmented(
-                options = GridDensity.entries.map { it.id to it.label },
-                selected = settings.gridDensity,
-                onSelect = { value -> onChange { it.copy(gridDensity = value) } },
-            )
-            Text(
-                // How many cells that works out to depends on the screen, so it is reported
-                // rather than chosen.
-                text = "${settings.columns} columns · ${settings.rows} rows on this screen",
-                color = palette.onGlassMuted,
-                fontSize = 12.sp,
-            )
-
-            LabeledSlider(
-                label = "Icon size",
-                value = settings.iconSize.toFloat(),
-                range = 40f..76f,
-                display = "${settings.iconSize} dp",
-            ) { value -> onChange { it.copy(iconSize = value.toInt()) } }
-
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text("Show labels", color = palette.onGlass, fontSize = 15.sp, modifier = Modifier.weight(1f))
-                Switch(
-                    checked = settings.showLabels,
-                    onCheckedChange = { value -> onChange { it.copy(showLabels = value) } },
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = Color.White,
-                        checkedTrackColor = palette.accent,
-                    ),
-                )
-            }
-
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("Show dock", color = palette.onGlass, fontSize = 15.sp)
-                    Text(
-                        "The bar of apps along the bottom. Its apps are kept while it is hidden.",
-                        color = palette.onGlassMuted,
-                        fontSize = 12.sp,
-                    )
-                }
-                Switch(
-                    checked = settings.showDock,
-                    onCheckedChange = { value -> onChange { it.copy(showDock = value) } },
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = Color.White,
-                        checkedTrackColor = palette.accent,
-                    ),
-                )
-            }
-
-            SectionLabel("Swipe up for")
-            Segmented(
-                options = listOf("drawer" to "App drawer", "library" to "App Library"),
-                selected = settings.appsView,
-                onSelect = { value -> onChange { it.copy(appsView = value) } },
-            )
-            Text(
-                text = if (settings.appsView == "library") {
-                    "Swipe left past your last page. Suggestions, recently added, then folders by kind."
-                } else {
-                    "Every app in one list, A to Z."
-                },
-                color = palette.onGlassMuted,
-                fontSize = 12.sp,
-            )
-
-            SectionLabel("Icon shape")
-            Segmented(
-                options = IconShapes.ids.map { it to IconShapes.label(it) },
-                selected = settings.iconShape,
-                onSelect = { value -> onChange { it.copy(iconShape = value) } },
-            )
-
-            SectionLabel("Icon pack")
-            IconPackRow(
-                label = "System icons",
-                selected = settings.iconPack.isEmpty(),
-                onClick = { onChange { it.copy(iconPack = "") } },
-            )
-            packs.forEach { pack ->
-                IconPackRow(
-                    label = pack.label,
-                    selected = settings.iconPack == pack.packageName,
-                    onClick = { onChange { it.copy(iconPack = pack.packageName) } },
-                )
-            }
-            if (packs.isEmpty()) {
-                Text(
-                    "No icon packs installed. Install any Nova or ADW compatible pack and it shows up here.",
-                    color = palette.onGlassMuted,
-                    fontSize = 12.sp,
-                )
-            }
-
-            SectionLabel("Aura")
-            MenuRow(
-                icon = Icons.Rounded.LocalFireDepartment,
-                label = "Aura and themes",
-                subtitle = if (settings.streak > 0) {
-                    "${settings.aura} aura · ${settings.streak} day streak"
-                } else {
-                    "${settings.aura} aura · open daily to build a streak"
-                },
-            ) { onAura() }
-
-            SectionLabel("Zenith Plus")
-            MenuRow(
-                icon = Icons.Rounded.AutoAwesome,
-                label = if (plus.purchased) "Zenith Plus" else if (plus.inTrial) "Zenith Plus — free trial" else "Zenith Plus",
-                subtitle = when {
-                    plus.lifetime -> "Unlocked for good. Thank you."
-                    plus.subscribed -> "Subscribed, ${plus.monthlyPrice} a month"
-                    plus.trialDaysLeft > 1 -> "${plus.trialDaysLeft} days left of your free trial"
-                    plus.trialDaysLeft == 1 -> "Last day of your free trial"
-                    else -> "${plus.monthlyPrice} a month or ${plus.lifetimePrice} for good"
-                },
-            ) { onPlus() }
-            MenuRow(
-                icon = if (plus.active) Icons.Rounded.Palette else Icons.Rounded.Lock,
-                label = "Theme maker",
-                subtitle = "Build a palette of your own",
-            ) { onThemeMaker() }
-            MenuRow(
-                icon = if (plus.active) Icons.Rounded.VisibilityOff else Icons.Rounded.Lock,
-                label = "Hidden apps",
-                subtitle = if (settings.hiddenApps.isEmpty()) {
-                    "Keep chosen apps out of the drawer"
-                } else {
-                    "${settings.hiddenApps.size} hidden"
-                },
-            ) { onHiddenApps() }
-            MenuRow(
-                icon = if (plus.active) Icons.Rounded.Save else Icons.Rounded.Lock,
-                label = "Back up home screen",
-                subtitle = "Save everything to a file",
-            ) { onBackup() }
-            MenuRow(
-                icon = if (plus.active) Icons.Rounded.Restore else Icons.Rounded.Lock,
-                label = "Restore from a backup",
-                subtitle = "Replaces your current layout",
-            ) { onRestore() }
-
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Text("Free placement", color = palette.onGlass, fontSize = 15.sp)
-                    Text(
-                        text = if (plus.active) {
-                            "Put apps anywhere and size widgets however you like."
-                        } else {
-                            "Plus: put apps anywhere, any widget size."
-                        },
-                        color = palette.onGlassMuted,
-                        fontSize = 12.sp,
-                    )
-                }
-                Switch(
-                    // Shown off without Plus even if it was left on, since it is not in effect.
-                    checked = settings.freeform && plus.active,
-                    onCheckedChange = onFreeform,
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = Color.White,
-                        checkedTrackColor = palette.accent,
-                    ),
-                )
-            }
-
-            SectionLabel("Device")
-            // Android may close any app in the background, a launcher included; then coming home
-            // has to start Zenith again. Exempting it from battery optimisation stops that.
-            val powerManager = remember { context.getSystemService(android.os.PowerManager::class.java) }
-            val keptLoaded = powerManager?.isIgnoringBatteryOptimizations(context.packageName) == true
-            MenuRow(
-                icon = Icons.Rounded.RestartAlt,
-                label = "Keep Zenith loaded",
-                subtitle = if (keptLoaded) {
-                    "On. Android will not put Zenith to sleep."
-                } else {
-                    "Off. Open Battery and choose Unrestricted."
-                },
-            ) {
-                runCatching {
-                    context.startActivity(
-                        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.parse("package:${context.packageName}"))
-                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    )
-                }
-            }
-            MenuRow(Icons.Rounded.Home, "Set as default launcher") {
-                runCatching {
-                    context.startActivity(Intent(Settings.ACTION_HOME_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                }
-            }
-            MenuRow(Icons.Rounded.Palette, "Change wallpaper") {
-                runCatching {
-                    context.startActivity(
-                        Intent.createChooser(Intent(Intent.ACTION_SET_WALLPAPER), "Wallpaper")
-                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    )
-                }
-            }
-            MenuRow(Icons.Rounded.RestartAlt, "Run first-time setup again", danger = true) {
-                onReset()
-                onDismiss()
-            }
-        }
-    }
-}
-
-@Composable
-private fun IconPackRow(label: String, selected: Boolean, onClick: () -> Unit) {
-    val palette = LocalPalette.current
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        val dot by animateColorAsState(
-            targetValue = if (selected) palette.accent else palette.onGlass.copy(alpha = 0.12f),
-            animationSpec = tween(320),
-            label = "packDot",
-        )
-        val dotSize by animateDpAsState(if (selected) 18.dp else 14.dp, Motion.snappy(), label = "packDotSize")
-        Box(
-            Modifier
-                .size(18.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            Box(
-                Modifier
-                    .size(dotSize)
-                    .clip(RoundedCornerShape(percent = 50))
-                    .background(dot)
-            )
-        }
-        Spacer(Modifier.width(12.dp))
-        Text(label, color = palette.onGlass, fontSize = 14.sp)
-    }
-}
-
-@Composable
-private fun LabeledSlider(
-    label: String,
-    value: Float,
-    range: ClosedFloatingPointRange<Float>,
-    steps: Int = 0,
-    display: String,
-    onChange: (Float) -> Unit,
-) {
-    val palette = LocalPalette.current
-    Column {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(label, color = palette.onGlass, fontSize = 14.sp, modifier = Modifier.weight(1f))
-            Text(display, color = palette.onGlassMuted, fontSize = 12.sp)
-        }
-        Slider(
-            value = value,
-            onValueChange = onChange,
-            valueRange = range,
-            steps = steps,
-            colors = SliderDefaults.colors(
-                thumbColor = palette.accent,
-                activeTrackColor = palette.accent,
-                inactiveTrackColor = palette.onGlass.copy(alpha = 0.18f),
-            ),
-        )
-    }
-}
-
-@Composable
-private fun Modifier.horizontalScrollRow(): Modifier =
-    this.then(Modifier.horizontalScroll(rememberScrollState()))

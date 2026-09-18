@@ -3,6 +3,10 @@ package com.gabriel.zenithui.data
 import java.util.UUID
 import kotlin.math.roundToInt
 
+/** Marks [item] as taken, less any empty band at the bottom it can give up (see [LayoutBuilder.blockedSpanY]). */
+fun PageGrid.occupyItem(item: HomeItem, tuck: Int) =
+    occupy(item.col, item.row, item.spanX, LayoutBuilder.blockedSpanY(item, tuck))
+
 /** Occupancy map for one home page. */
 class PageGrid(private val columns: Int, private val rows: Int) {
 
@@ -99,6 +103,32 @@ object LayoutBuilder {
         return items
     }
 
+    /**
+     * Whether [item] is drawn cut to the icon lines with an empty band under it — the strip where
+     * the labels of the icons beside it sit. The slim search bar is not cut that way.
+     */
+    fun leavesBand(item: HomeItem): Boolean =
+        item is WidgetCell && item.type != "search" && item.spanY >= ROW_UNITS
+
+    /**
+     * How many row units [item] really blocks: all of them, except that a widget gives up the
+     * bottom [tuck] units of that empty band, so an icon can sit snug under it instead of a whole
+     * label's height away. Items collide by what you can see, not the box around it.
+     */
+    fun blockedSpanY(item: HomeItem, tuck: Int): Int =
+        if (leavesBand(item)) (item.spanY - tuck).coerceAtLeast(ICON_ROW_STEP) else item.spanY
+
+    /** The same for a widget of [spanY] units that is being moved or resized. */
+    fun blockedSpanY(widgetType: String, spanY: Int, tuck: Int): Int =
+        if (widgetType != "search" && spanY >= ROW_UNITS) (spanY - tuck).coerceAtLeast(ICON_ROW_STEP) else spanY
+
+    /**
+     * The rows directly under a widget's blocked part: where an icon tucked in under it sits.
+     * They are allowed for icons even when they are not on the usual half-row steps.
+     */
+    fun tuckRows(items: List<HomeItem>, tuck: Int): Set<Int> =
+        if (tuck <= 0) emptySet() else items.filter(::leavesBand).map { it.row + blockedSpanY(it, tuck) }.toSet()
+
     /** As many home pages as anyone sensibly needs, and few enough that the dots still fit. */
     const val MAX_PAGES = 8
 
@@ -115,7 +145,7 @@ object LayoutBuilder {
      * go back to half-row steps and widgets back to the sizes they are designed for. A layout that
      * already follows the rules comes back unchanged, so it is always safe to run again.
      */
-    fun settle(items: List<HomeItem>, columns: Int, rows: Int, free: Boolean): List<HomeItem> {
+    fun settle(items: List<HomeItem>, columns: Int, rows: Int, free: Boolean, tuck: Int = 0): List<HomeItem> {
         val unitRows = rows * ROW_UNITS
         val grids = HashMap<Int, PageGrid>()
         fun grid(page: Int) = grids.getOrPut(page) { PageGrid(columns, unitRows) }
@@ -132,7 +162,7 @@ object LayoutBuilder {
                 overflow += item
                 continue
             }
-            g.occupy(slot.first, slot.second, item.spanX, item.spanY)
+            g.occupy(slot.first, slot.second, item.spanX, blockedSpanY(item, tuck))
             placed[item.id] = if (slot.first == item.col && slot.second == item.row) {
                 item
             } else {
@@ -149,7 +179,7 @@ object LayoutBuilder {
                 slot = grid(page).findSlot(item.spanX, item.spanY, stepFor(item))
             }
             if (slot == null) continue
-            grid(page).occupy(slot.first, slot.second, item.spanX, item.spanY)
+            grid(page).occupy(slot.first, slot.second, item.spanX, blockedSpanY(item, tuck))
             placed[item.id] = item.moved(page, slot.first, slot.second)
         }
 
@@ -173,9 +203,13 @@ object LayoutBuilder {
                 }
                 item.copy(spanX = spanX, spanY = spanY)
             }
-        } else if (item is AppCell && (item.spanX > minOf(2, columns) || item.spanY != ROW_UNITS)) {
-            // App icons come in two sizes: one cell, or a super icon two cells wide and one row tall.
-            item.copy(spanX = item.spanX.coerceIn(1, minOf(2, columns)), spanY = ROW_UNITS)
+        } else if (item is AppCell) {
+            // App icons come in three shapes: one cell, a super icon two cells wide, or one two
+            // rows tall. Anything else is made the nearest of those.
+            val tall = item.spanX == 1 && item.spanY > ROW_UNITS && unitRows >= 2 * ROW_UNITS
+            val spanX = if (tall) 1 else item.spanX.coerceIn(1, minOf(2, columns))
+            val spanY = if (tall) 2 * ROW_UNITS else ROW_UNITS
+            if (spanX == item.spanX && spanY == item.spanY) item else item.copy(spanX = spanX, spanY = spanY)
         } else {
             item
         }
@@ -193,7 +227,9 @@ object LayoutBuilder {
         }
 
         // Where the item is actually drawn, rounded to the closest spot normal placement allows.
-        val step = if (sized is WidgetCell) 1 else ICON_ROW_STEP
+        // An icon with no offset keeps the row it is on — it may be tucked under a widget, on a
+        // row that is not one of the usual half-row steps, and that is where it was put.
+        val step = if (sized is WidgetCell || (sized.dx == 0f && sized.dy == 0f)) 1 else ICON_ROW_STEP
         val col = (sized.col + sized.dx).roundToInt().coerceIn(0, maxCol)
         val row = (((sized.row + sized.dy) / step).roundToInt() * step).coerceIn(0, maxRow)
         return if (col == sized.col && row == sized.row && sized.dx == 0f && sized.dy == 0f) {

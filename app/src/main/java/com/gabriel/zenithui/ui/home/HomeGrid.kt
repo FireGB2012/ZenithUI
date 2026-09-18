@@ -142,18 +142,36 @@ class HomeDragState {
         removeArmed = false
     }
 
-    /** Cell under the centre of the dragged item, or null when it is off the grid. */
+    /**
+     * The cell the dragged item would take, or null when it has been carried right off the grid.
+     *
+     * An item that only hangs over an edge — a wide widget let go near the side, an icon dragged
+     * a little too low — is pulled back onto the grid rather than refused. Refusing it made the
+     * item jump back to where it started, which reads as the launcher ignoring you.
+     */
     fun cellUnderItem(columns: Int, rows: Int, rowStep: Int = 1): Pair<Int, Int>? {
         val current = item ?: return null
         if (cellWidth <= 0f || cellHeight <= 0f) return null
-        // Where the item is actually being drawn, rounded to the closest cell.
         val topLeft = pointer - grab
+        // Only when the middle of what you are carrying is off the grid is it truly off it.
+        val centreX = topLeft.x - gridOrigin.x + current.spanX * cellWidth / 2f
+        val centreY = topLeft.y - gridOrigin.y + current.spanY * cellHeight / 2f
+        val slackX = cellWidth / 2f
+        val slackY = cellHeight * ROW_UNITS / 2f
+        if (centreX < -slackX || centreX > columns * cellWidth + slackX) return null
+        if (centreY < -slackY || centreY > rows * cellHeight + slackY) return null
+        // Where the item is actually being drawn, rounded to the closest cell and kept on the grid.
         val col = ((topLeft.x - gridOrigin.x) / cellWidth).roundToInt()
+            .coerceIn(0, (columns - current.spanX).coerceAtLeast(0))
         val rawRow = ((topLeft.y - gridOrigin.y) / cellHeight).roundToInt()
+            .coerceIn(0, (rows - current.spanY).coerceAtLeast(0))
         // Icons stay on tidy boundaries; widgets may sit on any unit.
-        val row = if (rowStep > 1) (rawRow.toFloat() / rowStep).roundToInt() * rowStep else rawRow
-        if (col < 0 || row < 0 || col + current.spanX > columns || row + current.spanY > rows) return null
-        return col to row
+        val row = if (rowStep > 1) {
+            ((rawRow.toFloat() / rowStep).roundToInt() * rowStep).coerceAtMost(rows - current.spanY).let { it - it % rowStep }
+        } else {
+            rawRow
+        }
+        return col to row.coerceAtLeast(0)
     }
 
     fun cellUnderPointer(columns: Int, rows: Int): Pair<Int, Int>? {
@@ -216,14 +234,8 @@ fun HomePage(
         }
         val cellWidthDp = with(density) { cellWidthPx.toDp() }
         val cellHeightDp = with(density) { cellHeightPx.toDp() }
-        // An icon never grows so large that it pushes its label out of the cell.
-        val labelSpace = if (settings.showLabels) 24.dp else 4.dp
         val rowHeightDp = cellHeightDp * ROW_UNITS
-        val iconSize = minOf(
-            settings.iconSize.dp,
-            (rowHeightDp - labelSpace - 8.dp).coerceAtLeast(28.dp),
-            (cellWidthDp - 8.dp).coerceAtLeast(28.dp),
-        )
+        val iconSize = homeIconSize(cellWidthDp, rowHeightDp, settings.showLabels)
         if (active) drag.iconSize = iconSize
         val lines = iconLines(cellWidthDp, rowHeightDp, iconSize, settings.showLabels)
         if (active) drag.lines = lines
@@ -231,10 +243,12 @@ fun HomePage(
         // Drop hint for the cell the dragged item would land in.
         val dragged = drag.item
         if (dragged != null && active) {
+            // The raw row under the item; which rows it may actually take is resolveDrop's call,
+            // so a row tucked under a widget is not rounded away before it is even considered.
             val cell = drag.cellUnderItem(
                 columns = settings.columns,
                 rows = settings.rows * ROW_UNITS,
-                rowStep = if (dragged is WidgetCell) 1 else iconRowStep,
+                rowStep = 1,
             )
             // The cell under your finger may be taken, in which case the drop lands beside it.
             // Point at that opening instead: a hint showing somewhere the item will not go is
@@ -485,7 +499,7 @@ fun HomeItemContent(
     item: HomeItem,
     settings: ZenithSettings,
     appsByKey: Map<String, AppInfo>,
-    iconSize: androidx.compose.ui.unit.Dp = settings.iconSize.dp,
+    iconSize: androidx.compose.ui.unit.Dp = STANDARD_ICON_SIZE,
     /** Where icons sit in their cells; widgets and super icons are cut to the same lines. */
     lines: IconLines? = null,
     onSearch: () -> Unit,
@@ -607,6 +621,24 @@ private fun SuperAppTile(
         }
     }
 }
+
+/**
+ * How big an icon is, worked out from the cell it sits in rather than chosen: about three quarters
+ * of the cell's width, never so tall that it pushes its label out, and kept between sizes that read
+ * well. Because it follows the grid, icons, widgets and the gaps between them always stay in
+ * proportion — pick a roomier grid and the icons grow with it.
+ */
+fun homeIconSize(cellWidth: Dp, rowHeight: Dp, showLabels: Boolean): Dp {
+    val labelSpace = if (showLabels) 24.dp else 4.dp
+    return minOf(
+        (cellWidth * 0.75f).coerceIn(54.dp, 72.dp),
+        (rowHeight - labelSpace - 8.dp).coerceAtLeast(28.dp),
+        (cellWidth - 8.dp).coerceAtLeast(28.dp),
+    )
+}
+
+/** The size icons are drawn at away from the grid: the drawer, folders, the dock's fallback. */
+val STANDARD_ICON_SIZE = 60.dp
 
 /** How tall a tall super icon is, and how far below its row's icon line it starts. */
 @Immutable
@@ -900,7 +932,7 @@ fun DockBar(
     val haptics = LocalHapticFeedback.current
     val firstKeys = remember { keys.toSet() }
     val density = LocalDensity.current
-    val iconSize = pageIconSize ?: minOf(settings.iconSize.dp, 64.dp)
+    val iconSize = pageIconSize ?: STANDARD_ICON_SIZE
     val iconSizePx = with(density) { iconSize.toPx() }
     // One dock app per column: then each is centred on its column, exactly under the page's icons.
     val aligned = columns > 0 && keys.size == columns

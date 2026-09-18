@@ -17,6 +17,7 @@ import com.gabriel.zenithui.data.HomeItem
 import com.gabriel.zenithui.data.IconLoader
 import com.gabriel.zenithui.data.LayoutBuilder
 import com.gabriel.zenithui.data.PageGrid
+import com.gabriel.zenithui.data.occupyItem
 import com.gabriel.zenithui.data.Plus
 import com.gabriel.zenithui.data.PlusStatus
 import com.gabriel.zenithui.data.ROW_UNITS
@@ -115,7 +116,7 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
         // widgets grown over their neighbours — is put right once, as soon as it is loaded.
         if (!settings.value.freeform) {
             val current = settings.value
-            val settled = LayoutBuilder.settle(layout.value, current.columns, current.rows, free = false)
+            val settled = LayoutBuilder.settle(layout.value, current.columns, current.rows, free = false, tuck = current.widgetTuck)
             if (settled != layout.value) store.setLayout(settled)
         }
         icons.prime(settings.value.iconPack, settings.value.iconShape)
@@ -376,7 +377,7 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
         // half-cell offsets and odd sizes behind for the next drag to trip over.
         val leftFreePlacement = before.freeform && !after.freeform
         if (gridChanged || leftFreePlacement) {
-            val settled = LayoutBuilder.settle(layout.value, after.columns, after.rows, free = after.freeform)
+            val settled = LayoutBuilder.settle(layout.value, after.columns, after.rows, free = after.freeform, tuck = after.widgetTuck)
             if (settled != layout.value) store.setLayout(settled)
         }
     }
@@ -538,7 +539,7 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
         val s = settings.value
         val grid = PageGrid(s.columns, s.rows * ROW_UNITS)
         layout.value.filter { it.page == page && it.id != ignoreId }
-            .forEach { grid.occupy(it.col, it.row, it.spanX, it.spanY) }
+            .forEach { grid.occupyItem(it, settings.value.widgetTuck) }
         return grid.findSlot(spanX, spanY, rowStep)
     }
 
@@ -553,6 +554,24 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
         if (target < settings.value.pages) store.update { it.copy(pages = target) }
     }
 
+    /**
+     * The first opening on [startPage] or any page after it — a brand new page if every one is
+     * full. For a drop onto a full page: the item goes on to the next page with room rather than
+     * quietly returning to where it came from.
+     */
+    fun firstFreeSlotFrom(startPage: Int, spanX: Int, spanY: Int, rowStep: Int, ignoreId: String?): Triple<Int, Int, Int>? {
+        val s = settings.value
+        val items = layout.value.filter { it.id != ignoreId }
+        val lastPage = maxOf(items.maxOfOrNull { it.page } ?: 0, startPage)
+        for (page in startPage..minOf(lastPage + 1, LayoutBuilder.MAX_PAGES - 1)) {
+            val grid = PageGrid(s.columns, s.rows * ROW_UNITS)
+            items.filter { it.page == page }.forEach { grid.occupyItem(it, settings.value.widgetTuck) }
+            val slot = grid.findSlot(spanX, spanY, rowStep) ?: continue
+            return Triple(page, slot.first, slot.second)
+        }
+        return null
+    }
+
     /** Returns page/col/row of the first opening big enough for the given span, in row units. */
     fun firstFreeSlot(spanX: Int, spanY: Int, rowStep: Int = 1): Triple<Int, Int, Int>? {
         val s = settings.value
@@ -560,7 +579,7 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
         val lastPage = (items.maxOfOrNull { it.page } ?: 0)
         for (page in 0..(lastPage + 1)) {
             val grid = PageGrid(s.columns, s.rows * ROW_UNITS)
-            items.filter { it.page == page }.forEach { grid.occupy(it.col, it.row, it.spanX, it.spanY) }
+            items.filter { it.page == page }.forEach { grid.occupyItem(it, settings.value.widgetTuck) }
             val slot = grid.findSlot(spanX, spanY, rowStep)
             if (slot != null) return Triple(page, slot.first, slot.second)
         }
@@ -583,16 +602,23 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
         rowStep: Int,
         colWidthInRowUnits: Float = 2f,
     ): Pair<Int, Int>? {
-        if (isSlotFree(page, col, row, spanX, spanY, ignoreId)) return col to row
-
         val s = settings.value
+        // Icons keep to half-row steps, except the row right under a widget, where one may tuck in.
+        val tuckRows = if (rowStep > 1) {
+            LayoutBuilder.tuckRows(layout.value.filter { it.page == page && it.id != ignoreId }, s.widgetTuck)
+        } else {
+            emptySet()
+        }
+        fun allowed(r: Int) = r % rowStep == 0 || r in tuckRows
+        if (allowed(row) && isSlotFree(page, col, row, spanX, spanY, ignoreId)) return col to row
+
         val rows = s.rows * ROW_UNITS
         val weight = colWidthInRowUnits.coerceIn(0.5f, 8f)
         var best: Pair<Int, Int>? = null
         var bestDistance = Float.MAX_VALUE
 
-        var candidateRow = 0
-        while (candidateRow <= rows - spanY) {
+        for (candidateRow in 0..(rows - spanY)) {
+            if (!allowed(candidateRow)) continue
             for (candidateCol in 0..(s.columns - spanX)) {
                 if (!isSlotFree(page, candidateCol, candidateRow, spanX, spanY, ignoreId)) continue
                 val dx = (candidateCol - col) * weight
@@ -603,17 +629,31 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
                     best = candidateCol to candidateRow
                 }
             }
-            candidateRow += rowStep
         }
         return best
     }
 
     fun isSlotFree(page: Int, col: Int, row: Int, spanX: Int, spanY: Int, ignoreId: String?): Boolean {
         val s = settings.value
-        val grid = PageGrid(s.columns, s.rows * ROW_UNITS)
+        val rows = s.rows * ROW_UNITS
+        if (col < 0 || row < 0 || col + spanX > s.columns || row + spanY > rows) return false
+        val grid = PageGrid(s.columns, rows)
         layout.value.filter { it.page == page && it.id != ignoreId }
-            .forEach { grid.occupy(it.col, it.row, it.spanX, it.spanY) }
-        return grid.isFree(col, row, spanX, spanY)
+            .forEach { grid.occupyItem(it, s.widgetTuck) }
+        // A widget being moved or resized gives up the same empty band as one sitting still, so
+        // it can go back over an icon tucked under it.
+        val moving = layout.value.firstOrNull { it.id == ignoreId }
+        val blocked = if (moving is WidgetCell) LayoutBuilder.blockedSpanY(moving.type, spanY, s.widgetTuck) else spanY
+        return grid.isFree(col, row, spanX, blocked)
+    }
+
+    /**
+     * Keeps the tuck in step with the screen. It only changes the rule for the next placement: it
+     * never moves anything that is already on the page, so a passing measurement can not reshuffle
+     * your home screen. A real grid change tidies the page on its own, with the tuck it has then.
+     */
+    fun setWidgetTuck(tuck: Int) {
+        if (tuck != settings.value.widgetTuck) store.update { it.copy(widgetTuck = tuck) }
     }
 
     /** Drop one app onto another to make a folder; drop onto a folder to add to it. */
@@ -656,7 +696,7 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
             if (parts.size != 2) return base
             val grid = PageGrid(s.columns, s.rows * ROW_UNITS)
             base.filter { it.page == folder.page }
-                .forEach { grid.occupy(it.col, it.row, it.spanX, it.spanY) }
+                .forEach { grid.occupyItem(it, settings.value.widgetTuck) }
             val slot = grid.findSlot(1, ROW_UNITS, LayoutBuilder.ICON_ROW_STEP) ?: return base
             return base + AppCell(
                 LayoutBuilder.newId(), folder.page, slot.first, slot.second, parts[0], parts[1],

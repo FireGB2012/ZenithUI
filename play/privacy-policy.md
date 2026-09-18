@@ -1,10 +1,10 @@
 # Privacy Policy — Zenith UI
 
-**Last updated: 15 September 2026**
+**Last updated: 19 September 2026**
 
-> The copy Play actually links to is `docs/index.html`, published at
-> <https://firegb2012.github.io/ZenithUI/>. Edit both together, or the hosted policy drifts from
-> this one.
+> The copy Play actually links to is `docs/index.html`, published from the public repo
+> github.com/FireGB2012/zenith-privacy at <https://firegb2012.github.io/zenith-privacy/>. Edit all
+> three together, and copy `docs/index.html` into that repo, or the hosted policy drifts from this one.
 
 Zenith UI is a home screen replacement (launcher) for Android. This policy explains what the app
 does with your information. The short version: nothing you do in Zenith leaves your phone.
@@ -69,7 +69,7 @@ To work as a launcher, the app reads:
 
 | Permission | Why it is needed |
 | --- | --- |
-| `SET_WALLPAPER` | Opens the system wallpaper picker when you choose "Wallpaper" in the Customise sheet |
+| `SET_WALLPAPER` | Sets a wallpaper you pick from Zenith's own gallery, which the app paints on the phone. Choosing your own photo opens the system wallpaper picker instead |
 | `VIBRATE` | Provides a short haptic tick when you pick up an icon or resize a widget |
 | `READ_CALENDAR` | Optional. Asked for only when you tap "Allow calendar" on the bedside clock, so it can list today's events |
 | `com.android.vending.BILLING` | Lets Google Play sell Zenith Plus inside the app |

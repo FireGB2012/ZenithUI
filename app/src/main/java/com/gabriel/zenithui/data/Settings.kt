@@ -39,6 +39,13 @@ data class ZenithSettings(
      * any size the grid can hold instead of their designed range. Nothing may overlap either way.
      */
     val freeform: Boolean = false,
+    /**
+     * How many row units at the bottom of a widget are empty space an icon may tuck into. A
+     * widget is drawn cut to the icon lines, so under it is the strip where labels would go; how
+     * much of that can be given up depends on the screen, so the home screen works it out and
+     * keeps it here, where every placement rule — including the tidy on start-up — can read it.
+     */
+    val widgetTuck: Int = 0,
     val dock: List<String> = emptyList(),
     /** Whether the dock is shown. Its apps are kept either way, so turning it back on restores them. */
     val showDock: Boolean = true,
@@ -99,6 +106,7 @@ data class ZenithSettings(
         put("appsView", appsView)
         put("recentLaunches", JSONArray(recentLaunches))
         put("freeform", freeform)
+        put("widgetTuck", widgetTuck)
         put("dock", JSONArray(dock))
         put("showDock", showDock)
         put("toggles", JSONArray(toggles))
@@ -146,6 +154,7 @@ data class ZenithSettings(
                 appsView = o.optString("appsView", d.appsView),
                 recentLaunches = o.optJSONArray("recentLaunches").toStringList(),
                 freeform = o.optBoolean("freeform", d.freeform),
+                widgetTuck = o.optInt("widgetTuck", d.widgetTuck),
                 dock = o.optJSONArray("dock").toStringList(),
                 showDock = o.optBoolean("showDock", d.showDock),
                 toggles = o.optJSONArray("toggles").toStringList().ifEmpty { d.toggles },

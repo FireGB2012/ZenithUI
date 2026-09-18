@@ -55,6 +55,8 @@ import com.gabriel.zenithui.data.WidgetCell
 import com.gabriel.zenithui.data.ZenithSettings
 import com.gabriel.zenithui.ui.common.AppIcon
 import com.gabriel.zenithui.ui.home.HomeItemContent
+import com.gabriel.zenithui.ui.home.STANDARD_ICON_SIZE
+import com.gabriel.zenithui.ui.home.homeIconSize
 import com.gabriel.zenithui.ui.home.iconLines
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.ZenithShapes
@@ -152,12 +154,7 @@ private fun MiniHome(
                 val cellWidth = maxWidth / settings.columns
                 val cellHeight = maxHeight / (settings.rows * ROW_UNITS)
                 val rowHeight = cellHeight * ROW_UNITS
-                val labelSpace = if (settings.showLabels) 24.dp else 4.dp
-                val iconSize = minOf(
-                    settings.iconSize.dp,
-                    (rowHeight - labelSpace - 8.dp).coerceAtLeast(28.dp),
-                    (cellWidth - 8.dp).coerceAtLeast(28.dp),
-                )
+                val iconSize = homeIconSize(cellWidth, rowHeight, settings.showLabels)
                 val lines = iconLines(cellWidth, rowHeight, iconSize, settings.showLabels)
 
                 items.forEachIndexed { index, item ->
@@ -209,7 +206,7 @@ private fun MiniHome(
             )
 
             if (settings.showDock && dock.isNotEmpty()) {
-                val dockIcon = minOf(settings.iconSize.dp, 64.dp)
+                val dockIcon = STANDARD_ICON_SIZE
                 Row(
                     Modifier
                         .padding(horizontal = 12.dp)

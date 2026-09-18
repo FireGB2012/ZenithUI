@@ -111,6 +111,9 @@ import kotlin.math.roundToInt
  */
 private val PAGE_FLIP_EDGE = 60.dp
 
+/** The gap always left between a widget and an icon tucked in under it. */
+private val TUCK_GAP = 14.dp
+
 /** How far the home screen sinks back while an app opens out of it. */
 private const val HOME_SUNK = 0.9f
 
@@ -133,6 +136,7 @@ private sealed interface HomeSheet {
     data object ThemeMaker : HomeSheet
     data object HiddenApps : HomeSheet
     data object Toggles : HomeSheet
+    data object Wallpapers : HomeSheet
 }
 
 @Composable
@@ -547,6 +551,17 @@ fun HomeScreen(viewModel: ZenithViewModel) {
      * How finely an icon may be placed: every half row normally, every quarter row with Plus free
      * placement on. Read live, because the drag gesture keeps the callbacks it started with.
      */
+    // How far an icon may tuck in under a widget on this screen: the empty strip under the widget
+    // plus the space above the icon, less a small gap so the two never touch. Worked out from the
+    // grid actually being drawn, so it is right on any phone and any grid size.
+    val tuckDensity = LocalDensity.current
+    LaunchedEffect(drag.lines, drag.cellHeight) {
+        val lines = drag.lines ?: return@LaunchedEffect
+        if (drag.cellHeight <= 0f) return@LaunchedEffect
+        val spare = with(tuckDensity) { (lines.bottom + lines.top - TUCK_GAP).toPx() }
+        viewModel.setWidgetTuck((spare / drag.cellHeight).toInt().coerceIn(0, ROW_UNITS - 1))
+    }
+
     fun iconRowStep(): Int =
         if (settings.freeform && plus.active) 1 else LayoutBuilder.ICON_ROW_STEP
 
@@ -567,6 +582,18 @@ fun HomeScreen(viewModel: ZenithViewModel) {
             rowStep = if (item is WidgetCell) 1 else iconRowStep(),
             colWidthInRowUnits = if (drag.cellHeight > 0f) drag.cellWidth / drag.cellHeight else 2f,
         )
+
+    /**
+     * Turns to the page something has just been put on, so you never have to go looking for it.
+     * A page added this moment is not in the pager yet, hence the wait.
+     */
+    fun revealPage(page: Int?) {
+        if (page == null) return
+        scope.launch {
+            snapshotFlow { pagerState.pageCount }.first { it > page }
+            pagerState.animateScrollToPage(page)
+        }
+    }
 
     fun handleDrop() {
         val item = drag.item
@@ -594,7 +621,7 @@ fun HomeScreen(viewModel: ZenithViewModel) {
                     val cell = if (!settled) null else drag.cellUnderItem(
                         columns = settings.columns,
                         rows = settings.rows * ROW_UNITS,
-                        rowStep = rowStep,
+                        rowStep = 1,
                     )
                     // Letting go off the grid leaves an item where it was — unless it has been
                     // carried to another page, where dropping it back on the old one would look
@@ -611,6 +638,23 @@ fun HomeScreen(viewModel: ZenithViewModel) {
                         } else {
                             null
                         }
+                    // Carried onto a page with no room at all: on to the next page that has some,
+                    // and the screen follows it there. Nothing is ever dropped into thin air.
+                    if (slot == null && item.page != pagerState.currentPage) {
+                        val onward = viewModel.firstFreeSlotFrom(
+                            startPage = pagerState.currentPage,
+                            spanX = item.spanX,
+                            spanY = item.spanY,
+                            rowStep = rowStep,
+                            ignoreId = item.id,
+                        )
+                        if (onward != null) {
+                            viewModel.moveItem(item.id, onward.first, onward.second, onward.third)
+                            revealPage(onward.first)
+                        } else {
+                            Toast.makeText(context, "Every page is full", Toast.LENGTH_SHORT).show()
+                        }
+                    }
                     if (slot != null) {
                         val free = settings.freeform && plus.active
                         if (free && cell != null && slot == cell && drag.cellWidth > 0f && drag.cellHeight > 0f) {
@@ -636,18 +680,6 @@ fun HomeScreen(viewModel: ZenithViewModel) {
             }
         }
         drag.clear()
-    }
-
-    /**
-     * Turns to the page something has just been put on, so you never have to go looking for it.
-     * A page added this moment is not in the pager yet, hence the wait.
-     */
-    fun revealPage(page: Int?) {
-        if (page == null) return
-        scope.launch {
-            snapshotFlow { pagerState.pageCount }.first { it > page }
-            pagerState.animateScrollToPage(page)
-        }
     }
 
     /**
@@ -763,6 +795,32 @@ fun HomeScreen(viewModel: ZenithViewModel) {
                 drawerWidthPx = it.width.toFloat()
             }
             .onGloballyPositioned { homeOrigin = it.positionInRoot() }
+            // Pinching in anywhere on the home screen opens Customise, the way it does on Samsung
+            // and Pixel phones. It only watches; the page still gets every touch.
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                    var startSpan = 0f
+                    var fired = false
+                    while (true) {
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        val fingers = event.changes.filter { it.pressed }
+                        if (fingers.isEmpty()) break
+                        if (fingers.size < 2) {
+                            startSpan = 0f
+                            continue
+                        }
+                        val span = (fingers[0].position - fingers[1].position).getDistance()
+                        if (startSpan == 0f) {
+                            startSpan = span
+                        } else if (!fired && !drag.isDragging && span < startSpan * 0.72f) {
+                            fired = true
+                            haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                            showSheet(HomeSheet.Customize)
+                        }
+                    }
+                }
+            }
             // Watches every touch before anything else handles it, and never consumes one. While
             // a note is being typed in, a touch anywhere outside it ends the typing and puts the
             // keyboard away — the way a text field on any other screen behaves.
@@ -803,11 +861,24 @@ fun HomeScreen(viewModel: ZenithViewModel) {
                 // drawer feel like it was lagging behind the finger.
                 .then(if (homeBlur > 0.5.dp) Modifier.blur(homeBlur) else Modifier)
         ) {
+            // Picking something up on the home screen answers a beat sooner than Android's usual
+            // long press, so moving things feels immediate rather than like waiting for permission.
+            val baseConfiguration = androidx.compose.ui.platform.LocalViewConfiguration.current
+            val quickHold = remember(baseConfiguration) { QuickHold(baseConfiguration) }
+            androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalViewConfiguration provides quickHold) {
             Column(Modifier.fillMaxSize()) {
                 Greeting(
                     name = settings.userName,
                     modifier = Modifier
                         .statusBarsPadding()
+                        // Holding your name opens Customise too — always reachable, however full
+                        // the page underneath is.
+                        .pointerInput(Unit) {
+                            detectTapGestures(onLongPress = {
+                                haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                                showSheet(HomeSheet.Customize)
+                            })
+                        }
                         .padding(horizontal = 26.dp, vertical = 8.dp),
                 )
 
@@ -953,6 +1024,7 @@ fun HomeScreen(viewModel: ZenithViewModel) {
                     Spacer(Modifier.navigationBarsPadding().height(10.dp))
                 }
             }
+            }
         }
 
         // ------------------------------------------------------------ drawer
@@ -1069,6 +1141,7 @@ fun HomeScreen(viewModel: ZenithViewModel) {
                     visible = sheetVisible,
                     item = item,
                     appsByKey = appsByKey,
+                    onCustomize = { showSheet(HomeSheet.Customize) },
                     onOpen = { launchApp(it) },
                     onAppInfo = { viewModel.openAppInfo(it) },
                     onIconSize = { size ->
@@ -1135,14 +1208,7 @@ fun HomeScreen(viewModel: ZenithViewModel) {
 
             HomeSheet.Customize -> CustomizeSheet(
                 visible = sheetVisible,
-                onWallpaper = {
-                    runCatching {
-                        context.startActivity(
-                            Intent.createChooser(Intent(Intent.ACTION_SET_WALLPAPER), "Wallpaper")
-                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        )
-                    }
-                },
+                onWallpaper = { showSheet(HomeSheet.Wallpapers) },
                 onHelp = { showSheet(HomeSheet.Help) },
                 onAmbient = {
                     hideSheet()
@@ -1192,6 +1258,18 @@ fun HomeScreen(viewModel: ZenithViewModel) {
                 onRestore = { withPlus { openBackup.launch(arrayOf("*/*")) } },
                 onPlus = { showSheet(HomeSheet.Plus) },
                 onReset = { viewModel.resetEverything() },
+                onWallpaper = { showSheet(HomeSheet.Wallpapers) },
+                onDismiss = { hideSheet() },
+            )
+
+            HomeSheet.Wallpapers -> WallpaperSheet(
+                visible = sheetVisible,
+                settings = settings,
+                onApplied = { paletteId ->
+                    // The glass is drawn from the wallpaper, so read the new one straight away.
+                    viewModel.refreshWallpaper()
+                    if (paletteId != null) viewModel.updateSettings { it.copy(paletteId = paletteId) }
+                },
                 onDismiss = { hideSheet() },
             )
 
@@ -1436,4 +1514,10 @@ private fun DrawerAppSheet(
         MenuRow(Icons.Rounded.Info, "App info") { onAppInfo(); onDismiss() }
         MenuRow(Icons.Rounded.Delete, "Uninstall", danger = true) { onUninstall(); onDismiss() }
     }
+}
+
+/** Android's view configuration with a shorter long press, for picking things up on the home screen. */
+private class QuickHold(base: androidx.compose.ui.platform.ViewConfiguration) :
+    androidx.compose.ui.platform.ViewConfiguration by base {
+    override val longPressTimeoutMillis: Long get() = 320L
 }

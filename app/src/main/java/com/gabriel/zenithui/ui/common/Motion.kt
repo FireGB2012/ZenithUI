@@ -45,7 +45,7 @@ object Motion {
     fun <T> bouncy() = spring<T>(dampingRatio = 0.40f, stiffness = 200f)
 
     /** Icons gliding to a new cell, with a little overshoot as they land. */
-    val cell = spring<IntOffset>(dampingRatio = 0.58f, stiffness = 240f)
+    val cell = spring<IntOffset>(dampingRatio = 0.66f, stiffness = 420f)
 
     const val ENTER_STAGGER_MS = 34
     const val MAX_STAGGER_STEPS = 16

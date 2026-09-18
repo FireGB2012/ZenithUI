@@ -132,6 +132,11 @@ fun ZenithApp(viewModel: ZenithViewModel) {
     val pixelsPerDp = LocalDensity.current.density
     LaunchedEffect(screenSize, settings.gridDensity, settings.onboarded) {
         if (!settings.onboarded || screenSize == IntSize.Zero) return@LaunchedEffect
+        // Only a size that has settled counts. While the window is still being laid out it can
+        // report a smaller size for a frame or two, and a grid worked out from that would tidy
+        // the home screen into it — a change that is not undone when the real size arrives.
+        kotlinx.coroutines.delay(350)
+        if (screenSize.width / pixelsPerDp < 280f || screenSize.height / pixelsPerDp < 400f) return@LaunchedEffect
         viewModel.resolveGrid(
             density = GridDensity.byId(settings.gridDensity),
             widthDp = screenSize.width / pixelsPerDp,

@@ -22,7 +22,7 @@ from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 
-PACKAGE = "com.gabriel.zenithui"
+PACKAGE = "com.gabriel.zenith_Launcher"
 DEFAULT_KEY = os.path.expanduser("~/.config/zenith-play/service-account.json")
 DEFAULT_AAB = "app/build/outputs/bundle/release/app-release.aab"
 SCOPE = "https://www.googleapis.com/auth/androidpublisher"

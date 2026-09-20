@@ -19,7 +19,9 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.gabriel.zenithui"
+        // The identity Google Play holds for this app, fixed by the Play listing and unchangeable
+        // once published. The Kotlin package above is a separate thing and stays as it is.
+        applicationId = "com.gabriel.zenith_Launcher"
         minSdk = 31
         targetSdk = 37
         versionCode = 28

@@ -7,7 +7,7 @@ Paste these into Play Console → Grow → Store presence → Main store listing
 | Field | Value |
 | --- | --- |
 | App name (30 chars max) | `Zenith UI` |
-| Package / application ID | `com.gabriel.zenithui` (final once uploaded — cannot be changed later) |
+| Package / application ID | `com.gabriel.zenith_Launcher` (fixed by the Play listing; the Kotlin package stays `com.gabriel.zenithui`) |
 | Category | Personalisation |
 | Tags | Launcher, Home screen, Widgets |
 | Contact email | gabrieltinndahn06@gmail.com |

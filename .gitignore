@@ -21,3 +21,7 @@ captures/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Play publishing key, if it is ever copied into the project by mistake
+service-account.json
+*-service-account.json

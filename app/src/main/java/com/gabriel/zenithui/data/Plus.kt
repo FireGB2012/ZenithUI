@@ -234,9 +234,12 @@ class BillingRepository(context: Context) {
                 .setProductType(BillingClient.ProductType.INAPP)
                 .build()
             val params = QueryProductDetailsParams.newBuilder().setProductList(listOf(product)).build()
-            client.queryProductDetailsAsync(params) { result, list ->
+            // Billing 8 hands back a result object rather than a bare list; anything Play could not
+            // fetch is listed separately and simply is not in productDetailsList.
+            client.queryProductDetailsAsync(params) { result, details ->
                 if (result.responseCode != BillingClient.BillingResponseCode.OK) return@queryProductDetailsAsync
-                val found = list.firstOrNull { it.productId == Plus.LIFETIME_ID } ?: return@queryProductDetailsAsync
+                val found = details.productDetailsList
+                    .firstOrNull { it.productId == Plus.LIFETIME_ID } ?: return@queryProductDetailsAsync
                 lifetime = found
                 found.oneTimePurchaseOfferDetails?.formattedPrice?.let { _lifetimePrice.value = it }
             }
@@ -249,9 +252,9 @@ class BillingRepository(context: Context) {
                 .setProductType(BillingClient.ProductType.SUBS)
                 .build()
             val params = QueryProductDetailsParams.newBuilder().setProductList(listOf(product)).build()
-            client.queryProductDetailsAsync(params) { result, list ->
+            client.queryProductDetailsAsync(params) { result, details ->
                 if (result.responseCode != BillingClient.BillingResponseCode.OK) return@queryProductDetailsAsync
-                val found = list.firstOrNull { it.productId == Plus.MONTHLY_ID }
+                val found = details.productDetailsList.firstOrNull { it.productId == Plus.MONTHLY_ID }
                 monthly = found
                 val offers = found?.subscriptionOfferDetails.orEmpty()
                 _trialOffer.value = offers.any { offer ->

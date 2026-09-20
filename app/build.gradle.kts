@@ -24,7 +24,7 @@ android {
         applicationId = "com.gabriel.zenith_Launcher"
         minSdk = 31
         targetSdk = 37
-        versionCode = 100
+        versionCode = 101
         versionName = "3.7"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -48,6 +48,14 @@ android {
                 enable = true
             }
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            // Ships symbols for native code this project builds, so a crash in Play Console would
+            // read as function names rather than bare addresses. Nothing is built here today: the
+            // one .so in the bundle is a prebuilt from androidx.graphics.path, whose symbols are
+            // not ours to ship, which is why Play still mentions them. It costs nothing and covers
+            // us the day any native code is added.
+            ndk {
+                debugSymbolLevel = "FULL"
+            }
             if (keystoreProperties.getProperty("storeFile") != null) {
                 signingConfig = signingConfigs.getByName("release")
             }

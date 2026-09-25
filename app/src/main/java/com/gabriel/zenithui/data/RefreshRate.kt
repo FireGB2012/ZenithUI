@@ -3,6 +3,8 @@ package com.gabriel.zenithui.data
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
+import android.os.Build
+import android.view.Display
 import android.view.WindowManager
 
 /** The activity behind a composable's context, or null if there somehow is not one. */
@@ -14,6 +16,14 @@ fun Context.findActivity(): Activity? {
     }
     return null
 }
+
+/**
+ * The screen this activity is on. Activity#getDisplay only exists from Android 11, so anything
+ * older is asked through its window manager instead.
+ */
+@Suppress("DEPRECATION")
+private val Activity.screen: Display?
+    get() = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) display else windowManager.defaultDisplay
 
 /**
  * How fast the launcher draws: as fast as the screen can, for everybody.
@@ -30,7 +40,7 @@ object RefreshRate {
 
     /** The fastest mode this screen actually has, or [FLOOR_HZ] when it cannot be read. */
     fun maxHz(activity: Activity): Float = runCatching {
-        val display = activity.display ?: return@runCatching FLOOR_HZ
+        val display = activity.screen ?: return@runCatching FLOOR_HZ
         display.supportedModes.maxOfOrNull { it.refreshRate } ?: display.refreshRate
     }.getOrDefault(FLOOR_HZ).coerceAtLeast(FLOOR_HZ)
 
@@ -43,9 +53,10 @@ object RefreshRate {
             if (params.preferredRefreshRate == target) return@runCatching
             params.preferredRefreshRate = target
             // Older devices honour the mode id rather than the rate, so set both where we can.
-            val mode = activity.display
+            val screen = activity.screen
+            val mode = screen
                 ?.supportedModes
-                ?.filter { it.physicalWidth == activity.display?.mode?.physicalWidth }
+                ?.filter { it.physicalWidth == screen.mode?.physicalWidth }
                 ?.minByOrNull { kotlin.math.abs(it.refreshRate - target) }
             if (mode != null) params.preferredDisplayModeId = mode.modeId
             window.attributes = params

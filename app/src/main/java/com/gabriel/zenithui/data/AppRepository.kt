@@ -14,6 +14,7 @@ import android.os.Process
 import android.os.UserHandle
 import android.provider.MediaStore
 import android.provider.Settings
+import android.os.Build
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -87,7 +88,14 @@ class AppRepository(context: Context) {
      * MIUI's. Null when the app's icon cannot be read that way; then [systemIcon] is used.
      */
     fun originalIcon(key: String, densityDpi: Int): Drawable? = runCatching {
-        val info = activityInfo(key)?.activityInfo ?: return@runCatching null
+        val launcherInfo = activityInfo(key) ?: return@runCatching null
+        // LauncherActivityInfo carries its ActivityInfo only from Android 12; before that the
+        // package manager hands over the same thing, looked up by component name.
+        val info = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            launcherInfo.activityInfo
+        } else {
+            appContext.packageManager.getActivityInfo(launcherInfo.componentName, 0)
+        }
         val id = info.iconResource.takeIf { it != 0 } ?: return@runCatching null
         appContext.packageManager
             .getResourcesForApplication(info.applicationInfo)

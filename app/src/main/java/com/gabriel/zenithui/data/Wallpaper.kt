@@ -1,5 +1,6 @@
 package com.gabriel.zenithui.data
 
+import android.annotation.SuppressLint
 import android.app.WallpaperManager
 import android.content.Context
 import android.graphics.Bitmap
@@ -23,6 +24,10 @@ class WallpaperSource(context: Context) {
     private val _backdrop = MutableStateFlow<ImageBitmap?>(null)
     val backdrop: StateFlow<ImageBitmap?> = _backdrop.asStateFlow()
 
+    // Android gives the wallpaper to whoever is the home app, and the permission lint asks for is
+    // not one a launcher may hold. A phone that refuses throws, which runCatching already handles
+    // by leaving the backdrop empty and the glass tinted rather than blurred.
+    @SuppressLint("MissingPermission")
     suspend fun refresh() = withContext(Dispatchers.IO) {
         val bitmap = runCatching {
             val manager = WallpaperManager.getInstance(appContext)

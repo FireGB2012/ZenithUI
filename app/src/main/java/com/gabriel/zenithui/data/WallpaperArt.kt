@@ -12,6 +12,8 @@ import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RadialGradient
 import android.graphics.Shader
+import android.os.Build
+import android.util.DisplayMetrics
 import android.view.WindowManager
 import androidx.core.graphics.ColorUtils
 import kotlinx.coroutines.Dispatchers
@@ -71,14 +73,31 @@ object WallpaperArt {
     }
 
     /**
+     * The whole screen in pixels, including whatever the status and navigation bars cover, because
+     * a wallpaper is painted behind them. Window metrics arrived in Android 11; before that the
+     * display is measured directly.
+     */
+    @Suppress("DEPRECATION")
+    private fun screenSize(context: Context): Pair<Int, Int> {
+        val windows = context.getSystemService(WindowManager::class.java)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val bounds = windows.maximumWindowMetrics.bounds
+            return bounds.width() to bounds.height()
+        }
+        val metrics = DisplayMetrics()
+        windows.defaultDisplay.getRealMetrics(metrics)
+        return metrics.widthPixels to metrics.heightPixels
+    }
+
+    /**
      * Paints [style] at the size of this phone's screen and makes it the wallpaper. [lockToo] sets
      * the lock screen as well. Returns false if Android would not take it.
      */
     suspend fun apply(context: Context, style: WallStyle, colors: WallColors, seed: Int, lockToo: Boolean): Boolean =
         withContext(Dispatchers.Default) {
             runCatching {
-                val bounds = context.getSystemService(WindowManager::class.java).maximumWindowMetrics.bounds
-                val bitmap = render(style, colors, bounds.width(), bounds.height(), seed)
+                val (screenWidth, screenHeight) = screenSize(context)
+                val bitmap = render(style, colors, screenWidth, screenHeight, seed)
                 val which = if (lockToo) {
                     WallpaperManager.FLAG_SYSTEM or WallpaperManager.FLAG_LOCK
                 } else {

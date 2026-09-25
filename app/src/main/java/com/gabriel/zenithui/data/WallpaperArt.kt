@@ -78,7 +78,7 @@ object WallpaperArt {
      * display is measured directly.
      */
     @Suppress("DEPRECATION")
-    private fun screenSize(context: Context): Pair<Int, Int> {
+    internal fun screenSize(context: Context): Pair<Int, Int> {
         val windows = context.getSystemService(WindowManager::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             val bounds = windows.maximumWindowMetrics.bounds

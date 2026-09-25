@@ -10,7 +10,7 @@ import android.graphics.Paint
 import android.graphics.Rect
 import android.net.Uri
 import android.os.SystemClock
-import android.view.WindowManager
+import android.os.Build
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -66,9 +66,7 @@ object GlassWallpaper {
      * this screen, so the copy the glass uses lines up with what Android shows pixel for pixel.
      */
     suspend fun setPhoto(context: Context, uri: Uri): Boolean = withContext(Dispatchers.IO) {
-        val bounds = context.getSystemService(WindowManager::class.java).maximumWindowMetrics.bounds
-        val width = bounds.width()
-        val height = bounds.height()
+        val (width, height) = WallpaperArt.screenSize(context)
         val decoded = runCatching {
             val size = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, size) }
@@ -139,7 +137,10 @@ object GlassWallpaper {
         } else {
             bitmap
         }
-        target.outputStream().use { copy.compress(Bitmap.CompressFormat.WEBP_LOSSY, 92, it) }
+        // WEBP_LOSSY arrived in Android 11; before that WEBP meant the same thing.
+        @Suppress("DEPRECATION")
+        val format = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) Bitmap.CompressFormat.WEBP_LOSSY else Bitmap.CompressFormat.WEBP
+        target.outputStream().use { copy.compress(format, 92, it) }
         if (copy !== bitmap) copy.recycle()
     }
 

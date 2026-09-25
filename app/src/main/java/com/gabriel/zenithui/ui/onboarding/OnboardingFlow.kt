@@ -1,5 +1,6 @@
 package com.gabriel.zenithui.ui.onboarding
 
+import android.os.Build
 import android.view.HapticFeedbackConstants
 import android.view.RoundedCorner
 import androidx.activity.compose.BackHandler
@@ -181,7 +182,12 @@ fun OnboardingFlow(
 
     // The curve of this phone's own screen corners, so the preview is shaped like the real thing.
     val deviceCorner = remember(view, screenSize) {
-        val radius = view.rootWindowInsets?.getRoundedCorner(RoundedCorner.POSITION_TOP_LEFT)?.radius ?: 0
+        // Android 12 reports the screen's own corners; before that, a typical phone's.
+        val radius = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            view.rootWindowInsets?.getRoundedCorner(RoundedCorner.POSITION_TOP_LEFT)?.radius ?: 0
+        } else {
+            0
+        }
         if (radius > 0) (radius / pixelsPerDp).dp else 46.dp
     }
 
@@ -238,7 +244,9 @@ fun OnboardingFlow(
         work.join()
         shown = Int.MAX_VALUE
         built = true
-        view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+        view.performHapticFeedback(
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) HapticFeedbackConstants.CONFIRM else HapticFeedbackConstants.LONG_PRESS
+        )
         // Its own scope, so tapping on straight away does not cut the flourish off half lit.
         scope.launch {
             haloBoost.animateTo(3f, tween(280))

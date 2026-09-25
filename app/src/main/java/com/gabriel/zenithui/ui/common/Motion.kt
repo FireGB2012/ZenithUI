@@ -1,6 +1,8 @@
 package com.gabriel.zenithui.ui.common
 
+import android.provider.Settings
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -27,6 +29,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
 import kotlinx.coroutines.delay
 
@@ -49,6 +52,22 @@ object Motion {
 
     const val ENTER_STAGGER_MS = 34
     const val MAX_STAGGER_STEPS = 16
+
+    /** Fast out of the gate, then a long, soft landing. For things arriving that should feel expensive. */
+    val emphasized = CubicBezierEasing(0.16f, 1f, 0.3f, 1f)
+}
+
+/**
+ * False when the phone's "Remove animations" is on. Springs and tweens already honour that on
+ * their own; this is for the things that never end by themselves, like drifting light, which
+ * would otherwise keep a frame loop running for nothing.
+ */
+@Composable
+fun rememberAnimationsEnabled(): Boolean {
+    val context = LocalContext.current
+    return remember(context) {
+        Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) > 0f
+    }
 }
 
 /** Squeezes anything under a finger and lets it spring back — works alongside tap and drag. */

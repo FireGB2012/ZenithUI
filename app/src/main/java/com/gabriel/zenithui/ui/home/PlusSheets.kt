@@ -194,7 +194,8 @@ fun PlusSheet(
 }
 
 /** Icons for [Plus.FEATURES], in the same order. */
-private val FEATURE_ICONS: List<ImageVector> = listOf(
+/** One icon per entry in Plus.FEATURES, in the same order. Setup shows them too. */
+internal val FEATURE_ICONS: List<ImageVector> = listOf(
     Icons.Rounded.Palette,
     Icons.Rounded.VisibilityOff,
     Icons.Rounded.Save,

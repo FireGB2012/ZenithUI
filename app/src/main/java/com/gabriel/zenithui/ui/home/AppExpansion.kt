@@ -17,17 +17,32 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.asAndroidBitmap
-import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import com.gabriel.zenithui.ui.theme.GlassMaterial
+import com.gabriel.zenithui.ui.theme.drawLiquidGlass
+import com.gabriel.zenithui.ui.theme.glassLook
+import com.gabriel.zenithui.ui.theme.rememberLens
+import com.gabriel.zenithui.ui.theme.LocalBackdrop
+import com.gabriel.zenithui.ui.theme.LocalGlassBackdrop
+import com.gabriel.zenithui.ui.theme.LocalGlassStrength
 import com.gabriel.zenithui.ui.theme.LocalPalette
+import com.gabriel.zenithui.ui.theme.LocalScreenSize
+import com.gabriel.zenithui.ui.theme.LocalTilt
+import com.gabriel.zenithui.ui.theme.LocalWallpaperOffset
 import kotlin.math.roundToInt
 
 /**
@@ -70,7 +85,7 @@ fun AppLaunchCard(
     card: AppExpansion,
     /** 0 is the icon, 1 is the whole screen. Read while drawing, so every frame is smooth. */
     progress: () -> Float,
-    /** Grey liquid glass instead of a card in the icon's own colour. */
+    /** A refracting wallpaper lens instead of a card in the icon's own colour. */
     glass: Boolean,
     /** While an app is opening the card catches taps, so tapping it sends the app back. */
     catchTaps: Boolean,
@@ -80,10 +95,20 @@ fun AppLaunchCard(
     val icon = card.icon
     val fill = remember(icon) { icon?.let(::backgroundColourOf) } ?: palette.backdrop.last()
     val tapped by rememberUpdatedState(onTap)
+    val backdrop = LocalBackdrop.current
+    val sharp = LocalGlassBackdrop.current ?: backdrop
+    val screen = LocalScreenSize.current
+    val wallpaperOffset = LocalWallpaperOffset.current
+    val glassStrength = LocalGlassStrength.current.coerceIn(0f, 1.4f)
+    val tilt = LocalTilt.current
+    var origin by remember { mutableStateOf(Offset.Zero) }
+    val clip = remember { Path() }
+    val lens = rememberLens(if (glass) sharp else null, backdrop)
 
     Canvas(
         Modifier
             .fillMaxSize()
+            .onGloballyPositioned { origin = it.positionInWindow() }
             .then(
                 if (catchTaps) Modifier.pointerInput(card.key) { detectTapGestures { tapped() } } else Modifier
             ),
@@ -104,31 +129,36 @@ fun AppLaunchCard(
         val cardSize = Size(right - left, bottom - top)
         val corners = CornerRadius(radius, radius)
         if (glass) {
-            // Grey liquid glass: a see-through tint over the home screen, which blurs behind it, a
-            // soft sheen falling from the top and a thin bright rim.
-            drawRoundRect(
-                color = GLASS_TINT.copy(alpha = 0.42f + 0.22f * p.coerceIn(0f, 1f)),
-                topLeft = cardTopLeft,
-                size = cardSize,
-                cornerRadius = corners,
+            val amount = p.coerceIn(0f, 1f)
+            val roundRect = RoundRect(0f, 0f, cardSize.width, cardSize.height, corners)
+            clip.reset()
+            clip.addRoundRect(roundRect)
+            // The same glass as every pane on the home screen, gaining body as it grows so the
+            // app arriving on top of it reads cleanly.
+            val look = glassLook(
+                material = GlassMaterial.Regular,
+                strength = glassStrength,
+                solid = 0.15f + 0.35f * amount,
+                opacity = 1f,
+                dark = palette.dark,
+                tint = palette.glassTint,
             )
-            drawRoundRect(
-                brush = Brush.verticalGradient(
-                    listOf(Color.White.copy(alpha = 0.26f), Color.White.copy(alpha = 0.03f)),
-                    startY = top,
-                    endY = bottom,
-                ),
-                topLeft = cardTopLeft,
-                size = cardSize,
-                cornerRadius = corners,
-            )
-            drawRoundRect(
-                color = Color.White.copy(alpha = 0.40f),
-                topLeft = cardTopLeft,
-                size = cardSize,
-                cornerRadius = corners,
-                style = Stroke(width = 1.dp.toPx()),
-            )
+            translate(left, top) {
+                clipPath(clip) {
+                    drawLiquidGlass(
+                        paneSize = cardSize,
+                        outline = Outline.Rounded(roundRect),
+                        lens = lens,
+                        softened = backdrop,
+                        origin = origin + cardTopLeft,
+                        screen = screen,
+                        wallpaperOffset = wallpaperOffset.value,
+                        look = look,
+                        lean = tilt.value,
+                        dark = palette.dark,
+                    )
+                }
+            }
         } else {
             drawRoundRect(color = fill, topLeft = cardTopLeft, size = cardSize, cornerRadius = corners)
         }
@@ -200,9 +230,6 @@ object AppLanding {
     fun alphaFor(itemKey: String): Float =
         if (itemKey != key) 1f else (0.35f + 1.04f * progress.value).coerceIn(0f, 1f)
 }
-
-/** The grey of the liquid glass opening. */
-private val GLASS_TINT = Color(0xFF7C818C)
 
 /**
  * The colour an icon is mostly made of, which for almost every app is its background. Pixels are

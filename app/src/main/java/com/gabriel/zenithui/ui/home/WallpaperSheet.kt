@@ -4,6 +4,11 @@ import android.content.Intent
 import android.util.LruCache
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.lifecycle.lifecycleScope
+import com.gabriel.zenithui.data.findActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.animateColorAsState
@@ -37,6 +42,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Photo
+import androidx.compose.material.icons.rounded.Wallpaper
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -62,6 +68,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.gabriel.zenithui.data.GlassWallpaper
 import com.gabriel.zenithui.data.WallColors
 import com.gabriel.zenithui.data.WallStyle
 import com.gabriel.zenithui.data.WallpaperArt
@@ -111,6 +118,25 @@ fun WallpaperSheet(
     }
     BackHandler(enabled = visible && picked != null) { picked = null }
 
+    // Your own photo, through Android's photo picker (no permission needed). Zenith sets it itself
+    // so it can keep a copy for the glass, which Android would not otherwise let it see.
+    // Run on the activity, not this sheet: closing the sheet must not cut a wallpaper off half set.
+    val activityScope = (context.findActivity() as? androidx.activity.ComponentActivity)?.lifecycleScope
+    val sheetScope = rememberCoroutineScope()
+    val latestApplied by androidx.compose.runtime.rememberUpdatedState(onApplied)
+    val latestDismiss by androidx.compose.runtime.rememberUpdatedState(onDismiss)
+    val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        (activityScope ?: sheetScope).launch {
+            val ok = GlassWallpaper.setPhoto(context, uri)
+            Toast.makeText(context, if (ok) "Wallpaper set" else "That picture could not be used", Toast.LENGTH_SHORT).show()
+            if (ok) {
+                latestApplied(null)
+                latestDismiss()
+            }
+        }
+    }
+
     ZenithSheet(visible = visible, onDismiss = onDismiss, maxHeightFraction = 0.9f) {
         SettingsHeader(
             title = if (picked == null) "Wallpapers" else picked!!.first.label,
@@ -135,6 +161,10 @@ fun WallpaperSheet(
                     onFilter = { filter = it },
                     onPick = { style, palette -> picked = style to palette },
                     onPhotos = {
+                        // The sheet stays open underneath the picker, so its answer has somewhere to land.
+                        pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                    },
+                    onOtherApp = {
                         runCatching {
                             context.startActivity(
                                 Intent.createChooser(Intent(Intent.ACTION_SET_WALLPAPER), "Wallpaper")
@@ -165,6 +195,7 @@ private fun Browse(
     onFilter: (String) -> Unit,
     onPick: (WallStyle, ZenithPalette) -> Unit,
     onPhotos: () -> Unit,
+    onOtherApp: () -> Unit,
 ) {
     val palette = LocalPalette.current
     val shown = palettes.firstOrNull { it.id == filter } ?: palettes.first()
@@ -200,9 +231,15 @@ private fun Browse(
         Group {
             ActionRow(
                 icon = Icons.Rounded.Photo,
-                title = "Your photos or another app",
-                subtitle = "Use a picture of your own",
+                title = "Your photos",
+                subtitle = "Pick a picture; the glass will bend it too",
                 onClick = onPhotos,
+            )
+            ActionRow(
+                icon = Icons.Rounded.Wallpaper,
+                title = "Another app",
+                subtitle = "Glass stays frosted, as Android keeps those private",
+                onClick = onOtherApp,
             )
         }
         Spacer(Modifier.height(4.dp))

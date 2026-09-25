@@ -84,6 +84,7 @@ import com.gabriel.zenithui.ui.common.appearIn
 import com.gabriel.zenithui.ui.common.launchOrigin
 import com.gabriel.zenithui.ui.common.pressBounce
 import com.gabriel.zenithui.ui.common.staggerDelay
+import com.gabriel.zenithui.ui.theme.GlassMaterial
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.ZenithShapes
 import com.gabriel.zenithui.ui.theme.glass
@@ -737,7 +738,7 @@ fun FolderTile(
             Modifier
                 .size(iconSize)
                 .pressBounce()
-                .glass(ZenithShapes.icon, strength = 1.2f)
+                .glass(ZenithShapes.icon, strength = 1.2f, material = GlassMaterial.Clear)
                 .padding(iconSize * 0.12f),
             contentAlignment = Alignment.Center,
         ) {
@@ -991,7 +992,7 @@ fun DockBar(
                     scaleX = grow
                     scaleY = grow
                 }
-                .glass(ZenithShapes.panel, strength = 1.15f)
+                .glass(ZenithShapes.panel, strength = 1.15f, material = GlassMaterial.Clear)
                 .then(
                     if (rim > 0.01f) {
                         Modifier.border(2.dp, palette.accent.copy(alpha = 0.85f * rim), ZenithShapes.panel)

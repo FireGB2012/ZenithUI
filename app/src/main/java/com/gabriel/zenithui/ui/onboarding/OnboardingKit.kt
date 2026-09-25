@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -31,6 +32,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
@@ -41,7 +43,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.gabriel.zenithui.ui.common.pressBounce
 import com.gabriel.zenithui.ui.theme.LocalPalette
+import com.gabriel.zenithui.ui.theme.ZenithShapes
 import kotlinx.coroutines.delay
+
+/** How far a piece of a screen travels as it arrives, and the beat between neighbours. */
+private val RISE_DISTANCE = 14.dp
+private const val RISE_STAGGER_MS = 60L
 
 /**
  * A piece of a screen arriving: a short rise and a fade, critically damped so it lands without a
@@ -50,11 +57,28 @@ import kotlinx.coroutines.delay
  */
 fun Modifier.rise(order: Int, play: Boolean = true): Modifier = composed {
     val progress = remember { Animatable(if (play) 0f else 1f) }
-    val distance = with(LocalDensity.current) { 18.dp.toPx() }
+    val distance = with(LocalDensity.current) { RISE_DISTANCE.toPx() }
     LaunchedEffect(Unit) {
         if (progress.value >= 1f) return@LaunchedEffect
-        delay(order * 70L)
+        delay(order * RISE_STAGGER_MS)
         progress.animateTo(1f, spring(dampingRatio = 1f, stiffness = 220f))
+    }
+    graphicsLayer {
+        val p = progress.value
+        alpha = p
+        translationY = (1f - p) * distance
+    }
+}
+
+/**
+ * The same rise, driven by a flag: arrives when [visible] turns true and sinks away when it turns
+ * false. Something that starts out visible is simply there.
+ */
+fun Modifier.reveal(visible: Boolean): Modifier = composed {
+    val progress = remember { Animatable(if (visible) 1f else 0f) }
+    val distance = with(LocalDensity.current) { RISE_DISTANCE.toPx() }
+    LaunchedEffect(visible) {
+        progress.animateTo(if (visible) 1f else 0f, spring(dampingRatio = 1f, stiffness = 220f))
     }
     graphicsLayer {
         val p = progress.value
@@ -70,21 +94,24 @@ fun Eyebrow(text: String, modifier: Modifier = Modifier) {
         text = text,
         color = LocalPalette.current.onGlassMuted,
         fontSize = 15.sp,
+        lineHeight = 20.sp,
         fontWeight = FontWeight.Medium,
+        textAlign = TextAlign.Center,
         modifier = modifier,
     )
 }
 
-/** Each screen's one big line. Left aligned and set tight, the way a page is, not a banner. */
+/** Each screen's one big line, centred and set tight. */
 @Composable
 fun Headline(text: String, modifier: Modifier = Modifier) {
     Text(
         text = text,
         color = LocalPalette.current.onGlass,
-        fontSize = 32.sp,
-        lineHeight = 38.sp,
+        fontSize = 34.sp,
+        lineHeight = 40.sp,
         fontWeight = FontWeight.SemiBold,
-        letterSpacing = (-0.9).sp,
+        letterSpacing = (-1.0).sp,
+        textAlign = TextAlign.Center,
         modifier = modifier,
     )
 }
@@ -94,15 +121,16 @@ fun Lede(text: String, modifier: Modifier = Modifier) {
     Text(
         text = text,
         color = LocalPalette.current.onGlassMuted,
-        fontSize = 15.sp,
-        lineHeight = 21.sp,
-        modifier = modifier,
+        fontSize = 16.sp,
+        lineHeight = 23.sp,
+        textAlign = TextAlign.Center,
+        modifier = modifier.widthIn(max = 320.dp),
     )
 }
 
 /**
- * The one button that moves you on. A flat slab of the accent colour — no gradient, no glow — with
- * its label swapping in place when what it will do changes.
+ * The one button that moves you on: a pill of the accent colour with a faint sheen across its top
+ * half, and its label swapping in place when what it will do changes.
  */
 @Composable
 fun PrimaryButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
@@ -110,13 +138,17 @@ fun PrimaryButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifi
     val fill by animateColorAsState(palette.accent, tween(420), label = "buttonFill")
     // Dark text on anything lighter than a mid tone: white on Sunset's orange was hard to read.
     val ink = if (fill.luminance() > 0.3f) Color(0xFF0B0C10) else Color.White
+    val sheen = remember {
+        Brush.verticalGradient(0f to Color.White.copy(alpha = 0.14f), 0.5f to Color.Transparent)
+    }
     Box(
         modifier
             .fillMaxWidth()
             .height(56.dp)
-            .pressBounce(0.97f)
-            .clip(RoundedCornerShape(18.dp))
+            .pressBounce(0.96f)
+            .clip(ZenithShapes.pill)
             .background(fill)
+            .background(sheen)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
@@ -125,7 +157,7 @@ fun PrimaryButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifi
             transitionSpec = { fadeIn(tween(200, delayMillis = 60)).togetherWith(fadeOut(tween(120))) },
             label = "buttonLabel",
         ) { label ->
-            Text(label, color = ink, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+            Text(label, color = ink, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, letterSpacing = (-0.2).sp)
         }
     }
 }
@@ -211,12 +243,12 @@ fun ChoiceChip(label: String, selected: Boolean, onClick: () -> Unit, modifier: 
     }
 }
 
-/** A heading block: the eyebrow, the headline, and an optional line under it. */
+/** A heading block, centred: the eyebrow, the headline, and an optional line under it. */
 @Composable
 fun ScreenTitle(eyebrow: String, headline: String, lede: String?, play: Boolean, modifier: Modifier = Modifier) {
-    Column(modifier) {
+    Column(modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
         Eyebrow(eyebrow, Modifier.rise(0, play))
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(6.dp))
         Headline(headline, Modifier.rise(1, play))
         if (lede != null) {
             Spacer(Modifier.height(10.dp))

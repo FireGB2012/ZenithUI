@@ -11,6 +11,13 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -38,7 +45,6 @@ import com.gabriel.zenithui.data.findActivity
 import com.gabriel.zenithui.ui.common.LocalIconLoader
 import com.gabriel.zenithui.ui.home.HomeScreen
 import com.gabriel.zenithui.ui.onboarding.OnboardingFlow
-import com.gabriel.zenithui.ui.theme.Palettes
 import com.gabriel.zenithui.ui.theme.ZenithTheme
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -125,6 +131,7 @@ class MainActivity : ComponentActivity() {
 fun ZenithApp(viewModel: ZenithViewModel) {
     val settings by viewModel.settings.collectAsState()
     val backdrop by viewModel.backdrop.collectAsState()
+    val sharpBackdrop by viewModel.sharpBackdrop.collectAsState()
     var screenSize by remember { mutableStateOf(IntSize.Zero) }
 
     // The grid is a function of the screen, not a stored number: re-derive it whenever the window
@@ -156,9 +163,12 @@ fun ZenithApp(viewModel: ZenithViewModel) {
     val lightBars = when (settings.appearance) {
         "light" -> true
         "dark" -> false
-        else -> !Palettes.byId(settings.paletteId).dark
+        // Auto follows the phone, exactly as ZenithTheme does, so the icons never disagree with the page.
+        else -> !isSystemInDarkTheme()
     }
     SideEffect {
+        // Until setup is done it owns the bar colours, since it previews palettes that are not saved yet.
+        if (!settings.onboarded) return@SideEffect
         val window = (view.context as? Activity)?.window ?: return@SideEffect
         WindowCompat.getInsetsController(window, view).apply {
             isAppearanceLightStatusBars = lightBars
@@ -172,17 +182,36 @@ fun ZenithApp(viewModel: ZenithViewModel) {
             .onSizeChanged { screenSize = it }
     ) {
         CompositionLocalProvider(LocalIconLoader provides viewModel.icons) {
-            if (settings.onboarded) {
-                ZenithTheme(settings = settings, backdrop = backdrop, screenSize = screenSize) {
-                    HomeScreen(viewModel)
+            AnimatedContent(
+                targetState = settings.onboarded,
+                transitionSpec = {
+                    if (targetState) {
+                        // Setup has just grown its preview to fill the screen: the real home
+                        // screen fades in on top of it, and only then does setup let go.
+                        ContentTransform(
+                            targetContentEnter = fadeIn(tween(200)),
+                            initialContentExit = fadeOut(tween(100, delayMillis = 200)),
+                            targetContentZIndex = 1f,
+                        )
+                    } else {
+                        fadeIn(tween(200)).togetherWith(fadeOut(tween(200)))
+                    }
+                },
+                label = "handoff",
+                modifier = Modifier.fillMaxSize(),
+            ) { onboarded ->
+                if (onboarded) {
+                    ZenithTheme(settings = settings, backdrop = backdrop, screenSize = screenSize, sharpBackdrop = sharpBackdrop) {
+                        HomeScreen(viewModel)
+                    }
+                } else {
+                    OnboardingFlow(
+                        viewModel = viewModel,
+                        backdrop = backdrop,
+                        screenSize = screenSize,
+                        onFinished = { },
+                    )
                 }
-            } else {
-                OnboardingFlow(
-                    viewModel = viewModel,
-                    backdrop = backdrop,
-                    screenSize = screenSize,
-                    onFinished = { },
-                )
             }
         }
     }

@@ -47,6 +47,7 @@ import androidx.compose.ui.unit.sp
 import com.gabriel.zenithui.data.IconLoader
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.ZenithShapes
+import com.gabriel.zenithui.ui.theme.GlassMaterial
 import com.gabriel.zenithui.ui.theme.glass
 import kotlin.math.cos
 import kotlin.math.sin
@@ -208,7 +209,7 @@ fun GlassButton(
                 if (filled) Modifier
                     .clip(ZenithShapes.pill)
                     .background(Brush.horizontalGradient(listOf(palette.accent, palette.accentAlt)))
-                else Modifier.glass(ZenithShapes.pill, strength = 0.9f)
+                else Modifier.glass(ZenithShapes.pill, strength = 0.9f, material = GlassMaterial.Clear)
             )
             .clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center,

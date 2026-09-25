@@ -23,11 +23,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.gabriel.zenithui.ui.common.Motion
 import com.gabriel.zenithui.ui.common.pressBounce
+import com.gabriel.zenithui.ui.theme.GlassMaterial
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.ZenithShapes
 import com.gabriel.zenithui.ui.theme.glass
@@ -42,17 +45,20 @@ fun Segmented(options: List<Pair<String, String>>, selected: String, onSelect: (
         Modifier
             .fillMaxWidth()
             .height(46.dp)
-            .glass(ZenithShapes.pill, strength = 0.8f)
+            .glass(ZenithShapes.pill, strength = 0.8f, material = GlassMaterial.Clear)
             .padding(4.dp),
     ) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val itemWidth = maxWidth / options.size
             // The pill slides to the option you picked and settles with a small bounce.
-            val slide by animateDpAsState(itemWidth * index, Motion.snappy(), label = "segment")
+            val slide = animateDpAsState(itemWidth * index, Motion.snappy(), label = "segment")
+            // Dark words on a light accent, white on a deep one: dark on violet was hard to read.
+            val activeInk = if (palette.accent.luminance() > 0.3f) Color(0xFF0A0B12) else Color.White
 
             Box(
                 Modifier
-                    .offset(x = slide)
+                    // Read while placing, so the slide moves the pill without recomposing the row.
+                    .offset { IntOffset(slide.value.roundToPx(), 0) }
                     .width(itemWidth)
                     .fillMaxHeight()
                     .clip(RoundedCornerShape(percent = 50))
@@ -63,7 +69,7 @@ fun Segmented(options: List<Pair<String, String>>, selected: String, onSelect: (
                 options.forEachIndexed { position, (id, label) ->
                     val active = position == index
                     val textColour by animateColorAsState(
-                        targetValue = if (active) Color(0xFF0A0B12) else palette.onGlassMuted,
+                        targetValue = if (active) activeInk else palette.onGlassMuted,
                         animationSpec = tween(260),
                         label = "segmentText",
                     )

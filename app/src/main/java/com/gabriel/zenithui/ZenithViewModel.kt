@@ -47,6 +47,7 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
     val layout: StateFlow<List<HomeItem>> = store.layout
     val apps: StateFlow<List<AppInfo>> = repository.apps
     val backdrop = wallpaperSource.backdrop
+    val sharpBackdrop = wallpaperSource.sharpBackdrop
 
     /**
      * What Zenith Plus is worth to this user right now. Play is the authority on the purchase,
@@ -122,6 +123,7 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
         icons.prime(settings.value.iconPack, settings.value.iconShape)
         viewModelScope.launch { repository.refresh() }
         viewModelScope.launch { wallpaperSource.refresh() }
+        wallpaperSource.watch { viewModelScope.launch { wallpaperSource.refresh() } }
         viewModelScope.launch {
             val current = settings.value
             icons.configure(current.iconPack, current.iconShape)
@@ -306,6 +308,7 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     override fun onCleared() {
+        wallpaperSource.stopWatching()
         repository.stopObserving()
         super.onCleared()
     }
@@ -353,8 +356,21 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
 
     fun consumeHomeEntrance(): Boolean = homeEntrancePending.also { homeEntrancePending = false }
 
-    fun markOnboarded() {
-        homeEntrancePending = true
+    /**
+     * Set when setup grew its preview into the home screen: for that first moment the page has
+     * to be laid out exactly like the preview, so anything extra waits until the hand-off is over.
+     */
+    private var setupHandoffPending = false
+
+    fun consumeSetupHandoff(): Boolean = setupHandoffPending.also { setupHandoffPending = false }
+
+    /**
+     * Setup is done. [entrance] plays the home screen's own arrival; setup passes false when it
+     * has already grown its preview into the home screen, so the two do not play on top of each other.
+     */
+    fun markOnboarded(entrance: Boolean = true) {
+        homeEntrancePending = entrance
+        setupHandoffPending = !entrance
         store.update { it.copy(onboarded = true) }
     }
 

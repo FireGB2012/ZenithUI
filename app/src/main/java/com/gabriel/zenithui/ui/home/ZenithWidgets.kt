@@ -98,6 +98,7 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.gabriel.zenithui.ui.common.pressBounce
+import com.gabriel.zenithui.ui.theme.GlassMaterial
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.ZenithShapes
 import com.gabriel.zenithui.ui.theme.glass
@@ -169,12 +170,11 @@ fun ZenithWidget(
         modifier
             .glass(ZenithShapes.card, strength = 1f)
             .clip(ZenithShapes.card)
-            // Two soft pools of the theme's colours under the content, so every widget carries a
-            // little of the palette instead of being plain grey glass.
+            // A trace of the theme's colour, leaving the wallpaper and refracted edge visible.
             .drawBehind {
                 drawCircle(
                     brush = Brush.radialGradient(
-                        listOf(palette.accent.copy(alpha = 0.26f), Color.Transparent),
+                        listOf(palette.accent.copy(alpha = 0.08f), Color.Transparent),
                         center = Offset(size.width * 0.12f, size.height * 0.05f),
                         radius = size.maxDimension * 0.75f,
                     ),
@@ -183,7 +183,7 @@ fun ZenithWidget(
                 )
                 drawCircle(
                     brush = Brush.radialGradient(
-                        listOf(palette.accentAlt.copy(alpha = 0.16f), Color.Transparent),
+                        listOf(palette.accentAlt.copy(alpha = 0.05f), Color.Transparent),
                         center = Offset(size.width * 0.95f, size.height),
                         radius = size.maxDimension * 0.6f,
                     ),
@@ -1205,7 +1205,7 @@ private fun SearchButton(onSearch: () -> Unit) {
         Modifier
             .size(SEARCH_BAR_HEIGHT)
             .pressBounce(0.9f)
-            .glass(RoundedCornerShape(percent = 50), strength = 1.1f)
+            .glass(RoundedCornerShape(percent = 50), strength = 1.1f, material = GlassMaterial.Clear)
             .clickable(onClick = onSearch),
         contentAlignment = Alignment.Center,
     ) {

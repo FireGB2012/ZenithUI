@@ -50,7 +50,9 @@ import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -97,6 +99,7 @@ import com.gabriel.zenithui.ui.common.Motion
 import com.gabriel.zenithui.ui.common.appearIn
 import com.gabriel.zenithui.ui.common.pressBounce
 import com.gabriel.zenithui.ui.theme.LocalPalette
+import com.gabriel.zenithui.ui.theme.LocalWallpaperOffset
 import com.gabriel.zenithui.ui.theme.ZenithShapes
 import com.gabriel.zenithui.ui.theme.glass
 import kotlinx.coroutines.delay
@@ -141,6 +144,14 @@ private sealed interface HomeSheet {
 
 @Composable
 fun HomeScreen(viewModel: ZenithViewModel) {
+    val wallpaperOffset = remember { mutableStateOf(Offset(0.5f, 0.5f)) }
+    CompositionLocalProvider(LocalWallpaperOffset provides wallpaperOffset) {
+        HomeContent(viewModel, wallpaperOffset)
+    }
+}
+
+@Composable
+private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableState<Offset>) {
     val palette = LocalPalette.current
     val context = LocalContext.current
 
@@ -152,6 +163,16 @@ fun HomeScreen(viewModel: ZenithViewModel) {
     val checkIn by viewModel.checkIn.collectAsState()
     // Only true the first time the home screen appears after setup.
     val entrance = remember { viewModel.consumeHomeEntrance() }
+    // Straight after setup's hand-off the page must match the preview it replaced, so the "make
+    // Zenith your home app" hint holds back a moment and then eases in, moving the grid gently.
+    val handedOff = remember { viewModel.consumeSetupHandoff() }
+    var hintAllowed by remember { mutableStateOf(!handedOff) }
+    LaunchedEffect(Unit) {
+        if (!hintAllowed) {
+            kotlinx.coroutines.delay(900)
+            hintAllowed = true
+        }
+    }
 
     // Counted once a day, on the way back to the launcher — which is every time you unlock the
     // phone, so the strip lands on the first look of the morning and never again that day.
@@ -461,9 +482,11 @@ fun HomeScreen(viewModel: ZenithViewModel) {
         snapshotFlow { pagerState.currentPage + pagerState.currentPageOffsetFraction }.collect { position ->
             val token = hostView.windowToken ?: return@collect
             val last = (pageCount - 1).coerceAtLeast(1)
+            val horizontal = if (pageCount > 1) (position / last).coerceIn(0f, 1f) else 0.5f
             runCatching {
                 wallpaperManager.setWallpaperOffsetSteps(1f / last, 1f)
-                wallpaperManager.setWallpaperOffsets(token, if (pageCount > 1) (position / last).coerceIn(0f, 1f) else 0.5f, 0.5f)
+                wallpaperManager.setWallpaperOffsets(token, horizontal, 0.5f)
+                wallpaperOffset.value = Offset(horizontal, 0.5f)
             }
         }
     }
@@ -963,7 +986,16 @@ fun HomeScreen(viewModel: ZenithViewModel) {
                     }
                 }
 
-                if (!isDefaultLauncher && !hintDismissed) {
+                AnimatedVisibility(
+                    visible = !isDefaultLauncher && !hintDismissed && hintAllowed,
+                    enter = fadeIn(tween(260)) + androidx.compose.animation.expandVertically(
+                        androidx.compose.animation.core.spring(dampingRatio = 1f, stiffness = 300f)
+                    ),
+                    exit = fadeOut(tween(160)) + androidx.compose.animation.shrinkVertically(
+                        androidx.compose.animation.core.spring(dampingRatio = 1f, stiffness = 300f)
+                    ),
+                    modifier = Modifier.align(Alignment.CenterHorizontally),
+                ) {
                     DefaultLauncherHint(
                         onSetDefault = {
                             runCatching {
@@ -973,9 +1005,7 @@ fun HomeScreen(viewModel: ZenithViewModel) {
                             }
                         },
                         onDismiss = { hintDismissed = true },
-                        modifier = Modifier
-                            .align(Alignment.CenterHorizontally)
-                            .padding(horizontal = 18.dp),
+                        modifier = Modifier.padding(horizontal = 18.dp),
                     )
                 }
 

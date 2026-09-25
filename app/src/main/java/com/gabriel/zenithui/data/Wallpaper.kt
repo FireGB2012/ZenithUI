@@ -5,17 +5,27 @@ import android.app.WallpaperManager
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.os.Handler
+import android.os.Looper
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlin.math.min
+import kotlin.math.roundToInt
 
 /**
- * Grabs the current wallpaper and keeps a small, pre-blurred copy of it around.
- * Glass panels paint that copy behind themselves, so the blur costs nothing per frame.
+ * Keeps a detailed copy of the wallpaper for the glass to bend and a small pre-blurred one for its
+ * frosted face. Both are prepared once when the wallpaper changes, never while a pane is drawing.
+ *
+ * Where it comes from: Android's own copy when this phone lets a launcher read it (most no longer
+ * do), otherwise the copy Zenith kept of a wallpaper it set itself — see [GlassWallpaper]. With
+ * neither, the glass goes frosted instead of showing a picture that is not really behind it.
  */
 class WallpaperSource(context: Context) {
 
@@ -24,31 +34,109 @@ class WallpaperSource(context: Context) {
     private val _backdrop = MutableStateFlow<ImageBitmap?>(null)
     val backdrop: StateFlow<ImageBitmap?> = _backdrop.asStateFlow()
 
-    // Android gives the wallpaper to whoever is the home app, and the permission lint asks for is
-    // not one a launcher may hold. A phone that refuses throws, which runCatching already handles
-    // by leaving the backdrop empty and the glass tinted rather than blurred.
-    @SuppressLint("MissingPermission")
-    suspend fun refresh() = withContext(Dispatchers.IO) {
-        val bitmap = runCatching {
-            val manager = WallpaperManager.getInstance(appContext)
-            if (manager.wallpaperInfo != null) null else manager.drawable
-        }.getOrNull()?.let { drawable ->
-            val w = drawable.intrinsicWidth.takeIf { it > 0 } ?: TARGET_WIDTH
-            val h = drawable.intrinsicHeight.takeIf { it > 0 } ?: (TARGET_WIDTH * 2)
-            val scale = TARGET_WIDTH.toFloat() / w
-            val outW = TARGET_WIDTH
-            val outH = (h * scale).toInt().coerceAtLeast(1)
-            val bmp = Bitmap.createBitmap(outW, outH, Bitmap.Config.ARGB_8888)
-            drawable.setBounds(0, 0, outW, outH)
-            drawable.draw(Canvas(bmp))
-            bmp
-        } ?: return@withContext
+    private val _sharpBackdrop = MutableStateFlow<ImageBitmap?>(null)
+    val sharpBackdrop: StateFlow<ImageBitmap?> = _sharpBackdrop.asStateFlow()
 
-        if (!bitmap.hasVisiblePixels()) {
-            bitmap.recycle()
-            return@withContext
+    private val refreshMutex = Mutex()
+    /** What the prepared copies were made from, so coming home again does not redo the work. */
+    private var loadedKey: String? = null
+
+    private var listener: WallpaperManager.OnColorsChangedListener? = null
+
+    /** Calls [onChange] whenever the wallpaper changes, wherever it was changed from, until [stopWatching]. */
+    fun watch(onChange: () -> Unit) {
+        stopWatching()
+        val watcher = WallpaperManager.OnColorsChangedListener { colours, which ->
+            if (which and WallpaperManager.FLAG_SYSTEM != 0) {
+                // If Zenith set this wallpaper a moment ago, these colours now vouch for its copy.
+                GlassWallpaper.onColoursChanged(appContext, colours)
+                onChange()
+            }
         }
-        _backdrop.value = blur(blur(bitmap, 4), 3).asImageBitmap()
+        runCatching {
+            WallpaperManager.getInstance(appContext).addOnColorsChangedListener(watcher, Handler(Looper.getMainLooper()))
+            listener = watcher
+        }
+    }
+
+    fun stopWatching() {
+        val watcher = listener ?: return
+        runCatching { WallpaperManager.getInstance(appContext).removeOnColorsChangedListener(watcher) }
+        listener = null
+    }
+
+    suspend fun refresh() = refreshMutex.withLock {
+        withContext(Dispatchers.IO) {
+            val manager = WallpaperManager.getInstance(appContext)
+            if (runCatching { manager.wallpaperInfo != null }.getOrDefault(false)) {
+                // A live wallpaper moves; any still picture of it in the glass would be wrong.
+                clear()
+                return@withContext
+            }
+            val signature = GlassWallpaper.currentSignature(appContext)
+            val keptKey = "kept:$signature:${GlassWallpaper.stamp(appContext)}"
+            // Coming home is when this runs; if the wallpaper has not changed, there is nothing to do.
+            if (_backdrop.value != null && (loadedKey == "system:$signature" || loadedKey == keptKey)) {
+                return@withContext
+            }
+            val system = readSystemWallpaper(manager)
+            val source = system ?: GlassWallpaper.load(appContext)
+            if (source == null) {
+                clear()
+                return@withContext
+            }
+            val key = if (system != null) "system:$signature" else keptKey
+            prepare(source)
+            loadedKey = key
+        }
+    }
+
+    /**
+     * Android's copy, on the few phones that still hand it to a launcher. The permission lint asks
+     * for is not one a launcher may hold; a phone that refuses throws, and runCatching turns that
+     * into "no copy", which sends the glass to Zenith's own copy or to frosted.
+     */
+    @SuppressLint("MissingPermission")
+    private fun readSystemWallpaper(manager: WallpaperManager): Bitmap? = runCatching {
+        val drawable = manager.drawable ?: return@runCatching null
+        val w = drawable.intrinsicWidth.takeIf { it > 0 } ?: SHARP_WIDTH
+        val h = drawable.intrinsicHeight.takeIf { it > 0 } ?: SHARP_HEIGHT
+        val scale = min(1f, min(SHARP_WIDTH.toFloat() / w, SHARP_HEIGHT.toFloat() / h))
+        val outW = (w * scale).roundToInt().coerceAtLeast(1)
+        val outH = (h * scale).roundToInt().coerceAtLeast(1)
+        val bitmap = Bitmap.createBitmap(outW, outH, Bitmap.Config.ARGB_8888)
+        drawable.setBounds(0, 0, outW, outH)
+        drawable.draw(Canvas(bitmap))
+        // A wallpaper we may not read can come back as an empty picture rather than an error.
+        if (bitmap.hasVisiblePixels()) bitmap else {
+            bitmap.recycle()
+            null
+        }
+    }.getOrNull()
+
+    private fun prepare(source: Bitmap) {
+        val scale = min(1f, min(SHARP_WIDTH.toFloat() / source.width, SHARP_HEIGHT.toFloat() / source.height))
+        val sharp = if (scale < 1f) {
+            Bitmap.createScaledBitmap(source, (source.width * scale).roundToInt(), (source.height * scale).roundToInt(), true)
+                .also { if (it !== source) source.recycle() }
+        } else {
+            source
+        }
+        val blurWidth = min(BLUR_WIDTH, sharp.width)
+        val blurHeight = (sharp.height * blurWidth.toFloat() / sharp.width).roundToInt().coerceAtLeast(1)
+        val reduced = Bitmap.createScaledBitmap(sharp, blurWidth, blurHeight, true)
+        // createScaledBitmap can hand back its input; the blur must never eat the sharp copy.
+        val blurSource = if (reduced === sharp) sharp.copy(Bitmap.Config.ARGB_8888, true) else reduced
+        val blurred = blur(blur(blurSource, 4), 3)
+        _sharpBackdrop.value = sharp.asImageBitmap()
+        _backdrop.value = blurred.asImageBitmap()
+    }
+
+    private fun clear() {
+        // A live or unreadable wallpaper must never leave a picture of the previous wallpaper in glass.
+        _sharpBackdrop.value = null
+        _backdrop.value = null
+        loadedKey = null
     }
 
     /** A wallpaper we are not allowed to read comes back empty; do not paint it as glass. */
@@ -105,6 +193,8 @@ class WallpaperSource(context: Context) {
     }
 
     private companion object {
-        const val TARGET_WIDTH = 220
+        const val BLUR_WIDTH = 220
+        const val SHARP_WIDTH = 960
+        const val SHARP_HEIGHT = 1920
     }
 }

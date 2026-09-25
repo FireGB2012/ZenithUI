@@ -69,6 +69,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
@@ -92,9 +93,11 @@ import com.gabriel.zenithui.ui.common.appearIn
 import com.gabriel.zenithui.ui.common.launchOrigin
 import com.gabriel.zenithui.ui.common.pressBounce
 import com.gabriel.zenithui.ui.common.staggerDelay
+import com.gabriel.zenithui.ui.theme.GlassMaterial
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.ZenithShapes
 import com.gabriel.zenithui.ui.theme.glass
+import kotlin.math.roundToInt
 
 /**
  * The app drawer. The list scrolls at the top, the single-line search bar sits at the bottom
@@ -200,9 +203,18 @@ fun AppDrawer(
     Box(
         Modifier
             .fillMaxSize()
-            .graphicsLayer {
-                val hidden = 1f - progress.coerceIn(0f, 1f)
-                if (horizontal) translationX = hidden * size.width else translationY = hidden * size.height
+            // Moved while placing rather than on a graphics layer: glass inside the drawer lines
+            // its wallpaper up with where it really is, and a layer move would not tell it.
+            .layout { measurable, constraints ->
+                val placeable = measurable.measure(constraints)
+                layout(placeable.width, placeable.height) {
+                    val hidden = 1f - progress.coerceIn(0f, 1f)
+                    if (horizontal) {
+                        placeable.place((hidden * placeable.width).roundToInt(), 0)
+                    } else {
+                        placeable.place(0, (hidden * placeable.height).roundToInt())
+                    }
+                }
             }
             .draggable(
                 orientation = if (horizontal) Orientation.Horizontal else Orientation.Vertical,
@@ -279,7 +291,7 @@ fun AppDrawer(
                 Box(
                     Modifier
                         .size(38.dp)
-                        .glass(RoundedCornerShape(percent = 50), strength = 0.9f)
+                        .glass(RoundedCornerShape(percent = 50), strength = 0.9f, material = GlassMaterial.Clear)
                         .clickable { if (shownGroup != null) openGroup = null else onDismiss() },
                     contentAlignment = Alignment.Center,
                 ) {
@@ -403,7 +415,7 @@ fun AppDrawer(
                             Modifier
                                 .appearIn(fromScale = 0.9f)
                                 .pressBounce(0.95f)
-                                .glass(ZenithShapes.pill, strength = 1f, solid = 0.3f)
+                                .glass(ZenithShapes.pill, strength = 1f, material = GlassMaterial.Clear)
                                 .clickable { searchWeb() }
                                 .padding(horizontal = 20.dp, vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically,
@@ -539,7 +551,7 @@ private fun LibraryCard(
             Modifier
                 .fillMaxWidth()
                 .aspectRatio(1f)
-                .glass(RoundedCornerShape(26.dp), strength = 0.9f)
+                .glass(RoundedCornerShape(26.dp), strength = 0.9f, material = GlassMaterial.Clear)
                 .padding(12.dp),
         ) {
             val gap = 10.dp

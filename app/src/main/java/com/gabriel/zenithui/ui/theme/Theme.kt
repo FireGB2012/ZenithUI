@@ -9,8 +9,11 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.text.TextStyle
@@ -25,6 +28,12 @@ val LocalPalette = staticCompositionLocalOf { Palettes.Midnight }
 
 /** Pre-blurred wallpaper used as the backdrop of every glass surface. */
 val LocalBackdrop = staticCompositionLocalOf<ImageBitmap?> { null }
+
+/** Detailed wallpaper used by the lens at a glass surface's curved edge. */
+val LocalGlassBackdrop = staticCompositionLocalOf<ImageBitmap?> { null }
+
+/** Android's current wallpaper scroll, read during drawing so paging only invalidates the material. */
+val LocalWallpaperOffset = staticCompositionLocalOf<State<Offset>> { mutableStateOf(Offset(0.5f, 0.5f)) }
 
 /** Size of the window in pixels, so glass panels can align the backdrop to the screen. */
 val LocalScreenSize = staticCompositionLocalOf { IntSize.Zero }
@@ -46,6 +55,7 @@ fun ZenithTheme(
     settings: ZenithSettings,
     backdrop: ImageBitmap? = null,
     screenSize: IntSize = IntSize.Zero,
+    sharpBackdrop: ImageBitmap? = null,
     content: @Composable () -> Unit,
 ) {
     val base = Palettes.resolve(settings)
@@ -105,6 +115,7 @@ fun ZenithTheme(
         LocalTilt provides tilt,
         LocalPalette provides palette,
         LocalBackdrop provides backdrop,
+        LocalGlassBackdrop provides sharpBackdrop,
         LocalScreenSize provides screenSize,
         LocalGlassStrength provides settings.glass,
     ) {

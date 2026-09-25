@@ -103,11 +103,11 @@ object WallpaperArt {
                 } else {
                     WallpaperManager.FLAG_SYSTEM
                 }
-                withContext(Dispatchers.IO) {
-                    WallpaperManager.getInstance(context).setBitmap(bitmap, null, true, which)
-                }
+                // Set through GlassWallpaper, which keeps a copy: Android will not let a launcher
+                // read the wallpaper back, and the glass needs something to bend.
+                val ok = GlassWallpaper.set(context, bitmap, which)
                 bitmap.recycle()
-                true
+                ok
             }.getOrDefault(false)
         }
 

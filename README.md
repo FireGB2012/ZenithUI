@@ -54,11 +54,21 @@ icon packs. Any Nova- or ADW-compatible icon pack installed on the device is det
 
 ## How the glass works
 
-`Modifier.glass()` is the whole system. When Zenith is the default home app it can read the
-wallpaper, so `WallpaperSource` keeps one small pre-blurred copy of it; each panel paints that copy
-at exactly the offset the panel occupies on screen, then a translucent gradient, a palette tint and
-a specular rim. The blur is computed once, not per frame. When the wallpaper is not readable, panels
-fall back to a frosted body in the palette's own colour, so sheets stay legible over anything.
+`Modifier.glass()` is Zenith's Liquid Glass, in two finishes: **Clear** for the dock, folders and
+small controls, which shows the wallpaper sharp and bends it most, and **Regular** for widgets,
+search and sheets, which frosts it so text on top stays readable. On Android 13+ an AGSL shader
+(`LiquidGlassShader`) draws each pane: the flat middle shows the wallpaper exactly where it is,
+the rounded rim bends and magnifies it inward like the edge of a thick lens with a faint colour
+split, and a thin highlight runs round the rim on the side facing the light, which moves as the
+phone tilts. A readable veil thickens only over parts of the wallpaper that would fight the text.
+
+Android 13+ does not let a launcher read the wallpaper, so `GlassWallpaper` keeps its own copy of
+any wallpaper Zenith sets (its own designs, or a photo picked under Wallpapers → Your photos) and
+checks it is still current by comparing the wallpaper colours Android reports. Android 14+ shows a
+still wallpaper zoomed by a tenth to leave room for parallax, and the shader matches that. With no
+usable copy (a live wallpaper, or one set in another app) panes fall back to frosted glass with the
+same rim, rather than showing a picture that is not really behind them. Android 12 uses the cached
+blur. Nothing is captured or blurred per frame.
 
 ## Building
 

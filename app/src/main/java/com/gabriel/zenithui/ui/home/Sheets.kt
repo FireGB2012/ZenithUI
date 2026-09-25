@@ -151,11 +151,8 @@ fun ZenithSheet(
                     .fillMaxWidth()
                     .heightIn(max = maxHeight)
                     .padding(10.dp)
-                    // A tinted floor under the glass, so busy icons behind the sheet do not show
-                    // through its lower rows.
-                    .clip(RoundedCornerShape(34.dp))
-                    .background(palette.backdrop.last().copy(alpha = 0.85f))
-                    .glass(RoundedCornerShape(34.dp), strength = 1.2f, solid = 1f)
+                    // The regular material provides a readable body without a second opaque fill.
+                    .glass(RoundedCornerShape(34.dp), strength = 1.2f, solid = 0.65f)
                     .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) { }
                     .pointerInput(Unit) {
                         detectVerticalDragGestures { _, delta -> if (delta > 30f) onDismiss() }

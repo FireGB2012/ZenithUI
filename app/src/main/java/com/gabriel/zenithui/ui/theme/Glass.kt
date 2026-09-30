@@ -1,14 +1,21 @@
 package com.gabriel.zenithui.ui.theme
 
 import android.os.Build
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -21,6 +28,7 @@ import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.asAndroidPath
 import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -28,11 +36,15 @@ import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.isSpecified
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -44,9 +56,11 @@ import kotlin.math.roundToInt
 enum class GlassMaterial { Regular, Clear }
 
 /**
- * Liquid Glass. What is behind a pane shows through it; towards the rounded rim it bends and
- * magnifies like the edge of a thick lens, and a thin highlight runs round the rim on the side
- * facing the light, which moves as the phone tilts. Labels and icons drawn on top stay sharp.
+ * Liquid Glass, after Apple's. What is behind a pane shows through it; towards the rounded rim it
+ * bends and magnifies like the edge of a thick lens, and a crisp highlight runs round the rim on
+ * the side facing the light, with a fainter one opposite, both moving as the phone tilts. The pane
+ * floats: a soft shadow sits under it, deeper in the dark. An [interactive] pane lights up from
+ * within under your finger. Labels and icons drawn on top stay sharp.
  *
  * On Android 13+ with a readable wallpaper this is a GPU shader over a cached copy of the
  * wallpaper (no screen capture, no per-frame blur). Android 12 gets the softened wallpaper with the
@@ -62,6 +76,10 @@ fun Modifier.glass(
     /** Extra body for surfaces that must stay readable over busy content, such as sheets. */
     solid: Float = 0f,
     material: GlassMaterial = GlassMaterial.Regular,
+    /** Lights up from within under a finger: for panes you press, like the dock or a widget. */
+    interactive: Boolean = false,
+    /** The soft shadow the pane floats on. Off for glass lying flat inside other glass. */
+    shadow: Boolean = true,
 ): Modifier {
     val palette = LocalPalette.current
     val backdrop = LocalBackdrop.current
@@ -81,15 +99,58 @@ fun Modifier.glass(
     )
     val lens = rememberLens(sharp, backdrop)
     var origin by remember { mutableStateOf(Offset.Zero) }
+    val scope = rememberCoroutineScope()
+    val press = if (interactive) remember { PressLight(scope) } else null
 
     return this
         .onGloballyPositioned { origin = it.positionInWindow() }
+        .then(
+            if (press != null) {
+                Modifier.pointerInput(Unit) {
+                    // Watches the finger without taking it: taps, drags and long presses still
+                    // belong to whatever the pane is part of.
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        press.press(down.position)
+                        while (true) {
+                            val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
+                            if (!change.pressed) break
+                            press.at = change.position
+                        }
+                        press.release()
+                    }
+                }
+            } else {
+                Modifier
+            }
+        )
+        .then(
+            if (shadow && look.opacity > 0f) {
+                Modifier.drawWithCache {
+                    val outline = shape.createOutline(size, layoutDirection, this)
+                    val path = android.graphics.Path().apply { addOutline(outline) }
+                    val paint = shadowPaint(look, material, palette.dark, density)
+                    onDrawBehind {
+                        drawIntoCanvas {
+                            val canvas = it.nativeCanvas
+                            canvas.save()
+                            // Only the shadow is wanted: the pane itself is drawn by the glass.
+                            canvas.clipOutPath(path)
+                            canvas.drawPath(path, paint)
+                            canvas.restore()
+                        }
+                    }
+                }
+            } else {
+                Modifier
+            }
+        )
         .clip(shape)
         .drawWithCache {
             val outline = shape.createOutline(size, layoutDirection, this)
             onDrawBehind {
-                // Position, wallpaper scroll and tilt are all read here, while drawing, so moving
-                // any of them repaints the glass without recomposing anything.
+                // Position, wallpaper scroll, tilt and the finger's light are all read here, while
+                // drawing, so any of them changing repaints the glass without recomposing anything.
                 drawLiquidGlass(
                     paneSize = size,
                     outline = outline,
@@ -101,9 +162,78 @@ fun Modifier.glass(
                     look = look,
                     lean = tilt.value,
                     dark = palette.dark,
+                    touch = press?.touch(size) ?: GlassTouch.None,
                 )
             }
         }
+}
+
+/**
+ * The light a finger puts into a pane. It follows the finger, comes up quickly, and spreads out
+ * from under the fingertip while held; let go and it fades away slowly.
+ */
+@Stable
+private class PressLight(private val scope: CoroutineScope) {
+    var at by mutableStateOf(Offset.Zero)
+    private val strength = Animatable(0f)
+    private val spread = Animatable(0f)
+
+    fun press(position: Offset) {
+        at = position
+        scope.launch { strength.animateTo(1f, tween(140)) }
+        scope.launch {
+            spread.snapTo(0f)
+            spread.animateTo(1f, tween(700, easing = CubicBezierEasing(0.16f, 1f, 0.3f, 1f)))
+        }
+    }
+
+    fun release() {
+        scope.launch { strength.animateTo(0f, tween(560)) }
+    }
+
+    /** Read while drawing, so the glow animates without recomposing. */
+    fun touch(pane: Size): GlassTouch {
+        val level = strength.value
+        if (level <= 0.001f) return GlassTouch.None
+        val reach = max(pane.width, pane.height) * (0.1f + 0.32f * spread.value)
+        return GlassTouch(at, reach, level)
+    }
+}
+
+/**
+ * Apple's glass casts a soft shadow that separates it from what is behind. It is wide and faint,
+ * a little deeper in the dark, where it has to show against a dark picture, and lighter for Clear.
+ */
+private fun shadowPaint(look: GlassLook, material: GlassMaterial, dark: Boolean, density: Float): android.graphics.Paint {
+    val clear = material == GlassMaterial.Clear
+    val alpha = (if (dark) 0.34f else 0.18f) * (if (clear) 0.75f else 1f) * look.opacity
+    return android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+        color = android.graphics.Color.BLACK
+        setShadowLayer(18f * density, 0f, 5f * density, Color.Black.copy(alpha = alpha).toArgb())
+    }
+}
+
+private fun android.graphics.Path.addOutline(outline: Outline) {
+    when (outline) {
+        is Outline.Rectangle -> addRect(
+            outline.rect.left, outline.rect.top, outline.rect.right, outline.rect.bottom,
+            android.graphics.Path.Direction.CW,
+        )
+        is Outline.Rounded -> {
+            val r = outline.roundRect
+            addRoundRect(
+                r.left, r.top, r.right, r.bottom,
+                floatArrayOf(
+                    r.topLeftCornerRadius.x, r.topLeftCornerRadius.y,
+                    r.topRightCornerRadius.x, r.topRightCornerRadius.y,
+                    r.bottomRightCornerRadius.x, r.bottomRightCornerRadius.y,
+                    r.bottomLeftCornerRadius.x, r.bottomLeftCornerRadius.y,
+                ),
+                android.graphics.Path.Direction.CW,
+            )
+        }
+        is Outline.Generic -> addPath(outline.path.asAndroidPath())
+    }
 }
 
 /**
@@ -158,7 +288,7 @@ internal fun glassLook(
         refraction = (if (clear) 1f else 0.72f) * (0.35f + 0.65f * min(amount, 1f)),
         frost = ((if (clear) 0.08f else 0.80f) + 0.20f * body).coerceIn(0f, 1f),
         dispersion = (if (clear) 0.08f else 0.05f) * min(amount, 1f),
-        shine = if (border) 0.55f + 0.45f * min(amount, 1.2f) else 0f,
+        shine = if (border) 0.32f + 0.26f * min(amount, 1.2f) else 0f,
         vibrance = if (clear) 1.14f else 1.22f,
         wash = veil.copy(alpha = veilAlpha.coerceIn(0f, 0.92f)),
         adapt = (if (clear) 0.30f else 0.34f) + 0.2f * min(body, 1f),
@@ -181,6 +311,7 @@ internal fun DrawScope.drawLiquidGlass(
     look: GlassLook,
     lean: Offset,
     dark: Boolean,
+    touch: GlassTouch = GlassTouch.None,
 ) {
     if (paneSize.width <= 0f || paneSize.height <= 0f || look.opacity <= 0f) return
     // The light sits up and to the left, and swings the other way as the phone tips.
@@ -190,7 +321,7 @@ internal fun DrawScope.drawLiquidGlass(
 
     if (canSee && lens != null && Build.VERSION.SDK_INT >= 33) {
         drawIntoCanvas {
-            lens.draw(it.nativeCanvas, paneSize, outline, origin, screen, shown, density, look, light, dark)
+            lens.draw(it.nativeCanvas, paneSize, outline, origin, screen, shown, density, look, light, dark, touch)
         }
         return
     }
@@ -229,6 +360,18 @@ internal fun DrawScope.drawLiquidGlass(
             alpha = look.opacity,
         )
     }
+    if (touch.strength > 0f) {
+        // The finger's light, as the shader draws it: brightest under the fingertip.
+        drawRect(
+            Brush.radialGradient(
+                0f to Color.White.copy(alpha = 0.16f * touch.strength),
+                1f to Color.Transparent,
+                center = touch.at,
+                radius = touch.reach.coerceAtLeast(1f),
+            ),
+            size = paneSize,
+        )
+    }
     drawRim(paneSize, outline, look, light, dark)
 }
 
@@ -265,9 +408,10 @@ fun GlassPanel(
     solid: Float = 0f,
     contentPadding: PaddingValues = PaddingValues(0.dp),
     material: GlassMaterial = GlassMaterial.Regular,
+    interactive: Boolean = false,
     content: @Composable BoxScope.() -> Unit,
 ) {
-    Box(modifier = modifier.glass(shape, tint, strength, opacity, border, solid, material)) {
+    Box(modifier = modifier.glass(shape, tint, strength, opacity, border, solid, material, interactive)) {
         Box(modifier = Modifier.padding(contentPadding), content = content)
     }
 }

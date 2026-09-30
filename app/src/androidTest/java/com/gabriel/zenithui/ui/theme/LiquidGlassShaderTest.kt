@@ -43,22 +43,26 @@ class LiquidGlassShaderTest {
             for (dark in listOf(true, false)) {
                 val look = glassLook(material, strength = 1f, solid = 0.3f, opacity = 1f, dark = dark, tint = Color(0xFF7C6CFF))
                 for (outline in outlines) {
-                    val node = RenderNode("glass").apply { setPosition(0, 0, size.width.toInt(), size.height.toInt()) }
-                    val canvas = node.beginRecording()
-                    try {
-                        // Throws on a compile error or on any uniform the program does not declare.
-                        lens.draw(
-                            canvas, size, outline,
-                            origin = Offset(40f, 900f),
-                            screen = IntSize(1080, 2424),
-                            wallpaperOffset = Offset(0.5f, 0.5f),
-                            density = 2.625f,
-                            look = look,
-                            light = Offset(-0.45f, -1f),
-                            dark = dark,
-                        )
-                    } finally {
-                        node.endRecording()
+                    // Untouched, and with a finger's light in it.
+                    for (touch in listOf(GlassTouch.None, GlassTouch(Offset(60f, 40f), 120f, 0.8f))) {
+                        val node = RenderNode("glass").apply { setPosition(0, 0, size.width.toInt(), size.height.toInt()) }
+                        val canvas = node.beginRecording()
+                        try {
+                            // Throws on a compile error or on any uniform the program does not declare.
+                            lens.draw(
+                                canvas, size, outline,
+                                origin = Offset(40f, 900f),
+                                screen = IntSize(1080, 2424),
+                                wallpaperOffset = Offset(0.5f, 0.5f),
+                                density = 2.625f,
+                                look = look,
+                                light = Offset(-0.45f, -1f),
+                                dark = dark,
+                                touch = touch,
+                            )
+                        } finally {
+                            node.endRecording()
+                        }
                     }
                 }
             }

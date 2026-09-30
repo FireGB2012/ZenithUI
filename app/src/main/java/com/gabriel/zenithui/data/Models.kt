@@ -60,7 +60,10 @@ data class AppCell(
     val className: String,
     override val dx: Float = 0f,
     override val dy: Float = 0f,
-    /** One column by one row normally; a super icon is two columns wide or two rows tall. */
+    /**
+     * One column by one row normally. A super icon is any number of columns wide and whole rows
+     * tall, up to the whole page: the icon stretched to fill it.
+     */
     override val spanX: Int = 1,
     override val spanY: Int = ROW_UNITS,
 ) : HomeItem {
@@ -133,7 +136,10 @@ data class WidgetCell(
     }
 }
 
-/** Catalogue of the widgets Zenith ships with, and the sizes each one may take. */
+/**
+ * Catalogue of the widgets Zenith ships with: the size each starts at and the smallest it can be
+ * made. There is no largest; any widget can be pulled out to fill the whole page.
+ */
 @Immutable
 data class WidgetSpec(
     val type: String,
@@ -143,49 +149,68 @@ data class WidgetSpec(
     val spanY: Int,
     val minSpanX: Int = 1,
     val minSpanY: Int = 1,
-    val maxSpanX: Int = 4,
-    val maxSpanY: Int = 3,
     /** Search stretches across whatever grid you chose. */
     val fullWidth: Boolean = false,
-)
+) {
+    /** A "No glass" widget: no pane behind it; its numbers and icons are the glass. */
+    val isBare: Boolean get() = type.startsWith(Widgets.BARE_PREFIX)
+}
 
 object Widgets {
+    /** Marks a "No glass" version of a widget; what follows is the widget it is a version of. */
+    const val BARE_PREFIX = "bare_"
+
+    /** The widget a type draws, whichever section it came from: "bare_clock" is a clock. */
+    fun baseType(type: String): String = type.removePrefix(BARE_PREFIX)
+
     val Clock = WidgetSpec(
         "clock", "Zenith Clock",
         "Time, date and a greeting that knows your name.",
-        spanX = 2, spanY = 2 * ROW_UNITS, minSpanX = 2, minSpanY = 2, maxSpanX = 6, maxSpanY = 3 * ROW_UNITS,
+        spanX = 2, spanY = 2 * ROW_UNITS, minSpanX = 2, minSpanY = 2,
     )
     val Battery = WidgetSpec(
         "battery", "Power",
         "Live battery ring that tracks charge and charging state.",
-        spanX = 2, spanY = 2 * ROW_UNITS, minSpanX = 1, minSpanY = 3, maxSpanX = 4, maxSpanY = 3 * ROW_UNITS,
+        spanX = 2, spanY = 2 * ROW_UNITS, minSpanX = 1, minSpanY = 3,
     )
     val Calendar = WidgetSpec(
         "calendar", "Calendar",
         "The month at a glance with today highlighted.",
-        spanX = 2, spanY = 2 * ROW_UNITS, minSpanX = 2, minSpanY = 6, maxSpanX = 6, maxSpanY = 4 * ROW_UNITS,
+        spanX = 2, spanY = 2 * ROW_UNITS, minSpanX = 2, minSpanY = 6,
     )
     val Notes = WidgetSpec(
         "notes", "Quick Note",
         "A scratchpad that stays on your home screen.",
-        spanX = 2, spanY = 2 * ROW_UNITS, minSpanX = 2, minSpanY = 3, maxSpanX = 6, maxSpanY = 4 * ROW_UNITS,
+        spanX = 2, spanY = 2 * ROW_UNITS, minSpanX = 2, minSpanY = 3,
     )
     val Toggles = WidgetSpec(
         "toggles", "Quick Toggles",
         "Torch, Wi-Fi, Bluetooth and Do Not Disturb.",
-        spanX = 2, spanY = 2 * ROW_UNITS, minSpanX = 2, minSpanY = 3, maxSpanX = 6, maxSpanY = 2 * ROW_UNITS,
+        spanX = 2, spanY = 2 * ROW_UNITS, minSpanX = 2, minSpanY = 3,
     )
     val Search = WidgetSpec(
         "search", "Search Bar",
         "One line: search your apps, or jump straight to Google.",
         // Two units tall: the bar's real height, not a whole row.
-        spanX = 4, spanY = 2, minSpanX = 2, minSpanY = 2, maxSpanX = 6, maxSpanY = ROW_UNITS,
+        spanX = 4, spanY = 2, minSpanX = 2, minSpanY = 2,
         fullWidth = true,
     )
 
     val all = listOf(Clock, Battery, Calendar, Notes, Toggles, Search)
 
-    fun byType(type: String): WidgetSpec? = all.firstOrNull { it.type == type }
+    /**
+     * The "No glass" section: the same widgets with no pane round them. Their numbers, rings and
+     * icons are made of glass instead, like the clock on an iPhone's Lock Screen.
+     */
+    val noGlass = listOf(
+        Clock.copy(type = BARE_PREFIX + Clock.type, title = "Glass Clock", description = "Big glass numbers straight on the wallpaper, with a sun or moon for the time of day."),
+        Battery.copy(type = BARE_PREFIX + Battery.type, title = "Glass Power", description = "A glass ring and battery icon floating on the wallpaper."),
+        Calendar.copy(type = BARE_PREFIX + Calendar.type, title = "Glass Calendar", description = "Today's date in glass, with the month around it."),
+        Notes.copy(type = BARE_PREFIX + Notes.type, title = "Glass Note", description = "Your note written on the wallpaper, under a glass pencil."),
+        Toggles.copy(type = BARE_PREFIX + Toggles.type, title = "Glass Toggles", description = "Your quick controls as glass icons, lit in colour when on."),
+    )
+
+    fun byType(type: String): WidgetSpec? = all.firstOrNull { it.type == type } ?: noGlass.firstOrNull { it.type == type }
 
     /** The size a widget takes when first placed. [rows] is in rows; spans are in row units. */
     fun defaultSpan(spec: WidgetSpec, columns: Int, rows: Int): Pair<Int, Int> =
@@ -198,11 +223,10 @@ object Widgets {
     private fun scaleX(spanX: Int, columns: Int): Int =
         (spanX * columns / GridDensity.BASE_COLUMNS.toFloat()).roundToInt().coerceAtLeast(1)
 
-    fun clampSpan(spec: WidgetSpec, spanX: Int, spanY: Int, columns: Int, rows: Int): Pair<Int, Int> {
-        val widest = minOf(scaleX(spec.maxSpanX, columns), columns).coerceAtLeast(spec.minSpanX)
-        return spanX.coerceIn(spec.minSpanX, widest) to
-            spanY.coerceIn(spec.minSpanY, minOf(spec.maxSpanY, rows * ROW_UNITS))
-    }
+    /** Any size from the widget's smallest up to the whole page. */
+    fun clampSpan(spec: WidgetSpec, spanX: Int, spanY: Int, columns: Int, rows: Int): Pair<Int, Int> =
+        spanX.coerceIn(spec.minSpanX, columns.coerceAtLeast(spec.minSpanX)) to
+            spanY.coerceIn(spec.minSpanY, (rows * ROW_UNITS).coerceAtLeast(spec.minSpanY))
 }
 
 fun homeItemFromJson(o: JSONObject): HomeItem? =

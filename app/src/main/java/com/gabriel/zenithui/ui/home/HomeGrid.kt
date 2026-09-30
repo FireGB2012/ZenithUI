@@ -1,6 +1,7 @@
 package com.gabriel.zenithui.ui.home
 
 import com.gabriel.zenithui.ui.common.WideAppIcon
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.VectorConverter
 import androidx.compose.animation.core.animateFloatAsState
@@ -10,9 +11,11 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.zIndex
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -41,6 +44,7 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -48,16 +52,26 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.Paint
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
@@ -65,6 +79,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -72,11 +87,12 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.material3.Text
 import com.gabriel.zenithui.data.AppCell
 import com.gabriel.zenithui.data.AppInfo
+import com.gabriel.zenithui.data.DropPlanner
 import com.gabriel.zenithui.data.FolderCell
 import com.gabriel.zenithui.data.HomeItem
-import com.gabriel.zenithui.data.LayoutBuilder
 import com.gabriel.zenithui.data.ROW_UNITS
 import com.gabriel.zenithui.data.WidgetCell
+import com.gabriel.zenithui.data.Widgets
 import com.gabriel.zenithui.data.ZenithSettings
 import com.gabriel.zenithui.ui.common.AppIcon
 import com.gabriel.zenithui.ui.common.Motion
@@ -88,6 +104,9 @@ import com.gabriel.zenithui.ui.theme.GlassMaterial
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.ZenithShapes
 import com.gabriel.zenithui.ui.theme.glass
+import androidx.compose.ui.unit.round
+import kotlinx.coroutines.launch
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /** Everything the drag-and-drop interaction needs to know, hoisted above the pager. */
@@ -114,8 +133,20 @@ class HomeDragState {
     /** The icon size the live page settled on, so the ghost is drawn at exactly that size. */
     var iconSize by mutableStateOf(48.dp)
 
+    /** The same in pixels, for telling how close to an icon's middle the carried one is. */
+    var iconSizePx by mutableStateOf(0f)
+
     /** The lines icons sit on in the live page, so the ghost is cut to them too. */
     var lines by mutableStateOf<IconLines?>(null)
+
+    /**
+     * What has stepped aside for the carried item while it rests over a spot, as a phone's launcher
+     * shows it: the page, and the plan it is for. Letting go there does exactly this.
+     */
+    var preview by mutableStateOf<DropPreview?>(null)
+
+    /** The item last let go and where its grey copy was, so it lands from under your finger. */
+    var landing by mutableStateOf<Landing?>(null)
 
     val isDragging: Boolean get() = item != null
 
@@ -141,48 +172,42 @@ class HomeDragState {
         hoverItemId = null
         hoverCandidateId = null
         removeArmed = false
+        preview = null
     }
+
+    /** The grey copy's top left corner on the page's grid, in pixels. */
+    val ghostOnGrid: Offset get() = pointer - grab - gridOrigin
 
     /**
-     * The cell the dragged item would take, or null when it has been carried right off the grid.
+     * Where the top left corner of the carried item is on the grid, in columns (x) and row units
+     * (y), or null when it has been carried right off the grid.
      *
      * An item that only hangs over an edge — a wide widget let go near the side, an icon dragged
-     * a little too low — is pulled back onto the grid rather than refused. Refusing it made the
-     * item jump back to where it started, which reads as the launcher ignoring you.
+     * a little too low — still counts, and is pulled back onto the grid rather than refused.
+     * Refusing it made the item jump back to where it started, which reads as the launcher
+     * ignoring you.
      */
-    fun cellUnderItem(columns: Int, rows: Int, rowStep: Int = 1): Pair<Int, Int>? {
+    fun exactTopLeft(columns: Int, unitRows: Int): Offset? {
         val current = item ?: return null
         if (cellWidth <= 0f || cellHeight <= 0f) return null
-        val topLeft = pointer - grab
+        val col = ghostOnGrid.x / cellWidth
+        val row = ghostOnGrid.y / cellHeight
         // Only when the middle of what you are carrying is off the grid is it truly off it.
-        val centreX = topLeft.x - gridOrigin.x + current.spanX * cellWidth / 2f
-        val centreY = topLeft.y - gridOrigin.y + current.spanY * cellHeight / 2f
-        val slackX = cellWidth / 2f
-        val slackY = cellHeight * ROW_UNITS / 2f
-        if (centreX < -slackX || centreX > columns * cellWidth + slackX) return null
-        if (centreY < -slackY || centreY > rows * cellHeight + slackY) return null
-        // Where the item is actually being drawn, rounded to the closest cell and kept on the grid.
-        val col = ((topLeft.x - gridOrigin.x) / cellWidth).roundToInt()
-            .coerceIn(0, (columns - current.spanX).coerceAtLeast(0))
-        val rawRow = ((topLeft.y - gridOrigin.y) / cellHeight).roundToInt()
-            .coerceIn(0, (rows - current.spanY).coerceAtLeast(0))
-        // Icons stay on tidy boundaries; widgets may sit on any unit.
-        val row = if (rowStep > 1) {
-            ((rawRow.toFloat() / rowStep).roundToInt() * rowStep).coerceAtMost(rows - current.spanY).let { it - it % rowStep }
-        } else {
-            rawRow
-        }
-        return col to row.coerceAtLeast(0)
-    }
-
-    fun cellUnderPointer(columns: Int, rows: Int): Pair<Int, Int>? {
-        if (cellWidth <= 0f || cellHeight <= 0f) return null
-        val col = ((pointer.x - gridOrigin.x) / cellWidth).toInt()
-        val row = ((pointer.y - gridOrigin.y) / cellHeight).toInt()
-        if (col !in 0 until columns || row !in 0 until rows) return null
-        return col to row
+        val centreX = col + current.spanX / 2f
+        val centreY = row + current.spanY / 2f
+        if (centreX < -0.5f || centreX > columns + 0.5f) return null
+        if (centreY < -ROW_UNITS / 2f || centreY > unitRows + ROW_UNITS / 2f) return null
+        return Offset(col, row)
     }
 }
+
+/** Things stepping aside on [page] for the carried item, as [plan] has them. */
+@Immutable
+data class DropPreview(val page: Int, val plan: DropPlanner.Plan)
+
+/** Item [id] was just let go with its grey copy's corner at [ghostOnGrid], in the page's pixels. */
+@Immutable
+data class Landing(val id: String, val ghostOnGrid: Offset)
 
 @Composable
 fun HomePage(
@@ -193,7 +218,10 @@ fun HomePage(
     appsByKey: Map<String, AppInfo>,
     drag: HomeDragState,
     resizingId: String?,
-    onResize: (String, Int, Int) -> Boolean,
+    /** Asks for a new size, in cells across and row units down; false when there is no room. */
+    onResize: (HomeItem, Int, Int) -> Boolean,
+    /** Tapping the item being resized puts it down, just like tapping anywhere else. */
+    onResizeDone: () -> Unit = {},
     onOpenApp: (String) -> Unit,
     onOpenFolder: (FolderCell) -> Unit,
     onItemMenu: (HomeItem) -> Unit,
@@ -201,9 +229,11 @@ fun HomePage(
     onNoteChange: (String) -> Unit,
     onAmbient: () -> Unit,
     onDrop: () -> Unit,
-    resolveDrop: (HomeItem, Int, Int) -> Pair<Int, Int>?,
-    /** Row units between the positions an icon may take; smaller with free placement. */
-    iconRowStep: Int = LayoutBuilder.ICON_ROW_STEP,
+    /**
+     * Where the carried item would land if let go now, and what would step aside for it. Only
+     * ever for the page in view; the hint and the drop both come from it, so they always agree.
+     */
+    dropPlan: DropPlanner.Plan? = null,
     /** Plus free placement is on: the drop hint follows the exact spot, not the cell. */
     freePlacement: Boolean = false,
     /** Right after setup the page flies in; any other time it is simply there. */
@@ -237,42 +267,38 @@ fun HomePage(
         val cellHeightDp = with(density) { cellHeightPx.toDp() }
         val rowHeightDp = cellHeightDp * ROW_UNITS
         val iconSize = homeIconSize(cellWidthDp, rowHeightDp, settings.showLabels)
-        if (active) drag.iconSize = iconSize
+        if (active) {
+            drag.iconSize = iconSize
+            drag.iconSizePx = with(density) { iconSize.toPx() }
+        }
         val lines = iconLines(cellWidthDp, rowHeightDp, iconSize, settings.showLabels)
         if (active) drag.lines = lines
 
-        // Drop hint for the cell the dragged item would land in.
+        // Drop hint for the spot the dragged item would land in. When something is already there
+        // the hint still shows the spot, because that is where the item goes: what is there steps
+        // aside. Where nothing can make room there is no plan, and so no hint.
         val dragged = drag.item
-        if (dragged != null && active) {
-            // The raw row under the item; which rows it may actually take is resolveDrop's call,
-            // so a row tucked under a widget is not rounded away before it is even considered.
-            val cell = drag.cellUnderItem(
-                columns = settings.columns,
-                rows = settings.rows * ROW_UNITS,
-                rowStep = 1,
-            )
-            // The cell under your finger may be taken, in which case the drop lands beside it.
-            // Point at that opening instead: a hint showing somewhere the item will not go is
-            // worse than no hint at all.
-            val target = cell?.let { resolveDrop(dragged, it.first, it.second) }
-            if (target != null && drag.hoverItemId == null) {
+        val plan = if (active) dropPlan else null
+        if (dragged != null && plan != null) {
+            val target = plan.target
+            if (drag.hoverItemId == null) {
                 // With free placement the item keeps the exact spot it is let go at, so the hint
                 // shows that spot — worked out the same way the drop does — and glides after the
-                // finger. It only jumps to a cell when the one under the finger is taken, which
-                // is exactly when the drop would jump there too.
-                val exact = freePlacement && target == cell
+                // finger. It only jumps to a cell when the item lands beside where it is let go,
+                // which is exactly when the drop would jump there too.
+                val exact = freePlacement && plan.exact
                 val hintTarget = if (exact) {
-                    val topLeft = drag.pointer - drag.grab - drag.gridOrigin
-                    val offX = (topLeft.x / cellWidthPx - target.first).coerceIn(-0.49f, 0.49f)
-                    val offY = (topLeft.y / cellHeightPx - target.second).coerceIn(-0.49f, 0.49f)
+                    val topLeft = drag.ghostOnGrid
+                    val offX = (topLeft.x / cellWidthPx - target.col).coerceIn(-0.49f, 0.49f)
+                    val offY = (topLeft.y / cellHeightPx - target.row).coerceIn(-0.49f, 0.49f)
                     IntOffset(
-                        ((target.first + offX) * cellWidthPx).roundToInt(),
-                        ((target.second + offY) * cellHeightPx).roundToInt(),
+                        ((target.col + offX) * cellWidthPx).roundToInt(),
+                        ((target.row + offY) * cellHeightPx).roundToInt(),
                     )
                 } else {
                     IntOffset(
-                        (target.first * cellWidthPx).roundToInt(),
-                        (target.second * cellHeightPx).roundToInt(),
+                        (target.col * cellWidthPx).roundToInt(),
+                        (target.row * cellHeightPx).roundToInt(),
                     )
                 }
                 val hintSpec: AnimationSpec<IntOffset> = if (freePlacement) {
@@ -292,21 +318,21 @@ fun HomePage(
                         .requiredSize(cellWidthDp * dragged.spanX, cellHeightDp * dragged.spanY),
                     contentAlignment = Alignment.Center,
                 ) {
-                    if (dragged is AppCell && dragged.spanY > ROW_UNITS) {
-                        // A tall icon's hint is the icon itself, not the two rows around it.
-                        val frame = tallIconFrame(cellWidthDp, rowHeightDp, iconSize)
+                    if (dragged is AppCell && !dragged.isPlainIcon) {
+                        // A super icon's hint is the icon itself, not the cells around it.
+                        val frame = superIconFrame(dragged.spanX, dragged.spanY / ROW_UNITS, cellWidthDp, rowHeightDp, iconSize)
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
                             Box(
                                 Modifier
                                     .padding(top = lines.top + frame.drop)
-                                    .width(cellWidthDp - lines.side * 2)
+                                    .width(frame.width)
                                     .height(frame.height)
                                     .appearIn(fromScale = 0.8f, riseFrom = 0f)
-                                    .clip(RoundedCornerShape((cellWidthDp - lines.side * 2) * 0.26f))
+                                    .clip(RoundedCornerShape(minOf(frame.width, frame.height) * 0.26f))
                                     .background(palette.onGlass.copy(alpha = 0.12f))
                             )
                         }
-                    } else if (dragged is WidgetCell || (dragged is AppCell && !dragged.isPlainIcon)) {
+                    } else if (dragged is WidgetCell) {
                         Box(
                             Modifier
                                 .fillMaxSize()
@@ -336,6 +362,13 @@ fun HomePage(
             }
         }
 
+        // Only the page in view shows things stepping aside, and only for the plan made for it.
+        val stepping = drag.preview?.takeIf { active && it.page == page }?.plan
+        // Something stepping into the spot the carried item came from: the item's own copy there
+        // gets out of its way. It is in your hand anyway.
+        val carriedCovered = dragged != null && stepping != null && dragged.page == page &&
+            stepping.moves.any { (id, spot) -> items.firstOrNull { it.id == id }?.let { covers(it, spot, dragged) } == true }
+
         items.forEachIndexed { index, item ->
             key(item.id) {
             var cellRoot by remember { mutableStateOf(Offset.Zero) }
@@ -350,30 +383,57 @@ fun HomePage(
             // report as a tap — opening an app or the clock behind the menu that just appeared.
             var longPressHandled by remember { mutableStateOf(false) }
             val hovered = drag.hoverItemId == item.id
+            val resizing = item.id == resizingId
             val scale by animateFloatAsState(if (hovered) 1.18f else 1f, Motion.bouncy(), label = "hover")
-            // Glide when the item changes cell, but snap when the grid itself is re-measured.
             // The cell plus any free-placement offset, so a freely placed item sits exactly where
-            // it was let go rather than on the grid line.
-            val target = IntOffset(
-                ((item.col + item.dx) * cellWidthPx).roundToInt(),
-                ((item.row + item.dy) * cellHeightPx).roundToInt(),
-            )
-            val cellOffset = remember { Animatable(target, IntOffset.VectorConverter) }
+            // it was let go rather than on the grid line — or, while the carried item rests over
+            // it, the spot it has stepped aside to.
+            val aside = stepping?.moves?.get(item.id)
+            val target = if (aside != null) {
+                IntOffset((aside.col * cellWidthPx).roundToInt(), (aside.row * cellHeightPx).roundToInt())
+            } else {
+                IntOffset(
+                    ((item.col + item.dx) * cellWidthPx).roundToInt(),
+                    ((item.row + item.dy) * cellHeightPx).roundToInt(),
+                )
+            }
+            // Just let go, it comes down from under your finger, the way a phone puts an icon
+            // down, rather than travelling over from where it started.
+            val landing = drag.landing?.takeIf { it.id == item.id }
+            val arrivedByDrop = remember { landing != null }
+            val cellOffset = remember { Animatable(landing?.ghostOnGrid?.round() ?: target, IntOffset.VectorConverter) }
+            // Each landing plays once; anything that moves the item after that is a plain glide.
+            val landed = remember { arrayOfNulls<Landing>(1) }
             var lastGeometry by remember { mutableStateOf(cellWidthPx to cellHeightPx) }
-            LaunchedEffect(target, cellWidthPx, cellHeightPx) {
+            // Glide when the item changes cell, but snap when the grid itself is re-measured.
+            LaunchedEffect(target, cellWidthPx, cellHeightPx, landing) {
                 val geometry = cellWidthPx to cellHeightPx
                 val remeasured = geometry != lastGeometry
                 lastGeometry = geometry
-                if (remeasured) cellOffset.snapTo(target) else cellOffset.animateTo(target, Motion.cell)
+                when {
+                    remeasured -> cellOffset.snapTo(target)
+                    landing != null && landed[0] !== landing -> {
+                        landed[0] = landing
+                        cellOffset.snapTo(landing.ghostOnGrid.round())
+                        cellOffset.animateTo(target, Motion.cell)
+                    }
+                    else -> cellOffset.animateTo(target, Motion.cell)
+                }
             }
+            val makingWay = carriedCovered && item.id == dragged?.id
+            val wayAlpha by animateFloatAsState(if (makingWay) 0f else 1f, tween(140), label = "makingWay")
 
             Box(
                 Modifier
+                    // The item being resized draws, and takes touches, above its neighbours: its
+                    // outline and pointer reach past its own edges.
+                    .zIndex(if (resizing) 1f else 0f)
                     .offset { cellOffset.value }
                     .requiredSize(cellWidthDp * item.spanX, cellHeightDp * item.spanY)
                     .onGloballyPositioned { cellRoot = it.positionInRoot() }
                     .then(
-                        if (animateEntrance || item.id !in firstIds) {
+                        // One that arrives by being let go here already has its landing.
+                        if ((animateEntrance || item.id !in firstIds) && !arrivedByDrop) {
                             Modifier.appearIn(delayMillis = staggerDelay(index))
                         } else {
                             Modifier
@@ -386,7 +446,7 @@ fun HomePage(
                         val landing = if (item is AppCell) AppLanding.scaleFor(item.key) else 1f
                         scaleX = scale * landing
                         scaleY = scale * landing
-                        if (item is AppCell) alpha = AppLanding.alphaFor(item.key)
+                        alpha = wayAlpha * (if (item is AppCell) AppLanding.alphaFor(item.key) else 1f)
                         // Parallax: while pages slide, items drift apart from the middle of the page
                         // and settle back together as it lands, so the page has depth.
                         translationX = pageOffset * cellWidthPx * PAGE_PARALLAX *
@@ -401,7 +461,10 @@ fun HomePage(
                     modifier = (if (slim) Modifier.fillMaxWidth().height(SEARCH_BAR_HEIGHT) else Modifier.fillMaxSize())
                         .onGloballyPositioned { contentRoot = it.positionInRoot() }
                         .then(if (item is AppCell) Modifier.launchOrigin(item.key) else Modifier)
-                        .pointerInput(item.id, cellWidthPx, cellHeightPx, settings.columns) {
+                        .pointerInput(item.id, cellWidthPx, cellHeightPx, settings.columns, resizing) {
+                            // While its size is being pulled, the item stays put: a finger resting
+                            // on the pointer must never turn into a long press that carries it off.
+                            if (resizing) return@pointerInput
                             detectDragGesturesAfterLongPress(
                                 onDragStart = { local ->
                                     travelled = 0f
@@ -413,8 +476,7 @@ fun HomePage(
                                     change.consume()
                                     travelled += delta.getDistance()
                                     drag.pointer += delta
-                                    drag.hoverCandidateId =
-                                        hoverTarget(drag, liveItems, liveItem, settings.columns, settings.rows * ROW_UNITS)
+                                    drag.hoverCandidateId = hoverTarget(drag, liveItems, liveItem)
                                 },
                                 onDragEnd = {
                                     if (travelled < 24f) {
@@ -427,7 +489,7 @@ fun HomePage(
                                 onDragCancel = { drag.clear() },
                             )
                         }
-                        .pointerInput(item.id) {
+                        .pointerInput(item.id, resizing) {
                             detectTapGestures(
                                 onPress = {
                                     longPressHandled = false
@@ -439,11 +501,12 @@ fun HomePage(
                                         return@detectTapGestures
                                     }
                                     when {
+                                        resizing -> onResizeDone()
                                         item is AppCell -> onOpenApp(item.key)
                                         item is FolderCell -> onOpenFolder(item)
                                         // Tapping the clock opens the bedside screen; long press
                                         // still belongs to the drag and menu detector.
-                                        item is WidgetCell && item.type == "clock" -> onAmbient()
+                                        item is WidgetCell && Widgets.baseType(item.type) == "clock" -> onAmbient()
                                         else -> Unit
                                     }
                                 },
@@ -461,16 +524,23 @@ fun HomePage(
                         onNoteChange = onNoteChange,
                         onAmbient = onAmbient,
                     )
+                }
 
-                    if (item.id == resizingId && item is WidgetCell) {
-                        ResizeFrame(
-                            item = item,
-                            cellWidthPx = cellWidthPx,
-                            cellHeightPx = cellHeightPx,
-                            lines = lines,
-                            onResize = onResize,
-                        )
-                    }
+                // Over the whole cell, not just the part that listens, so the outline lines up with
+                // the cell even for the slim search bar; and as a sibling on top, so a finger on
+                // the pointer is never also a press on the item.
+                if (resizing && (item is WidgetCell || item is AppCell)) {
+                    ResizeFrame(
+                        item = item,
+                        cellWidthPx = cellWidthPx,
+                        cellHeightPx = cellHeightPx,
+                        lines = lines,
+                        iconSize = iconSize,
+                        columns = settings.columns,
+                        unitRows = settings.rows * ROW_UNITS,
+                        onResize = onResize,
+                        onDone = onResizeDone,
+                    )
                 }
             }
             }
@@ -478,22 +548,31 @@ fun HomePage(
     }
 }
 
-private fun hoverTarget(
-    drag: HomeDragState,
-    items: List<HomeItem>,
-    dragged: HomeItem,
-    columns: Int,
-    rows: Int,
-): String? {
+/**
+ * The icon or folder the carried icon would make a folder with: the one whose middle it is held
+ * over, within about half an icon. Held anywhere else over an icon, it takes that icon's place and
+ * the icon steps aside, as on a phone.
+ */
+private fun hoverTarget(drag: HomeDragState, items: List<HomeItem>, dragged: HomeItem): String? {
     if (dragged !is AppCell || !dragged.isPlainIcon) return null
-    val cell = drag.cellUnderPointer(columns, rows) ?: return null
-    val target = items.firstOrNull {
-        it.id != dragged.id &&
-            cell.first >= it.col && cell.first < it.col + it.spanX &&
-            cell.second >= it.row && cell.second < it.row + it.spanY
-    } ?: return null
-    return if ((target is AppCell && target.isPlainIcon) || target is FolderCell) target.id else null
+    if (drag.cellWidth <= 0f || drag.cellHeight <= 0f) return null
+    val centreX = drag.ghostOnGrid.x + dragged.spanX * drag.cellWidth / 2f
+    val centreY = drag.ghostOnGrid.y + dragged.spanY * drag.cellHeight / 2f
+    val reach = drag.iconSizePx * FOLDER_REACH
+    return items.firstOrNull {
+        it.id != dragged.id && ((it is AppCell && it.isPlainIcon) || it is FolderCell) &&
+            abs((it.col + it.dx + it.spanX / 2f) * drag.cellWidth - centreX) < reach &&
+            abs((it.row + it.dy + it.spanY / 2f) * drag.cellHeight - centreY) < reach
+    }?.id
 }
+
+/** Whether [other], moved to [spot], would cover any of the cells [item] stands on. */
+private fun covers(other: HomeItem, spot: DropPlanner.Spot, item: HomeItem): Boolean =
+    spot.col < item.col + item.spanX && item.col < spot.col + other.spanX &&
+        spot.row < item.row + item.spanY && item.row < spot.row + other.spanY
+
+/** How near the middle of an icon, in icon widths, the carried icon has to be to make a folder. */
+private const val FOLDER_REACH = 0.45f
 
 @Composable
 fun HomeItemContent(
@@ -520,7 +599,8 @@ fun HomeItemContent(
                         iconSize = iconSize,
                         lines = lines,
                         showLabel = settings.showLabels,
-                        tall = item.spanY > ROW_UNITS,
+                        spanX = item.spanX,
+                        rows = (item.spanY / ROW_UNITS).coerceAtLeast(1),
                     )
                 else -> AppTile(
                     key = item.key,
@@ -566,11 +646,9 @@ fun HomeItemContent(
 }
 
 /**
- * A super icon, as on HyperOS: the app's icon stretched two columns wide or two rows tall, its
+ * A super icon, as on HyperOS: the app's icon stretched over [spanX] columns and [rows] rows, its
  * background filling the whole shape and its logo in the middle, with the name underneath like any
- * other icon. A wide one runs from the left edge of the icon in its first column to the right edge
- * of the icon in its second; a tall one from the top of the icon in its first row to the bottom of
- * the icon in its second. Either way it sits on the same lines as every icon around it.
+ * other icon. It sits on the same lines as every icon around it (see [superIconFrame]).
  */
 @Composable
 private fun SuperAppTile(
@@ -579,13 +657,14 @@ private fun SuperAppTile(
     iconSize: Dp,
     lines: IconLines?,
     showLabel: Boolean,
-    tall: Boolean = false,
+    spanX: Int,
+    rows: Int,
 ) {
     val palette = LocalPalette.current
     BoxWithConstraints(Modifier.fillMaxSize()) {
-        val frame = tallIconFrame(cellWidth = maxWidth, rowHeight = maxHeight / 2, iconSize = iconSize)
-        val iconHeight = if (tall) frame.height else iconSize
-        val drop = if (tall) frame.drop else 0.dp
+        val frame = superIconFrame(spanX, rows, cellWidth = maxWidth / spanX, rowHeight = maxHeight / rows, iconSize = iconSize)
+        val iconHeight = frame.height
+        val drop = frame.drop
         Column(
             Modifier
                 .fillMaxSize()
@@ -641,20 +720,22 @@ fun homeIconSize(cellWidth: Dp, rowHeight: Dp, showLabels: Boolean): Dp {
 /** The size icons are drawn at away from the grid: the drawer, folders, the dock's fallback. */
 val STANDARD_ICON_SIZE = 60.dp
 
-/** How tall a tall super icon is, and how far below its row's icon line it starts. */
+/** A super icon's picture: its size, and how far below its first row's icon line it starts. */
 @Immutable
-data class TallIconFrame(val height: Dp, val drop: Dp)
+data class SuperIconFrame(val width: Dp, val height: Dp, val drop: Dp)
 
 /**
- * A tall super icon is the wide one turned on its side: as tall as a wide one is long (one cell
- * plus an icon), so it keeps the same proportions instead of stretching down two whole rows. It
- * sits centred in the space between the top of its first row's icon and the bottom of its
- * second's. The icon and its drop hint both come from here, so they are always the same size.
+ * Where a super icon [columns] wide and [rows] tall is drawn. It runs from the left edge of the
+ * icon in its first column to the right edge of the icon in its last. Going down, each row past
+ * the first adds a column's width rather than a whole row, so it keeps a wide one's proportions:
+ * a 2 by 2 is square, a 1 by 2 is a 2 by 1 turned on its side. It sits centred between the top of
+ * the icon in its first row and the bottom of the icon in its last. The icon, its drop hint and
+ * its resize outline all come from here, so they are always the same size.
  */
-fun tallIconFrame(cellWidth: Dp, rowHeight: Dp, iconSize: Dp): TallIconFrame {
-    val span = rowHeight + iconSize
-    val height = minOf(cellWidth + iconSize, span)
-    return TallIconFrame(height = height, drop = (span - height) / 2)
+fun superIconFrame(columns: Int, rows: Int, cellWidth: Dp, rowHeight: Dp, iconSize: Dp): SuperIconFrame {
+    val span = rowHeight * (rows - 1) + iconSize
+    val height = minOf(cellWidth * (rows - 1) + iconSize, span)
+    return SuperIconFrame(width = cellWidth * (columns - 1) + iconSize, height = height, drop = (span - height) / 2)
 }
 
 /**
@@ -738,7 +819,7 @@ fun FolderTile(
             Modifier
                 .size(iconSize)
                 .pressBounce()
-                .glass(ZenithShapes.icon, strength = 1.2f, material = GlassMaterial.Clear)
+                .glass(ZenithShapes.icon, strength = 1.2f, material = GlassMaterial.Clear, interactive = true)
                 .padding(iconSize * 0.12f),
             contentAlignment = Alignment.Center,
         ) {
@@ -776,74 +857,295 @@ fun FolderTile(
 }
 
 /**
- * The handles you drag to make a widget bigger or smaller. Everything snaps to whole grid
- * cells, and the view model refuses any size that would overlap a neighbour.
+ * Resizing, as simple as pulling a corner. A thin outline hugs the item and a pointer sits on its
+ * bottom-right corner; pull the pointer and the outline follows your finger exactly, while the item
+ * underneath snaps to whole cells as you pass them, with a light tick, and a badge by the pointer
+ * says the size. Let go and the outline settles onto the size the item took. A size with no room
+ * turns the outline red rather than pushing anything out of the way.
+ *
+ * Apps and widgets can both be pulled out to any size, up to the whole page; a widget only stops at
+ * the smallest its design allows. Apps grow in whole rows.
  */
 @Composable
 private fun BoxScope.ResizeFrame(
-    item: WidgetCell,
+    item: HomeItem,
     cellWidthPx: Float,
     cellHeightPx: Float,
     lines: IconLines,
-    onResize: (String, Int, Int) -> Boolean,
+    iconSize: Dp,
+    columns: Int,
+    unitRows: Int,
+    onResize: (HomeItem, Int, Int) -> Boolean,
+    /** A tap on the pointer, rather than a pull, finishes resizing like a tap anywhere else. */
+    onDone: () -> Unit,
 ) {
     val palette = LocalPalette.current
     val haptics = LocalHapticFeedback.current
+    val density = LocalDensity.current
+    val scope = rememberCoroutineScope()
+    val finish by rememberUpdatedState(onDone)
+    // The spans are read live: the gesture below outlives every size it passes through.
+    val live by rememberUpdatedState(item)
+    val isApp = item is AppCell
+    val side = with(density) { lines.side.toPx() }
+    val topInset = with(density) { lines.top.toPx() }
+    val bottomInset = with(density) { lines.bottom.toPx() }
+    val pageRows = unitRows / ROW_UNITS
+
+    // Where an app's picture starts and ends for each number of rows it could span, from the same
+    // frame the icon is drawn in (see superIconFrame); index 0 is unused.
+    val appTop = FloatArray(pageRows + 1)
+    val appBottom = FloatArray(pageRows + 1)
+    with(density) {
+        for (rows in 1..pageRows) {
+            val frame = superIconFrame(1, rows, cellWidthPx.toDp(), (cellHeightPx * ROW_UNITS).toDp(), iconSize)
+            appTop[rows] = topInset + frame.drop.toPx()
+            appBottom[rows] = appTop[rows] + frame.height.toPx()
+        }
+    }
+    fun rowsOf(spanY: Int) = (spanY / ROW_UNITS).coerceIn(1, pageRows.coerceAtLeast(1))
+
+    // The outline runs along the icon lines, exactly where the item is drawn, in the item's own
+    // pixels. Its right and bottom edges are the ones you pull.
+    fun top(spanY: Int) = when {
+        isApp -> appTop[rowsOf(spanY)]
+        spanY >= ROW_UNITS -> topInset
+        else -> 0f
+    }
+    fun restingRight(spanX: Int) = spanX * cellWidthPx - side
+    fun restingBottom(spanY: Int) = when {
+        isApp -> appBottom[rowsOf(spanY)]
+        spanY >= ROW_UNITS -> spanY * cellHeightPx - bottomInset
+        else -> spanY * cellHeightPx
+    }
+
+    val right = remember { Animatable(restingRight(item.spanX)) }
+    val bottom = remember { Animatable(restingBottom(item.spanY)) }
+    /** A finger is on the pointer. */
+    var held by remember { mutableStateOf(false) }
+    /** ...and has moved far enough to be pulling it, not tapping it. */
+    var pulling by remember { mutableStateOf(false) }
+    var blocked by remember { mutableStateOf(false) }
+    val settle = spring<Float>(dampingRatio = 0.72f, stiffness = 420f)
+    // Whenever nobody is pulling — after you let go, or when the size changes some other way —
+    // the outline glides onto the item.
+    LaunchedEffect(item.spanX, item.spanY, pulling, cellWidthPx, cellHeightPx) {
+        if (!pulling) {
+            blocked = false
+            launch { right.animateTo(restingRight(item.spanX), settle) }
+            launch { bottom.animateTo(restingBottom(item.spanY), settle) }
+        }
+    }
+
+    /** The size the outline is asking for, in cells across and row units down. */
+    fun sizeFor(r: Float, b: Float): Pair<Int, Int> {
+        val spanX = ((r + side) / cellWidthPx).roundToInt().coerceIn(1, columns - live.col)
+        if (!isApp) {
+            val spanY = ((b + bottomInset) / cellHeightPx).roundToInt().coerceIn(1, unitRows - live.row)
+            return spanX to spanY
+        }
+        // Whole rows: whichever height's picture ends nearest the finger.
+        val room = ((unitRows - live.row) / ROW_UNITS).coerceIn(1, pageRows)
+        val rows = (1..room).minByOrNull { kotlin.math.abs(appBottom[it] - b) } ?: 1
+        return spanX to rows * ROW_UNITS
+    }
+
+    // The top edge only moves when an app changes how many rows it spans; it glides there too.
+    val frameTop by animateFloatAsState(top(item.spanY), settle, label = "frameTop")
+    val appear = remember { Animatable(0f) }
+    LaunchedEffect(Unit) { appear.animateTo(1f, spring(dampingRatio = 0.5f, stiffness = 300f)) }
+    val lift by animateFloatAsState(if (held) 1.15f else 1f, spring(dampingRatio = 0.5f, stiffness = 500f), label = "pointerLift")
+    val outline by animateColorAsState(if (blocked) Color(0xFFFF5A5F) else Color.White, tween(160), label = "outline")
+    val grow = 4.dp
+
+    /**
+     * Follows the item's own rounding: a widget's card, or for an app a quarter of its short side,
+     * as its stretched icon is drawn — so it rounds more the bigger the icon is pulled.
+     */
+    fun Density.radius(): Float =
+        if (isApp) 0.26f * minOf(right.value - side, bottom.value - frameTop).coerceAtLeast(0f) else 24.dp.toPx()
+
+    /** Where the rounded corner of the outline comes closest to the corner of its box. */
+    fun Density.tip(): Offset {
+        val round = radius() + grow.toPx()
+        val inset = round * (1f - 0.7071f) - grow.toPx()
+        return Offset(right.value - inset, bottom.value - inset)
+    }
 
     Box(
         Modifier
             .matchParentSize()
-            .toIconLines(lines, item.spanY)
-            .appearIn(fromScale = 0.94f, riseFrom = 0f)
-            .border(2.dp, palette.accent, ZenithShapes.card)
-    )
+            // While it is being resized the item is not itself: a tap on it finishes, rather than
+            // typing in a note or flipping a toggle.
+            .pointerInput(Unit) { detectTapGestures(onTap = { finish() }) },
+    ) {
+        // The outline, with a soft glow of the accent round it.
+        Canvas(Modifier.matchParentSize()) {
+            val out = grow.toPx()
+            val frame = Rect(side - out, frameTop - out, right.value + out, bottom.value + out)
+            val radius = CornerRadius(radius() + out)
+            val fade = appear.value.coerceIn(0f, 1f)
+            drawRoundRect(
+                color = palette.accent.copy(alpha = 0.28f * fade),
+                topLeft = frame.topLeft, size = frame.size, cornerRadius = radius,
+                style = Stroke(width = 7.dp.toPx()),
+            )
+            drawRoundRect(
+                color = outline.copy(alpha = 0.95f * fade),
+                topLeft = frame.topLeft, size = frame.size, cornerRadius = radius,
+                style = Stroke(width = 2.dp.toPx()),
+            )
+        }
 
-    // The spans are read live, and the target size is always measured from where the drag
-    // started, so the widget follows the handle instead of drifting a step at a time.
-    val live by rememberUpdatedState(item)
+        // The pointer: its tip rests on the outline's corner.
+        val pointerSize = 30.dp
+        Canvas(
+            Modifier
+                .offset {
+                    val tip = tip()
+                    val reach = pointerSize.toPx() * POINTER_TIP
+                    IntOffset((tip.x - reach).roundToInt(), (tip.y - reach).roundToInt())
+                }
+                .size(pointerSize)
+                .graphicsLayer {
+                    val scale = appear.value * lift
+                    scaleX = scale
+                    scaleY = scale
+                    // Grows from its tip, so it never slides off the corner.
+                    transformOrigin = TransformOrigin(POINTER_TIP, POINTER_TIP)
+                },
+        ) { drawPointer(palette.accent) }
 
-    @Composable
-    fun handle(alignment: Alignment, horizontal: Boolean, vertical: Boolean) {
+        // What your finger takes hold of: a generous square over the pointer and the corner.
+        val touch = 56.dp
         Box(
             Modifier
-                .align(alignment)
-                .padding(2.dp)
-                .size(38.dp)
-                .clip(RoundedCornerShape(percent = 50))
-                .background(palette.accent)
-                .border(2.dp, Color.White.copy(alpha = 0.85f), RoundedCornerShape(percent = 50))
-                .pointerInput(item.id, cellWidthPx, cellHeightPx) {
-                    var startSpanX = live.spanX
-                    var startSpanY = live.spanY
-                    var travelX = 0f
-                    var travelY = 0f
-                    detectDragGestures(
-                        onDragStart = {
-                            startSpanX = live.spanX
-                            startSpanY = live.spanY
-                            travelX = 0f
-                            travelY = 0f
-                        },
-                        onDrag = { change, delta ->
-                            change.consume()
-                            if (horizontal) travelX += delta.x
-                            if (vertical) travelY += delta.y
-                            val targetX = startSpanX + (travelX / cellWidthPx).roundToInt()
-                            val targetY = startSpanY + (travelY / cellHeightPx).roundToInt()
-                            if (targetX != live.spanX || targetY != live.spanY) {
-                                if (onResize(live.id, targetX, targetY)) {
-                                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                                }
-                            }
-                        },
-                    )
+                .offset {
+                    val tip = tip()
+                    val half = touch.toPx() / 2f
+                    // Centred a little inside the corner, over the body of the pointer.
+                    val centre = tip - Offset(6.dp.toPx(), 6.dp.toPx())
+                    IntOffset((centre.x - half).roundToInt(), (centre.y - half).roundToInt())
                 }
+                .size(touch)
+                .pointerInput(item.id, cellWidthPx, cellHeightPx, columns, unitRows) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        // Taken from the start, so the press is neither a tap on the item nor the
+                        // beginning of a drag of the whole page.
+                        down.consume()
+                        held = true
+                        val startRight = right.value
+                        val startBottom = bottom.value
+                        var pull = Offset.Zero
+                        var lifted = false
+                        while (true) {
+                            val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
+                            if (!change.pressed) {
+                                lifted = true
+                                break
+                            }
+                            pull += change.positionChange()
+                            change.consume()
+                            // A finger that has not really moved yet is still a tap.
+                            if (!pulling) {
+                                if (pull.getDistance() < viewConfiguration.touchSlop) continue
+                                pulling = true
+                            }
+                            // No further than the page's own right and bottom edges.
+                            val maxSpanX = (columns - live.col).coerceAtLeast(1)
+                            val maxSpanY = (unitRows - live.row).coerceAtLeast(1)
+                            val r = (startRight + pull.x).coerceIn(restingRight(1), restingRight(maxSpanX))
+                            val lowest = restingBottom(if (isApp) ROW_UNITS else minOf(ROW_UNITS, live.spanY))
+                            val b = (startBottom + pull.y).coerceIn(lowest, restingBottom(maxSpanY).coerceAtLeast(lowest))
+                            scope.launch {
+                                right.snapTo(r)
+                                bottom.snapTo(b)
+                            }
+                            val (spanX, spanY) = sizeFor(r, b)
+                            blocked = if (spanX == live.spanX && spanY == live.spanY) {
+                                false
+                            } else if (onResize(live, spanX, spanY)) {
+                                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                false
+                            } else {
+                                true
+                            }
+                        }
+                        held = false
+                        if (pulling) pulling = false else if (lifted) finish()
+                    }
+                },
         )
-    }
 
-    handle(Alignment.CenterEnd, horizontal = true, vertical = false)
-    handle(Alignment.BottomCenter, horizontal = false, vertical = true)
-    handle(Alignment.BottomEnd, horizontal = true, vertical = true)
+        // The size, just above your finger while you pull.
+        if (pulling) {
+            Text(
+                text = sizeLabel(live),
+                color = Color.White,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier
+                    .offset {
+                        // High enough to clear your fingertip and the top of an app icon.
+                        IntOffset(
+                            (right.value - 64.dp.toPx()).roundToInt(),
+                            (bottom.value - 112.dp.toPx()).roundToInt(),
+                        )
+                    }
+                    .appearIn(fromScale = 0.8f, riseFrom = 10f)
+                    .background(Color.Black.copy(alpha = 0.62f), RoundedCornerShape(percent = 50))
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+            )
+        }
+    }
+}
+
+/** "3 × 1", "4 × 1½": columns by rows, quarter rows shown as fractions. */
+private fun sizeLabel(item: HomeItem): String {
+    val whole = item.spanY / ROW_UNITS
+    val part = when (item.spanY % ROW_UNITS) {
+        1 -> "¼"
+        2 -> "½"
+        3 -> "¾"
+        else -> ""
+    }
+    val rows = if (whole == 0 && part.isNotEmpty()) part else "$whole$part"
+    return "${item.spanX} × $rows"
+}
+
+/**
+ * Where the pointer's tip lands in its square, across and down, once it is turned to aim at the
+ * corner: drawn pointing up with its tip 0.46 of the way from the middle, then turned 135°.
+ */
+private const val POINTER_TIP = 0.5f + 0.46f * 0.7071f
+
+/**
+ * The resize pointer: a rounded arrowhead aimed at the bottom-right corner, white with a dark rim
+ * and a soft shadow so it reads on any wallpaper, and a touch of the accent at its heart.
+ */
+private fun DrawScope.drawPointer(accent: Color) {
+    val w = size.width
+    // Drawn pointing straight up in a unit square, then turned to aim down and to the right.
+    val shape = Path().apply {
+        moveTo(0.5f * w, 0.04f * w)
+        lineTo(0.86f * w, 0.9f * w)
+        quadraticTo(0.5f * w, 0.7f * w, 0.14f * w, 0.9f * w)
+        close()
+    }
+    val pivot = Offset(w / 2f, w / 2f)
+    // Its shadow falls straight down, whichever way the pointer faces.
+    translate(top = 1.5.dp.toPx()) {
+        rotate(135f, pivot) { drawPath(shape, Color.Black.copy(alpha = 0.28f)) }
+    }
+    rotate(135f, pivot) {
+        drawPath(shape, Color.White)
+        drawPath(
+            shape,
+            Brush.verticalGradient(listOf(accent.copy(alpha = 0f), accent.copy(alpha = 0.35f)), startY = 0.3f * w, endY = 0.9f * w),
+        )
+        drawPath(shape, Color.Black.copy(alpha = 0.45f), style = Stroke(width = 1.2.dp.toPx(), join = StrokeJoin.Round))
+    }
 }
 
 /** The ghost that follows your finger while dragging. */
@@ -919,8 +1221,8 @@ fun DockBar(
     onOpen: (String) -> Unit,
     onLongPress: (String) -> Unit,
     onReorder: (from: Int, to: Int) -> Unit,
-    /** An app was lifted off the dock and let go at this point on screen. */
-    onDragOut: (key: String, pointerRoot: Offset) -> Unit,
+    /** An app was lifted off the dock and let go, the middle of its icon at this point on screen. */
+    onDragOut: (key: String, iconCentre: Offset) -> Unit,
     onBounds: (Rect) -> Unit,
     animateEntrance: Boolean = false,
     /** The page grid's column count; with as many dock apps, each stands under its column. */
@@ -992,7 +1294,7 @@ fun DockBar(
                     scaleX = grow
                     scaleY = grow
                 }
-                .glass(ZenithShapes.panel, strength = 1.15f, material = GlassMaterial.Clear)
+                .glass(ZenithShapes.panel, strength = 1.15f, material = GlassMaterial.Clear, interactive = true)
                 .then(
                     if (rim > 0.01f) {
                         Modifier.border(2.dp, palette.accent.copy(alpha = 0.85f * rim), ZenithShapes.panel)
@@ -1074,7 +1376,7 @@ fun DockBar(
                                     when {
                                         // Held still: that is a long press, so show the menu.
                                         moved < iconSizePx * 0.25f -> currentOnLongPress(key)
-                                        liftedNow() -> currentOnDragOut(key, grabRoot + dragOffset)
+                                        liftedNow() -> currentOnDragOut(key, (slots[index]?.center ?: grabRoot) + dragOffset)
                                         start != null && end != null && end != start -> currentOnReorder(start, end)
                                     }
                                     draggingIndex = null

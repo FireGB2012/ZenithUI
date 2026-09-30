@@ -44,7 +44,7 @@ PLACEMENT THAT JUST WORKS
 Icons size themselves to your grid, so there is no icon size slider to fiddle with. Drop one over an edge and it slides in rather than bouncing back; drop one on a full page and it carries on to the next page with room. Icons tuck in right under a widget.
 
 WIDGETS THAT FIT
-Six built-in widgets: an oversized clock, a live battery ring, a month calendar, a quick note, quick toggles with a working torch, and a search bar for your apps or Google. Long press any widget, tap Resize and drag its handles - the grid has quarter-row steps, so a slim bar takes a slim slot instead of a whole row.
+Six built-in widgets: an oversized clock, a live battery ring, a month calendar, a quick note, quick toggles with a working torch, and a search bar for your apps or Google. Long press any widget or app, tap Resize and pull the pointer on its corner - make it any size you like, up to the whole page. The grid has quarter-row steps, so a slim bar takes a slim slot instead of a whole row.
 
 SETTINGS YOU CAN READ
 Five short pages instead of one long list, and the first tells you how everything is set without opening anything. Customise is always in reach: pinch the home screen, hold your name, or open it from any long press menu.

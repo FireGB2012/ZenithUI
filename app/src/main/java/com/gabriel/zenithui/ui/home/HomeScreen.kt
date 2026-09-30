@@ -54,6 +54,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -88,6 +89,7 @@ import androidx.compose.ui.unit.sp
 import com.gabriel.zenithui.ZenithViewModel
 import com.gabriel.zenithui.data.AppCell
 import com.gabriel.zenithui.data.Backup
+import com.gabriel.zenithui.data.DropPlanner
 import com.gabriel.zenithui.data.FolderCell
 import com.gabriel.zenithui.data.HomeItem
 import com.gabriel.zenithui.data.LayoutBuilder
@@ -109,10 +111,11 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /**
- * How close to the side of the screen a dragged item has to be to turn the page. Wide enough to
- * hit with a thumb that is already holding something, since you cannot see your finger under it.
+ * How close to the side of the glass the finger itself has to be to turn the page, for items too
+ * wide to carry half off it. Anything narrower turns the page once its middle passes the edge of
+ * the grid, which is easy to do with a thumb that cannot see past what it is holding.
  */
-private val PAGE_FLIP_EDGE = 60.dp
+private val PAGE_FLIP_EDGE = 16.dp
 
 /** The gap always left between a widget and an icon tucked in under it. */
 private val TUCK_GAP = 14.dp
@@ -125,6 +128,12 @@ private const val CLOSE_WINDOW_MS = 30 * 60 * 1000L
 
 /** How long it has to stay there, so carrying an item past an edge does not flip anything. */
 private const val PAGE_FLIP_DELAY = 240L
+
+/**
+ * How long the carried item rests over a spot before whatever is there steps aside for it: long
+ * enough that carrying it across the page shuffles nothing, short enough to feel like it answers.
+ */
+private const val REORDER_DELAY = 280L
 
 private sealed interface HomeSheet {
     data class Item(val id: String) : HomeSheet
@@ -268,8 +277,12 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
     LaunchedEffect(settings.showDock) {
         if (!settings.showDock) dockBounds = androidx.compose.ui.geometry.Rect.Zero
     }
-    // Only a single app goes in the dock; a folder or widget carried over it is ignored.
-    val overDock = drag.item is AppCell && !dockBounds.isEmpty && dockBounds.contains(drag.pointer)
+    // Only a single app goes in the dock; a folder or widget carried over it is ignored. Derived,
+    // so the whole screen is not recomposed for every pixel the finger moves.
+    val overDock by remember {
+        derivedStateOf { drag.item is AppCell && !dockBounds.isEmpty && dockBounds.contains(drag.pointer) }
+    }
+    val overRemove by remember { derivedStateOf { drag.overRemove } }
     val edgeFlipPx = with(LocalDensity.current) { PAGE_FLIP_EDGE.toPx() }
     val drawerProgress = if (dragging) dragProgress else drawer.value
     val drawerOpen = drawerProgress > 0.5f
@@ -570,10 +583,6 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         }
     }
 
-    /**
-     * How finely an icon may be placed: every half row normally, every quarter row with Plus free
-     * placement on. Read live, because the drag gesture keeps the callbacks it started with.
-     */
     // How far an icon may tuck in under a widget on this screen: the empty strip under the widget
     // plus the space above the icon, less a small gap so the two never touch. Worked out from the
     // grid actually being drawn, so it is right on any phone and any grid size.
@@ -585,26 +594,41 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         viewModel.setWidgetTuck((spare / drag.cellHeight).toInt().coerceIn(0, ROW_UNITS - 1))
     }
 
-    fun iconRowStep(): Int =
-        if (settings.freeform && plus.active) 1 else LayoutBuilder.ICON_ROW_STEP
+    /** The page in view as the drop planner sees it, measured from the grid actually drawn. */
+    fun dropPage(): DropPlanner.Page =
+        DropPlanner.pageFor(settings, settings.freeform && plus.active, drag.cellWidth / drag.cellHeight)
 
-    /**
-     * Where an item dragged over [col], [row] would actually come to rest — the closest opening,
-     * since a drop onto a taken cell lands beside it rather than being refused. The hint and the
-     * drop itself both resolve through here, so the hint can never point at a cell the item will
-     * not take.
-     */
-    fun dropSlotFor(item: HomeItem, col: Int, row: Int): Pair<Int, Int>? =
-        viewModel.nearestFreeSlot(
-            page = pagerState.currentPage,
-            col = col,
-            row = row,
-            spanX = item.spanX,
-            spanY = item.spanY,
-            ignoreId = item.id,
-            rowStep = if (item is WidgetCell) 1 else iconRowStep(),
-            colWidthInRowUnits = if (drag.cellHeight > 0f) drag.cellWidth / drag.cellHeight else 2f,
-        )
+    // Where the carried item would land if let go right now, and what would step aside for it.
+    // Worked out afresh as it moves; the hint, whatever steps aside and the drop itself all come
+    // from here, so letting go always does what is on show.
+    val dropPlan by remember {
+        derivedStateOf {
+            val item = drag.item ?: return@derivedStateOf null
+            // About to be thrown away, put in the dock or made into a folder: not a spot on the page.
+            // Merely passing over the bin is not: it sits over the top row, which you can still use.
+            if (drag.removeArmed || drag.hoverItemId != null) return@derivedStateOf null
+            if (item is AppCell && !dockBounds.isEmpty && dockBounds.contains(drag.pointer)) return@derivedStateOf null
+            // Mid-turn the page under your finger is halfway across the screen.
+            if (abs(pagerState.currentPageOffsetFraction) >= 0.01f) return@derivedStateOf null
+            val corner = drag.exactTopLeft(settings.columns, settings.rows * ROW_UNITS) ?: return@derivedStateOf null
+            val page = pagerState.currentPage
+            DropPlanner.plan(layout.filter { it.page == page }, item, corner.x, corner.y, dropPage())
+        }
+    }
+
+    // Rest over a spot for a moment and whatever is there steps aside, the way it does on a phone;
+    // keep moving and nothing shuffles. Resting on an icon's middle is for making a folder, and
+    // resting on the bin for throwing away, so nothing steps aside then.
+    LaunchedEffect(dropPlan?.target, drag.hoverCandidateId, overRemove, pagerState.currentPage) {
+        drag.preview = null
+        val plan = dropPlan ?: return@LaunchedEffect
+        if (plan.moves.isEmpty() || drag.hoverCandidateId != null || overRemove) return@LaunchedEffect
+        delay(REORDER_DELAY)
+        val latest = dropPlan ?: return@LaunchedEffect
+        if (latest.target == plan.target && latest.moves.isNotEmpty()) {
+            drag.preview = DropPreview(pagerState.currentPage, latest)
+        }
+    }
 
     /**
      * Turns to the page something has just been put on, so you never have to go looking for it.
@@ -615,6 +639,71 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         scope.launch {
             snapshotFlow { pagerState.pageCount }.first { it > page }
             pagerState.animateScrollToPage(page)
+        }
+    }
+
+    /**
+     * Puts the carried item down on the page in view where it was let go, with whatever is there
+     * stepping aside: exactly what was on show at the moment you let go.
+     */
+    fun dropOnPage(item: HomeItem) {
+        val page = pagerState.currentPage
+        val ghost = drag.ghostOnGrid
+        val corner = drag.exactTopLeft(settings.columns, settings.rows * ROW_UNITS)
+        // If things had already stepped aside for this very spot, that is what happens; otherwise
+        // the plan for where it was let go.
+        val plan = drag.preview?.takeIf { it.page == page && it.plan.target == dropPlan?.target }?.plan ?: dropPlan
+        if (plan != null) {
+            // Free placement keeps the exact spot you let go of, not just the cell it rounds to —
+            // unless it landed beside that spot, where an offset from the finger would mean nothing.
+            val offset = corner?.takeIf { settings.freeform && plus.active && plan.exact }
+            drag.landing = Landing(item.id, ghost)
+            viewModel.applyDrop(
+                id = item.id,
+                page = page,
+                plan = plan,
+                dx = offset?.let { (it.x - plan.target.col).coerceIn(-0.49f, 0.49f) } ?: 0f,
+                dy = offset?.let { (it.y - plan.target.row).coerceIn(-0.49f, 0.49f) } ?: 0f,
+            )
+            return
+        }
+        val settled = abs(pagerState.currentPageOffsetFraction) < 0.01f
+        if (item.page == page) {
+            // Nowhere near there has room, even with everything stepping aside, or it was let go
+            // off the grid. It goes back to its own spot from under your finger, as on a phone,
+            // rather than off to some far corner of the page.
+            if (settled) drag.landing = Landing(item.id, ghost)
+            return
+        }
+        // Carried onto another page, it has to land on that page: the opening nearest to where it
+        // was let go, however far — or mid-turn, when that means nothing, the first one there is.
+        val rowStep = if (item is WidgetCell || (settings.freeform && plus.active)) 1 else LayoutBuilder.ICON_ROW_STEP
+        val opening = if (settled && corner != null) {
+            DropPlanner.opening(layout.filter { it.page == page }, item, corner.x, corner.y, dropPage())
+        } else {
+            viewModel.freeSlotOnPage(page, item.spanX, item.spanY, rowStep, item.id)?.let { DropPlanner.Spot(it.first, it.second) }
+        }
+        if (opening != null) {
+            if (settled && corner != null) drag.landing = Landing(item.id, ghost)
+            viewModel.applyDrop(item.id, page, DropPlanner.Plan(opening, exact = false))
+            return
+        }
+        // No room on this page at all: on to the next page that has some, and the screen follows it
+        // there. Nothing is ever dropped into thin air.
+        val onward = viewModel.firstFreeSlotFrom(page, item.spanX, item.spanY, rowStep, item.id)
+        if (onward != null) {
+            viewModel.moveItem(item.id, onward.first, onward.second, onward.third)
+            revealPage(onward.first)
+        } else {
+            Toast.makeText(context, "Every page is full", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    // A landing plays the moment the item is let go; after that it would only replay by mistake.
+    LaunchedEffect(drag.landing) {
+        if (drag.landing != null) {
+            delay(1000)
+            drag.landing = null
         }
     }
 
@@ -636,85 +725,35 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 }
                 drag.removeArmed -> viewModel.removeItem(item.id)
                 hover != null -> viewModel.combine(item.id, hover)
-                else -> {
-                    val rowStep = if (item is WidgetCell) 1 else iconRowStep()
-                    // Mid-turn the page under your finger is halfway across the screen, so the
-                    // cell it reports is meaningless. Fall through to the first free slot instead.
-                    val settled = abs(pagerState.currentPageOffsetFraction) < 0.01f
-                    val cell = if (!settled) null else drag.cellUnderItem(
-                        columns = settings.columns,
-                        rows = settings.rows * ROW_UNITS,
-                        rowStep = 1,
-                    )
-                    // Letting go off the grid leaves an item where it was — unless it has been
-                    // carried to another page, where dropping it back on the old one would look
-                    // like the launcher had swallowed it.
-                    val slot = cell?.let { dropSlotFor(item, it.first, it.second) }
-                        ?: if (!settled || item.page != pagerState.currentPage) {
-                            viewModel.freeSlotOnPage(
-                                page = pagerState.currentPage,
-                                spanX = item.spanX,
-                                spanY = item.spanY,
-                                rowStep = rowStep,
-                                ignoreId = item.id,
-                            )
-                        } else {
-                            null
-                        }
-                    // Carried onto a page with no room at all: on to the next page that has some,
-                    // and the screen follows it there. Nothing is ever dropped into thin air.
-                    if (slot == null && item.page != pagerState.currentPage) {
-                        val onward = viewModel.firstFreeSlotFrom(
-                            startPage = pagerState.currentPage,
-                            spanX = item.spanX,
-                            spanY = item.spanY,
-                            rowStep = rowStep,
-                            ignoreId = item.id,
-                        )
-                        if (onward != null) {
-                            viewModel.moveItem(item.id, onward.first, onward.second, onward.third)
-                            revealPage(onward.first)
-                        } else {
-                            Toast.makeText(context, "Every page is full", Toast.LENGTH_SHORT).show()
-                        }
-                    }
-                    if (slot != null) {
-                        val free = settings.freeform && plus.active
-                        if (free && cell != null && slot == cell && drag.cellWidth > 0f && drag.cellHeight > 0f) {
-                            // Free placement keeps the exact spot you let go of, not just the cell
-                            // it rounds to. Only when it landed in that cell — if it had to move
-                            // aside for a neighbour, an offset from the finger would mean nothing.
-                            val topLeft = drag.pointer - drag.grab
-                            val exactCol = (topLeft.x - drag.gridOrigin.x) / drag.cellWidth
-                            val exactRow = (topLeft.y - drag.gridOrigin.y) / drag.cellHeight
-                            viewModel.placeItemFreely(
-                                id = item.id,
-                                page = pagerState.currentPage,
-                                col = slot.first,
-                                row = slot.second,
-                                dx = (exactCol - slot.first).coerceIn(-0.49f, 0.49f),
-                                dy = (exactRow - slot.second).coerceIn(-0.49f, 0.49f),
-                            )
-                        } else {
-                            viewModel.moveItem(item.id, pagerState.currentPage, slot.first, slot.second)
-                        }
-                    }
-                }
+                else -> dropOnPage(item)
             }
         }
         drag.clear()
     }
 
     /**
-     * Which way a page turn is being asked for: carrying an item to the very edge of the screen
-     * flips to the page beside it, and pushing past the last page makes a new one. Without this
-     * an item could never leave the page it started on.
+     * Which way a page turn is being asked for: carrying an item off the side of the page flips to
+     * the page beside it, and pushing past the last page makes a new one. Without this an item
+     * could never leave the page it started on.
+     *
+     * Off the side means the middle of what you carry is past the edge of the grid, or your finger
+     * is at the very edge of the glass. Holding an icon over the outer column to put it there never
+     * turns the page: on most phones the middle of that column is nearer the edge than a thumb is
+     * wide, and resting there is exactly what putting something in it looks like.
      */
-    val flipDirection = when {
-        !drag.isDragging || pagerBounds.isEmpty -> 0
-        drag.pointer.x < pagerBounds.left + edgeFlipPx -> -1
-        drag.pointer.x > pagerBounds.right - edgeFlipPx -> 1
-        else -> 0
+    val flipDirection by remember(edgeFlipPx) {
+        derivedStateOf {
+            val item = drag.item
+            if (item == null || pagerBounds.isEmpty || drag.cellWidth <= 0f) return@derivedStateOf 0
+            val middle = drag.pointer.x - drag.grab.x + item.spanX * drag.cellWidth / 2f
+            val gridLeft = drag.gridOrigin.x
+            val gridRight = gridLeft + settings.columns * drag.cellWidth
+            when {
+                middle < gridLeft || drag.pointer.x < pagerBounds.left + edgeFlipPx -> -1
+                middle > gridRight || drag.pointer.x > pagerBounds.right - edgeFlipPx -> 1
+                else -> 0
+            }
+        }
     }
     /**
      * A column is wider than the edge strip, so an icon in the first or last column is already
@@ -950,7 +989,14 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                             appsByKey = appsByKey,
                             drag = drag,
                             resizingId = resizingId,
-                            onResize = { id, spanX, spanY -> viewModel.resizeWidget(id, spanX, spanY) },
+                            onResize = { item, spanX, spanY ->
+                                when (item) {
+                                    is WidgetCell -> viewModel.resizeWidget(item.id, spanX, spanY)
+                                    is AppCell -> viewModel.resizeApp(item.id, spanX, rows = spanY / ROW_UNITS)
+                                    else -> false
+                                }
+                            },
+                            onResizeDone = { resizingId = null },
                             onOpenApp = { launchApp(it) },
                             onOpenFolder = { showSheet(HomeSheet.Folder(it.id)) },
                             onItemMenu = { showSheet(HomeSheet.Item(it.id)) },
@@ -958,8 +1004,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                             onNoteChange = { viewModel.setNote(it) },
                             onAmbient = { ambient = true },
                             onDrop = { handleDrop() },
-                            resolveDrop = { item, col, row -> dropSlotFor(item, col, row) },
-                            iconRowStep = iconRowStep(),
+                            dropPlan = dropPlan,
                             freePlacement = settings.freeform && plus.active,
                             animateEntrance = entrance,
                             pageOffset = offset,
@@ -1030,19 +1075,28 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     onOpen = { launchApp(it) },
                     onLongPress = { showSheet(HomeSheet.DrawerApp(it)) },
                     onReorder = { from, to -> viewModel.moveInDock(from, to) },
-                    onDragOut = { key, point ->
-                        // The finger's cell on the page in view, in the same units the grid uses.
-                        val col = if (drag.cellWidth > 0f) ((point.x - drag.gridOrigin.x) / drag.cellWidth).toInt() else 0
-                        val row = if (drag.cellHeight > 0f) ((point.y - drag.gridOrigin.y) / drag.cellHeight).toInt() else 0
-                        revealPage(
-                            viewModel.moveDockToHome(
+                    onDragOut = { key, iconCentre ->
+                        if (drag.cellWidth > 0f && drag.cellHeight > 0f) {
+                            // The cell that puts a home screen icon exactly where the dock icon was
+                            // let go; from there it is put down like any icon on the page.
+                            val iconMiddle = with(tuckDensity) { (drag.lines?.top ?: 0.dp).toPx() } + drag.iconSizePx / 2f
+                            val ghost = Offset(
+                                iconCentre.x - drag.gridOrigin.x - drag.cellWidth / 2f,
+                                iconCentre.y - drag.gridOrigin.y - iconMiddle,
+                            )
+                            val placed = viewModel.moveDockToHome(
                                 key = key,
                                 page = pagerState.currentPage,
-                                col = col,
-                                row = row,
-                                colWidthInRowUnits = if (drag.cellHeight > 0f) drag.cellWidth / drag.cellHeight else 2f,
+                                exactCol = ghost.x / drag.cellWidth,
+                                exactRow = ghost.y / drag.cellHeight,
+                                colWidthInRowUnits = drag.cellWidth / drag.cellHeight,
                             )
-                        )
+                            if (placed != null) {
+                                drag.landing = Landing(placed, ghost)
+                            } else {
+                                Toast.makeText(context, "No room on this page", Toast.LENGTH_SHORT).show()
+                            }
+                        }
                     },
                     onBounds = { dockBounds = it },
                     modifier = Modifier
@@ -1090,7 +1144,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = "Drag the handles to resize · tap to finish",
+                    text = "Pull the pointer to resize · tap to finish",
                     color = palette.onGlass,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Medium,
@@ -1114,9 +1168,9 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             }
 
             // Hold on the bin for a moment before it will actually take anything.
-            LaunchedEffect(drag.overRemove) {
+            LaunchedEffect(overRemove) {
                 drag.removeArmed = false
-                if (drag.overRemove) {
+                if (overRemove) {
                     kotlinx.coroutines.delay(450)
                     drag.removeArmed = true
                     haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
@@ -1124,7 +1178,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             }
             RemoveTarget(
                 armed = drag.removeArmed,
-                hovering = drag.overRemove,
+                hovering = overRemove,
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .statusBarsPadding()
@@ -1174,16 +1228,6 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     onCustomize = { showSheet(HomeSheet.Customize) },
                     onOpen = { launchApp(it) },
                     onAppInfo = { viewModel.openAppInfo(it) },
-                    onIconSize = { size ->
-                        val fits = when (size) {
-                            "wide" -> viewModel.resizeApp(item.id, spanX = 2)
-                            "tall" -> viewModel.resizeApp(item.id, spanX = 1, tall = true)
-                            else -> viewModel.resizeApp(item.id, spanX = 1)
-                        }
-                        if (!fits) {
-                            Toast.makeText(context, "No room for that size on this page", Toast.LENGTH_SHORT).show()
-                        }
-                    },
                     onChooseToggles = { showSheet(HomeSheet.Toggles) },
                     onRename = { showSheet(HomeSheet.Folder(it)) },
                     onResize = {

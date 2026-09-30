@@ -11,6 +11,7 @@ import com.gabriel.zenithui.data.AuraThemes
 import com.gabriel.zenithui.data.CheckIn
 import com.gabriel.zenithui.data.Backup
 import com.gabriel.zenithui.data.BillingRepository
+import com.gabriel.zenithui.data.DropPlanner
 import com.gabriel.zenithui.data.FolderCell
 import com.gabriel.zenithui.data.GridDensity
 import com.gabriel.zenithui.data.HomeItem
@@ -430,10 +431,27 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
 
     // ---------------------------------------------------------------- home editing
 
-    /** Plus free placement: into a cell, but kept exactly where it was let go within it. */
-    fun placeItemFreely(id: String, page: Int, col: Int, row: Int, dx: Float, dy: Float) =
+    /** The page as the drop planner sees it; [colWidthInRowUnits] is measured from the grid on screen. */
+    fun dropPage(colWidthInRowUnits: Float): DropPlanner.Page =
+        DropPlanner.pageFor(settings.value, settings.value.freeform && plus.value.active, colWidthInRowUnits)
+
+    /**
+     * Lets item [id] go on [page] as [plan] says: it takes the plan's spot, and everything the plan
+     * moves aside moves with it, all in one change, so nothing is ever seen half moved. [dx] and
+     * [dy] are a free-placement offset to keep within the spot.
+     */
+    fun applyDrop(id: String, page: Int, plan: DropPlanner.Plan, dx: Float = 0f, dy: Float = 0f) =
         store.mutateLayout { items ->
-            items.map { if (it.id == id) it.moved(page, col, row).nudged(dx, dy) else it }
+            items.map { item ->
+                val aside = plan.moves[item.id]
+                when {
+                    item.id == id -> item.moved(page, plan.target.col, plan.target.row).let {
+                        if (dx != 0f || dy != 0f) it.nudged(dx, dy) else it
+                    }
+                    aside != null && item.page == page -> item.moved(page, aside.col, aside.row)
+                    else -> item
+                }
+            }
         }
 
     fun moveItem(id: String, page: Int, col: Int, row: Int) = store.mutateLayout { items ->
@@ -441,14 +459,6 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun removeItem(id: String) = store.mutateLayout { items -> items.filterNot { it.id == id } }
-
-    fun addAppAt(key: String, page: Int, col: Int, row: Int) {
-        val parts = key.split('/', limit = 2)
-        if (parts.size != 2) return
-        store.mutateLayout { items ->
-            items + AppCell(LayoutBuilder.newId(), page, col, row, parts[0], parts[1])
-        }
-    }
 
     /** Puts an app in the first opening anywhere, and says which page that turned out to be. */
     fun addAppToFirstFreeSlot(key: String): Int? {
@@ -494,38 +504,19 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     /**
-     * Makes an app icon ordinary (1 by 1) or a super icon (2 by 1), as HyperOS does. It grows from
-     * where it is when there is room, and otherwise moves to the nearest spot on its page that
-     * fits. False when nothing that size fits on the page; then nothing changes.
+     * Resizes an app icon where it stands, for the resize pointer: [spanX] columns wide and [rows]
+     * whole rows tall, anything up to the whole page. 1 by 1 is an ordinary icon; anything bigger is
+     * a super icon, stretched to fill it. It never moves the icon — it is under your finger — so a
+     * size with no room is refused, and false comes back.
      */
-    /** [tall] makes a super icon two rows high instead of two columns wide. Never both. */
-    fun resizeApp(id: String, spanX: Int, tall: Boolean = false): Boolean {
+    fun resizeApp(id: String, spanX: Int, rows: Int): Boolean {
         val app = layout.value.firstOrNull { it.id == id } as? AppCell ?: return false
         val s = settings.value
-        val unitRows = s.rows * ROW_UNITS
-        val sx = if (tall) 1 else spanX.coerceIn(1, minOf(2, s.columns))
-        val sy = if (tall && unitRows >= 2 * ROW_UNITS) 2 * ROW_UNITS else ROW_UNITS
-        if (sx == app.spanX && sy == app.spanY) return true
-        val step = if (s.freeform && plus.value.active) 1 else LayoutBuilder.ICON_ROW_STEP
-        val slot = nearestFreeSlot(
-            page = app.page,
-            col = app.col.coerceAtMost(s.columns - sx),
-            row = app.row.coerceAtMost(unitRows - sy),
-            spanX = sx,
-            spanY = sy,
-            ignoreId = id,
-            rowStep = step,
-        ) ?: return false
-        val resized = app.copy(spanX = sx, spanY = sy)
-        store.mutateLayout { items ->
-            items.map {
-                when {
-                    it.id != id -> it
-                    slot.first == app.col && slot.second == app.row -> resized
-                    else -> resized.moved(app.page, slot.first, slot.second)
-                }
-            }
-        }
+        val sx = spanX.coerceIn(1, s.columns)
+        val sy = rows.coerceIn(1, s.rows) * ROW_UNITS
+        if (sx == app.spanX && sy == app.spanY) return false
+        if (!isSlotFree(app.page, app.col, app.row, sx, sy, id)) return false
+        store.mutateLayout { items -> items.map { if (it.id == id) app.copy(spanX = sx, spanY = sy) else it } }
         return true
     }
 
@@ -600,53 +591,6 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
             if (slot != null) return Triple(page, slot.first, slot.second)
         }
         return null
-    }
-
-    /**
-     * The closest opening to where you let go, measured in millimetres on the glass rather than
-     * in grid units: [colWidthInRowUnits] says how tall one column is in row units, so a cell one
-     * column across really does beat one four rows down. Get that wrong and an icon dropped beside
-     * a widget flies to the bottom of the page instead of tucking in next to it.
-     */
-    fun nearestFreeSlot(
-        page: Int,
-        col: Int,
-        row: Int,
-        spanX: Int,
-        spanY: Int,
-        ignoreId: String?,
-        rowStep: Int,
-        colWidthInRowUnits: Float = 2f,
-    ): Pair<Int, Int>? {
-        val s = settings.value
-        // Icons keep to half-row steps, except the row right under a widget, where one may tuck in.
-        val tuckRows = if (rowStep > 1) {
-            LayoutBuilder.tuckRows(layout.value.filter { it.page == page && it.id != ignoreId }, s.widgetTuck)
-        } else {
-            emptySet()
-        }
-        fun allowed(r: Int) = r % rowStep == 0 || r in tuckRows
-        if (allowed(row) && isSlotFree(page, col, row, spanX, spanY, ignoreId)) return col to row
-
-        val rows = s.rows * ROW_UNITS
-        val weight = colWidthInRowUnits.coerceIn(0.5f, 8f)
-        var best: Pair<Int, Int>? = null
-        var bestDistance = Float.MAX_VALUE
-
-        for (candidateRow in 0..(rows - spanY)) {
-            if (!allowed(candidateRow)) continue
-            for (candidateCol in 0..(s.columns - spanX)) {
-                if (!isSlotFree(page, candidateCol, candidateRow, spanX, spanY, ignoreId)) continue
-                val dx = (candidateCol - col) * weight
-                val dy = (candidateRow - row).toFloat()
-                val distance = dx * dx + dy * dy
-                if (distance < bestDistance) {
-                    bestDistance = distance
-                    best = candidateCol to candidateRow
-                }
-            }
-        }
-        return best
     }
 
     fun isSlotFree(page: Int, col: Int, row: Int, spanX: Int, spanY: Int, ignoreId: String?): Boolean {
@@ -775,31 +719,28 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     /**
-     * Lifts an app out of the dock onto [page], as close to the cell under the finger as there is
-     * room for. Returns the page it ended up on, which may be another one if this page is full.
+     * Lifts an app out of the dock onto [page], where it was let go — its cell's corner at
+     * [exactCol], [exactRow] — with whatever is there stepping aside, just as on the home screen.
+     * Where nothing can make room it takes the nearest opening on the page. On a page with no room
+     * at all it stays in the dock, as it would on a phone, and null comes back; otherwise the id of
+     * the icon now on the page.
      */
-    fun moveDockToHome(key: String, page: Int, col: Int, row: Int, colWidthInRowUnits: Float): Int? {
-        if (key.split('/', limit = 2).size != 2) return null
-        val s = settings.value
-        val step = LayoutBuilder.ICON_ROW_STEP
-        // Icons live on whole rows, so the finger's row is rounded to the nearest one.
-        val snappedRow = ((row + step / 2) / step * step).coerceIn(0, (s.rows * ROW_UNITS - ROW_UNITS).coerceAtLeast(0))
-        val slot = nearestFreeSlot(
-            page = page,
-            col = col.coerceIn(0, s.columns - 1),
-            row = snappedRow,
-            spanX = 1,
-            spanY = ROW_UNITS,
-            ignoreId = null,
-            rowStep = step,
-            colWidthInRowUnits = colWidthInRowUnits,
-        ) ?: freeSlotOnPage(page, 1, ROW_UNITS, step, null)
-
+    fun moveDockToHome(key: String, page: Int, exactCol: Float, exactRow: Float, colWidthInRowUnits: Float): String? {
+        val parts = key.split('/', limit = 2)
+        if (parts.size != 2) return null
+        val arriving = AppCell(LayoutBuilder.newId(), page, 0, 0, parts[0], parts[1])
+        val onPage = layout.value.filter { it.page == page }
+        val grid = dropPage(colWidthInRowUnits)
+        val plan = DropPlanner.plan(onPage, arriving, exactCol, exactRow, grid)
+            ?: DropPlanner.opening(onPage, arriving, exactCol, exactRow, grid)?.let { DropPlanner.Plan(it, exact = false) }
+            ?: return null
         store.update { it.copy(dock = it.dock - key) }
-        if (slot != null) {
-            addAppAt(key, page, slot.first, slot.second)
-            return page
+        store.mutateLayout { items ->
+            items.map { item ->
+                val aside = plan.moves[item.id]
+                if (aside != null && item.page == page) item.moved(page, aside.col, aside.row) else item
+            } + arriving.moved(page, plan.target.col, plan.target.row)
         }
-        return addAppToFirstFreeSlot(key)
+        return arriving.id
     }
 }

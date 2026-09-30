@@ -122,13 +122,6 @@ object LayoutBuilder {
     fun blockedSpanY(widgetType: String, spanY: Int, tuck: Int): Int =
         if (widgetType != "search" && spanY >= ROW_UNITS) (spanY - tuck).coerceAtLeast(ICON_ROW_STEP) else spanY
 
-    /**
-     * The rows directly under a widget's blocked part: where an icon tucked in under it sits.
-     * They are allowed for icons even when they are not on the usual half-row steps.
-     */
-    fun tuckRows(items: List<HomeItem>, tuck: Int): Set<Int> =
-        if (tuck <= 0) emptySet() else items.filter(::leavesBand).map { it.row + blockedSpanY(it, tuck) }.toSet()
-
     /** As many home pages as anyone sensibly needs, and few enough that the dots still fit. */
     const val MAX_PAGES = 8
 
@@ -204,11 +197,10 @@ object LayoutBuilder {
                 item.copy(spanX = spanX, spanY = spanY)
             }
         } else if (item is AppCell) {
-            // App icons come in three shapes: one cell, a super icon two cells wide, or one two
-            // rows tall. Anything else is made the nearest of those.
-            val tall = item.spanX == 1 && item.spanY > ROW_UNITS && unitRows >= 2 * ROW_UNITS
-            val spanX = if (tall) 1 else item.spanX.coerceIn(1, minOf(2, columns))
-            val spanY = if (tall) 2 * ROW_UNITS else ROW_UNITS
+            // An app icon is any number of columns wide and whole rows tall, no bigger than the
+            // page. A height between rows is rounded to the nearest whole one.
+            val spanX = item.spanX.coerceIn(1, columns)
+            val spanY = ((item.spanY + ROW_UNITS / 2) / ROW_UNITS).coerceIn(1, rows) * ROW_UNITS
             if (spanX == item.spanX && spanY == item.spanY) item else item.copy(spanX = spanX, spanY = spanY)
         } else {
             item

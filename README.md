@@ -23,6 +23,11 @@ built entirely in Jetpack Compose.
 - **Folders** — drop one app onto another to create a folder; drop onto a folder to add to it.
   Tap a folder for a bottom sheet with an editable name; long-press an app inside to take it out.
 - **Remove** — drag to the "Remove" target at the top.
+- **Resize** — long-press any app or widget → **Resize**, then pull the pointer on its bottom-right
+  corner. The outline follows your finger and the item snaps to whole cells as you pass them, with a
+  size badge; it can be any size up to the whole page (a widget stops at the smallest its design
+  allows). An app bigger than 1×1 becomes a super icon, its icon stretched to fill the space. A
+  size with no room turns the outline red. Tap anywhere to finish.
 - **App drawer** — a sheet that tracks your finger: drag up anywhere on the page and it follows,
   release and a fling (or the halfway point) decides whether it opens or falls back. Close it by
   dragging down anywhere — the handle, the header, the search row, or the app grid once it is
@@ -45,6 +50,13 @@ built entirely in Jetpack Compose.
 | Quick Toggles | 2×2 | Small tile, 2×2 buttons: working torch (Camera2) plus Wi-Fi / Bluetooth / DND |
 | Search Bar | 4×1 | A single-line pill: tap to search apps, or hit the button for Google |
 
+**No glass** — a second section in the widget picker with the same widgets and no pane round
+them, like the clock on an iPhone's Lock Screen: the big numbers, rings and icons are made of glass
+themselves and sit straight on the wallpaper, with small glass icons added (a sun or moon on the
+clock, a battery on Power, a calendar, a pencil). Their words are white with a soft shadow. They are
+stored as `bare_<type>` (`bare_clock`, …) and otherwise behave exactly like the widget they are a
+version of.
+
 ## Customisation
 
 Long-press an empty spot → **Customise** → **Zenith settings**: palette, appearance, glass strength,
@@ -54,13 +66,20 @@ icon packs. Any Nova- or ADW-compatible icon pack installed on the device is det
 
 ## How the glass works
 
-`Modifier.glass()` is Zenith's Liquid Glass, in two finishes: **Clear** for the dock, folders and
-small controls, which shows the wallpaper sharp and bends it most, and **Regular** for widgets,
-search and sheets, which frosts it so text on top stays readable. On Android 13+ an AGSL shader
-(`LiquidGlassShader`) draws each pane: the flat middle shows the wallpaper exactly where it is,
-the rounded rim bends and magnifies it inward like the edge of a thick lens with a faint colour
-split, and a thin highlight runs round the rim on the side facing the light, which moves as the
-phone tilts. A readable veil thickens only over parts of the wallpaper that would fight the text.
+`Modifier.glass()` is Zenith's Liquid Glass, modelled on Apple's own description of it, in two
+finishes: **Clear** for the dock, folders and small controls, which shows the wallpaper sharp and
+bends it most, and **Regular** for widgets, search and sheets, which frosts it so text on top stays
+readable. On Android 13+ an AGSL shader (`LiquidGlassShader`) draws each pane: the flat middle
+shows the wallpaper exactly where it is, the rounded rim bends and magnifies it inward like the
+edge of a thick lens with a faint colour split — a bigger pane is a thicker slab and bends more —
+and a crisp highlight runs round the rim where it faces the light, with a weaker one opposite, both
+moving as the phone tilts. A readable veil thickens only over parts of the wallpaper that would
+fight the text. Every pane floats on a soft shadow, and panes you press (`interactive = true`: the
+dock, folders, widgets, search) light up from within, the glow starting under your finger.
+
+`Modifier.glassInk()` makes whatever a composable draws out of glass, for the "No glass" widgets:
+its own outline becomes the rim, so the wallpaper bends at the edges of each numeral and icon and
+the highlight runs along them. What is drawn white is clear glass; a colour becomes tinted glass.
 
 Android 13+ does not let a launcher read the wallpaper, so `GlassWallpaper` keeps its own copy of
 any wallpaper Zenith sets (its own designs, or a photo picked under Wallpapers → Your photos) and
@@ -68,7 +87,8 @@ checks it is still current by comparing the wallpaper colours Android reports. A
 still wallpaper zoomed by a tenth to leave room for parallax, and the shader matches that. With no
 usable copy (a live wallpaper, or one set in another app) panes fall back to frosted glass with the
 same rim, rather than showing a picture that is not really behind them. Android 12 uses the cached
-blur. Nothing is captured or blurred per frame.
+blur, and "No glass" widgets draw their numbers and icons plain white below Android 13. Nothing is
+captured or blurred per frame.
 
 ## Building
 

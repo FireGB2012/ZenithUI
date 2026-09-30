@@ -96,7 +96,6 @@ import com.gabriel.zenithui.data.GridDensity
 import com.gabriel.zenithui.data.IconShapes
 import com.gabriel.zenithui.data.AppCell
 import com.gabriel.zenithui.data.WidgetCell
-import com.gabriel.zenithui.data.ROW_UNITS
 import com.gabriel.zenithui.data.Widgets
 import com.gabriel.zenithui.data.ZenithSettings
 import com.gabriel.zenithui.ui.common.Motion
@@ -104,7 +103,6 @@ import com.gabriel.zenithui.ui.common.appearIn
 import com.gabriel.zenithui.ui.common.pressBounce
 import com.gabriel.zenithui.ui.common.staggerDelay
 import com.gabriel.zenithui.ui.common.SectionLabel
-import com.gabriel.zenithui.ui.onboarding.Segmented
 import com.gabriel.zenithui.ui.onboarding.TipList
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.Palettes
@@ -231,8 +229,6 @@ fun ItemMenuSheet(
     onResize: () -> Unit,
     onRemove: () -> Unit,
     onUninstall: (String) -> Unit,
-    /** "normal", "wide" (two columns) or "tall" (two rows). */
-    onIconSize: (size: String) -> Unit,
     onChooseToggles: () -> Unit = {},
     /** Opens Customise: on a full page, this is the easy way there. */
     onCustomize: () -> Unit = {},
@@ -247,18 +243,7 @@ fun ItemMenuSheet(
     ZenithSheet(visible = visible, onDismiss = onDismiss, title = title) {
         when (item) {
             is AppCell -> {
-                SectionLabel("Icon size")
-                Segmented(
-                    options = listOf("normal" to "1×1", "wide" to "Wide 2×1", "tall" to "Tall 1×2"),
-                    selected = when {
-                        item.spanX >= 2 -> "wide"
-                        item.spanY > ROW_UNITS -> "tall"
-                        else -> "normal"
-                    },
-                    // The sheet stays open, so you see the icon change behind it and can switch back.
-                    onSelect = onIconSize,
-                )
-                Spacer(Modifier.height(10.dp))
+                MenuRow(Icons.Rounded.OpenInFull, "Resize", "Pull the pointer to make it any size") { onResize() }
                 MenuRow(Icons.AutoMirrored.Rounded.OpenInNew, "Open") { onOpen(item.key); onDismiss() }
                 MenuRow(Icons.Rounded.Info, "App info") { onAppInfo(item.key); onDismiss() }
                 MenuRow(Icons.Rounded.Home, "Remove from home", danger = true) { onRemove(); onDismiss() }
@@ -271,10 +256,10 @@ fun ItemMenuSheet(
             }
 
             is WidgetCell -> {
-                if (item.type == "toggles") {
+                if (Widgets.baseType(item.type) == "toggles") {
                     MenuRow(Icons.Rounded.Tune, "Choose buttons", "Pick which controls it shows") { onChooseToggles() }
                 }
-                MenuRow(Icons.Rounded.OpenInFull, "Resize", "Drag the handles to change its size") { onResize() }
+                MenuRow(Icons.Rounded.OpenInFull, "Resize", "Pull the pointer to change its size") { onResize() }
                 MenuRow(Icons.Rounded.Home, "Remove widget", danger = true) { onRemove(); onDismiss() }
             }
         }
@@ -366,21 +351,42 @@ fun WidgetPickerSheet(
     val palette = LocalPalette.current
     var message by remember { mutableStateOf<String?>(null) }
 
+    fun add(type: String) {
+        message = if (onAdd(type)) null else "No room left — free up a cell first."
+        if (message == null) onDismiss()
+    }
+
     ZenithSheet(visible = visible, onDismiss = onDismiss, title = "Add a widget") {
         Column(Modifier.verticalScroll(rememberScrollState())) {
+            message?.let {
+                Text(it, color = palette.onGlassMuted, fontSize = 12.sp, modifier = Modifier.padding(8.dp))
+            }
             Widgets.all.forEachIndexed { index, spec ->
                 MenuRow(
                     icon = Icons.Rounded.Add,
                     label = spec.title,
                     subtitle = spec.description,
                     index = index,
-                ) {
-                    message = if (onAdd(spec.type)) null else "No room left — free up a cell first."
-                    if (message == null) onDismiss()
-                }
+                ) { add(spec.type) }
             }
-            message?.let {
-                Text(it, color = palette.onGlassMuted, fontSize = 12.sp, modifier = Modifier.padding(8.dp))
+
+            Spacer(Modifier.height(18.dp))
+            SectionLabel("No glass", Modifier.padding(horizontal = 8.dp))
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "No pane round them: the numbers and icons are the glass, like an iPhone's Lock Screen clock.",
+                color = palette.onGlassMuted,
+                fontSize = 12.sp,
+                modifier = Modifier.padding(horizontal = 8.dp),
+            )
+            Spacer(Modifier.height(4.dp))
+            Widgets.noGlass.forEachIndexed { index, spec ->
+                MenuRow(
+                    icon = Icons.Rounded.AutoAwesome,
+                    label = spec.title,
+                    subtitle = spec.description,
+                    index = Widgets.all.size + index,
+                ) { add(spec.type) }
             }
         }
     }

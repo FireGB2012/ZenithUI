@@ -13,8 +13,8 @@ import kotlin.random.Random
 
 class DropPlannerTest {
 
-    /** The Pixel 10a's home page: 4 by 5, a column about 2.9 row units wide, an icon tucks 1 unit. */
-    private val pixel = DropPlanner.Page(columns = 4, unitRows = 20, tuck = 1, free = false, colWidthInRowUnits = 2.9f)
+    /** The Pixel 10a's home page: 4 by 5, a column about 2.9 row units wide. */
+    private val pixel = DropPlanner.Page(columns = 4, unitRows = 20, free = false, colWidthInRowUnits = 2.9f)
 
     private fun app(id: String, col: Int, row: Int, spanX: Int = 1, spanY: Int = ROW_UNITS, page: Int = 0) =
         AppCell(id, page, col, row, "pkg.$id", "Main", spanX = spanX, spanY = spanY)
@@ -49,8 +49,8 @@ class DropPlannerTest {
         for (i in items.indices) for (j in i + 1 until items.size) {
             val a = items[i]
             val b = items[j]
-            val aBottom = a.row + LayoutBuilder.blockedSpanY(a, page.tuck)
-            val bBottom = b.row + LayoutBuilder.blockedSpanY(b, page.tuck)
+            val aBottom = a.row + a.spanY
+            val bBottom = b.row + b.spanY
             val overlap = a.col < b.col + b.spanX && b.col < a.col + a.spanX && a.row < bBottom && b.row < aBottom
             assertTrue("$a and $b overlap", !overlap)
         }
@@ -70,17 +70,20 @@ class DropPlannerTest {
     }
 
     @Test
-    fun `an icon let go a little high under a widget tucks in snug under it`() {
-        // Its top edge is still a little inside the clock; the opening just under the clock is meant.
-        val plan = plan(listOf(clock, google), google, 0.1f, 6.4f)
-        assertEquals(Spot(0, 7), plan?.target)
-        assertTrue(plan!!.moves.isEmpty())
+    fun `an icon let go a little high under a widget lands on the row under it`() {
+        // Its top edge is still a little inside the clock; the row just under the clock is meant.
+        assertEquals(Plan(Spot(0, 8)), plan(listOf(clock, google), google, 0.1f, 6.4f))
+        assertEquals(Plan(Spot(0, 8)), plan(home, google, 0.1f, 6.4f))
     }
 
     @Test
-    fun `an icon under a widget stays in line with the icon beside it rather than tucking in`() {
-        // Gmail's top is on row 8; tucked in on row 7, Google would sit a quarter row above it.
-        assertEquals(Plan(Spot(0, 8)), plan(home, google, 0.1f, 6.4f))
+    fun `a widget never lands between rows`() {
+        var y = 0f
+        while (y <= 12f) {
+            val plan = plan(home, clock, 2.0f, y)
+            if (plan != null) assertEquals("let go at $y", 0, plan.target.row % ROW_UNITS)
+            y += 0.25f
+        }
     }
 
     @Test
@@ -90,19 +93,11 @@ class DropPlannerTest {
     }
 
     @Test
-    fun `an icon beside a widget keeps to the rows of the page, not the widget's tuck row`() {
-        // Nothing is above column 3, so row 7 would sit it a quarter row off every other icon.
+    fun `an icon beside a widget keeps to the rows of the page`() {
+        // Let go a little above row 8 with nothing above it in column 3.
         val stray = app("stray", 3, 16)
         val plan = plan(listOf(clock, stray), stray, 3.0f, 7.1f)
         assertEquals(Plan(Spot(3, 8)), plan)
-    }
-
-    @Test
-    fun `an icon sits snug under an icon that is itself tucked under a widget`() {
-        val tucked = app("tucked", 0, 7)
-        val next = app("next", 3, 16)
-        val plan = plan(listOf(clock, tucked, next), next, 0.0f, 11.2f)
-        assertEquals(Plan(Spot(0, 11)), plan)
     }
 
     @Test
@@ -241,14 +236,13 @@ class DropPlannerTest {
             val grid = PageGrid(pixel.columns, pixel.unitRows)
             repeat(random.nextInt(2, 12)) { n ->
                 val candidate: HomeItem = when (random.nextInt(4)) {
-                    0 -> widget("w$n", 0, 0, random.nextInt(1, 5), random.nextInt(2, 13), if (random.nextBoolean()) "clock" else "search")
+                    0 -> widget("w$n", 0, 0, random.nextInt(1, 5), ROW_UNITS * random.nextInt(1, 4), if (random.nextBoolean()) "clock" else "notes")
                     1 -> app("s$n", 0, 0, spanX = random.nextInt(1, 3), spanY = ROW_UNITS * random.nextInt(1, 3))
                     else -> app("a$n", 0, 0)
                 }
-                val step = if (candidate is WidgetCell) 1 else ROW_UNITS
-                val slot = grid.findSlot(candidate.spanX, LayoutBuilder.blockedSpanY(candidate, pixel.tuck), step)
+                val slot = grid.findSlot(candidate.spanX, candidate.spanY, ROW_UNITS)
                 if (slot != null && slot.second + candidate.spanY <= pixel.unitRows) {
-                    grid.occupy(slot.first, slot.second, candidate.spanX, LayoutBuilder.blockedSpanY(candidate, pixel.tuck))
+                    grid.occupy(slot.first, slot.second, candidate.spanX, candidate.spanY)
                     items += candidate.moved(0, slot.first, slot.second)
                 }
             }

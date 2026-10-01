@@ -117,9 +117,6 @@ import kotlin.math.roundToInt
  */
 private val PAGE_FLIP_EDGE = 16.dp
 
-/** The gap always left between a widget and an icon tucked in under it. */
-private val TUCK_GAP = 14.dp
-
 /** How far the home screen sinks back while an app opens out of it. */
 private const val HOME_SUNK = 0.9f
 
@@ -583,16 +580,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         }
     }
 
-    // How far an icon may tuck in under a widget on this screen: the empty strip under the widget
-    // plus the space above the icon, less a small gap so the two never touch. Worked out from the
-    // grid actually being drawn, so it is right on any phone and any grid size.
-    val tuckDensity = LocalDensity.current
-    LaunchedEffect(drag.lines, drag.cellHeight) {
-        val lines = drag.lines ?: return@LaunchedEffect
-        if (drag.cellHeight <= 0f) return@LaunchedEffect
-        val spare = with(tuckDensity) { (lines.bottom + lines.top - TUCK_GAP).toPx() }
-        viewModel.setWidgetTuck((spare / drag.cellHeight).toInt().coerceIn(0, ROW_UNITS - 1))
-    }
+    val density = LocalDensity.current
 
     /** The page in view as the drop planner sees it, measured from the grid actually drawn. */
     fun dropPage(): DropPlanner.Page =
@@ -677,7 +665,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         }
         // Carried onto another page, it has to land on that page: the opening nearest to where it
         // was let go, however far — or mid-turn, when that means nothing, the first one there is.
-        val rowStep = if (item is WidgetCell || (settings.freeform && plus.active)) 1 else LayoutBuilder.ICON_ROW_STEP
+        val rowStep = if (settings.freeform && plus.active) 1 else ROW_UNITS
         val opening = if (settled && corner != null) {
             DropPlanner.opening(layout.filter { it.page == page }, item, corner.x, corner.y, dropPage())
         } else {
@@ -1079,7 +1067,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                         if (drag.cellWidth > 0f && drag.cellHeight > 0f) {
                             // The cell that puts a home screen icon exactly where the dock icon was
                             // let go; from there it is put down like any icon on the page.
-                            val iconMiddle = with(tuckDensity) { (drag.lines?.top ?: 0.dp).toPx() } + drag.iconSizePx / 2f
+                            val iconMiddle = with(density) { (drag.lines?.top ?: 0.dp).toPx() } + drag.iconSizePx / 2f
                             val ghost = Offset(
                                 iconCentre.x - drag.gridOrigin.x - drag.cellWidth / 2f,
                                 iconCentre.y - drag.gridOrigin.y - iconMiddle,

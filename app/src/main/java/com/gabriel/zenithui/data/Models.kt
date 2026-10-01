@@ -6,8 +6,8 @@ import org.json.JSONObject
 import kotlin.math.roundToInt
 
 /**
- * A home row is divided into this many vertical units. Icons take a whole row; a slim widget such
- * as the search bar can take a quarter of one, so it never blocks a row you wanted apps in.
+ * A home row is divided into this many vertical units. Icons and widgets keep to whole rows, so
+ * everything on a page lines up; the quarter steps are what Plus free placement puts things on.
  */
 const val ROW_UNITS = 4
 
@@ -166,28 +166,31 @@ object Widgets {
     val Clock = WidgetSpec(
         "clock", "Zenith Clock",
         "Time, date and a greeting that knows your name.",
-        spanX = 2, spanY = 2 * ROW_UNITS, minSpanX = 2, minSpanY = 2,
+        spanX = 2, spanY = 2 * ROW_UNITS, minSpanX = 2, minSpanY = ROW_UNITS,
     )
     val Battery = WidgetSpec(
         "battery", "Power",
         "Live battery ring that tracks charge and charging state.",
-        spanX = 2, spanY = 2 * ROW_UNITS, minSpanX = 1, minSpanY = 3,
+        spanX = 2, spanY = 2 * ROW_UNITS, minSpanX = 1, minSpanY = ROW_UNITS,
     )
     val Calendar = WidgetSpec(
         "calendar", "Calendar",
         "The month at a glance with today highlighted.",
-        spanX = 2, spanY = 2 * ROW_UNITS, minSpanX = 2, minSpanY = 6,
+        spanX = 2, spanY = 2 * ROW_UNITS, minSpanX = 2, minSpanY = 2 * ROW_UNITS,
     )
     val Notes = WidgetSpec(
         "notes", "Quick Note",
         "A scratchpad that stays on your home screen.",
-        spanX = 2, spanY = 2 * ROW_UNITS, minSpanX = 2, minSpanY = 3,
+        spanX = 2, spanY = 2 * ROW_UNITS, minSpanX = 2, minSpanY = ROW_UNITS,
     )
     val Toggles = WidgetSpec(
         "toggles", "Quick Toggles",
         "Torch, Wi-Fi, Bluetooth and Do Not Disturb.",
-        spanX = 2, spanY = 2 * ROW_UNITS, minSpanX = 2, minSpanY = 3,
+        spanX = 2, spanY = 2 * ROW_UNITS, minSpanX = 2, minSpanY = ROW_UNITS,
     )
+
+    // No longer placed on a page: the search bar is the bar above the dock, switched on in
+    // settings. The type stays so that layouts saved with one can be read and converted.
     val Search = WidgetSpec(
         "search", "Search Bar",
         "One line: search your apps, or jump straight to Google.",
@@ -197,6 +200,9 @@ object Widgets {
     )
 
     val all = listOf(Clock, Battery, Calendar, Notes, Toggles, Search)
+
+    /** The widgets that can be put on a page. */
+    val placeable = listOf(Clock, Battery, Calendar, Notes, Toggles)
 
     /**
      * The "No glass" section: the same widgets with no pane round them. Their numbers, rings and

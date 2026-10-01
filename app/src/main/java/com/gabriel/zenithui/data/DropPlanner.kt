@@ -10,7 +10,8 @@ import kotlin.math.sin
 
 /**
  * Where a dragged item lands, and what makes room for it — the way the launcher on a phone does it.
- * This follows how Android's own launcher reorders its grid, on Zenith's finer rows.
+ * This follows how Android's own launcher reorders its grid. Everything keeps to whole rows unless
+ * free placement is on, so nothing can end up out of line with its neighbours.
  *
  * The item goes where it is let go. Anything already there steps aside: pushed along first, taking
  * whatever it bumps into with it; failing that, moved as a group to the nearest opening; failing
@@ -29,9 +30,7 @@ object DropPlanner {
         val columns: Int,
         /** Its height in row units, [ROW_UNITS] to a row. */
         val unitRows: Int,
-        /** How many units at the bottom of a widget an icon may tuck into. */
-        val tuck: Int,
-        /** Plus free placement: any row unit will do, for icons as well. */
+        /** Plus free placement: any row unit will do. */
         val free: Boolean,
         /** How wide a column is in row units, so that "nearest" means nearest on the glass. */
         val colWidthInRowUnits: Float,
@@ -44,7 +43,6 @@ object DropPlanner {
     fun pageFor(settings: ZenithSettings, freePlacement: Boolean, colWidthInRowUnits: Float): Page = Page(
         columns = settings.columns,
         unitRows = settings.rows * ROW_UNITS,
-        tuck = settings.widgetTuck,
         free = freePlacement,
         colWidthInRowUnits = colWidthInRowUnits.takeIf { it.isFinite() && it > 0f } ?: 2.9f,
     )
@@ -66,12 +64,12 @@ object DropPlanner {
      */
     fun plan(items: List<HomeItem>, dragged: HomeItem, exactCol: Float, exactRow: Float, page: Page): Plan? {
         if (dragged.spanX > page.columns || dragged.spanY > page.unitRows) return null
-        val others = items.filter { it.id != dragged.id }.map { Box.of(it, page.tuck) }
-        val height = LayoutBuilder.blockedSpanY(dragged, page.tuck)
+        val others = items.filter { it.id != dragged.id }.map { Box.of(it) }
+        val height = dragged.spanY
         val col = exactCol.roundToInt().coerceIn(0, page.columns - dragged.spanX)
-        val rows = (0..(page.unitRows - dragged.spanY)).filter { canTake(dragged, col, it, others, page) }
+        val rows = (0..(page.unitRows - dragged.spanY)).filter { canTake(it, page) }
         fun fits(row: Int) = others.none { it.overlaps(col, row, dragged.spanX, height) }
-        fun cost(row: Int) = abs(row - exactRow) + misfit(dragged, col, row, others, page)
+        fun cost(row: Int) = abs(row - exactRow)
 
         val row = rows.minByOrNull(::cost) ?: return null
         val target = Spot(col, row)
@@ -79,7 +77,7 @@ object DropPlanner {
 
         // Let go only partly over something, less than half its height into it, with an opening in
         // the same column: that opening is what was meant.
-        rows.filter { abs(it - exactRow) <= dragged.spanY / 2f && misfit(dragged, col, it, others, page) <= 0f && fits(it) }
+        rows.filter { abs(it - exactRow) <= dragged.spanY / 2f && fits(it) }
             .minByOrNull(::cost)
             ?.let { return Plan(Spot(col, it), exact = false) }
 
@@ -98,20 +96,18 @@ object DropPlanner {
      */
     fun opening(items: List<HomeItem>, dragged: HomeItem, exactCol: Float, exactRow: Float, page: Page): Spot? {
         if (dragged.spanX > page.columns || dragged.spanY > page.unitRows) return null
-        val others = items.filter { it.id != dragged.id }.map { Box.of(it, page.tuck) }
+        val others = items.filter { it.id != dragged.id }.map { Box.of(it) }
         return opening(dragged, exactCol, exactRow, others, page)
     }
 
     private fun opening(dragged: HomeItem, exactCol: Float, exactRow: Float, others: List<Box>, page: Page): Spot? {
-        val height = LayoutBuilder.blockedSpanY(dragged, page.tuck)
         var best: Spot? = null
         var bestCost = Float.MAX_VALUE
         for (r in 0..(page.unitRows - dragged.spanY)) {
+            if (!canTake(r, page)) continue
             for (c in 0..(page.columns - dragged.spanX)) {
-                if (!canTake(dragged, c, r, others, page)) continue
-                if (others.any { it.overlaps(c, r, dragged.spanX, height) }) continue
-                val cost = hypot((c - exactCol) * page.colWidthInRowUnits, r - exactRow) +
-                    misfit(dragged, c, r, others, page).coerceAtLeast(0f)
+                if (others.any { it.overlaps(c, r, dragged.spanX, dragged.spanY) }) continue
+                val cost = hypot((c - exactCol) * page.colWidthInRowUnits, r - exactRow)
                 if (cost < bestCost) {
                     bestCost = cost
                     best = Spot(c, r)
@@ -123,39 +119,8 @@ object DropPlanner {
 
     // ------------------------------------------------------------------ rows
 
-    private fun isIcon(item: HomeItem) = item !is WidgetCell
-
-    /**
-     * Whether [item] may sit on [row] at [col]. Widgets may sit on any row unit. Icons keep to whole
-     * rows, to a row something else on the page already sits on, or snug under whatever is directly
-     * above them: the band under a widget, a slim search bar, an icon that is tucked in itself.
-     */
-    private fun canTake(item: HomeItem, col: Int, row: Int, others: List<Box>, page: Page): Boolean =
-        page.free || !isIcon(item) || linesUp(item, col, row, others)
-
-    private fun linesUp(item: HomeItem, col: Int, row: Int, others: List<Box>): Boolean =
-        row % ROW_UNITS == 0 || others.any { it.row == row } ||
-            others.any { it.bottom == row && it.col < col + item.spanX && col < it.right }
-
-    /**
-     * What sitting on [row] costs beyond its distance from where the item was let go. An icon out of
-     * line with an icon right beside it costs a lot. A widget that lines up with the rows around it
-     * gains a little, so that one let go close to a row settles onto it.
-     */
-    private fun misfit(item: HomeItem, col: Int, row: Int, others: List<Box>, page: Page): Float = when {
-        page.free -> 0f
-        isIcon(item) -> if (outOfLine(item, col, row, others)) OUT_OF_LINE else 0f
-        linesUp(item, col, row, others) -> -WIDGET_PULL
-        else -> 0f
-    }
-
-    /** An icon right beside the spot whose rows it would cut across instead of sharing. */
-    private fun outOfLine(item: HomeItem, col: Int, row: Int, others: List<Box>): Boolean =
-        others.any {
-            isIcon(it.item) && (it.right == col || it.col == col + item.spanX) &&
-                it.row < row + item.spanY && row < it.row + it.spanY &&
-                (row - it.row) % ROW_UNITS != 0
-        }
+    /** Whether anything may sit on [row]: a whole row, or with free placement any row unit. */
+    private fun canTake(row: Int, page: Page): Boolean = page.free || row % ROW_UNITS == 0
 
     // ------------------------------------------------------------------ making room
 
@@ -257,7 +222,7 @@ object DropPlanner {
 
     /**
      * Moves what is in the way, all together and in the same arrangement, to the nearest opening
-     * that takes it. Icons move by whole rows, so they stay in line with the icons they left.
+     * that takes it. They move by whole rows, so they stay in line with what they left.
      */
     private fun moveTogether(all: List<Box>, hits: List<Box>, drop: Box, direction: Way, page: Page): Boolean {
         val rest = all.filter { it !in hits }
@@ -265,7 +230,7 @@ object DropPlanner {
         val top = hits.minOf { it.row }
         val right = hits.maxOf { it.right }
         val bottom = hits.maxOf { it.row + it.spanY }
-        val step = if (page.free || hits.none { isIcon(it.item) }) 1 else ROW_UNITS
+        val step = if (page.free) 1 else ROW_UNITS
         var best: Way? = null
         var bestCost = Float.MAX_VALUE
         var bestLean = Int.MIN_VALUE
@@ -304,12 +269,12 @@ object DropPlanner {
             var bestCost = Float.MAX_VALUE
             var bestLean = Int.MIN_VALUE
             for (r in 0..(page.unitRows - h.spanY)) {
+                if (!canTake(r, page)) continue
                 for (c in 0..(page.columns - h.spanX)) {
                     if (around.any { it.overlaps(c, r, h.spanX, h.height) }) continue
-                    if (!canTake(h.item, c, r, around, page)) continue
                     val dx = (c - h.col) * page.colWidthInRowUnits
                     val dy = (r - h.row).toFloat()
-                    val cost = hypot(dx, dy) + misfit(h.item, c, r, around, page).coerceAtLeast(0f)
+                    val cost = hypot(dx, dy)
                     val lean = lean(direction, dx, dy)
                     if (cost < bestCost || (cost == bestCost && lean > bestLean)) {
                         best = Spot(c, r)
@@ -334,7 +299,7 @@ object DropPlanner {
 
     /**
      * Whether a way of making room left a page that works: nothing on top of anything, nothing off
-     * the page, and every icon that moved on a row an icon may take — or moved by whole rows, and so
+     * the page, and everything that moved on a row it may take — or moved by whole rows, and so
      * still in line with wherever it was.
      */
     private fun sound(trial: List<Box>, drop: Box, before: List<Box>, page: Page): Boolean {
@@ -343,12 +308,11 @@ object DropPlanner {
             for (j in i + 1 until trial.size) if (trial[i].overlaps(trial[j])) return false
         }
         return trial.zip(before).all { (now, was) ->
-            (now.row - was.row) % ROW_UNITS == 0 ||
-                canTake(now.item, now.col, now.row, trial.filter { it !== now } + drop, page)
+            (now.row - was.row) % ROW_UNITS == 0 || canTake(now.row, page)
         }
     }
 
-    /** An item's place while a way of making room is tried out. [height] is how much of it blocks. */
+    /** An item's place while a way of making room is tried out. */
     private class Box(val id: String, val item: HomeItem, var col: Int, var row: Int, val height: Int) {
         val spanX: Int get() = item.spanX
         val spanY: Int get() = item.spanY
@@ -372,15 +336,9 @@ object DropPlanner {
         fun copy(): Box = Box(id, item, col, row, height)
 
         companion object {
-            fun of(item: HomeItem, tuck: Int): Box = Box(item.id, item, item.col, item.row, LayoutBuilder.blockedSpanY(item, tuck))
+            fun of(item: HomeItem): Box = Box(item.id, item, item.col, item.row, item.spanY)
         }
     }
-
-    /** What an icon out of line with the icon beside it costs, as row units of distance. */
-    private const val OUT_OF_LINE = 3f
-
-    /** How much further a widget reaches for a row that lines up with the page, in row units. */
-    private const val WIDGET_PULL = 1f
 
     /** How close an opening has to be to stand in for the spot itself: in columns, and in rows. */
     private const val NEAR_COLUMNS = 1.25f

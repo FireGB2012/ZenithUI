@@ -76,6 +76,7 @@ import com.gabriel.zenithui.data.ZenithSettings
 import com.gabriel.zenithui.ui.common.AppIcon
 import com.gabriel.zenithui.ui.home.HomeItemContent
 import com.gabriel.zenithui.ui.home.STANDARD_ICON_SIZE
+import com.gabriel.zenithui.ui.home.SlotArrangement
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.ZenithShapes
 import com.gabriel.zenithui.ui.theme.GlassMaterial
@@ -365,16 +366,32 @@ private fun MiniHome(
             }
 
             if (settings.showDock && dock.isNotEmpty()) {
-                // One app per column stands under its column, exactly as the real dock lines up.
-                val aligned = dock.size == settings.columns
+                // On the page's own columns, exactly as the real dock stands.
+                val g = page
+                val pane = g?.dockPane(dock.size)
+                val arrangement = remember(g, dock.size) {
+                    if (g == null) {
+                        null
+                    } else {
+                        val paneLeft = g.dockPane(dock.size).first
+                        SlotArrangement(List(dock.size) { g.dockIconLeft(it, dock.size) - paneLeft })
+                    }
+                }
+                Box(Modifier.padding(horizontal = 12.dp).padding(bottom = navBottom + 10.dp).fillMaxWidth()) {
                 Row(
                     Modifier
-                        .padding(horizontal = 12.dp)
-                        .padding(bottom = navBottom + 10.dp)
-                        .fillMaxWidth()
+                        .then(
+                            if (g != null && pane != null) {
+                                Modifier
+                                    .padding(start = with(density) { (g.originX + pane.first).toDp() })
+                                    .width(with(density) { (pane.second - pane.first).toDp() })
+                            } else {
+                                Modifier.fillMaxWidth()
+                            }
+                        )
                         .glass(ZenithShapes.panel, strength = 1.15f, material = GlassMaterial.Clear)
-                        .padding(vertical = 12.dp, horizontal = if (aligned) 0.dp else 10.dp),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
+                        .padding(vertical = 12.dp),
+                    horizontalArrangement = arrangement ?: Arrangement.SpaceEvenly,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     dock.forEachIndexed { index, appKey ->
@@ -385,10 +402,7 @@ private fun MiniHome(
                                 animationSpec = if (visible) spring(dampingRatio = 0.62f, stiffness = 360f) else tween(160),
                                 label = "dockAppear",
                             )
-                            Box(
-                                if (aligned) Modifier.weight(1f) else Modifier,
-                                contentAlignment = Alignment.Center,
-                            ) {
+                            Box(contentAlignment = Alignment.Center) {
                                 AppIcon(
                                     key = appKey,
                                     label = appsByKey[appKey]?.label ?: "",
@@ -404,6 +418,7 @@ private fun MiniHome(
                             }
                         }
                     }
+                }
                 }
             } else {
                 Spacer(Modifier.padding(bottom = navBottom).height(10.dp))

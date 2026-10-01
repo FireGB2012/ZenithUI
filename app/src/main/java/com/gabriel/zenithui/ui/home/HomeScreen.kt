@@ -132,6 +132,9 @@ private const val PAGE_FLIP_DELAY = 240L
  */
 private const val REORDER_DELAY = 280L
 
+/** The space between the edge of the screen and the page, the dock and everything else on it. */
+private val PAGE_MARGIN = 12.dp
+
 private sealed interface HomeSheet {
     data class Item(val id: String) : HomeSheet
     data class Folder(val id: String) : HomeSheet
@@ -1005,7 +1008,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                                     scaleX = scale
                                     scaleY = scale
                                 }
-                                .padding(horizontal = 12.dp, vertical = 4.dp),
+                                .padding(horizontal = PAGE_MARGIN, vertical = 4.dp),
                         )
                     }
 
@@ -1058,8 +1061,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     settings = settings,
                     highlight = overDock,
                     animateEntrance = entrance,
-                    columns = settings.columns,
-                    pageIconSize = drag.iconSize,
+                    geometry = drag.geometry,
                     onOpen = { launchApp(it) },
                     onLongPress = { showSheet(HomeSheet.DrawerApp(it)) },
                     onReorder = { from, to -> viewModel.moveInDock(from, to) },
@@ -1088,7 +1090,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     },
                     onBounds = { dockBounds = it },
                     modifier = Modifier
-                        .padding(horizontal = 12.dp)
+                        .padding(horizontal = PAGE_MARGIN)
                         .navigationBarsPadding()
                         .padding(bottom = 10.dp),
                 ) else {

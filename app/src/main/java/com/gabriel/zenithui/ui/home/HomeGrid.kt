@@ -84,6 +84,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.material3.Text
@@ -1137,13 +1138,21 @@ fun DragGhost(
     }
 }
 
-/** Breathing room either side of a dock icon before the bar counts as over-wide. */
-private val DOCK_ICON_GAP = 36.dp
+/** Puts a row's children at fixed places from its left edge, mirrored when the layout is. */
+internal class SlotArrangement(private val lefts: List<Int>) : Arrangement.Horizontal {
+    override fun Density.arrange(totalSize: Int, sizes: IntArray, layoutDirection: LayoutDirection, outPositions: IntArray) {
+        for (i in sizes.indices) {
+            val left = lefts.getOrElse(i) { 0 }
+            outPositions[i] = if (layoutDirection == LayoutDirection.Ltr) left else totalSize - left - sizes[i]
+        }
+    }
+}
 
 /**
  * The dock. Apps arrive by being dragged onto it from the home screen, and once there they are
  * rearranged the same way: hold one, slide it along and the others make room; lift it up off the
  * bar and it goes back to the home screen. Holding without moving still opens the app's menu.
+ * Its icons stand on the page's own columns, so each is under the icons above it.
  */
 @Composable
 fun DockBar(
@@ -1159,24 +1168,27 @@ fun DockBar(
     onDragOut: (key: String, iconCentre: Offset) -> Unit,
     onBounds: (Rect) -> Unit,
     animateEntrance: Boolean = false,
-    /** The page grid's column count; with as many dock apps, each stands under its column. */
-    columns: Int = 0,
-    /** The icon size the page settled on, so dock icons match the icons above them. */
-    pageIconSize: Dp? = null,
+    /** The page's geometry: the dock stands on the same columns and its icons are the same size. */
+    geometry: HomeGeometry? = null,
     modifier: Modifier = Modifier,
 ) {
     val palette = LocalPalette.current
     val haptics = LocalHapticFeedback.current
     val firstKeys = remember { keys.toSet() }
     val density = LocalDensity.current
-    val iconSize = pageIconSize ?: STANDARD_ICON_SIZE
+    val iconSize = geometry?.iconDp?.dp ?: STANDARD_ICON_SIZE
     val iconSizePx = with(density) { iconSize.toPx() }
-    // One dock app per column: then each is centred on its column, exactly under the page's icons.
-    val aligned = columns > 0 && keys.size == columns
-    // A dock is a row of icons, not a rail. Past the width its icons actually need, SpaceEvenly
-    // stops being spacing and starts being distance, so on a tablet the bar centres itself instead
-    // of flinging four icons into the corners.
-    val widest = if (keys.isEmpty() || aligned) Dp.Infinity else (iconSize + DOCK_ICON_GAP) * keys.size + 20.dp
+    // Where the pane and each icon stand, on the page's own columns (see HomeGeometry.dockIconLeft).
+    // Before a page has been measured there is no geometry, and the icons are simply spread out.
+    val pane = geometry?.dockPane(keys.size)
+    val arrangement = remember(geometry, keys.size) {
+        if (geometry == null || keys.isEmpty()) {
+            null
+        } else {
+            val paneLeft = geometry.dockPane(keys.size).first
+            SlotArrangement(List(keys.size) { geometry.dockIconLeft(it, keys.size) - paneLeft })
+        }
+    }
 
     // Where each icon sits at rest, measured only while nothing is moving so a dragged icon's own
     // offset never feeds back into the maths.
@@ -1217,11 +1229,18 @@ fun DockBar(
 
     val rim by animateFloatAsState(if (highlight) 1f else 0f, tween(220), label = "dockRim")
 
-    Box(modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+    Box(modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
-                .widthIn(max = widest)
-                .fillMaxWidth()
+                .then(
+                    if (geometry != null && pane != null) {
+                        Modifier
+                            .padding(start = with(density) { (geometry.originX + pane.first).toDp() })
+                            .width(with(density) { (pane.second - pane.first).toDp() })
+                    } else {
+                        Modifier.fillMaxWidth()
+                    }
+                )
                 .onGloballyPositioned { onBounds(it.boundsInRoot()) }
                 .graphicsLayer {
                     val grow = 1f + 0.03f * rim
@@ -1236,8 +1255,12 @@ fun DockBar(
                         Modifier
                     }
                 )
-                .padding(vertical = 12.dp, horizontal = if (aligned) 0.dp else 10.dp),
-            horizontalArrangement = if (keys.isEmpty()) Arrangement.Center else Arrangement.SpaceEvenly,
+                .padding(vertical = 12.dp),
+            horizontalArrangement = when {
+                keys.isEmpty() -> Arrangement.Center
+                arrangement != null -> arrangement
+                else -> Arrangement.SpaceEvenly
+            },
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (keys.isEmpty()) {
@@ -1261,7 +1284,6 @@ fun DockBar(
 
                 Box(
                     Modifier
-                        .then(if (aligned) Modifier.weight(1f) else Modifier)
                         .then(
                             if (animateEntrance || key !in firstKeys) {
                                 Modifier.appearIn(delayMillis = 90 + staggerDelay(index), riseFrom = 26f)

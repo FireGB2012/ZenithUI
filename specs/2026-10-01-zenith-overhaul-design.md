@@ -250,7 +250,7 @@ One class owned by `ZenithViewModel`.
   the home screen is not showing.
 - When the key differs from the one last applied, `wallpaperFollow` is on, `wallpaperStyle` is set
   and Zenith's kept copy is still the wallpaper on screen, it paints the new picture off the main
-  thread and sets it. Changes are held for 400 ms and a newer change cancels an older one that is
+  thread and sets it. Changes are held for 200 ms and a newer change cancels an older one that is
   still painting, so tapping through palettes does not queue up wallpapers.
 - With the home screen showing: the new picture fades in over 700 ms as a layer behind the home
   screen, drawn with the same zoom and scroll Android uses, while the interface colours make their

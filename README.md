@@ -20,13 +20,19 @@ built entirely in Jetpack Compose.
 
 - **Free placement** — every page is a `columns × rows` grid; long-press any icon, folder or widget
   and drag it to any free cell. A drop hint shows where it will land.
+- **Everything lines up** — icons and widgets keep to whole rows. A widget runs from the left edge
+  of the icon in its first column to the right edge of the icon in its last, and from the top of
+  its first row's icons to the bottom of its last row's labels, so the space under a widget is the
+  space under any icon. The dock stands on the same columns as the page, and the name at the top
+  starts on the same line as the first column. One class, `HomeGeometry`, works out every position
+  in whole pixels. (Zenith Plus free placement still puts things anywhere.)
 - **Folders** — drop one app onto another to create a folder; drop onto a folder to add to it.
   Tap a folder for a bottom sheet with an editable name; long-press an app inside to take it out.
 - **Remove** — drag to the "Remove" target at the top.
 - **Resize** — long-press any app or widget → **Resize**, then pull the pointer on its bottom-right
-  corner. The outline follows your finger and the item snaps to whole cells as you pass them, with a
-  size badge; it can be any size up to the whole page (a widget stops at the smallest its design
-  allows). An app bigger than 1×1 becomes a super icon, its icon stretched to fill the space. A
+  corner. The outline follows your finger and the item snaps to whole cells and whole rows as you
+  pass them, with a size badge; it can be any size up to the whole page (a widget stops at the
+  smallest its design allows). An app bigger than 1×1 becomes a super icon, its icon stretched to fill the space. A
   size with no room turns the outline red. Tap anywhere to finish.
 - **App drawer** — a sheet that tracks your finger: drag up anywhere on the page and it follows,
   release and a fling (or the halfway point) decides whether it opens or falls back. Close it by
@@ -37,7 +43,8 @@ built entirely in Jetpack Compose.
   the first match or, when nothing matches, the web search.
 - **Every menu is a bottom sheet** — item menus, Customise, widget picker, settings. Nothing needs
   a second hand.
-- **Dock** — up to five pinned apps; pin from any app's long-press menu.
+- **Dock** — one pinned app for each column of the page (four on most phones), each standing
+  under the icons above it; pin from any app's long-press menu.
 
 ## Built-in widgets
 
@@ -48,7 +55,9 @@ built entirely in Jetpack Compose.
 | Calendar | 2×2 | Real month grid, today highlighted, days left in the month |
 | Quick Note | 2×2 | Scratchpad persisted with your settings |
 | Quick Toggles | 2×2 | Small tile, 2×2 buttons: working torch (Camera2) plus Wi-Fi / Bluetooth / DND |
-| Search Bar | 4×1 | A single-line pill: tap to search apps, or hit the button for Google |
+
+The **search bar** is not a widget: switch it on under Zenith settings → Home screen and it sits
+above the dock, as wide as the icons above it. Tap to search apps, or hit the button for Google.
 
 **No glass** — a second section in the widget picker with the same widgets and no pane round
 them, like the clock on an iPhone's Lock Screen: the big numbers, rings and icons are made of glass
@@ -60,9 +69,10 @@ version of.
 ## Customisation
 
 Long-press an empty spot → **Customise** → **Zenith settings**: palette, appearance, glass strength,
-columns (3–6), rows (4–7), icon size, labels, icon shape (squircle / circle / rounded / square) and
-icon packs. Any Nova- or ADW-compatible icon pack installed on the device is detected and its
-`appfilter.xml` is parsed. Changing the grid re-flows the existing layout instead of dropping items.
+grid density, labels, the search bar, what is written at the top of the page, icon shape (squircle /
+circle / rounded / square) and icon packs. Any Nova- or ADW-compatible icon pack installed on the
+device is detected and its `appfilter.xml` is parsed. Changing the grid re-flows the existing layout
+instead of dropping items.
 
 ## How the glass works
 

@@ -41,10 +41,10 @@ SET UP IN TWENTY SECONDS
 Tell Zenith your name, pick a colour and watch a live picture of your own phone change with it, choose your widgets, and it builds the first page for you. Everything else stays one swipe away instead of being dumped across five pages.
 
 PLACEMENT THAT JUST WORKS
-Icons size themselves to your grid, so there is no icon size slider to fiddle with. Drop one over an edge and it slides in rather than bouncing back; drop one on a full page and it carries on to the next page with room. Icons tuck in right under a widget.
+Icons size themselves to your grid, so there is no icon size slider to fiddle with. Drop one over an edge and it slides in rather than bouncing back; drop one on a full page and it carries on to the next page with room. Everything keeps to the same lines: widgets, icons and the dock.
 
 WIDGETS THAT FIT
-Six built-in widgets: an oversized clock, a live battery ring, a month calendar, a quick note, quick toggles with a working torch, and a search bar for your apps or Google. Long press any widget or app, tap Resize and pull the pointer on its corner - make it any size you like, up to the whole page. The grid has quarter-row steps, so a slim bar takes a slim slot instead of a whole row.
+Five built-in widgets: an oversized clock, a live battery ring, a month calendar, a quick note and quick toggles with a working torch, plus a search bar for your apps or Google that sits above the dock. Long press any widget or app, tap Resize and pull the pointer on its corner - make it any size you like, up to the whole page. Widgets are cut to the same lines as the icons around them, so nothing looks out of place.
 
 SETTINGS YOU CAN READ
 Five short pages instead of one long list, and the first tells you how everything is set without opening anything. Customise is always in reach: pinch the home screen, hold your name, or open it from any long press menu.
@@ -80,8 +80,8 @@ First release.
 - Liquid glass home screen that blurs your wallpaper
 - Wallpapers Zenith paints in your theme's colours
 - Twenty second setup with a live preview of your phone
-- Six built-in widgets, resizable in quarter-row steps
-- Icons tuck under widgets, and a full page passes the icon on
+- Five built-in widgets and a search bar above the dock, all on the same lines as your icons
+- A full page passes the icon on to the next page with room
 - Drawer that tracks your thumb, with app and Google search
 - Six palettes, icon packs, adjustable grid, bedside clock
 - Zenith Plus free for a week; Aura streak points buy themes

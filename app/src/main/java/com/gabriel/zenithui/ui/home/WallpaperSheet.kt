@@ -79,6 +79,7 @@ import com.gabriel.zenithui.ui.onboarding.Segmented
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.Palettes
 import com.gabriel.zenithui.ui.theme.ZenithPalette
+import com.gabriel.zenithui.ui.theme.wallColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -412,10 +413,3 @@ private val thumbCache = LruCache<String, ImageBitmap>(120)
 /** The same design in the same theme is always the same picture, thumbnail or full size. */
 private fun seedFor(style: WallStyle, palette: ZenithPalette): Int = style.ordinal * 7919 + palette.id.hashCode()
 
-private fun ZenithPalette.wallColors(): WallColors = WallColors(
-    accent = accent.toArgb(),
-    accentAlt = accentAlt.toArgb(),
-    deep = backdrop.first().toArgb(),
-    mid = backdrop.getOrElse(1) { backdrop.first() }.toArgb(),
-    base = backdrop.last().toArgb(),
-)

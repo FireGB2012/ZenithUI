@@ -87,6 +87,13 @@ data class ZenithSettings(
     val customBackdrop: Long = 0xFF0A0B18,
     val customDark: Boolean = true,
 ) {
+    /** Whether the launcher is dark right now: what was asked for, or with "auto" what the phone is. */
+    fun isDark(systemDark: Boolean): Boolean = when (appearance) {
+        "light" -> false
+        "dark" -> true
+        else -> systemDark
+    }
+
     fun toJson(): JSONObject = JSONObject().apply {
         put("onboarded", onboarded)
         put("userName", userName)

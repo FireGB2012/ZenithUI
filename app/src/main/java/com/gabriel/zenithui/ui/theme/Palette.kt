@@ -3,6 +3,8 @@ package com.gabriel.zenithui.ui.theme
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.toArgb
+import com.gabriel.zenithui.data.WallColors
 import com.gabriel.zenithui.data.ZenithSettings
 
 @Immutable
@@ -19,6 +21,40 @@ data class ZenithPalette(
     val onGlass: Color get() = if (dark) Color.White else Color(0xFF10131A)
     val onGlassMuted: Color get() = onGlass.copy(alpha = 0.62f)
 }
+
+/**
+ * This palette in light or in dark. Its accents stay. When the tone asked for is not the palette's
+ * own, the backdrop is made from those accents — a near-white or near-black base with a little of
+ * each mixed in — rather than borrowed from another palette, so the interface and a wallpaper
+ * painted from it still belong to this one.
+ */
+fun ZenithPalette.toned(dark: Boolean): ZenithPalette {
+    if (dark == this.dark) return this
+    val backdrop = if (dark) {
+        listOf(
+            lerp(Color(0xFF07080D), accent, 0.07f),
+            lerp(Color(0xFF0C0F1A), accentAlt, 0.16f),
+            lerp(Color(0xFF06070B), accent, 0.05f),
+        )
+    } else {
+        listOf(
+            lerp(Color.White, accent, 0.10f),
+            lerp(Color.White, accentAlt, 0.18f),
+            lerp(Color.White, accent, 0.05f),
+        )
+    }
+    return copy(dark = dark, backdrop = backdrop)
+}
+
+/** The five colours a wallpaper is painted from, and whether it is the light or the dark picture. */
+fun ZenithPalette.wallColors(): WallColors = WallColors(
+    accent = accent.toArgb(),
+    accentAlt = accentAlt.toArgb(),
+    deep = backdrop.first().toArgb(),
+    mid = backdrop.getOrElse(1) { backdrop.first() }.toArgb(),
+    base = backdrop.last().toArgb(),
+    dark = dark,
+)
 
 object Palettes {
 

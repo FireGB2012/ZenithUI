@@ -59,16 +59,9 @@ fun ZenithTheme(
     content: @Composable () -> Unit,
 ) {
     val base = Palettes.resolve(settings)
-    val systemDark = isSystemInDarkTheme()
-    val dark = when (settings.appearance) {
-        "light" -> false
-        "dark" -> true
-        else -> systemDark
-    }
-    val target = if (dark == base.dark) base else base.copy(
-        dark = dark,
-        backdrop = if (dark) Palettes.Midnight.backdrop else Palettes.Frost.backdrop,
-    )
+    val dark = settings.isDark(isSystemInDarkTheme())
+    // In the other tone a palette keeps its accents and gets a backdrop of its own (see toned).
+    val target = base.toned(dark)
 
     // Switching palette should look like the light changing, not like a page reload.
     val spec = tween<Color>(durationMillis = 750)

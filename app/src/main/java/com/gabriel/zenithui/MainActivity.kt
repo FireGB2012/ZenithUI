@@ -160,12 +160,8 @@ fun ZenithApp(viewModel: ZenithViewModel) {
     }
 
     val view = LocalView.current
-    val lightBars = when (settings.appearance) {
-        "light" -> true
-        "dark" -> false
-        // Auto follows the phone, exactly as ZenithTheme does, so the icons never disagree with the page.
-        else -> !isSystemInDarkTheme()
-    }
+    // Light or dark exactly as ZenithTheme works it out, so the bar icons never disagree with the page.
+    val lightBars = !settings.isDark(isSystemInDarkTheme())
     SideEffect {
         // Until setup is done it owns the bar colours, since it previews palettes that are not saved yet.
         if (!settings.onboarded) return@SideEffect

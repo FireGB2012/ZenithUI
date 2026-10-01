@@ -24,8 +24,12 @@ import kotlin.math.max
 import kotlin.math.sin
 import kotlin.random.Random
 
-/** The five colours a wallpaper is painted from: a theme's two accents and its three backdrop tones. */
-data class WallColors(val accent: Int, val accentAlt: Int, val deep: Int, val mid: Int, val base: Int)
+/**
+ * The five colours a wallpaper is painted from: a theme's two accents and its three backdrop
+ * tones, and whether they are the theme's dark colours or its light ones. Every design paints a
+ * light picture and a dark one.
+ */
+data class WallColors(val accent: Int, val accentAlt: Int, val deep: Int, val mid: Int, val base: Int, val dark: Boolean = true)
 
 /** The designs Zenith can paint. Every one of them works in any theme's colours. */
 enum class WallStyle(val label: String) {

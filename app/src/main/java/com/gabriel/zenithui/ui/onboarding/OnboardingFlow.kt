@@ -203,8 +203,8 @@ fun OnboardingFlow(
     )
 
     // The page the preview shows is laid out by the same code that builds the real one.
-    val dock by produceState(emptyList<String>(), apps) {
-        value = withContext(Dispatchers.Default) { viewModel.repository.suggestedDock(4) }
+    val dock by produceState(emptyList<String>(), apps, columns) {
+        value = withContext(Dispatchers.Default) { viewModel.repository.suggestedDock(LayoutBuilder.setupDockSize(columns)) }
     }
     val chosen = widgets.toList()
     val items by produceState(emptyList<HomeItem>(), apps, chosen, columns, rows, dock) {

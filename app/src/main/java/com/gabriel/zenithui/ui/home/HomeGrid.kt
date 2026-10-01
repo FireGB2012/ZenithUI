@@ -1176,7 +1176,8 @@ fun DockBar(
     val haptics = LocalHapticFeedback.current
     val firstKeys = remember { keys.toSet() }
     val density = LocalDensity.current
-    val iconSize = geometry?.iconDp?.dp ?: STANDARD_ICON_SIZE
+    // The page's icon size, or a little smaller when more apps than columns have to share the bar.
+    val iconSize = geometry?.let { with(density) { it.dockIcon(keys.size).toDp() } } ?: STANDARD_ICON_SIZE
     val iconSizePx = with(density) { iconSize.toPx() }
     // Where the pane and each icon stand, on the page's own columns (see HomeGeometry.dockIconLeft).
     // Before a page has been measured there is no geometry, and the icons are simply spread out.
@@ -1234,9 +1235,10 @@ fun DockBar(
             modifier = Modifier
                 .then(
                     if (geometry != null && pane != null) {
+                        // Its height comes from the grid, not from its icons: see HomeGeometry.dockHeight.
                         Modifier
                             .padding(start = with(density) { (geometry.originX + pane.first).toDp() })
-                            .width(with(density) { (pane.second - pane.first).toDp() })
+                            .size(with(density) { (pane.second - pane.first).toDp() }, with(density) { geometry.dockHeight.toDp() })
                     } else {
                         Modifier.fillMaxWidth()
                     }
@@ -1255,7 +1257,8 @@ fun DockBar(
                         Modifier
                     }
                 )
-                .padding(vertical = 12.dp),
+                // Before a page has been measured the bar simply wraps its icons with the usual margin.
+                .then(if (geometry == null) Modifier.padding(vertical = 12.dp) else Modifier),
             horizontalArrangement = when {
                 keys.isEmpty() -> Arrangement.Center
                 arrangement != null -> arrangement

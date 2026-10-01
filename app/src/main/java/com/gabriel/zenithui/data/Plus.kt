@@ -161,6 +161,16 @@ class BillingRepository(context: Context) {
     /** True while a subscription is live. Unlike the pass, this one can go away again. */
     val subscribed: StateFlow<Boolean> = _subscribed.asStateFlow()
 
+    private val _answered = MutableStateFlow(false)
+
+    /**
+     * True once Play has answered both questions, one-time purchases and subscriptions, so that
+     * "nothing bought" is Play's word rather than only that nobody has asked yet.
+     */
+    val answered: StateFlow<Boolean> = _answered.asStateFlow()
+
+    private var answeredTypes = emptySet<String>()
+
     private val client = BillingClient.newBuilder(app)
         .enablePendingPurchases(PendingPurchasesParams.newBuilder().enableOneTimeProducts().build())
         .setListener { result, purchases ->
@@ -222,6 +232,8 @@ class BillingRepository(context: Context) {
                         _subscribed.value = live
                         _purchased.value = _permanent.value || live
                     }
+                    answeredTypes = answeredTypes + type
+                    if (answeredTypes.size == 2) _answered.value = true
                 }
             }
         }

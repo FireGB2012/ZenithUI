@@ -27,8 +27,10 @@ class HomeGeometry(
     val density: Float,
     val showLabels: Boolean,
 ) {
-    val cellWidth: Int = width / columns
-    val rowHeight: Int = height / rows
+    // A page always has at least one column and one row: a saved value of nothing, from a damaged
+    // backup, must not stop the home screen from being drawn at all.
+    val cellWidth: Int = width / columns.coerceAtLeast(1)
+    val rowHeight: Int = height / rows.coerceAtLeast(1)
 
     /** A row unit, a quarter of a row. Only free placement puts anything between rows. */
     val unitHeight: Float = rowHeight / ROW_UNITS.toFloat()
@@ -98,6 +100,24 @@ class HomeGeometry(
     }
 
     /**
+     * How tall the dock's pane is: an icon as big as the columns alone would make it, with a margin
+     * above and below. It is deliberately not taken from the page's own icons. On a cramped page
+     * the icons shrink to fit their rows; a dock that shrank with them would hand the page more
+     * room, the icons would grow again, and the two would chase each other on every frame.
+     */
+    val dockHeight: Int =
+        (iconSizeDp(cellWidth / density, Float.MAX_VALUE, showLabels) * density).roundToInt() +
+            2 * (DOCK_MARGIN_DP * density).roundToInt()
+
+    /**
+     * How big a dock icon is with [count] apps: the page's icon size, or smaller when there are
+     * more apps than columns, so that however many there are they stand side by side inside the
+     * grid without touching.
+     */
+    fun dockIcon(count: Int): Int =
+        if (count > columns && count > 0) minOf(icon, (gridWidth / count * DOCK_FILL).toInt()) else icon
+
+    /**
      * The left edge of dock icon [index] of [count], from the grid's left edge. The dock stands on
      * the page's own columns: with one app for each column every icon is under its column, and
      * with fewer the group is centred on the same spacing. More than fit are spread evenly.
@@ -105,7 +125,7 @@ class HomeGeometry(
     fun dockIconLeft(index: Int, count: Int): Int {
         if (count > columns) {
             val slot = gridWidth.toFloat() / count
-            return ((index + 0.5f) * slot - icon / 2f).roundToInt()
+            return ((index + 0.5f) * slot - dockIcon(count) / 2f).roundToInt()
         }
         // Counted in half columns, so a group one short of the columns sits between them.
         val halfColumns = (columns - count) + 2 * index
@@ -122,6 +142,12 @@ class HomeGeometry(
     companion object {
         /** The height of the strip an 11sp label sits in, in dp. */
         const val LABEL_DP = 20f
+
+        /** How much of its share of an over-full dock an icon may take, leaving the rest as gaps. */
+        private const val DOCK_FILL = 0.9f
+
+        /** The space above and below the icons inside the dock's pane, in dp. */
+        private const val DOCK_MARGIN_DP = 12f
 
         /**
          * How big an icon is, worked out from the cell it sits in rather than chosen: about three

@@ -119,12 +119,46 @@ class HomeGeometryTest {
     }
 
     @Test
-    fun `a dock with more apps than columns is spread evenly inside the grid`() {
-        val count = pixel.columns + 1
-        val lefts = (0 until count).map { pixel.dockIconLeft(it, count) }
-        assertTrue(lefts.first() >= 0 && lefts.last() + pixel.icon <= pixel.gridWidth)
-        assertTrue(lefts.zipWithNext().all { (a, b) -> b - a >= pixel.icon })
-        assertEquals(0 to pixel.gridWidth, pixel.dockPane(count))
+    fun `a dock with more apps than columns is spread evenly inside the grid`() = everyPage { g ->
+        // Five was the limit before the dock followed the columns, and six leaves a margin.
+        for (count in (g.columns + 1)..6) {
+            val size = g.dockIcon(count)
+            val lefts = (0 until count).map { g.dockIconLeft(it, count) }
+            assertTrue("$count apps on ${g.columns} columns start at ${lefts.first()}", lefts.first() >= 0)
+            assertTrue("$count apps on ${g.columns} columns end past the grid", lefts.last() + size <= g.gridWidth)
+            assertTrue("$count apps on ${g.columns} columns touch", lefts.zipWithNext().all { (a, b) -> b - a > size })
+            assertTrue(size in 1..g.icon)
+            assertEquals(0 to g.gridWidth, g.dockPane(count))
+        }
+    }
+
+    @Test
+    fun `dock icons are the page's size whenever there is a column for each`() = everyPage { g ->
+        for (count in 0..g.columns) assertEquals(g.icon, g.dockIcon(count))
+    }
+
+    @Test
+    fun `a grid saved with no columns or rows does not divide by nothing`() {
+        val broken = HomeGeometry(1016, 1724, columns = 0, rows = 0, density = 2.625f, showLabels = true)
+        assertTrue(broken.cellWidth > 0 && broken.rowHeight > 0)
+        assertTrue(broken.icon > 0)
+    }
+
+    @Test
+    fun `the dock is as tall however cramped the rows are`() {
+        // Six rows a pixel apart in height. The icons shrink to fit the shorter rows, and a dock
+        // that shrank with them would hand the page its pixel back, the icons would grow again,
+        // and the two would chase each other on every frame.
+        val roomier = HomeGeometry(1016, 1338, columns = 5, rows = 6, density = 2.625f, showLabels = true)
+        val tighter = HomeGeometry(1016, 1337, columns = 5, rows = 6, density = 2.625f, showLabels = true)
+        assertEquals(139, roomier.icon)
+        assertEquals(138, tighter.icon)
+        assertEquals(roomier.dockHeight, tighter.dockHeight)
+    }
+
+    @Test
+    fun `the dock has room for the page's icons and a margin above and below`() = everyPage { g ->
+        assertTrue(g.dockHeight >= g.icon + 2 * (12f * g.density).roundToInt())
     }
 
     @Test

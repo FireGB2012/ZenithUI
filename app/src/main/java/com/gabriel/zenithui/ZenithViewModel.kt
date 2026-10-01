@@ -126,27 +126,32 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
                 if (bought && !settings.value.plusPurchased) store.update { it.copy(plusPurchased = true) }
             }
         }
+        // Free placement left switched on by someone whose Plus has since ended is not in effect,
+        // so their layout goes back onto whole rows. Only once Play itself has said nothing is
+        // bought: a subscriber who is merely offline must never have an arrangement undone.
+        viewModelScope.launch {
+            billing.answered.collect { answered ->
+                if (!answered) return@collect
+                val current = settings.value
+                val active = billing.purchased.value || current.plusPurchased || trialDaysLeft(current.plusTrialStart) > 0
+                if (active) return@collect
+                val tidied = LayoutTidy.afterPlusEnded(current, layout.value)
+                if (tidied != layout.value) store.setLayout(tidied)
+            }
+        }
         billing.refresh()
     }
 
     /**
-     * Brings whatever layout is stored up to today's rules: rescaled into row units, onto whole
-     * rows, and settled so nothing overlaps. Safe to run on a layout that already follows them,
-     * which is why a restored backup goes through it too.
+     * Brings whatever layout is stored up to today's rules (see [LayoutTidy.bringUpToDate]) and
+     * settles it so nothing overlaps. Safe to run on a layout that already follows them, which is
+     * why a restored backup goes through it too.
      */
     private fun upgradeLayout() {
-        // Layouts saved before the grid gained sub-rows are rescaled once.
-        if (settings.value.layoutVersion < 1) {
-            if (layout.value.isNotEmpty()) store.setLayout(LayoutBuilder.upgradeToRowUnits(layout.value))
-            store.update { it.copy(layoutVersion = 1) }
-        }
-        // Undo that fourfold rescale on a home screen that already went through it.
-        LayoutBuilder.undoDoubleUpgrade(layout.value, settings.value.rows).let { fixed ->
-            if (fixed != layout.value) store.setLayout(fixed)
-        }
-        // Whole rows for everything, and the search bar as a setting rather than a widget.
+        // Rescaled into row units, onto whole rows, the search bar a setting rather than a widget:
+        // all of it happens once, and a layout that is already up to date is not touched.
         if (settings.value.layoutVersion < LayoutTidy.VERSION) {
-            val (next, items) = LayoutTidy.upgrade(settings.value, layout.value)
+            val (next, items) = LayoutTidy.bringUpToDate(settings.value, layout.value)
             store.restore(next, items)
         }
         // A layout left in a state normal placement does not allow — offsets from free placement,
@@ -347,7 +352,7 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
         rows: Int,
     ) {
         val installed = repository.refresh()
-        val dock = repository.suggestedDock(minOf(4, columns))
+        val dock = repository.suggestedDock(LayoutBuilder.setupDockSize(columns))
         val items = LayoutBuilder.build(repository, installed, widgets, columns, rows, dock)
         store.update {
             it.copy(
@@ -412,7 +417,7 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
         // half-cell offsets and odd sizes behind for the next drag to trip over.
         val leftFreePlacement = before.freeform && !after.freeform
         if (gridChanged || leftFreePlacement) {
-            val settled = LayoutBuilder.settle(layout.value, after.columns, after.rows, free = after.freeform)
+            val settled = LayoutBuilder.settle(layout.value, after.columns, after.rows, free = after.freeform && plus.value.active)
             if (settled != layout.value) store.setLayout(settled)
         }
     }

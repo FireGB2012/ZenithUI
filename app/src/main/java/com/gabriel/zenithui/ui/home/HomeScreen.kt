@@ -933,17 +933,18 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             Column(Modifier.fillMaxSize()) {
                 // The page's left and right lines: the outer edges of the first and last columns'
                 // icons. What is written at the top starts on the left one, and the search bar
-                // runs from one to the other.
+                // runs from one to the other. They are measured from the page's own margin, which
+                // is put on separately so that it rounds to the same pixel as the page's does.
                 val geometry = drag.geometry
                 val leftLine = if (geometry != null) {
-                    PAGE_MARGIN + with(density) { (geometry.originX + geometry.leftLine).toDp() }
+                    with(density) { (geometry.originX + geometry.leftLine).toDp() }
                 } else {
-                    26.dp
+                    14.dp
                 }
                 val rightLine = if (geometry != null) {
-                    PAGE_MARGIN + with(density) { (geometry.width - geometry.originX - geometry.rightLine).toDp() }
+                    with(density) { (geometry.width - geometry.originX - geometry.rightLine).toDp() }
                 } else {
-                    26.dp
+                    14.dp
                 }
                 val header = HomeHeader.text(settings.header, settings.userName, hour)
                 if (header != null) {
@@ -959,6 +960,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                                     showSheet(HomeSheet.Customize)
                                 })
                             }
+                            .padding(horizontal = PAGE_MARGIN)
                             .padding(start = leftLine, end = rightLine, top = 8.dp, bottom = 8.dp),
                     )
                 } else {
@@ -1089,7 +1091,9 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 if (settings.searchBar) {
                     HomeSearchBar(
                         onSearch = { openDrawer(search = true) },
-                        modifier = Modifier.padding(start = leftLine, end = rightLine, bottom = 10.dp),
+                        modifier = Modifier
+                            .padding(horizontal = PAGE_MARGIN)
+                            .padding(start = leftLine, end = rightLine, bottom = 10.dp),
                     )
                 }
 

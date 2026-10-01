@@ -103,6 +103,9 @@ object LayoutBuilder {
         return items
     }
 
+    /** How many apps setup puts in the dock: four, or one for each column on a narrower grid. */
+    fun setupDockSize(columns: Int): Int = minOf(4, columns)
+
     /** As many home pages as anyone sensibly needs, and few enough that the dots still fit. */
     const val MAX_PAGES = 8
 

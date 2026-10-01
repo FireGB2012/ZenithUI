@@ -280,12 +280,14 @@ private fun MiniHome(
                 color = palette.onGlass.copy(alpha = 0.85f),
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Medium,
-                modifier = Modifier.padding(
-                    start = 12.dp + (page?.let { with(density) { (it.originX + it.leftLine).toDp() } } ?: 14.dp),
-                    end = 26.dp,
-                    top = 8.dp,
-                    bottom = 8.dp,
-                ),
+                modifier = Modifier
+                    .padding(horizontal = 12.dp)
+                    .padding(
+                        start = page?.let { with(density) { (it.originX + it.leftLine).toDp() } } ?: 14.dp,
+                        end = 14.dp,
+                        top = 8.dp,
+                        bottom = 8.dp,
+                    ),
             )
 
             BoxWithConstraints(
@@ -375,11 +377,13 @@ private fun MiniHome(
                 val g = page
                 HomeSearchBar(
                     onSearch = {},
-                    modifier = Modifier.padding(
-                        start = 12.dp + (g?.let { with(density) { (it.originX + it.leftLine).toDp() } } ?: 14.dp),
-                        end = 12.dp + (g?.let { with(density) { (it.width - it.originX - it.rightLine).toDp() } } ?: 14.dp),
-                        bottom = 10.dp,
-                    ),
+                    modifier = Modifier
+                        .padding(horizontal = 12.dp)
+                        .padding(
+                            start = g?.let { with(density) { (it.originX + it.leftLine).toDp() } } ?: 14.dp,
+                            end = g?.let { with(density) { (it.width - it.originX - it.rightLine).toDp() } } ?: 14.dp,
+                            bottom = 10.dp,
+                        ),
                 )
             }
 
@@ -402,13 +406,13 @@ private fun MiniHome(
                             if (g != null && pane != null) {
                                 Modifier
                                     .padding(start = with(density) { (g.originX + pane.first).toDp() })
-                                    .width(with(density) { (pane.second - pane.first).toDp() })
+                                    .size(with(density) { (pane.second - pane.first).toDp() }, with(density) { g.dockHeight.toDp() })
                             } else {
                                 Modifier.fillMaxWidth()
                             }
                         )
                         .glass(ZenithShapes.panel, strength = 1.15f, material = GlassMaterial.Clear)
-                        .padding(vertical = 12.dp),
+                        .then(if (g == null) Modifier.padding(vertical = 12.dp) else Modifier),
                     horizontalArrangement = arrangement ?: Arrangement.SpaceEvenly,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -424,7 +428,7 @@ private fun MiniHome(
                                 AppIcon(
                                     key = appKey,
                                     label = appsByKey[appKey]?.label ?: "",
-                                    size = page?.iconDp?.dp ?: STANDARD_ICON_SIZE,
+                                    size = page?.let { with(density) { it.dockIcon(dock.size).toDp() } } ?: STANDARD_ICON_SIZE,
                                     shape = ZenithShapes.forIconShape(settings.iconShape),
                                     modifier = Modifier.graphicsLayer {
                                         alpha = appear.coerceIn(0f, 1f)

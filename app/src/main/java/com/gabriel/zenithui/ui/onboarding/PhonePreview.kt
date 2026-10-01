@@ -279,7 +279,12 @@ private fun MiniHome(
                 color = palette.onGlass.copy(alpha = 0.85f),
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Medium,
-                modifier = Modifier.padding(horizontal = 26.dp, vertical = 8.dp),
+                modifier = Modifier.padding(
+                    start = 12.dp + (page?.let { with(density) { (it.originX + it.leftLine).toDp() } } ?: 14.dp),
+                    end = 26.dp,
+                    top = 8.dp,
+                    bottom = 8.dp,
+                ),
             )
 
             BoxWithConstraints(

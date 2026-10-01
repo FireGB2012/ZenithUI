@@ -59,6 +59,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -84,6 +85,7 @@ import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.gabriel.zenithui.ZenithViewModel
@@ -91,6 +93,7 @@ import com.gabriel.zenithui.data.AppCell
 import com.gabriel.zenithui.data.Backup
 import com.gabriel.zenithui.data.DropPlanner
 import com.gabriel.zenithui.data.FolderCell
+import com.gabriel.zenithui.data.HomeHeader
 import com.gabriel.zenithui.data.HomeItem
 import com.gabriel.zenithui.data.LayoutBuilder
 import com.gabriel.zenithui.data.ROW_UNITS
@@ -585,6 +588,14 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
 
     val density = LocalDensity.current
 
+    // The hour, for a greeting at the top of the page; looked at again every minute.
+    val hour by produceState(java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)) {
+        while (true) {
+            delay(60_000)
+            value = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
+        }
+    }
+
     /** The page in view as the drop planner sees it, measured from the grid actually drawn. */
     fun dropPage(): DropPlanner.Page =
         DropPlanner.pageFor(settings, settings.freeform && plus.active, drag.cellWidth / drag.cellHeight)
@@ -920,20 +931,39 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             val quickHold = remember(baseConfiguration) { QuickHold(baseConfiguration) }
             androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalViewConfiguration provides quickHold) {
             Column(Modifier.fillMaxSize()) {
-                Greeting(
-                    name = settings.userName,
-                    modifier = Modifier
-                        .statusBarsPadding()
-                        // Holding your name opens Customise too — always reachable, however full
-                        // the page underneath is.
-                        .pointerInput(Unit) {
-                            detectTapGestures(onLongPress = {
-                                haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
-                                showSheet(HomeSheet.Customize)
-                            })
-                        }
-                        .padding(horizontal = 26.dp, vertical = 8.dp),
-                )
+                // The page's left and right lines: the outer edges of the first and last columns'
+                // icons. What is written at the top starts on the left one, and the search bar
+                // runs from one to the other.
+                val geometry = drag.geometry
+                val leftLine = if (geometry != null) {
+                    PAGE_MARGIN + with(density) { (geometry.originX + geometry.leftLine).toDp() }
+                } else {
+                    26.dp
+                }
+                val rightLine = if (geometry != null) {
+                    PAGE_MARGIN + with(density) { (geometry.width - geometry.originX - geometry.rightLine).toDp() }
+                } else {
+                    26.dp
+                }
+                val header = HomeHeader.text(settings.header, settings.userName, hour)
+                if (header != null) {
+                    Greeting(
+                        text = header,
+                        modifier = Modifier
+                            .statusBarsPadding()
+                            // Holding it opens Customise too — always reachable, however full
+                            // the page underneath is.
+                            .pointerInput(Unit) {
+                                detectTapGestures(onLongPress = {
+                                    haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                                    showSheet(HomeSheet.Customize)
+                                })
+                            }
+                            .padding(start = leftLine, end = rightLine, top = 8.dp, bottom = 8.dp),
+                    )
+                } else {
+                    Spacer(Modifier.statusBarsPadding().height(8.dp))
+                }
 
                 Box(
                     Modifier
@@ -1459,14 +1489,16 @@ private fun DefaultLauncherHint(
 }
 
 @Composable
-private fun Greeting(name: String, modifier: Modifier = Modifier) {
+private fun Greeting(text: String, modifier: Modifier = Modifier) {
     val palette = LocalPalette.current
     Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(
-            text = if (name.isBlank()) "Zenith" else name,
+            text = text,
             color = palette.onGlass.copy(alpha = 0.85f),
             fontSize = 13.sp,
             fontWeight = FontWeight.Medium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }

@@ -87,6 +87,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.gabriel.zenithui.data.GridDensity
+import com.gabriel.zenithui.data.HomeHeader
 import com.gabriel.zenithui.data.IconPackInfo
 import com.gabriel.zenithui.data.IconPacks
 import com.gabriel.zenithui.data.IconShapes
@@ -360,6 +361,20 @@ private fun HomePageSettings(settings: ZenithSettings, onChange: ((ZenithSetting
         ToggleRow("Dock", "Its apps are kept while it is hidden", settings.showDock) { value ->
             onChange { it.copy(showDock = value) }
         }
+        GroupDivider()
+        ToggleRow("Search bar", "Above the dock, for your apps and the web", settings.searchBar) { value ->
+            onChange { it.copy(searchBar = value) }
+        }
+    }
+
+    Group(padding = 14.dp) {
+        Caption("Top of the page")
+        Spacer(Modifier.height(10.dp))
+        Segmented(
+            options = listOf(HomeHeader.NAME to "Name", HomeHeader.GREETING to "Greeting", HomeHeader.OFF to "Nothing"),
+            selected = settings.header,
+            onSelect = { value -> onChange { it.copy(header = value) } },
+        )
     }
 
     Group(padding = 14.dp) {

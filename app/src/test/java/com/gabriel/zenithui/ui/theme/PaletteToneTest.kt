@@ -2,6 +2,7 @@ package com.gabriel.zenithui.ui.theme
 
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
+import com.gabriel.zenithui.data.ZenithSettings
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -39,6 +40,22 @@ class PaletteToneTest {
         assertNotEquals(sunset, aurora)
         assertNotEquals(Palettes.Frost.backdrop, sunset)
         assertNotEquals(Palettes.Midnight.backdrop, Palettes.Frost.toned(dark = true).backdrop)
+    }
+
+    @Test
+    fun `a wallpaper is painted in the theme's palette unless it was pinned to another`() {
+        val sunset = ZenithSettings(paletteId = "sunset")
+        assertEquals(Palettes.Sunset.toned(dark = false), Palettes.forWallpaper(sunset, dark = false))
+        assertEquals(Palettes.Sunset, Palettes.forWallpaper(sunset, dark = true))
+        val pinned = sunset.copy(wallpaperPalette = "aurora")
+        assertEquals(Palettes.Aurora, Palettes.forWallpaper(pinned, dark = true))
+        assertEquals(Palettes.Aurora.toned(dark = false), Palettes.forWallpaper(pinned, dark = false))
+    }
+
+    @Test
+    fun `a wallpaper pinned to the palette you made is painted in it`() {
+        val made = ZenithSettings(paletteId = "midnight", wallpaperPalette = Palettes.CUSTOM, customAccent = 0xFF112233)
+        assertEquals(Palettes.custom(made).accent, Palettes.forWallpaper(made, dark = true).accent)
     }
 
     @Test

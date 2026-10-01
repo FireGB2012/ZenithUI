@@ -207,4 +207,11 @@ object Palettes {
     /** Every palette by id, including the custom one when it is the one in use. */
     fun resolve(settings: ZenithSettings): ZenithPalette =
         if (settings.paletteId == CUSTOM) custom(settings) else byId(settings.paletteId)
+
+    /** The palette a Zenith wallpaper is painted in: the one it was pinned to, or the theme's, in the tone in use. */
+    fun forWallpaper(settings: ZenithSettings, dark: Boolean): ZenithPalette = when (settings.wallpaperPalette) {
+        "" -> resolve(settings)
+        CUSTOM -> custom(settings)
+        else -> byId(settings.wallpaperPalette)
+    }.toned(dark)
 }

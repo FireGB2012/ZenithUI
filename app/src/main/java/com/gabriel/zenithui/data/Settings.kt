@@ -48,6 +48,14 @@ data class ZenithSettings(
     val searchBar: Boolean = false,
     /** What is written at the top of the home screen: name | greeting | off. */
     val header: String = "name",
+    /** The Zenith design in use as the wallpaper, by its WallStyle name; empty for a photo or one set elsewhere. */
+    val wallpaperStyle: String = "",
+    /** The palette that wallpaper is pinned to, or empty to paint it in the theme's own. */
+    val wallpaperPalette: String = "",
+    /** Whether it is on the lock screen too. */
+    val wallpaperLock: Boolean = false,
+    /** Paint it again when the palette, or light and dark, changes. */
+    val wallpaperFollow: Boolean = true,
     /** The controls the Quick Toggles widget shows, in the order they appear. */
     val toggles: List<String> = listOf("torch", "wifi", "bluetooth", "focus"),
     /** How many home pages you have asked for. Empty trailing ones are forgotten again. */
@@ -117,6 +125,10 @@ data class ZenithSettings(
         put("showDock", showDock)
         put("searchBar", searchBar)
         put("header", header)
+        put("wallpaperStyle", wallpaperStyle)
+        put("wallpaperPalette", wallpaperPalette)
+        put("wallpaperLock", wallpaperLock)
+        put("wallpaperFollow", wallpaperFollow)
         put("toggles", JSONArray(toggles))
         put("plusTrialStart", plusTrialStart)
         put("plusPurchased", plusPurchased)
@@ -167,6 +179,10 @@ data class ZenithSettings(
                 showDock = o.optBoolean("showDock", d.showDock),
                 searchBar = o.optBoolean("searchBar", d.searchBar),
                 header = o.optString("header", d.header),
+                wallpaperStyle = o.optString("wallpaperStyle", d.wallpaperStyle),
+                wallpaperPalette = o.optString("wallpaperPalette", d.wallpaperPalette),
+                wallpaperLock = o.optBoolean("wallpaperLock", d.wallpaperLock),
+                wallpaperFollow = o.optBoolean("wallpaperFollow", d.wallpaperFollow),
                 toggles = o.optJSONArray("toggles").toStringList().ifEmpty { d.toggles },
                 plusTrialStart = o.optLong("plusTrialStart", d.plusTrialStart),
                 plusPurchased = o.optBoolean("plusPurchased", d.plusPurchased),

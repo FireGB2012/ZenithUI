@@ -124,9 +124,13 @@ The search bar stops being a grid widget.
   `i` sits at column position `(columns - n) / 2 + i`. With `n == columns` each icon is exactly
   under a column. With a different count the group is still on the grid's spacing, offset by half
   a column when the difference is odd, as on an iPhone.
-- The dock takes at most `columns` apps. A dock that already holds more keeps them, spread evenly,
-  and takes no more until it is back under the limit.
+- The dock takes at most `columns` apps. A dock that already holds more keeps them, spread evenly
+  and drawn a little smaller if that is what it takes to fit, and takes no more until it is back
+  under the limit.
 - Dock icon size stays the page's icon size.
+- The dock pane's height comes from the column width alone, never from the page's icons. On a
+  cramped page the icons shrink to fit their rows; if the dock shrank with them the page would
+  gain the room back, the icons would grow, and the two would chase each other on every frame.
 
 ### Header
 
@@ -148,6 +152,13 @@ version upgrades:
 4. `LayoutBuilder.settle` resolves any overlap, taking items from the top down so the higher one
    keeps its place and the other moves to the nearest opening. Anything with no room goes to the
    next page with room, as today.
+
+A layout with free placement on keeps its offsets and part rows; only what now overlaps moves, by
+as little as it can (an icon that was tucked onto the last step of a widget moves one step down).
+Free placement left switched on by someone whose Plus has ended is not in effect: their layout goes
+onto whole rows too, but only once Play has confirmed that nothing is bought, so a subscriber who
+is merely offline never has an arrangement undone. A layout already at version 2 is never run
+through the older repairs again.
 
 ### Tests
 

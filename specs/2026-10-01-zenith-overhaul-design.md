@@ -84,8 +84,9 @@ A new pure Kotlin class, `data/HomeGeometry.kt`, with no Compose or Android type
 position in whole pixels:
 
 - Input: page width and height in px, columns, rows, pixels per dp, labels on or off.
-- Column edges are `round(i * width / columns)` for `i` in `0..columns`; row edges likewise. A cell
-  is the space between two neighbouring edges, so neighbours always share an edge exactly.
+- Every cell is the same whole number of pixels wide and every row the same number tall. Pixels
+  left over when the page does not divide evenly are shared between the two outer edges, so no
+  cell is a pixel bigger than its neighbour and every inset is the same in every cell.
 - Output: icon size (today's `homeIconSize` rule), the icon rectangle and label strip of a cell, the
   frame of a widget or super icon for a column, row and span, the header's left inset, the search
   bar's frame, and the centre of each dock slot for a given number of dock apps.

@@ -1,0 +1,140 @@
+package com.gabriel.zenithui.data
+
+import kotlin.math.roundToInt
+
+/** A rectangle in whole pixels, measured from the top left corner of whatever it sits in. */
+data class PxRect(val left: Int, val top: Int, val right: Int, val bottom: Int) {
+    val width: Int get() = right - left
+    val height: Int get() = bottom - top
+}
+
+/**
+ * Where everything on a home page sits, in whole pixels. The page, the drop hint, the resize
+ * outline, the dock, the name at the top and the search bar all ask the same object, so two edges
+ * that should meet are one number rather than two roundings of it.
+ *
+ * Every cell is the same whole number of pixels wide and every row the same number tall. Pixels
+ * left over when the page does not divide evenly are shared between the outer edges ([originX],
+ * [originY]) rather than making some cells a pixel bigger than their neighbours.
+ */
+class HomeGeometry(
+    /** The page area in pixels: the screen less the page's own margins. */
+    val width: Int,
+    val height: Int,
+    val columns: Int,
+    val rows: Int,
+    /** Pixels per dp. */
+    val density: Float,
+    val showLabels: Boolean,
+) {
+    val cellWidth: Int = width / columns
+    val rowHeight: Int = height / rows
+
+    /** A row unit, a quarter of a row. Only free placement puts anything between rows. */
+    val unitHeight: Float = rowHeight / ROW_UNITS.toFloat()
+
+    val gridWidth: Int = cellWidth * columns
+    val gridHeight: Int = rowHeight * rows
+
+    /** The grid's top left corner inside the page area. */
+    val originX: Int = (width - gridWidth) / 2
+    val originY: Int = (height - gridHeight) / 2
+
+    /** The icon size in dp, as it is handed to an icon, and the pixels that comes to. */
+    val iconDp: Float = iconSizeDp(cellWidth / density, rowHeight / density, showLabels)
+    val icon: Int = (iconDp * density).roundToInt()
+
+    /** The strip a label is written in under an icon; nothing when labels are off. */
+    val label: Int = if (showLabels) (LABEL_DP * density).roundToInt() else 0
+
+    /** From a cell's left edge to its icon, and from the icon to the cell's right edge. */
+    val sideInset: Int = ((cellWidth - icon) / 2).coerceAtLeast(0)
+    val sideInsetEnd: Int = (cellWidth - icon - sideInset).coerceAtLeast(0)
+
+    /** From a row's top edge to its icons. */
+    val topInset: Int = ((rowHeight - icon - label) / 2).coerceAtLeast(0)
+
+    /** From the bottom of a row's labels to the bottom edge of the row. */
+    val underInset: Int = (rowHeight - topInset - icon - label).coerceAtLeast(0)
+
+    /** Where an icon is drawn inside its own cell. */
+    val iconFrame: PxRect = PxRect(sideInset, topInset, sideInset + icon, topInset + icon)
+
+    /** The page's left line, the left edge of the first column's icons, from the grid's left edge. */
+    val leftLine: Int get() = sideInset
+
+    /** The page's right line, the right edge of the last column's icons, from the grid's left edge. */
+    val rightLine: Int get() = gridWidth - sideInsetEnd
+
+    /**
+     * Where a widget [spanX] columns wide and [spanY] row units tall is drawn inside the cells it
+     * covers: from the left edge of the icon in its first column to the right edge of the icon in
+     * its last, and from the top of the icons in its first row to the bottom of the labels in its
+     * last. That leaves the same gap under a widget as under any icon's label. One shorter than a
+     * row, which only free placement allows, keeps its whole height.
+     */
+    fun widgetFrame(spanX: Int, spanY: Int): PxRect {
+        val bottom = (spanY * unitHeight).roundToInt()
+        val right = spanX * cellWidth - sideInsetEnd
+        return if (spanY >= ROW_UNITS) {
+            PxRect(sideInset, topInset, right, bottom - underInset)
+        } else {
+            PxRect(sideInset, 0, right, bottom)
+        }
+    }
+
+    /**
+     * Where a super icon [spanX] columns wide and [rowsTall] rows tall is drawn inside the cells
+     * it covers. It runs from the left edge of the icon in its first column to the right edge of
+     * the icon in its last. Going down, each row past the first adds a column's width rather than
+     * a whole row, so it keeps a wide one's proportions: a 2 by 2 is square. It sits centred
+     * between the top of the icons in its first row and the bottom of the icons in its last.
+     */
+    fun superIconFrame(spanX: Int, rowsTall: Int): PxRect {
+        val span = rowHeight * (rowsTall - 1) + icon
+        val height = minOf(cellWidth * (rowsTall - 1) + icon, span)
+        val top = topInset + (span - height) / 2
+        return PxRect(sideInset, top, sideInset + cellWidth * (spanX - 1) + icon, top + height)
+    }
+
+    /**
+     * The left edge of dock icon [index] of [count], from the grid's left edge. The dock stands on
+     * the page's own columns: with one app for each column every icon is under its column, and
+     * with fewer the group is centred on the same spacing. More than fit are spread evenly.
+     */
+    fun dockIconLeft(index: Int, count: Int): Int {
+        if (count > columns) {
+            val slot = gridWidth.toFloat() / count
+            return ((index + 0.5f) * slot - icon / 2f).roundToInt()
+        }
+        // Counted in half columns, so a group one short of the columns sits between them.
+        val halfColumns = (columns - count) + 2 * index
+        return sideInset + halfColumns * cellWidth / 2
+    }
+
+    /** The left and right edges of the dock's pane for [count] apps: one column for each icon. */
+    fun dockPane(count: Int): Pair<Int, Int> {
+        if (count <= 0 || count >= columns) return 0 to gridWidth
+        val left = dockIconLeft(0, count) - sideInset
+        return left to left + count * cellWidth
+    }
+
+    companion object {
+        /** The height of the strip an 11sp label sits in, in dp. */
+        const val LABEL_DP = 20f
+
+        /**
+         * How big an icon is, worked out from the cell it sits in rather than chosen: about three
+         * quarters of the cell's width, never so tall that it pushes its label out, and kept
+         * between sizes that read well.
+         */
+        fun iconSizeDp(cellWidthDp: Float, rowHeightDp: Float, showLabels: Boolean): Float {
+            val labelSpace = if (showLabels) 24f else 4f
+            return minOf(
+                (cellWidthDp * 0.75f).coerceIn(54f, 72f),
+                (rowHeightDp - labelSpace - 8f).coerceAtLeast(28f),
+                (cellWidthDp - 8f).coerceAtLeast(28f),
+            )
+        }
+    }
+}

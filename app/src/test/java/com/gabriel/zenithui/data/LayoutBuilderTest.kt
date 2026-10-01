@@ -81,6 +81,11 @@ class LayoutBuilderTest {
     }
 
     @Test
+    fun `the dock holds one app for each column and never fewer than four`() {
+        assertEquals(listOf(4, 4, 5, 8), listOf(3, 4, 5, 8).map { LayoutBuilder.dockLimit(it) })
+    }
+
+    @Test
     fun `setup puts widgets and icons on whole rows and leaves the search bar out`() {
         val grid = PageGrid(4, 20)
         assertEquals(0 to 0, grid.place(2, 8, rowStep = ROW_UNITS))

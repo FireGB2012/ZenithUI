@@ -698,8 +698,7 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
 
     // ---------------------------------------------------------------- dock
 
-    /** How many apps the dock takes: one for each column of the page, so each can stand under one. */
-    private fun dockLimit(): Int = settings.value.columns
+    private fun dockLimit(): Int = LayoutBuilder.dockLimit(settings.value.columns)
 
     /** Adds [key] to the dock or takes it off. False when it was to be added and the dock is full. */
     fun toggleDock(key: String): Boolean {

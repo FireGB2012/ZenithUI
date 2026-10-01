@@ -124,7 +124,8 @@ The search bar stops being a grid widget.
   `i` sits at column position `(columns - n) / 2 + i`. With `n == columns` each icon is exactly
   under a column. With a different count the group is still on the grid's spacing, offset by half
   a column when the difference is odd, as on an iPhone.
-- The dock takes at most `columns` apps. A dock that already holds more keeps them, spread evenly
+- The dock takes at most `columns` apps, and never fewer than four: on a three-column grid a
+  fourth is allowed, spread evenly with the others. A dock that already holds more keeps them, spread evenly
   and drawn a little smaller if that is what it takes to fit, and takes no more until it is back
   under the limit.
 - Dock icon size stays the page's icon size.

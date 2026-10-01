@@ -43,8 +43,9 @@ built entirely in Jetpack Compose.
   the first match or, when nothing matches, the web search.
 - **Every menu is a bottom sheet** — item menus, Customise, widget picker, settings. Nothing needs
   a second hand.
-- **Dock** — one pinned app for each column of the page (four on most phones), each standing
-  under the icons above it; pin from any app's long-press menu.
+- **Dock** — one pinned app for each column of the page, each standing under the icons above it,
+  and never fewer than four (on a three-column grid the four are spread evenly); pin from any
+  app's long-press menu.
 
 ## Built-in widgets
 

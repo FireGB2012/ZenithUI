@@ -64,9 +64,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalDensity
 import com.gabriel.zenithui.data.AppCell
 import com.gabriel.zenithui.data.AppInfo
 import com.gabriel.zenithui.data.FolderCell
+import com.gabriel.zenithui.data.HomeGeometry
 import com.gabriel.zenithui.data.HomeItem
 import com.gabriel.zenithui.data.ROW_UNITS
 import com.gabriel.zenithui.data.WidgetCell
@@ -74,8 +76,6 @@ import com.gabriel.zenithui.data.ZenithSettings
 import com.gabriel.zenithui.ui.common.AppIcon
 import com.gabriel.zenithui.ui.home.HomeItemContent
 import com.gabriel.zenithui.ui.home.STANDARD_ICON_SIZE
-import com.gabriel.zenithui.ui.home.homeIconSize
-import com.gabriel.zenithui.ui.home.iconLines
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.ZenithShapes
 import com.gabriel.zenithui.ui.theme.GlassMaterial
@@ -252,8 +252,9 @@ private fun MiniHome(
     val backdrop = Brush.verticalGradient(
         listOf(palette.accent.copy(alpha = 0.55f), palette.backdrop.getOrElse(1) { palette.backdrop.first() }, palette.backdrop.last())
     )
-    // The page settles its icon size from its cells; the dock uses the same, as the real one does.
-    var pageIcon by remember { mutableStateOf(STANDARD_ICON_SIZE) }
+    // The page settles where everything sits; the name, the search bar and the dock read the same.
+    var page by remember { mutableStateOf<HomeGeometry?>(null) }
+    val density = LocalDensity.current
 
     Box(
         Modifier
@@ -286,12 +287,14 @@ private fun MiniHome(
                     .fillMaxWidth()
                     .padding(horizontal = 12.dp, vertical = 4.dp)
             ) {
-                val cellWidth = maxWidth / settings.columns
-                val cellHeight = maxHeight / (settings.rows * ROW_UNITS)
-                val rowHeight = cellHeight * ROW_UNITS
-                val iconSize = homeIconSize(cellWidth, rowHeight, settings.showLabels)
-                val lines = iconLines(cellWidth, rowHeight, iconSize, settings.showLabels)
-                SideEffect { pageIcon = iconSize }
+                val geometry = remember(constraints.maxWidth, constraints.maxHeight, settings.columns, settings.rows, density.density, settings.showLabels) {
+                    HomeGeometry(constraints.maxWidth, constraints.maxHeight, settings.columns, settings.rows, density.density, settings.showLabels)
+                }
+                val cellWidth = with(density) { geometry.cellWidth.toDp() }
+                val cellHeight = with(density) { geometry.unitHeight.toDp() }
+                val originX = with(density) { geometry.originX.toDp() }
+                val originY = with(density) { geometry.originY.toDp() }
+                SideEffect { page = geometry }
 
                 items.forEachIndexed { index, item ->
                     key(stableKey(item)) {
@@ -302,8 +305,8 @@ private fun MiniHome(
                             label = "appear",
                         )
                         // Adding or removing a widget moves the others; they glide rather than jump.
-                        val x by animateDpAsState(cellWidth * item.col, spring(dampingRatio = 0.9f, stiffness = 320f), label = "x")
-                        val y by animateDpAsState(cellHeight * item.row, spring(dampingRatio = 0.9f, stiffness = 320f), label = "y")
+                        val x by animateDpAsState(originX + cellWidth * item.col, spring(dampingRatio = 0.9f, stiffness = 320f), label = "x")
+                        val y by animateDpAsState(originY + cellHeight * item.row, spring(dampingRatio = 0.9f, stiffness = 320f), label = "y")
                         Box(
                             Modifier
                                 .offset(x, y)
@@ -320,8 +323,7 @@ private fun MiniHome(
                                 item = item,
                                 settings = settings,
                                 appsByKey = appsByKey,
-                                iconSize = iconSize,
-                                lines = lines,
+                                geometry = geometry,
                                 onSearch = {},
                                 onNoteChange = {},
                             )
@@ -390,7 +392,7 @@ private fun MiniHome(
                                 AppIcon(
                                     key = appKey,
                                     label = appsByKey[appKey]?.label ?: "",
-                                    size = pageIcon,
+                                    size = page?.iconDp?.dp ?: STANDARD_ICON_SIZE,
                                     shape = ZenithShapes.forIconShape(settings.iconShape),
                                     modifier = Modifier.graphicsLayer {
                                         alpha = appear.coerceIn(0f, 1f)

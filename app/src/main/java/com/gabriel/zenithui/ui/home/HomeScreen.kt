@@ -1067,7 +1067,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                         if (drag.cellWidth > 0f && drag.cellHeight > 0f) {
                             // The cell that puts a home screen icon exactly where the dock icon was
                             // let go; from there it is put down like any icon on the page.
-                            val iconMiddle = with(density) { (drag.lines?.top ?: 0.dp).toPx() } + drag.iconSizePx / 2f
+                            val iconMiddle = (drag.geometry?.topInset ?: 0) + drag.iconSizePx / 2f
                             val ghost = Offset(
                                 iconCentre.x - drag.gridOrigin.x - drag.cellWidth / 2f,
                                 iconCentre.y - drag.gridOrigin.y - iconMiddle,

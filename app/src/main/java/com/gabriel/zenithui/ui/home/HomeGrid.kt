@@ -10,6 +10,8 @@ import androidx.compose.animation.core.AnimationSpec
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.zIndex
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -89,7 +91,9 @@ import com.gabriel.zenithui.data.AppCell
 import com.gabriel.zenithui.data.AppInfo
 import com.gabriel.zenithui.data.DropPlanner
 import com.gabriel.zenithui.data.FolderCell
+import com.gabriel.zenithui.data.HomeGeometry
 import com.gabriel.zenithui.data.HomeItem
+import com.gabriel.zenithui.data.PxRect
 import com.gabriel.zenithui.data.ROW_UNITS
 import com.gabriel.zenithui.data.WidgetCell
 import com.gabriel.zenithui.data.Widgets
@@ -136,8 +140,8 @@ class HomeDragState {
     /** The same in pixels, for telling how close to an icon's middle the carried one is. */
     var iconSizePx by mutableStateOf(0f)
 
-    /** The lines icons sit on in the live page, so the ghost is cut to them too. */
-    var lines by mutableStateOf<IconLines?>(null)
+    /** Where everything sits on the live page, so the ghost and the dock are cut to the same lines. */
+    var geometry by mutableStateOf<HomeGeometry?>(null)
 
     /**
      * What has stepped aside for the carried item while it rests over a spot, as a phone's launcher
@@ -248,31 +252,35 @@ fun HomePage(
     val firstIds = remember { items.map { it.id }.toSet() }
     val haptics = LocalHapticFeedback.current
 
-    BoxWithConstraints(
-        modifier = modifier
-            .fillMaxSize()
-            .onGloballyPositioned { coords ->
-                // Only the page in view owns the geometry drops are resolved against.
-                if (active) drag.gridOrigin = coords.positionInRoot()
-            },
-    ) {
-        val cellWidthPx = constraints.maxWidth.toFloat() / settings.columns
+    BoxWithConstraints(modifier.fillMaxSize()) {
+        val geometry = remember(constraints.maxWidth, constraints.maxHeight, settings.columns, settings.rows, density.density, settings.showLabels) {
+            HomeGeometry(constraints.maxWidth, constraints.maxHeight, settings.columns, settings.rows, density.density, settings.showLabels)
+        }
+        val cellWidthPx = geometry.cellWidth.toFloat()
         // One cell is a row unit tall; an icon spans ROW_UNITS of them.
-        val cellHeightPx = constraints.maxHeight.toFloat() / (settings.rows * ROW_UNITS)
+        val cellHeightPx = geometry.unitHeight
+        val iconSize = geometry.iconDp.dp
         if (active) {
             drag.cellWidth = cellWidthPx
             drag.cellHeight = cellHeightPx
+            drag.iconSize = iconSize
+            drag.iconSizePx = geometry.icon.toFloat()
+            drag.geometry = geometry
         }
         val cellWidthDp = with(density) { cellWidthPx.toDp() }
         val cellHeightDp = with(density) { cellHeightPx.toDp() }
-        val rowHeightDp = cellHeightDp * ROW_UNITS
-        val iconSize = homeIconSize(cellWidthDp, rowHeightDp, settings.showLabels)
-        if (active) {
-            drag.iconSize = iconSize
-            drag.iconSizePx = with(density) { iconSize.toPx() }
-        }
-        val lines = iconLines(cellWidthDp, rowHeightDp, iconSize, settings.showLabels)
-        if (active) drag.lines = lines
+
+        // The grid itself: every cell the same whole number of pixels, with any left over shared
+        // between the two edges. Everything below is placed from this box's corner.
+        Box(
+            Modifier
+                .padding(start = with(density) { geometry.originX.toDp() }, top = with(density) { geometry.originY.toDp() })
+                .size(with(density) { geometry.gridWidth.toDp() }, with(density) { geometry.gridHeight.toDp() })
+                .onGloballyPositioned { coords ->
+                    // Only the page in view owns the geometry drops are resolved against.
+                    if (active) drag.gridOrigin = coords.positionInRoot()
+                },
+        ) {
 
         // Drop hint for the spot the dragged item would land in. When something is already there
         // the hint still shows the spot, because that is where the item goes: what is there steps
@@ -320,43 +328,37 @@ fun HomePage(
                 ) {
                     if (dragged is AppCell && !dragged.isPlainIcon) {
                         // A super icon's hint is the icon itself, not the cells around it.
-                        val frame = superIconFrame(dragged.spanX, dragged.spanY / ROW_UNITS, cellWidthDp, rowHeightDp, iconSize)
-                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-                            Box(
-                                Modifier
-                                    .padding(top = lines.top + frame.drop)
-                                    .width(frame.width)
-                                    .height(frame.height)
-                                    .appearIn(fromScale = 0.8f, riseFrom = 0f)
-                                    .clip(RoundedCornerShape(minOf(frame.width, frame.height) * 0.26f))
-                                    .background(palette.onGlass.copy(alpha = 0.12f))
-                            )
-                        }
+                        val frame = geometry.superIconFrame(dragged.spanX, dragged.spanY / ROW_UNITS)
+                        val round = with(density) { minOf(frame.width, frame.height).toDp() } * 0.26f
+                        Box(
+                            Modifier
+                                .fillMaxSize()
+                                .pixelFrame(frame)
+                                .appearIn(fromScale = 0.8f, riseFrom = 0f)
+                                .clip(RoundedCornerShape(round))
+                                .background(palette.onGlass.copy(alpha = 0.12f))
+                        )
                     } else if (dragged is WidgetCell) {
                         Box(
                             Modifier
                                 .fillMaxSize()
-                                .toIconLines(lines, dragged.spanY)
+                                .pixelFrame(geometry.widgetFrame(dragged.spanX, dragged.spanY))
                                 .appearIn(fromScale = 0.8f, riseFrom = 0f)
                                 .clip(ZenithShapes.tile)
                                 .background(palette.onGlass.copy(alpha = 0.12f))
                         )
                     } else {
-                        // An icon is drawn above its label, so the hint has to sit above the
-                        // middle of the cell by exactly the same amount or it looks offset.
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center,
-                        ) {
-                            Box(
-                                Modifier
-                                    .size(iconSize + 14.dp)
-                                    .appearIn(fromScale = 0.8f, riseFrom = 0f)
-                                    .clip(ZenithShapes.tile)
-                                    .background(palette.onGlass.copy(alpha = 0.12f))
-                            )
-                            if (settings.showLabels) Spacer(Modifier.height(LABEL_LINE_HEIGHT))
-                        }
+                        // Round the icon itself, a little bigger, so the hint sits where the icon will.
+                        val pad = with(density) { 7.dp.roundToPx() }
+                        val icon = geometry.iconFrame
+                        Box(
+                            Modifier
+                                .fillMaxSize()
+                                .pixelFrame(PxRect(icon.left - pad, icon.top - pad, icon.right + pad, icon.bottom + pad))
+                                .appearIn(fromScale = 0.8f, riseFrom = 0f)
+                                .clip(ZenithShapes.tile)
+                                .background(palette.onGlass.copy(alpha = 0.12f))
+                        )
                     }
                 }
             }
@@ -454,11 +456,9 @@ fun HomePage(
                     },
                 contentAlignment = Alignment.Center,
             ) {
-                // A slim widget only listens inside its own bar, so the empty part of the cell
-                // still belongs to the home screen.
-                val slim = item is WidgetCell && item.type == "search"
                 Box(
-                    modifier = (if (slim) Modifier.fillMaxWidth().height(SEARCH_BAR_HEIGHT) else Modifier.fillMaxSize())
+                    modifier = Modifier
+                        .fillMaxSize()
                         .onGloballyPositioned { contentRoot = it.positionInRoot() }
                         .then(if (item is AppCell) Modifier.launchOrigin(item.key) else Modifier)
                         .pointerInput(item.id, cellWidthPx, cellHeightPx, settings.columns, resizing) {
@@ -518,24 +518,21 @@ fun HomePage(
                         item = item,
                         settings = settings,
                         appsByKey = appsByKey,
-                        iconSize = iconSize,
-                        lines = lines,
+                        geometry = geometry,
                         onSearch = onSearch,
                         onNoteChange = onNoteChange,
                         onAmbient = onAmbient,
                     )
                 }
 
-                // Over the whole cell, not just the part that listens, so the outline lines up with
-                // the cell even for the slim search bar; and as a sibling on top, so a finger on
-                // the pointer is never also a press on the item.
+                // As a sibling on top, so a finger on the pointer is never also a press on the item.
                 if (resizing && (item is WidgetCell || item is AppCell)) {
                     ResizeFrame(
                         item = item,
                         cellWidthPx = cellWidthPx,
                         cellHeightPx = cellHeightPx,
-                        lines = lines,
-                        iconSize = iconSize,
+                        geometry = geometry,
+                        free = freePlacement,
                         columns = settings.columns,
                         unitRows = settings.rows * ROW_UNITS,
                         onResize = onResize,
@@ -544,6 +541,7 @@ fun HomePage(
                 }
             }
             }
+        }
         }
     }
 }
@@ -579,35 +577,32 @@ fun HomeItemContent(
     item: HomeItem,
     settings: ZenithSettings,
     appsByKey: Map<String, AppInfo>,
-    iconSize: androidx.compose.ui.unit.Dp = STANDARD_ICON_SIZE,
-    /** Where icons sit in their cells; widgets and super icons are cut to the same lines. */
-    lines: IconLines? = null,
+    /** The page it is on: icons, super icons and widgets are all cut to its lines. */
+    geometry: HomeGeometry,
     onSearch: () -> Unit,
     onNoteChange: (String) -> Unit,
     onAmbient: () -> Unit = {},
 ) {
+    val iconSize = geometry.iconDp.dp
     when (item) {
         is AppCell -> {
             val app = appsByKey[item.key]
             val label = app?.label ?: item.packageName.substringAfterLast('.')
-            val shape = ZenithShapes.forIconShape(settings.iconShape)
             when {
                 !item.isPlainIcon ->
                     SuperAppTile(
                         key = item.key,
                         label = label,
-                        iconSize = iconSize,
-                        lines = lines,
+                        frame = geometry.superIconFrame(item.spanX, (item.spanY / ROW_UNITS).coerceAtLeast(1)),
                         showLabel = settings.showLabels,
-                        spanX = item.spanX,
-                        rows = (item.spanY / ROW_UNITS).coerceAtLeast(1),
                     )
                 else -> AppTile(
                     key = item.key,
                     label = label,
                     iconSize = iconSize,
                     showLabel = settings.showLabels,
-                    shape = shape,
+                    shape = ZenithShapes.forIconShape(settings.iconShape),
+                    frame = geometry.iconFrame,
                 )
             }
         }
@@ -617,6 +612,7 @@ fun HomeItemContent(
             appsByKey = appsByKey,
             iconSize = iconSize,
             showLabel = settings.showLabels,
+            frame = geometry.iconFrame,
         )
 
         is WidgetCell -> ZenithWidget(
@@ -629,142 +625,58 @@ fun HomeItemContent(
             onAmbient = onAmbient,
             modifier = Modifier
                 .fillMaxSize()
-                .then(
-                    when {
-                        lines == null -> Modifier.padding(
-                            horizontal = 6.dp,
-                            vertical = if (item.type == "search") 0.dp else 6.dp,
-                        )
-                        // The slim search bar is exactly its own height, so only its sides are cut
-                        // to the icon lines; insetting it vertically would squeeze the bar.
-                        item.type == "search" -> Modifier.padding(horizontal = lines.side)
-                        else -> Modifier.toIconLines(lines, item.spanY)
-                    }
-                ),
+                .pixelFrame(geometry.widgetFrame(item.spanX, item.spanY)),
         )
     }
 }
 
 /**
- * A super icon, as on HyperOS: the app's icon stretched over [spanX] columns and [rows] rows, its
+ * A super icon, as on HyperOS: the app's icon stretched over several columns and rows, its
  * background filling the whole shape and its logo in the middle, with the name underneath like any
- * other icon. It sits on the same lines as every icon around it (see [superIconFrame]).
+ * other icon. [frame] is where the picture goes inside its cells (see [HomeGeometry.superIconFrame]),
+ * which puts it on the same lines as every icon around it.
  */
 @Composable
-private fun SuperAppTile(
-    key: String,
-    label: String,
-    iconSize: Dp,
-    lines: IconLines?,
-    showLabel: Boolean,
-    spanX: Int,
-    rows: Int,
-) {
+private fun SuperAppTile(key: String, label: String, frame: PxRect, showLabel: Boolean) {
     val palette = LocalPalette.current
-    BoxWithConstraints(Modifier.fillMaxSize()) {
-        val frame = superIconFrame(spanX, rows, cellWidth = maxWidth / spanX, rowHeight = maxHeight / rows, iconSize = iconSize)
-        val iconHeight = frame.height
-        val drop = frame.drop
-        Column(
-            Modifier
-                .fillMaxSize()
-                .then(
-                    if (lines != null) {
-                        Modifier.padding(start = lines.side, end = lines.side, top = lines.top + drop)
-                    } else {
-                        Modifier.padding(start = 6.dp, end = 6.dp, top = 4.dp + drop, bottom = 4.dp)
-                    }
-                ),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            WideAppIcon(
-                key = key,
-                label = label,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(iconHeight)
-                    .launchOrigin(key)
-                    .pressBounce(0.9f),
-            )
-            if (showLabel) {
-                Box(Modifier.height(LABEL_LINE_HEIGHT), contentAlignment = Alignment.BottomCenter) {
-                    Text(
-                        text = label,
-                        color = palette.onGlass,
-                        fontSize = 11.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        fontWeight = FontWeight.Medium,
-                    )
-                }
+    val density = LocalDensity.current
+    Column(Modifier.fillMaxSize()) {
+        Spacer(Modifier.height(with(density) { frame.top.toDp() }))
+        WideAppIcon(
+            key = key,
+            label = label,
+            modifier = Modifier
+                .padding(start = with(density) { frame.left.toDp() })
+                .size(with(density) { frame.width.toDp() }, with(density) { frame.height.toDp() })
+                .launchOrigin(key)
+                .pressBounce(0.9f),
+        )
+        if (showLabel) {
+            Box(Modifier.fillMaxWidth().height(LABEL_LINE_HEIGHT), contentAlignment = Alignment.BottomCenter) {
+                Text(
+                    text = label,
+                    color = palette.onGlass,
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    fontWeight = FontWeight.Medium,
+                )
             }
         }
     }
 }
 
-/**
- * How big an icon is, worked out from the cell it sits in rather than chosen: about three quarters
- * of the cell's width, never so tall that it pushes its label out, and kept between sizes that read
- * well. Because it follows the grid, icons, widgets and the gaps between them always stay in
- * proportion — pick a roomier grid and the icons grow with it.
- */
-fun homeIconSize(cellWidth: Dp, rowHeight: Dp, showLabels: Boolean): Dp {
-    val labelSpace = if (showLabels) 24.dp else 4.dp
-    return minOf(
-        (cellWidth * 0.75f).coerceIn(54.dp, 72.dp),
-        (rowHeight - labelSpace - 8.dp).coerceAtLeast(28.dp),
-        (cellWidth - 8.dp).coerceAtLeast(28.dp),
-    )
-}
-
 /** The size icons are drawn at away from the grid: the drawer, folders, the dock's fallback. */
 val STANDARD_ICON_SIZE = 60.dp
 
-/** A super icon's picture: its size, and how far below its first row's icon line it starts. */
-@Immutable
-data class SuperIconFrame(val width: Dp, val height: Dp, val drop: Dp)
-
 /**
- * Where a super icon [columns] wide and [rows] tall is drawn. It runs from the left edge of the
- * icon in its first column to the right edge of the icon in its last. Going down, each row past
- * the first adds a column's width rather than a whole row, so it keeps a wide one's proportions:
- * a 2 by 2 is square, a 1 by 2 is a 2 by 1 turned on its side. It sits centred between the top of
- * the icon in its first row and the bottom of the icon in its last. The icon, its drop hint and
- * its resize outline all come from here, so they are always the same size.
+ * Draws content at exactly [frame], in whole pixels, inside the space this is given. The space
+ * itself is taken whole, so the parent and anything beside it see no difference.
  */
-fun superIconFrame(columns: Int, rows: Int, cellWidth: Dp, rowHeight: Dp, iconSize: Dp): SuperIconFrame {
-    val span = rowHeight * (rows - 1) + iconSize
-    val height = minOf(cellWidth * (rows - 1) + iconSize, span)
-    return SuperIconFrame(width = cellWidth * (columns - 1) + iconSize, height = height, drop = (span - height) / 2)
+fun Modifier.pixelFrame(frame: PxRect): Modifier = layout { measurable, constraints ->
+    val placeable = measurable.measure(Constraints.fixed(frame.width.coerceAtLeast(0), frame.height.coerceAtLeast(0)))
+    layout(constraints.maxWidth, constraints.maxHeight) { placeable.placeRelative(frame.left, frame.top) }
 }
-
-/**
- * Where an icon sits inside its cell. Everything else on the page is cut to the same lines: a
- * widget starts at the left edge of the icon in its first column and ends at the right edge of the
- * icon in its last column, and runs from the top of the icons in its first row to the bottom of
- * the icons in its last row. That is what makes apps, super icons and widgets line up.
- */
-@Immutable
-data class IconLines(val side: Dp, val top: Dp, val bottom: Dp)
-
-fun iconLines(cellWidth: Dp, rowHeight: Dp, iconSize: Dp, showLabels: Boolean): IconLines {
-    val label = if (showLabels) LABEL_LINE_HEIGHT else 0.dp
-    val top = ((rowHeight - iconSize - label) / 2).coerceAtLeast(0.dp)
-    return IconLines(
-        side = ((cellWidth - iconSize) / 2).coerceAtLeast(0.dp),
-        top = top,
-        bottom = (rowHeight - top - iconSize).coerceAtLeast(0.dp),
-    )
-}
-
-/** Insets something spanning [spanY] row units to the icon lines of the cells it covers. */
-fun Modifier.toIconLines(lines: IconLines, spanY: Int): Modifier =
-    if (spanY >= ROW_UNITS) {
-        padding(start = lines.side, top = lines.top, end = lines.side, bottom = lines.bottom)
-    } else {
-        // Shorter than a row, like the search bar: only the sides can follow the icons.
-        padding(horizontal = lines.side)
-    }
 
 @Composable
 fun AppTile(
@@ -774,18 +686,34 @@ fun AppTile(
     showLabel: Boolean,
     shape: androidx.compose.ui.graphics.Shape = ZenithShapes.icon,
     modifier: Modifier = Modifier,
+    /** On a home page: exactly where the icon goes inside its cell. Elsewhere it is centred. */
+    frame: PxRect? = null,
 ) {
     val palette = LocalPalette.current
+    val density = LocalDensity.current
     Column(
-        modifier = modifier.padding(horizontal = 2.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
+        modifier = if (frame == null) modifier.padding(horizontal = 2.dp) else modifier.fillMaxSize(),
+        horizontalAlignment = if (frame == null) Alignment.CenterHorizontally else Alignment.Start,
+        verticalArrangement = if (frame == null) Arrangement.Center else Arrangement.Top,
     ) {
-        AppIcon(key = key, label = label, size = iconSize, shape = shape, modifier = Modifier.launchOrigin(key).pressBounce())
+        if (frame != null) Spacer(Modifier.height(with(density) { frame.top.toDp() }))
+        AppIcon(
+            key = key,
+            label = label,
+            size = iconSize,
+            shape = shape,
+            modifier = Modifier
+                .then(if (frame != null) Modifier.padding(start = with(density) { frame.left.toDp() }) else Modifier)
+                .launchOrigin(key)
+                .pressBounce(),
+        )
         if (showLabel) {
             // Always exactly LABEL_LINE_HEIGHT tall, so every icon's top edge sits on one line and
-            // widgets beside it can be cut to that line.
-            Box(Modifier.height(LABEL_LINE_HEIGHT), contentAlignment = Alignment.BottomCenter) {
+            // widgets beside it can be cut to the bottom of this strip.
+            Box(
+                (if (frame != null) Modifier.fillMaxWidth().padding(horizontal = 2.dp) else Modifier).height(LABEL_LINE_HEIGHT),
+                contentAlignment = Alignment.BottomCenter,
+            ) {
                 Text(
                     text = label,
                     color = palette.onGlass,
@@ -808,15 +736,20 @@ fun FolderTile(
     iconSize: androidx.compose.ui.unit.Dp,
     showLabel: Boolean,
     modifier: Modifier = Modifier,
+    /** On a home page: exactly where the folder goes inside its cell. Elsewhere it is centred. */
+    frame: PxRect? = null,
 ) {
     val palette = LocalPalette.current
+    val density = LocalDensity.current
     Column(
-        modifier = modifier,
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
+        modifier = if (frame == null) modifier else modifier.fillMaxSize(),
+        horizontalAlignment = if (frame == null) Alignment.CenterHorizontally else Alignment.Start,
+        verticalArrangement = if (frame == null) Arrangement.Center else Arrangement.Top,
     ) {
+        if (frame != null) Spacer(Modifier.height(with(density) { frame.top.toDp() }))
         Box(
             Modifier
+                .then(if (frame != null) Modifier.padding(start = with(density) { frame.left.toDp() }) else Modifier)
                 .size(iconSize)
                 .pressBounce()
                 .glass(ZenithShapes.icon, strength = 1.2f, material = GlassMaterial.Clear, interactive = true)
@@ -842,7 +775,10 @@ fun FolderTile(
             }
         }
         if (showLabel) {
-            Box(Modifier.height(LABEL_LINE_HEIGHT), contentAlignment = Alignment.BottomCenter) {
+            Box(
+                (if (frame != null) Modifier.fillMaxWidth() else Modifier).height(LABEL_LINE_HEIGHT),
+                contentAlignment = Alignment.BottomCenter,
+            ) {
                 Text(
                     text = folder.title,
                     color = palette.onGlass,
@@ -871,8 +807,9 @@ private fun BoxScope.ResizeFrame(
     item: HomeItem,
     cellWidthPx: Float,
     cellHeightPx: Float,
-    lines: IconLines,
-    iconSize: Dp,
+    geometry: HomeGeometry,
+    /** Plus free placement: a widget may be any number of row units tall. */
+    free: Boolean,
     columns: Int,
     unitRows: Int,
     onResize: (HomeItem, Int, Int) -> Boolean,
@@ -881,41 +818,39 @@ private fun BoxScope.ResizeFrame(
 ) {
     val palette = LocalPalette.current
     val haptics = LocalHapticFeedback.current
-    val density = LocalDensity.current
     val scope = rememberCoroutineScope()
     val finish by rememberUpdatedState(onDone)
     // The spans are read live: the gesture below outlives every size it passes through.
     val live by rememberUpdatedState(item)
     val isApp = item is AppCell
-    val side = with(density) { lines.side.toPx() }
-    val topInset = with(density) { lines.top.toPx() }
-    val bottomInset = with(density) { lines.bottom.toPx() }
+    val side = geometry.sideInset.toFloat()
+    val sideEnd = geometry.sideInsetEnd.toFloat()
+    val topInset = geometry.topInset.toFloat()
+    val underInset = geometry.underInset.toFloat()
     val pageRows = unitRows / ROW_UNITS
 
     // Where an app's picture starts and ends for each number of rows it could span, from the same
-    // frame the icon is drawn in (see superIconFrame); index 0 is unused.
+    // frame the icon is drawn in (see HomeGeometry.superIconFrame); index 0 is unused.
     val appTop = FloatArray(pageRows + 1)
     val appBottom = FloatArray(pageRows + 1)
-    with(density) {
-        for (rows in 1..pageRows) {
-            val frame = superIconFrame(1, rows, cellWidthPx.toDp(), (cellHeightPx * ROW_UNITS).toDp(), iconSize)
-            appTop[rows] = topInset + frame.drop.toPx()
-            appBottom[rows] = appTop[rows] + frame.height.toPx()
-        }
+    for (rows in 1..pageRows) {
+        val frame = geometry.superIconFrame(1, rows)
+        appTop[rows] = frame.top.toFloat()
+        appBottom[rows] = frame.bottom.toFloat()
     }
     fun rowsOf(spanY: Int) = (spanY / ROW_UNITS).coerceIn(1, pageRows.coerceAtLeast(1))
 
-    // The outline runs along the icon lines, exactly where the item is drawn, in the item's own
-    // pixels. Its right and bottom edges are the ones you pull.
+    // The outline runs along the lines the item is drawn on, in the item's own pixels. Its right
+    // and bottom edges are the ones you pull.
     fun top(spanY: Int) = when {
         isApp -> appTop[rowsOf(spanY)]
         spanY >= ROW_UNITS -> topInset
         else -> 0f
     }
-    fun restingRight(spanX: Int) = spanX * cellWidthPx - side
+    fun restingRight(spanX: Int) = spanX * cellWidthPx - sideEnd
     fun restingBottom(spanY: Int) = when {
         isApp -> appBottom[rowsOf(spanY)]
-        spanY >= ROW_UNITS -> spanY * cellHeightPx - bottomInset
+        spanY >= ROW_UNITS -> spanY * cellHeightPx - underInset
         else -> spanY * cellHeightPx
     }
 
@@ -939,15 +874,14 @@ private fun BoxScope.ResizeFrame(
 
     /** The size the outline is asking for, in cells across and row units down. */
     fun sizeFor(r: Float, b: Float): Pair<Int, Int> {
-        val spanX = ((r + side) / cellWidthPx).roundToInt().coerceIn(1, columns - live.col)
-        if (!isApp) {
-            val spanY = ((b + bottomInset) / cellHeightPx).roundToInt().coerceIn(1, unitRows - live.row)
-            return spanX to spanY
+        val spanX = ((r + sideEnd) / cellWidthPx).roundToInt().coerceIn(1, columns - live.col)
+        val room = ((unitRows - live.row) / ROW_UNITS).coerceIn(1, pageRows.coerceAtLeast(1))
+        return when {
+            // Whole rows: whichever height's picture ends nearest the finger.
+            isApp -> spanX to (((1..room).minByOrNull { abs(appBottom[it] - b) } ?: 1) * ROW_UNITS)
+            free -> spanX to ((b + underInset) / cellHeightPx).roundToInt().coerceIn(1, unitRows - live.row)
+            else -> spanX to (((1..room).minByOrNull { abs(restingBottom(it * ROW_UNITS) - b) } ?: 1) * ROW_UNITS)
         }
-        // Whole rows: whichever height's picture ends nearest the finger.
-        val room = ((unitRows - live.row) / ROW_UNITS).coerceIn(1, pageRows)
-        val rows = (1..room).minByOrNull { kotlin.math.abs(appBottom[it] - b) } ?: 1
-        return spanX to rows * ROW_UNITS
     }
 
     // The top edge only moves when an app changes how many rows it spans; it glides there too.
@@ -1156,6 +1090,7 @@ fun DragGhost(
     appsByKey: Map<String, AppInfo>,
 ) {
     val item = drag.item ?: return
+    val geometry = drag.geometry ?: return
     val density = LocalDensity.current
     val width = with(density) { (drag.cellWidth * item.spanX).toDp() }
     val height = with(density) { (drag.cellHeight * item.spanY).toDp() }
@@ -1195,8 +1130,7 @@ fun DragGhost(
             item = item,
             settings = settings,
             appsByKey = appsByKey,
-            iconSize = drag.iconSize,
-            lines = drag.lines,
+            geometry = geometry,
             onSearch = {},
             onNoteChange = {},
         )
@@ -1415,7 +1349,7 @@ fun DockBar(
 /** How far items spread apart, in cells per cell from the middle, as a page slides fully away. */
 private const val PAGE_PARALLAX = 0.35f
 
-/** Height of a single 11sp app label line, plus its spacer — the hint lines up with it. */
-private val LABEL_LINE_HEIGHT = 20.dp
+/** Height of a single 11sp app label line, plus its spacer — the same strip [HomeGeometry] counts. */
+private val LABEL_LINE_HEIGHT = HomeGeometry.LABEL_DP.dp
 
 val TransparentColor: Color = Color.Transparent

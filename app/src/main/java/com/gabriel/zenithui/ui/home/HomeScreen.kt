@@ -1261,7 +1261,11 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                         revealPage(viewModel.addAppToFirstFreeSlot(current.key))
                         closeDrawer()
                     },
-                    onToggleDock = { viewModel.toggleDock(current.key) },
+                    onToggleDock = {
+                    if (!viewModel.toggleDock(current.key)) {
+                        Toast.makeText(context, "The dock is full — drag one out first", Toast.LENGTH_SHORT).show()
+                    }
+                },
                     onAppInfo = { viewModel.openAppInfo(current.key) },
                     onUninstall = { viewModel.uninstall(current.key) },
                     onDismiss = { hideSheet() },

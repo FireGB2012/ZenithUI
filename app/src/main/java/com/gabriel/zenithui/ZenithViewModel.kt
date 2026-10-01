@@ -17,6 +17,7 @@ import com.gabriel.zenithui.data.GridDensity
 import com.gabriel.zenithui.data.HomeItem
 import com.gabriel.zenithui.data.IconLoader
 import com.gabriel.zenithui.data.LayoutBuilder
+import com.gabriel.zenithui.data.LayoutTidy
 import com.gabriel.zenithui.data.PageGrid
 import com.gabriel.zenithui.data.occupyItem
 import com.gabriel.zenithui.data.Plus
@@ -105,22 +106,7 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
     fun noteHomePrompt() = store.update { it.copy(homePrompts = it.homePrompts + 1) }
 
     init {
-        // Layouts saved before the grid gained sub-rows are rescaled once.
-        if (settings.value.layoutVersion < 1) {
-            if (layout.value.isNotEmpty()) store.setLayout(LayoutBuilder.upgradeToRowUnits(layout.value))
-            store.update { it.copy(layoutVersion = 1) }
-        }
-        // Undo that fourfold rescale on a home screen that already went through it.
-        LayoutBuilder.undoDoubleUpgrade(layout.value, settings.value.rows).let { fixed ->
-            if (fixed != layout.value) store.setLayout(fixed)
-        }
-        // A layout left in a state normal placement does not allow — offsets from free placement,
-        // widgets grown over their neighbours — is put right once, as soon as it is loaded.
-        if (!settings.value.freeform) {
-            val current = settings.value
-            val settled = LayoutBuilder.settle(layout.value, current.columns, current.rows, free = false)
-            if (settled != layout.value) store.setLayout(settled)
-        }
+        upgradeLayout()
         icons.prime(settings.value.iconPack, settings.value.iconShape)
         viewModelScope.launch { repository.refresh() }
         viewModelScope.launch { wallpaperSource.refresh() }
@@ -141,6 +127,35 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
             }
         }
         billing.refresh()
+    }
+
+    /**
+     * Brings whatever layout is stored up to today's rules: rescaled into row units, onto whole
+     * rows, and settled so nothing overlaps. Safe to run on a layout that already follows them,
+     * which is why a restored backup goes through it too.
+     */
+    private fun upgradeLayout() {
+        // Layouts saved before the grid gained sub-rows are rescaled once.
+        if (settings.value.layoutVersion < 1) {
+            if (layout.value.isNotEmpty()) store.setLayout(LayoutBuilder.upgradeToRowUnits(layout.value))
+            store.update { it.copy(layoutVersion = 1) }
+        }
+        // Undo that fourfold rescale on a home screen that already went through it.
+        LayoutBuilder.undoDoubleUpgrade(layout.value, settings.value.rows).let { fixed ->
+            if (fixed != layout.value) store.setLayout(fixed)
+        }
+        // Whole rows for everything, and the search bar as a setting rather than a widget.
+        if (settings.value.layoutVersion < LayoutTidy.VERSION) {
+            val (next, items) = LayoutTidy.upgrade(settings.value, layout.value)
+            store.restore(next, items)
+        }
+        // A layout left in a state normal placement does not allow — offsets from free placement,
+        // widgets grown over their neighbours — is put right once, as soon as it is loaded.
+        if (!settings.value.freeform) {
+            val current = settings.value
+            val settled = LayoutBuilder.settle(layout.value, current.columns, current.rows, free = false)
+            if (settled != layout.value) store.setLayout(settled)
+        }
     }
 
     // ---------------------------------------------------------------- Aura
@@ -304,6 +319,7 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
             ),
             items = items,
         )
+        upgradeLayout()
         viewModelScope.launch { icons.configure(restored.iconPack, restored.iconShape) }
         return true
     }
@@ -331,7 +347,7 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
         rows: Int,
     ) {
         val installed = repository.refresh()
-        val dock = repository.suggestedDock(4)
+        val dock = repository.suggestedDock(minOf(4, columns))
         val items = LayoutBuilder.build(repository, installed, widgets, columns, rows, dock)
         store.update {
             it.copy(
@@ -342,10 +358,12 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
                 columns = columns,
                 rows = rows,
                 dock = dock,
-                // Built just now, so already in row units. Without this a rerun of setup left the
-                // version at 0, and the next launch rescaled the new layout as if it were an old
-                // whole-row one — every widget four times too tall, every app below the page.
-                layoutVersion = 1,
+                // Choosing the search bar in setup switches on the bar above the dock.
+                searchBar = Widgets.Search.type in widgets,
+                // Built just now, so already under today's rules. Without this a rerun of setup
+                // left the version behind, and the next launch upgraded the new layout as if it
+                // were an old one — every widget four times too tall, every app below the page.
+                layoutVersion = LayoutTidy.VERSION,
             )
         }
         store.setLayout(items)
@@ -675,12 +693,18 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
 
     // ---------------------------------------------------------------- dock
 
-    fun toggleDock(key: String) = store.update { current ->
-        val dock = current.dock
-        current.copy(dock = if (key in dock) dock - key else (dock + key).takeLast(5))
+    /** How many apps the dock takes: one for each column of the page, so each can stand under one. */
+    private fun dockLimit(): Int = settings.value.columns
+
+    /** Adds [key] to the dock or takes it off. False when it was to be added and the dock is full. */
+    fun toggleDock(key: String): Boolean {
+        val dock = settings.value.dock
+        if (key !in dock && dock.size >= dockLimit()) return false
+        store.update { it.copy(dock = if (key in it.dock) it.dock - key else it.dock + key) }
+        return true
     }
 
-    fun setDock(keys: List<String>) = store.update { it.copy(dock = keys.take(5)) }
+    fun setDock(keys: List<String>) = store.update { it.copy(dock = keys.take(dockLimit())) }
 
     /**
      * Takes an app off the home screen and slots it into the dock at [index]. False when the dock
@@ -690,7 +714,7 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
         val cell = layout.value.firstOrNull { it.id == itemId } as? AppCell ?: return false
         val dock = settings.value.dock
         if (cell.key !in dock) {
-            if (dock.size >= 5) return false
+            if (dock.size >= dockLimit()) return false
             store.update { current ->
                 current.copy(dock = current.dock.toMutableList().apply { add(index.coerceIn(0, size), cell.key) })
             }

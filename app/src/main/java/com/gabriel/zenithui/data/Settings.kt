@@ -39,16 +39,15 @@ data class ZenithSettings(
      * any size the grid can hold instead of their designed range. Nothing may overlap either way.
      */
     val freeform: Boolean = false,
-    /**
-     * How many row units at the bottom of a widget are empty space an icon may tuck into. A
-     * widget is drawn cut to the icon lines, so under it is the strip where labels would go; how
-     * much of that can be given up depends on the screen, so the home screen works it out and
-     * keeps it here, where every placement rule — including the tidy on start-up — can read it.
-     */
+    /** No longer used: nothing tucks under a widget. Kept so that older backups still read. */
     val widgetTuck: Int = 0,
     val dock: List<String> = emptyList(),
     /** Whether the dock is shown. Its apps are kept either way, so turning it back on restores them. */
     val showDock: Boolean = true,
+    /** A search bar above the dock, between the page dots and the dock. */
+    val searchBar: Boolean = false,
+    /** What is written at the top of the home screen: name | greeting | off. */
+    val header: String = "name",
     /** The controls the Quick Toggles widget shows, in the order they appear. */
     val toggles: List<String> = listOf("torch", "wifi", "bluetooth", "focus"),
     /** How many home pages you have asked for. Empty trailing ones are forgotten again. */
@@ -56,7 +55,7 @@ data class ZenithSettings(
     val note: String = "",
     /** How many times we have shown the system "default home app" prompt. */
     val homePrompts: Int = 0,
-    /** 0 = rows only, 1 = rows divided into units. */
+    /** 0 = rows only, 1 = rows divided into units, 2 = everything on whole rows. */
     val layoutVersion: Int = 0,
 
     // ------------------------------------------------------------------ Zenith Plus
@@ -109,6 +108,8 @@ data class ZenithSettings(
         put("widgetTuck", widgetTuck)
         put("dock", JSONArray(dock))
         put("showDock", showDock)
+        put("searchBar", searchBar)
+        put("header", header)
         put("toggles", JSONArray(toggles))
         put("plusTrialStart", plusTrialStart)
         put("plusPurchased", plusPurchased)
@@ -157,6 +158,8 @@ data class ZenithSettings(
                 widgetTuck = o.optInt("widgetTuck", d.widgetTuck),
                 dock = o.optJSONArray("dock").toStringList(),
                 showDock = o.optBoolean("showDock", d.showDock),
+                searchBar = o.optBoolean("searchBar", d.searchBar),
+                header = o.optString("header", d.header),
                 toggles = o.optJSONArray("toggles").toStringList().ifEmpty { d.toggles },
                 plusTrialStart = o.optLong("plusTrialStart", d.plusTrialStart),
                 plusPurchased = o.optBoolean("plusPurchased", d.plusPurchased),

@@ -198,6 +198,8 @@ fun OnboardingFlow(
         glass = 0.85f,
         columns = columns,
         rows = rows,
+        // Choosing the search bar puts the bar above the dock, as it will on the real home screen.
+        searchBar = "search" in widgets,
     )
 
     // The page the preview shows is laid out by the same code that builds the real one.

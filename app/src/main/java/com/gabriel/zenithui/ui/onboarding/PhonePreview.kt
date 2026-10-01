@@ -75,6 +75,7 @@ import com.gabriel.zenithui.data.WidgetCell
 import com.gabriel.zenithui.data.ZenithSettings
 import com.gabriel.zenithui.ui.common.AppIcon
 import com.gabriel.zenithui.ui.home.HomeItemContent
+import com.gabriel.zenithui.ui.home.HomeSearchBar
 import com.gabriel.zenithui.ui.home.STANDARD_ICON_SIZE
 import com.gabriel.zenithui.ui.home.SlotArrangement
 import com.gabriel.zenithui.ui.theme.LocalPalette
@@ -368,6 +369,18 @@ private fun MiniHome(
                         modifier = Modifier.size(12.dp),
                     )
                 }
+            }
+
+            if (settings.searchBar) {
+                val g = page
+                HomeSearchBar(
+                    onSearch = {},
+                    modifier = Modifier.padding(
+                        start = 12.dp + (g?.let { with(density) { (it.originX + it.leftLine).toDp() } } ?: 14.dp),
+                        end = 12.dp + (g?.let { with(density) { (it.width - it.originX - it.rightLine).toDp() } } ?: 14.dp),
+                        bottom = 10.dp,
+                    ),
+                )
             }
 
             if (settings.showDock && dock.isNotEmpty()) {

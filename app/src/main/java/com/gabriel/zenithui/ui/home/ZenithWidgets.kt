@@ -1517,6 +1517,12 @@ private fun ColumnScope.TileText(toggle: Toggle, ink: Color) {
 
 // ---------------------------------------------------------------------- search
 
+/** The search bar that sits above the dock when it is switched on in settings. */
+@Composable
+fun HomeSearchBar(onSearch: () -> Unit, modifier: Modifier = Modifier) {
+    Box(modifier) { SearchBar(onSearch) }
+}
+
 @Composable
 private fun SearchWidget(onSearch: () -> Unit) {
     BoxWithConstraints(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {

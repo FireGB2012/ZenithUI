@@ -1085,6 +1085,14 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                         .padding(vertical = 10.dp),
                 )
 
+                // From the first column's icons to the last column's, like everything on the page.
+                if (settings.searchBar) {
+                    HomeSearchBar(
+                        onSearch = { openDrawer(search = true) },
+                        modifier = Modifier.padding(start = leftLine, end = rightLine, bottom = 10.dp),
+                    )
+                }
+
                 if (settings.showDock) DockBar(
                     keys = settings.dock,
                     appsByKey = appsByKey,

@@ -361,7 +361,7 @@ fun WidgetPickerSheet(
             message?.let {
                 Text(it, color = palette.onGlassMuted, fontSize = 12.sp, modifier = Modifier.padding(8.dp))
             }
-            Widgets.all.forEachIndexed { index, spec ->
+            Widgets.placeable.forEachIndexed { index, spec ->
                 MenuRow(
                     icon = Icons.Rounded.Add,
                     label = spec.title,
@@ -385,7 +385,7 @@ fun WidgetPickerSheet(
                     icon = Icons.Rounded.AutoAwesome,
                     label = spec.title,
                     subtitle = spec.description,
-                    index = Widgets.all.size + index,
+                    index = Widgets.placeable.size + index,
                 ) { add(spec.type) }
             }
         }

@@ -126,25 +126,37 @@ fun Modifier.pressBounce(pressedScale: Float = 0.88f, enabled: Boolean = true): 
         }
 }
 
-/** Fades, lifts and scales content in once, optionally staggered behind its neighbours. */
+/**
+ * Fades, lifts and scales content in, optionally staggered behind its neighbours. Once, unless
+ * [replay] changes, when it plays again: the app drawer's rows rise in every time it opens, not
+ * only the first. With movement reduced it is a quick fade where the content stands, all at once.
+ */
 @Composable
 fun Modifier.appearIn(
     delayMillis: Int = 0,
     fromScale: Float = 0.84f,
     riseFrom: Float = 28f,
+    replay: Any? = Unit,
 ): Modifier {
-    val progress = remember { Animatable(0f) }
-    LaunchedEffect(Unit) {
-        if (delayMillis > 0) delay(delayMillis.toLong())
-        progress.animateTo(1f, spring(dampingRatio = 0.55f, stiffness = 170f))
+    val reduced = LocalMotionLevel.current.reduced
+    val progress = remember(replay) { Animatable(0f) }
+    LaunchedEffect(replay) {
+        if (reduced) {
+            progress.animateTo(1f, tween(Motion.REDUCED_MS))
+        } else {
+            if (delayMillis > 0) delay(delayMillis.toLong())
+            progress.animateTo(1f, spring(dampingRatio = 0.55f, stiffness = 170f))
+        }
     }
     return this.graphicsLayer {
         val value = progress.value
-        alpha = value
-        val scale = fromScale + (1f - fromScale) * value
-        scaleX = scale
-        scaleY = scale
-        translationY = (1f - value) * riseFrom
+        alpha = value.coerceIn(0f, 1f)
+        if (!reduced) {
+            val scale = fromScale + (1f - fromScale) * value
+            scaleX = scale
+            scaleY = scale
+            translationY = (1f - value) * riseFrom
+        }
     }
 }
 

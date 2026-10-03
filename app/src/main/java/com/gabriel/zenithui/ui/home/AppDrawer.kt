@@ -156,7 +156,10 @@ fun AppDrawer(
 
     // The drawer stays composed between openings, so tidy it up once it is fully closed.
     val closed = progress < 0.01f
+    // Counts the openings, so the first screenful rises in each time and not only the first.
+    var opening by remember { androidx.compose.runtime.mutableIntStateOf(0) }
     LaunchedEffect(closed) {
+        if (!closed) opening++
         if (closed) {
             query = ""
             openGroup = null
@@ -333,7 +336,7 @@ fun AppDrawer(
                                     .animateItem()
                                     .then(
                                         if (index < 6 && gridState.firstVisibleItemIndex == 0) {
-                                            Modifier.appearIn(delayMillis = staggerDelay(index), riseFrom = 26f)
+                                            Modifier.appearIn(delayMillis = staggerDelay(index), riseFrom = 26f, replay = opening)
                                         } else {
                                             Modifier
                                         }
@@ -353,7 +356,7 @@ fun AppDrawer(
                                 .animateItem()
                                 .then(
                                     if (stagger) {
-                                        Modifier.appearIn(delayMillis = staggerDelay(index), riseFrom = 26f)
+                                        Modifier.appearIn(delayMillis = staggerDelay(index), riseFrom = 26f, replay = opening)
                                     } else {
                                         Modifier
                                     }

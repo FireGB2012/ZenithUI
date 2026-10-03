@@ -16,6 +16,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -57,6 +58,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
@@ -75,6 +81,8 @@ import com.gabriel.zenithui.data.WallStyle
 import com.gabriel.zenithui.data.WallpaperArt
 import com.gabriel.zenithui.data.ZenithSettings
 import com.gabriel.zenithui.data.findActivity
+import com.gabriel.zenithui.ui.common.LocalMotionLevel
+import com.gabriel.zenithui.ui.common.Motion
 import com.gabriel.zenithui.ui.common.pressBounce
 import com.gabriel.zenithui.ui.onboarding.PrimaryButton
 import com.gabriel.zenithui.ui.onboarding.Segmented
@@ -132,6 +140,10 @@ fun WallpaperSheet(
     var filter by remember { mutableStateOf(current.id) }
     var shelf by remember { mutableStateOf<WallGroup?>(null) }
     var picked by remember { mutableStateOf<Pair<WallStyle, ZenithPalette>?>(null) }
+    // Where the thumbnail that was tapped sits within the sheet, for its preview to grow out of.
+    var pagesAt by remember { mutableStateOf(Rect.Zero) }
+    var growFrom by remember { mutableStateOf(TransformOrigin.Center) }
+    val reduced = LocalMotionLevel.current.reduced
     LaunchedEffect(visible) {
         if (visible) {
             filter = current.id
@@ -169,10 +181,18 @@ fun WallpaperSheet(
         AnimatedContent(
             targetState = picked,
             transitionSpec = {
-                (fadeIn(tween(240, delayMillis = 40)) + scaleIn(spring(dampingRatio = 1f, stiffness = 400f), initialScale = 0.96f))
-                    .togetherWith(fadeOut(tween(120)))
-                    .using(SizeTransform(clip = false) { _, _ -> spring(dampingRatio = 1f, stiffness = 380f, visibilityThreshold = IntSize(1, 1)) })
+                val opening = targetState != null
+                when {
+                    reduced -> fadeIn(tween(Motion.REDUCED_MS)).togetherWith(fadeOut(tween(Motion.REDUCED_MS)))
+                    // The preview grows out of the thumbnail that was tapped...
+                    opening -> (fadeIn(tween(200)) + scaleIn(Motion.open(), initialScale = 0.3f, transformOrigin = growFrom))
+                        .togetherWith(fadeOut(tween(160)))
+                    // ...and goes back into it.
+                    else -> fadeIn(tween(240, delayMillis = 80))
+                        .togetherWith(fadeOut(tween(200)) + scaleOut(Motion.close(), targetScale = 0.3f, transformOrigin = growFrom))
+                }.using(SizeTransform(clip = false) { _, _ -> spring(dampingRatio = 1f, stiffness = 380f, visibilityThreshold = IntSize(1, 1)) })
             },
+            modifier = Modifier.onGloballyPositioned { pagesAt = it.boundsInRoot() },
             label = "wallpaperPage",
         ) { selection ->
             if (selection == null) {
@@ -186,7 +206,15 @@ fun WallpaperSheet(
                     onFilter = { filter = it },
                     shelf = shelf,
                     onShelf = { shelf = it },
-                    onPick = { style, palette -> picked = style to palette },
+                    onPick = { style, palette, centre ->
+                        if (!pagesAt.isEmpty) {
+                            growFrom = TransformOrigin(
+                                ((centre.x - pagesAt.left) / pagesAt.width).coerceIn(0f, 1f),
+                                ((centre.y - pagesAt.top) / pagesAt.height).coerceIn(0f, 1f),
+                            )
+                        }
+                        picked = style to palette
+                    },
                     onFollow = onFollow,
                     onPhotos = {
                         // The sheet stays open underneath the picker, so its answer has somewhere to land.
@@ -234,7 +262,8 @@ private fun Browse(
     onFilter: (String) -> Unit,
     shelf: WallGroup?,
     onShelf: (WallGroup?) -> Unit,
-    onPick: (WallStyle, ZenithPalette) -> Unit,
+    /** A design was tapped: which, in which theme, and where on screen the middle of its thumbnail is. */
+    onPick: (WallStyle, ZenithPalette, Offset) -> Unit,
     onFollow: (Boolean) -> Unit,
     onPhotos: () -> Unit,
     onOtherApp: () -> Unit,
@@ -298,7 +327,7 @@ private fun Browse(
                                 locked = style.plus && !plusActive,
                                 inUse = style == inUse,
                                 modifier = Modifier.weight(1f),
-                            ) { onPick(style, theme) }
+                            ) { centre -> onPick(style, theme, centre) }
                         }
                         repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
                     }
@@ -462,14 +491,17 @@ private fun Thumb(
     locked: Boolean,
     inUse: Boolean,
     modifier: Modifier,
-    onClick: () -> Unit,
+    /** Tapped; with where the middle of the thumbnail is on screen. */
+    onClick: (Offset) -> Unit,
 ) {
     val ui = LocalPalette.current
+    val centre = remember { arrayOf(Offset.Zero) }
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
             Modifier
                 .fillMaxWidth()
                 .aspectRatio(0.46f)
+                .onGloballyPositioned { centre[0] = it.boundsInRoot().center }
                 .pressBounce(0.94f)
                 .clip(RoundedCornerShape(16.dp))
                 .border(
@@ -477,7 +509,7 @@ private fun Thumb(
                     if (inUse) ui.accent else ui.onGlass.copy(alpha = 0.12f),
                     RoundedCornerShape(16.dp),
                 )
-                .clickable(onClick = onClick),
+                .clickable { onClick(centre[0]) },
         ) {
             WallpaperImage(style = style, palette = palette, widthPx = 240, modifier = Modifier.fillMaxSize())
             if (locked) {

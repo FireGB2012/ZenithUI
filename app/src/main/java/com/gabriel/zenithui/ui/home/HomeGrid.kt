@@ -250,7 +250,8 @@ fun HomePage(
     /** Tapping the item being resized puts it down, just like tapping anywhere else. */
     onResizeDone: () -> Unit = {},
     onOpenApp: (String) -> Unit,
-    onOpenFolder: (FolderCell) -> Unit,
+    /** A folder was tapped: which one, and where its icon is on screen, for it to open out of. */
+    onOpenFolder: (FolderCell, Rect) -> Unit,
     onItemMenu: (HomeItem) -> Unit,
     onSearch: () -> Unit,
     onNoteChange: (String) -> Unit,
@@ -609,7 +610,16 @@ fun HomePage(
                                     when {
                                         resizing -> onResizeDone()
                                         item is AppCell -> onOpenApp(item.key)
-                                        item is FolderCell -> onOpenFolder(item)
+                                        item is FolderCell -> {
+                                            val icon = geometry.iconFrame
+                                            onOpenFolder(
+                                                item,
+                                                Rect(
+                                                    cellRoot.x + icon.left, cellRoot.y + icon.top,
+                                                    cellRoot.x + icon.right, cellRoot.y + icon.bottom,
+                                                ),
+                                            )
+                                        }
                                         // Tapping the clock opens the bedside screen; long press
                                         // still belongs to the drag and menu detector.
                                         item is WidgetCell && Widgets.baseType(item.type) == "clock" -> onAmbient()

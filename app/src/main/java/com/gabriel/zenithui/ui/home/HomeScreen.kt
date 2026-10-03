@@ -153,7 +153,6 @@ private const val DOT_STRETCH = 16
 
 private sealed interface HomeSheet {
     data class Item(val id: String) : HomeSheet
-    data class Folder(val id: String) : HomeSheet
     data class DrawerApp(val key: String) : HomeSheet
     data object Customize : HomeSheet
     data object WidgetPicker : HomeSheet
@@ -319,6 +318,30 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
 
     fun hideSheet() {
         sheetVisible = false
+    }
+
+    // A folder open out of its icon: which one and where its icon is, and how far open it is.
+    var folderUp by remember { mutableStateOf<Pair<String, androidx.compose.ui.geometry.Rect?>?>(null) }
+    val folderProgress = remember { Animatable(0f) }
+    val folderJob = remember { arrayOfNulls<kotlinx.coroutines.Job>(1) }
+
+    fun openFolder(id: String, from: androidx.compose.ui.geometry.Rect?) {
+        hideSheet()
+        folderUp = id to from
+        folderJob[0]?.cancel()
+        folderJob[0] = scope.launch {
+            if (motion.reduced) folderProgress.animateTo(1f, tween(Motion.REDUCED_MS)) else folderProgress.animateTo(1f, Motion.open())
+        }
+    }
+
+    /** Back into its icon; only then is it gone, so the home screen is never left dimmed behind nothing. */
+    fun closeFolder() {
+        if (folderUp == null) return
+        folderJob[0]?.cancel()
+        folderJob[0] = scope.launch {
+            if (motion.reduced) folderProgress.animateTo(0f, tween(Motion.REDUCED_MS)) else folderProgress.animateTo(0f, Motion.close())
+            folderUp = null
+        }
     }
 
     val hostView = androidx.compose.ui.platform.LocalView.current
@@ -904,6 +927,8 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         // The liquid glass opening frosts the home screen behind the growing glass.
         targetValue = when {
             drawerProgress > 0.55f -> 20.dp
+            // An open folder has the home screen out of focus behind it.
+            folderUp != null -> 14.dp
             card != null && settings.openAnimation == "glass" -> 20.dp
             // One UI softens the home screen behind an opening app; a lighter frost for the card.
             card != null -> 8.dp
@@ -928,16 +953,18 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             if (card != null && cardOpening) closeCard()
             hideSheet()
             settingsOpen = false
+            closeFolder()
             closeDrawer()
             if (pagerState.currentPage != 0) pagerState.animateScrollToPage(0)
         }
     }
 
-    BackHandler(enabled = (card != null && cardOpening) || drawerProgress > 0.002f || sheetVisible || resizingId != null || ambient) {
+    BackHandler(enabled = (card != null && cardOpening) || drawerProgress > 0.002f || sheetVisible || resizingId != null || ambient || folderUp != null) {
         when {
             card != null && cardOpening -> closeCard()
             ambient -> ambient = false
             sheetVisible -> hideSheet()
+            folderUp != null -> closeFolder()
             resizingId != null -> resizingId = null
             else -> closeDrawer()
         }
@@ -1120,7 +1147,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                             },
                             onResizeDone = { resizingId = null },
                             onOpenApp = { launchApp(it) },
-                            onOpenFolder = { showSheet(HomeSheet.Folder(it.id)) },
+                            onOpenFolder = { folder, icon -> openFolder(folder.id, icon) },
                             onItemMenu = { showSheet(HomeSheet.Item(it.id)) },
                             onSearch = { openDrawer(search = true) },
                             onNoteChange = { viewModel.setNote(it) },
@@ -1339,6 +1366,34 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             DragGhost(drag = drag, settings = settings, appsByKey = appsByKey)
         }
 
+        // ------------------------------------------------------------ folder
+        folderUp?.let { (id, icon) ->
+            val folder = layout.firstOrNull { it.id == id } as? FolderCell
+            // Taking the last app out dissolves the folder: then there is nothing left to show.
+            LaunchedEffect(folder == null) {
+                if (folder == null) {
+                    folderJob[0]?.cancel()
+                    folderProgress.snapTo(0f)
+                    folderUp = null
+                }
+            }
+            if (folder != null) FolderPanel(
+                folder = folder,
+                origin = icon,
+                progress = { folderProgress.value },
+                grows = !motion.reduced,
+                appsByKey = appsByKey,
+                settings = settings,
+                onOpen = {
+                    launchApp(it)
+                    closeFolder()
+                },
+                onRemoveApp = { viewModel.removeFromFolder(folder.id, it) },
+                onRename = { viewModel.renameFolder(folder.id, it) },
+                onDismiss = { closeFolder() },
+            )
+        }
+
         StreakStrip(
             state = checkIn,
             onShown = { viewModel.clearCheckIn() },
@@ -1405,30 +1460,13 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     onOpen = { launchApp(it) },
                     onAppInfo = { viewModel.openAppInfo(it) },
                     onChooseToggles = { showSheet(HomeSheet.Toggles) },
-                    onRename = { showSheet(HomeSheet.Folder(it)) },
+                    onRename = { openFolder(it, null) },
                     onResize = {
                         resizingId = item.id
                         hideSheet()
                     },
                     onRemove = { viewModel.removeItem(item.id) },
                     onUninstall = { viewModel.uninstall(it) },
-                    onDismiss = { hideSheet() },
-                )
-            }
-
-            is HomeSheet.Folder -> {
-                val folder = layout.firstOrNull { it.id == current.id } as? FolderCell
-                // Taking the last app out dissolves the folder; close the sheet from an effect,
-                // never from the composition itself.
-                LaunchedEffect(folder == null) { if (folder == null) hideSheet() }
-                if (folder != null) FolderSheet(
-                    visible = sheetVisible,
-                    folder = folder,
-                    appsByKey = appsByKey,
-                    settings = settings,
-                    onOpen = { launchApp(it) },
-                    onRemoveApp = { viewModel.removeFromFolder(folder.id, it) },
-                    onRename = { viewModel.renameFolder(folder.id, it) },
                     onDismiss = { hideSheet() },
                 )
             }

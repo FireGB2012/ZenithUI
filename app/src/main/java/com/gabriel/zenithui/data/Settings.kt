@@ -56,6 +56,12 @@ data class ZenithSettings(
     val wallpaperLock: Boolean = false,
     /** Paint it again when the palette, or light and dark, changes. */
     val wallpaperFollow: Boolean = true,
+    /** How much moves: full | reduced. The phone's own "Remove animations" reduces it too. */
+    val motion: String = "full",
+    /** How one page gives way to the next: depth | slide | cube | stack. */
+    val pageEffect: String = "depth",
+    /** The small ticks under your finger when you pick something up, switch something or drop it. */
+    val haptics: Boolean = true,
     /** The controls the Quick Toggles widget shows, in the order they appear. */
     val toggles: List<String> = listOf("torch", "wifi", "bluetooth", "focus"),
     /** How many home pages you have asked for. Empty trailing ones are forgotten again. */
@@ -129,6 +135,9 @@ data class ZenithSettings(
         put("wallpaperPalette", wallpaperPalette)
         put("wallpaperLock", wallpaperLock)
         put("wallpaperFollow", wallpaperFollow)
+        put("motion", motion)
+        put("pageEffect", pageEffect)
+        put("haptics", haptics)
         put("toggles", JSONArray(toggles))
         put("plusTrialStart", plusTrialStart)
         put("plusPurchased", plusPurchased)
@@ -183,6 +192,9 @@ data class ZenithSettings(
                 wallpaperPalette = o.optString("wallpaperPalette", d.wallpaperPalette),
                 wallpaperLock = o.optBoolean("wallpaperLock", d.wallpaperLock),
                 wallpaperFollow = o.optBoolean("wallpaperFollow", d.wallpaperFollow),
+                motion = o.optString("motion", d.motion),
+                pageEffect = o.optString("pageEffect", d.pageEffect),
+                haptics = o.optBoolean("haptics", d.haptics),
                 toggles = o.optJSONArray("toggles").toStringList().ifEmpty { d.toggles },
                 plusTrialStart = o.optLong("plusTrialStart", d.plusTrialStart),
                 plusPurchased = o.optBoolean("plusPurchased", d.plusPurchased),

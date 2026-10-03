@@ -78,6 +78,11 @@ import com.gabriel.zenithui.data.findActivity
 import com.gabriel.zenithui.ui.common.pressBounce
 import com.gabriel.zenithui.ui.onboarding.PrimaryButton
 import com.gabriel.zenithui.ui.onboarding.Segmented
+import com.gabriel.zenithui.ui.settings.ActionRow
+import com.gabriel.zenithui.ui.settings.Caption
+import com.gabriel.zenithui.ui.settings.Group
+import com.gabriel.zenithui.ui.settings.SettingsHeader
+import com.gabriel.zenithui.ui.settings.ToggleRow
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.Palettes
 import com.gabriel.zenithui.ui.theme.ZenithPalette

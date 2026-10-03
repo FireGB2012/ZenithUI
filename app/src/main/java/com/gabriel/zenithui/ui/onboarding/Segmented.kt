@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.gabriel.zenithui.ui.common.Motion
 import com.gabriel.zenithui.ui.common.pressBounce
+import com.gabriel.zenithui.ui.common.rememberTick
 import com.gabriel.zenithui.ui.theme.GlassMaterial
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.ZenithShapes
@@ -40,6 +41,7 @@ import com.gabriel.zenithui.ui.theme.glass
 fun Segmented(options: List<Pair<String, String>>, selected: String, onSelect: (String) -> Unit) {
     val palette = LocalPalette.current
     val index = options.indexOfFirst { it.first == selected }.coerceAtLeast(0)
+    val tick = rememberTick()
 
     Box(
         Modifier
@@ -79,7 +81,10 @@ fun Segmented(options: List<Pair<String, String>>, selected: String, onSelect: (
                             .fillMaxHeight()
                             .pressBounce(0.94f)
                             .clip(RoundedCornerShape(percent = 50))
-                            .clickable { onSelect(id) },
+                            .clickable {
+                                if (!active) tick()
+                                onSelect(id)
+                            },
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(

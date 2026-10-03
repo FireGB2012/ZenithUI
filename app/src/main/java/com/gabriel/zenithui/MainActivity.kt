@@ -42,6 +42,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.gabriel.zenithui.data.GridDensity
 import com.gabriel.zenithui.data.RefreshRate
 import com.gabriel.zenithui.data.findActivity
+import com.gabriel.zenithui.ui.common.LocalHapticsOn
 import com.gabriel.zenithui.ui.common.LocalIconLoader
 import com.gabriel.zenithui.ui.home.HomeScreen
 import com.gabriel.zenithui.ui.onboarding.OnboardingFlow
@@ -187,7 +188,7 @@ fun ZenithApp(viewModel: ZenithViewModel) {
             .fillMaxSize()
             .onSizeChanged { screenSize = it }
     ) {
-        CompositionLocalProvider(LocalIconLoader provides viewModel.icons) {
+        CompositionLocalProvider(LocalIconLoader provides viewModel.icons, LocalHapticsOn provides settings.haptics) {
             AnimatedContent(
                 targetState = settings.onboarded,
                 transitionSpec = {

@@ -9,6 +9,13 @@ import android.os.BatteryManager
 import android.provider.Settings
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateIntAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -74,6 +81,7 @@ import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Immutable
@@ -88,6 +96,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.graphicsLayer
+import com.gabriel.zenithui.ui.common.LocalMotionLevel
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -618,7 +628,7 @@ private fun BatteryWidget(form: WidgetForm, width: Dp, height: Dp) {
     when (form) {
         // A thin ring with the number inside.
         WidgetForm.Mini -> Box(Modifier.fillMaxSize().padding(6.dp), contentAlignment = Alignment.Center) {
-            Ring(battery.fraction, 4.dp, Modifier.fillMaxSize())
+            Ring(battery.fraction, 4.dp, Modifier.fillMaxSize(), charging = battery.charging)
             Figure("${battery.level.coerceAtLeast(0)}", fit(width * 0.21f, height * 0.21f), FontWeight.Medium, accent = false)
         }
 
@@ -636,7 +646,7 @@ private fun BatteryWidget(form: WidgetForm, width: Dp, height: Dp) {
 
         // The ring.
         WidgetForm.Square -> Box(Modifier.fillMaxSize().padding(20.dp), contentAlignment = Alignment.Center) {
-            Ring(battery.fraction, if (bare) 9.dp else 7.dp, Modifier.fillMaxSize())
+            Ring(battery.fraction, if (bare) 9.dp else 7.dp, Modifier.fillMaxSize(), charging = battery.charging)
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 if (bare) {
                     Symbol(symbol, 22.dp)
@@ -654,7 +664,7 @@ private fun BatteryWidget(form: WidgetForm, width: Dp, height: Dp) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(Modifier.fillMaxHeight(0.8f).aspectRatio(1f), contentAlignment = Alignment.Center) {
-                Ring(battery.fraction, if (bare) 8.dp else 6.dp, Modifier.fillMaxSize())
+                Ring(battery.fraction, if (bare) 8.dp else 6.dp, Modifier.fillMaxSize(), charging = battery.charging)
                 Symbol(symbol, if (bare) 28.dp else 22.dp, tint = symbolTint)
             }
             Spacer(Modifier.width(16.dp))
@@ -735,7 +745,7 @@ private fun BatteryWidget(form: WidgetForm, width: Dp, height: Dp) {
                 Text(battery.status, color = palette.onGlassMuted, fontSize = 12.sp)
             }
             Box(Modifier.weight(1f).fillMaxWidth().padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
-                Ring(battery.fraction, if (bare) 13.dp else 10.dp, Modifier.fillMaxSize(0.8f))
+                Ring(battery.fraction, if (bare) 13.dp else 10.dp, Modifier.fillMaxSize(0.8f), charging = battery.charging)
                 Figure(battery.percent, fit(width * 0.1f, height * 0.085f))
             }
             Segments(battery.fraction, Modifier.fillMaxWidth())
@@ -748,9 +758,29 @@ private fun BatteryWidget(form: WidgetForm, width: Dp, height: Dp) {
  * track stays a faint line on the wallpaper and the charge is a band of glass.
  */
 @Composable
-private fun Ring(fraction: Float, stroke: Dp, modifier: Modifier) {
+private fun Ring(fraction: Float, stroke: Dp, modifier: Modifier, charging: Boolean = false) {
     val palette = LocalPalette.current
     val bare = LocalBare.current
+    val reduced = LocalMotionLevel.current.reduced
+    // The ring springs to its value: up from empty when it first appears, and from wherever it
+    // was whenever the charge changes.
+    val filled = remember { Animatable(if (reduced) fraction else 0f) }
+    LaunchedEffect(fraction, reduced) {
+        if (reduced) filled.snapTo(fraction) else filled.animateTo(fraction, spring(dampingRatio = 0.62f, stiffness = 90f))
+    }
+    // While it is charging a glint runs up the filled part of the ring, over and over. It is the
+    // one thing on the home screen that keeps moving by itself, and only while there is a charger.
+    val glint = if (charging && !reduced) {
+        rememberInfiniteTransition(label = "charging").animateFloat(
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(tween(1900, easing = LinearEasing)),
+            label = "glint",
+        )
+    } else {
+        null
+    }
+    val fill = remember(palette.accent, palette.accentAlt) { Brush.linearGradient(listOf(palette.accent, palette.accentAlt)) }
     fun DrawScope.arc(sweep: Float, brush: Brush) {
         val width = stroke.toPx()
         val side = size.minDimension - width
@@ -764,15 +794,35 @@ private fun Ring(fraction: Float, stroke: Dp, modifier: Modifier) {
     Box(modifier) {
         Canvas(Modifier.fillMaxSize()) {
             arc(280f, SolidColor(if (bare) Color.White.copy(alpha = 0.16f) else palette.onGlass.copy(alpha = 0.12f)))
-            if (!bare) arc(280f * fraction, Brush.linearGradient(listOf(palette.accent, palette.accentAlt)))
+            val sweep = (280f * filled.value).coerceIn(0f, 280f)
+            if (!bare) arc(sweep, fill)
+            val along = glint?.value
+            if (along != null && sweep > GLINT) {
+                val width = stroke.toPx()
+                val side = size.minDimension - width
+                drawArc(
+                    color = Color.White,
+                    startAngle = 130f + (sweep - GLINT) * along,
+                    sweepAngle = GLINT,
+                    useCenter = false,
+                    topLeft = Offset((size.width - side) / 2f, (size.height - side) / 2f),
+                    size = Size(side, side),
+                    // In at the foot of the ring, out at the head of it.
+                    alpha = 0.6f * kotlin.math.sin(along * Math.PI).toFloat(),
+                    style = Stroke(width = width, cap = StrokeCap.Round),
+                )
+            }
         }
         if (bare && fraction > 0f) {
             Canvas(Modifier.fillMaxSize().glassInk(bevel = stroke * 0.4f)) {
-                arc(280f * fraction, SolidColor(Color.White))
+                arc((280f * filled.value).coerceIn(0f, 280f), SolidColor(Color.White))
             }
         }
     }
 }
+
+/** How much of the ring the charging glint covers, in degrees. */
+private const val GLINT = 26f
 
 @Composable
 private fun Capsule(fraction: Float, modifier: Modifier) {
@@ -964,6 +1014,13 @@ private fun MonthGrid(today: LocalDate, fontSize: TextUnit, dot: Dp, modifier: M
         shadow = if (bare) LocalTextStyle.current.shadow else null,
     )
 
+    // Today's dot grows into its place with a ring drawn round it, once, as the calendar appears.
+    val reduced = LocalMotionLevel.current.reduced
+    val drawnIn = remember { Animatable(if (reduced) 1f else 0f) }
+    LaunchedEffect(Unit) {
+        if (!reduced) drawnIn.animateTo(1f, tween(760, easing = FastOutSlowInEasing))
+    }
+
     Column(modifier) {
         Row(Modifier.fillMaxWidth()) {
             listOf("M", "T", "W", "T", "F", "S", "S").forEach { letter ->
@@ -983,6 +1040,34 @@ private fun MonthGrid(today: LocalDate, fontSize: TextUnit, dot: Dp, modifier: M
                                 Box(
                                     Modifier
                                         .size(dot)
+                                        .then(
+                                            if (isToday) {
+                                                Modifier
+                                                    .drawBehind {
+                                                        val drawn = drawnIn.value
+                                                        if (drawn < 1f) {
+                                                            val out = 3.dp.toPx()
+                                                            drawArc(
+                                                                color = palette.accent,
+                                                                startAngle = -90f,
+                                                                sweepAngle = 360f * drawn,
+                                                                useCenter = false,
+                                                                topLeft = Offset(-out, -out),
+                                                                size = Size(size.width + 2f * out, size.height + 2f * out),
+                                                                alpha = 1f - drawn * drawn * drawn,
+                                                                style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round),
+                                                            )
+                                                        }
+                                                    }
+                                                    .graphicsLayer {
+                                                        val grown = 0.55f + 0.45f * drawnIn.value
+                                                        scaleX = grown
+                                                        scaleY = grown
+                                                    }
+                                            } else {
+                                                Modifier
+                                            }
+                                        )
                                         .then(
                                             if (isToday && !bare) {
                                                 Modifier
@@ -1449,11 +1534,17 @@ private fun ToggleButton(toggle: Toggle, size: Dp) {
         animationSpec = tween(420),
         label = "toggleTint",
     )
+    // On, it squares up a little; off, it is a circle again. The shape says it as well as the colour.
+    val corner by animateIntAsState(
+        targetValue = if (toggle.active) 34 else 50,
+        animationSpec = spring(dampingRatio = 0.55f, stiffness = 260f),
+        label = "toggleShape",
+    )
     Box(
         Modifier
             .size(size)
             .pressBounce(0.86f)
-            .clip(RoundedCornerShape(percent = 50))
+            .clip(RoundedCornerShape(percent = corner.coerceIn(0, 50)))
             .background(background)
             .clickable(onClick = toggle.onClick),
         contentAlignment = Alignment.Center,

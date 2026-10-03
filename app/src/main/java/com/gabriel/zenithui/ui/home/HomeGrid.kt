@@ -112,6 +112,7 @@ import com.gabriel.zenithui.ui.theme.glass
 import androidx.compose.ui.unit.round
 import kotlinx.coroutines.launch
 import kotlin.math.abs
+import kotlin.math.hypot
 import kotlin.math.roundToInt
 
 /** Everything the drag-and-drop interaction needs to know, hoisted above the pager. */
@@ -206,6 +207,21 @@ class HomeDragState {
     }
 }
 
+/**
+ * The parts of the home screen that are not on the grid — the line at the top, the dots, the
+ * search bar, the dock — arriving with it: up or down from [from] and fading in, as late as
+ * [distance] says (0 with the middle of the page, 1 with its corners).
+ */
+internal fun Modifier.arriving(clock: () -> Float, depth: () -> Float, distance: Float, from: Dp): Modifier =
+    graphicsLayer {
+        val at = clock()
+        if (at < FlyIn.TOTAL_MS) {
+            val out = (1f - FlyIn.progress(at, FlyIn.delayMs(distance))) * depth()
+            translationY = from.toPx() * out
+            alpha = (1f - out * out).coerceIn(0f, 1f)
+        }
+    }
+
 /** Things stepping aside on [page] for the carried item, as [plan] has them. */
 @Immutable
 data class DropPreview(val page: Int, val plan: DropPlanner.Plan)
@@ -245,6 +261,10 @@ fun HomePage(
     animateEntrance: Boolean = false,
     /** How far this page is from the middle of the screen while swiping, -1 to 1. */
     pageOffset: Float = 0f,
+    /** The arrival clock, in milliseconds; at [FlyIn.TOTAL_MS] or beyond everything is in its place. */
+    arrivalClock: () -> Float = { FlyIn.TOTAL_MS.toFloat() },
+    /** How far out the arrival starts: [FlyIn.FULL] for the fly-in, [FlyIn.SETTLE] for coming back from an app. */
+    arrivalDepth: () -> Float = { 0f },
     modifier: Modifier = Modifier,
 ) {
     val palette = LocalPalette.current
@@ -423,6 +443,13 @@ fun HomePage(
                     else -> cellOffset.animateTo(target, Motion.cell)
                 }
             }
+            // How far this item's middle is from the middle of the page: it decides both where the
+            // item flies in from and when it sets off, the middle of the page first.
+            val fromCentreX = (item.col + item.dx + item.spanX / 2f) * cellWidthPx - geometry.gridWidth / 2f
+            val fromCentreY = (item.row + item.dy + item.spanY / 2f) * cellHeightPx - geometry.gridHeight / 2f
+            val flyDelay = FlyIn.delayMs(
+                hypot(fromCentreX, fromCentreY) / hypot(geometry.gridWidth / 2f, geometry.gridHeight / 2f).coerceAtLeast(1f)
+            )
             val makingWay = carriedCovered && item.id == dragged?.id
             val wayAlpha by animateFloatAsState(if (makingWay) 0f else 1f, tween(140), label = "makingWay")
 
@@ -454,6 +481,19 @@ fun HomePage(
                         // and settle back together as it lands, so the page has depth.
                         translationX = pageOffset * cellWidthPx * PAGE_PARALLAX *
                             (item.col + item.spanX / 2f - settings.columns / 2f)
+                        // Arriving: out from the middle and a little small, then in to its place
+                        // and a touch past it. Read here, while drawing, so the clock ticking
+                        // recomposes nothing.
+                        val clock = arrivalClock()
+                        if (clock < FlyIn.TOTAL_MS) {
+                            val out = (1f - FlyIn.progress(clock, flyDelay)) * arrivalDepth()
+                            translationX += fromCentreX * FlyIn.SPREAD * out
+                            translationY = fromCentreY * FlyIn.SPREAD * out
+                            val shrink = 1f - 0.3f * out
+                            scaleX *= shrink
+                            scaleY *= shrink
+                            alpha *= (1f - out * out).coerceIn(0f, 1f)
+                        }
                     },
                 contentAlignment = Alignment.Center,
             ) {

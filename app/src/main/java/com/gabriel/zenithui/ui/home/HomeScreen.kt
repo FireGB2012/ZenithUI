@@ -347,6 +347,33 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
      */
     var holdSunk by remember { mutableStateOf(false) }
 
+    // Arriving. One clock for the whole home screen: at 0 everything is out from the middle, at
+    // FlyIn.TOTAL_MS it is all in its place. It is wound back while nobody can see — at a cold
+    // start, or when Zenith is stopped — and let run once the home screen is on show again.
+    val liveMotion by androidx.compose.runtime.rememberUpdatedState(motion)
+    val flyOnStart = remember { !entrance && !motion.reduced }
+    val arrivalClock = remember { Animatable(if (flyOnStart) 0f else FlyIn.TOTAL_MS.toFloat()) }
+    val arrivalDepth = remember { mutableFloatStateOf(FlyIn.FULL) }
+    val arrivalPending = remember { BooleanArray(1).also { it[0] = flyOnStart } }
+    val power = remember(context) { context.getSystemService(android.os.PowerManager::class.java) }
+
+    fun arrive() {
+        if (!arrivalPending[0]) return
+        arrivalPending[0] = false
+        scope.launch {
+            arrivalClock.snapTo(0f)
+            arrivalClock.animateTo(
+                FlyIn.TOTAL_MS.toFloat(),
+                tween(FlyIn.TOTAL_MS, easing = androidx.compose.animation.core.LinearEasing),
+            )
+        }
+    }
+    LaunchedEffect(Unit) {
+        // A cold start: once the first frame is up.
+        androidx.compose.runtime.withFrameNanos { }
+        arrive()
+    }
+
     /** One UI's half of closing an app: the home screen swells back and the app's icon lands. */
     fun comeForward() {
         val key = returningKey[0] ?: return
@@ -458,6 +485,13 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
             when (event) {
                 androidx.lifecycle.Lifecycle.Event.ON_STOP -> {
+                    // Wind the arrival back now, unseen. Stopped with the screen off, the next
+                    // thing seen is an unlock: the full fly-in. Stopped behind an app: a settle.
+                    if (!liveMotion.reduced) {
+                        arrivalDepth.floatValue = if (power?.isInteractive == false) FlyIn.FULL else FlyIn.SETTLE
+                        arrivalPending[0] = true
+                        scope.launch { arrivalClock.snapTo(0f) }
+                    }
                     // The app now covers Zenith. Put the card away while nobody can see it and
                     // leave the home screen sunk back, so the first frame on the way home is the
                     // home screen waiting to come forward. Keeping the full-screen card here is what
@@ -485,7 +519,15 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
 
                 // Resumed is when Zenith is on its way to the front again. Window focus, below, is
                 // the backstop for the phones that resume before the home screen is shown.
-                androidx.lifecycle.Lifecycle.Event.ON_RESUME -> comeForward()
+                androidx.lifecycle.Lifecycle.Event.ON_RESUME -> {
+                    comeForward()
+                    // With the window already in front, arrive now; otherwise when it gets there,
+                    // and in any case before long, so the home screen is never left wound back.
+                    if (hostView.hasWindowFocus()) arrive() else scope.launch {
+                        delay(450)
+                        arrive()
+                    }
+                }
 
                 else -> Unit
             }
@@ -501,7 +543,10 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
     // swells back and the app's icon lands.
     androidx.compose.runtime.DisposableEffect(hostView) {
         val listener = android.view.ViewTreeObserver.OnWindowFocusChangeListener { focused ->
-            if (focused) comeForward()
+            if (focused) {
+                comeForward()
+                arrive()
+            }
         }
         hostView.viewTreeObserver.addOnWindowFocusChangeListener(listener)
         onDispose { hostView.viewTreeObserver.removeOnWindowFocusChangeListener(listener) }
@@ -979,6 +1024,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                         text = header,
                         modifier = Modifier
                             .statusBarsPadding()
+                            .arriving({ arrivalClock.value }, { arrivalDepth.floatValue }, distance = 1f, from = (-28).dp)
                             // Holding it opens Customise too — always reachable, however full
                             // the page underneath is.
                             .pointerInput(Unit) {
@@ -1060,6 +1106,8 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                             freePlacement = settings.freeform && plus.active,
                             animateEntrance = entrance,
                             pageOffset = if (turn.parallax) offset else 0f,
+                            arrivalClock = { arrivalClock.value },
+                            arrivalDepth = { arrivalDepth.floatValue },
                             modifier = Modifier
                                 .fillMaxSize()
                                 .graphicsLayer {
@@ -1117,6 +1165,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     onAddPage = { revealPage(viewModel.addPage()) },
                     modifier = Modifier
                         .align(Alignment.CenterHorizontally)
+                        .arriving({ arrivalClock.value }, { arrivalDepth.floatValue }, distance = 0.7f, from = 30.dp)
                         .padding(vertical = 10.dp),
                 )
 
@@ -1125,6 +1174,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     HomeSearchBar(
                         onSearch = { openDrawer(search = true) },
                         modifier = Modifier
+                            .arriving({ arrivalClock.value }, { arrivalDepth.floatValue }, distance = 0.85f, from = 40.dp)
                             .padding(horizontal = PAGE_MARGIN)
                             .padding(start = leftLine, end = rightLine, bottom = 10.dp),
                     )
@@ -1165,6 +1215,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     },
                     onBounds = { dockBounds = it },
                     modifier = Modifier
+                        .arriving({ arrivalClock.value }, { arrivalDepth.floatValue }, distance = 1f, from = 56.dp)
                         .padding(horizontal = PAGE_MARGIN)
                         .navigationBarsPadding()
                         .padding(bottom = 10.dp),

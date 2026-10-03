@@ -3,6 +3,7 @@ package com.gabriel.zenithui.ui.home
 import com.gabriel.zenithui.ui.common.WideAppIcon
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.VectorConverter
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animateIntOffsetAsState
@@ -53,9 +54,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorMatrix
@@ -67,6 +71,7 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -114,6 +119,7 @@ import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.hypot
 import kotlin.math.roundToInt
+import kotlin.math.sin
 
 /** Everything the drag-and-drop interaction needs to know, hoisted above the pager. */
 @Stable
@@ -265,6 +271,10 @@ fun HomePage(
     arrivalClock: () -> Float = { FlyIn.TOTAL_MS.toFloat() },
     /** How far out the arrival starts: [FlyIn.FULL] for the fly-in, [FlyIn.SETTLE] for coming back from an app. */
     arrivalDepth: () -> Float = { 0f },
+    /** Seconds on the clock every item on the page jiggles to, while something is being carried. */
+    jiggleClock: () -> Float = { 0f },
+    /** How hard: 0 at rest, 1 while something is in the air. It eases in and out. */
+    jiggleStrength: () -> Float = { 0f },
     modifier: Modifier = Modifier,
 ) {
     val palette = LocalPalette.current
@@ -450,6 +460,29 @@ fun HomePage(
             val flyDelay = FlyIn.delayMs(
                 hypot(fromCentreX, fromCentreY) / hypot(geometry.gridWidth / 2f, geometry.gridHeight / 2f).coerceAtLeast(1f)
             )
+            // While something is carried everything else on the page rocks a little, each item out
+            // of step with its neighbours and at its own pace. A wide widget rocks less: the same
+            // angle would swing its corners much further than an icon's.
+            val jigglePhase = remember(item.id) { (item.id.hashCode() and 0xFF) / 255f }
+            val jiggleAngle = if (item.spanX > 1 || item.spanY > ROW_UNITS) 0.45f else 1.2f
+            val carried = item.id == dragged?.id
+            // Put down, it settles with a ring that spreads from it and fades.
+            val ring = remember { Animatable(1f) }
+            LaunchedEffect(landing) {
+                if (landing != null) {
+                    ring.snapTo(0f)
+                    ring.animateTo(1f, tween(460, easing = LinearOutSlowInEasing))
+                } else {
+                    // Another item landed before this ring had finished: it must not be left half drawn.
+                    ring.snapTo(1f)
+                }
+            }
+            val ringFrame = when {
+                item is WidgetCell -> geometry.widgetFrame(item.spanX, item.spanY)
+                item is AppCell && !item.isPlainIcon -> geometry.superIconFrame(item.spanX, (item.spanY / ROW_UNITS).coerceAtLeast(1))
+                else -> geometry.iconFrame
+            }
+            val ringRound = item is FolderCell || (item is AppCell && item.isPlainIcon)
             val makingWay = carriedCovered && item.id == dragged?.id
             val wayAlpha by animateFloatAsState(if (makingWay) 0f else 1f, tween(140), label = "makingWay")
 
@@ -493,6 +526,38 @@ fun HomePage(
                             scaleX *= shrink
                             scaleY *= shrink
                             alpha *= (1f - out * out).coerceIn(0f, 1f)
+                        }
+                        val shake = jiggleStrength()
+                        if (shake > 0f && !carried) {
+                            rotationZ = jiggleAngle * shake *
+                                sin((jiggleClock() * (2f + 0.7f * jigglePhase) + jigglePhase) * TWO_PI)
+                        }
+                    }
+                    .drawBehind {
+                        val spread = ring.value
+                        if (spread < 1f) {
+                            val grow = 16.dp.toPx() * spread
+                            val stroke = Stroke(3.dp.toPx() * (1f - spread) + 0.5.dp.toPx())
+                            val fade = 0.6f * (1f - spread)
+                            if (ringRound) {
+                                drawCircle(
+                                    color = palette.accent,
+                                    radius = ringFrame.width / 2f + grow,
+                                    center = Offset((ringFrame.left + ringFrame.right) / 2f, (ringFrame.top + ringFrame.bottom) / 2f),
+                                    alpha = fade,
+                                    style = stroke,
+                                )
+                            } else {
+                                val corner = 26.dp.toPx() + grow
+                                drawRoundRect(
+                                    color = palette.accent,
+                                    topLeft = Offset(ringFrame.left - grow, ringFrame.top - grow),
+                                    size = Size(ringFrame.width + 2f * grow, ringFrame.height + 2f * grow),
+                                    cornerRadius = CornerRadius(corner, corner),
+                                    alpha = fade,
+                                    style = stroke,
+                                )
+                            }
                         }
                     },
                 contentAlignment = Alignment.Center,
@@ -1139,7 +1204,12 @@ fun DragGhost(
     val lift = remember { Animatable(1f) }
     LaunchedEffect(item.id) {
         val target = if (item is WidgetCell || (item is AppCell && !item.isPlainIcon)) 1.02f else 1.14f
-        lift.animateTo(target, spring(dampingRatio = 0.38f, stiffness = 260f))
+        lift.animateTo(target, Motion.lift())
+    }
+    val shadowFrame = when {
+        item is WidgetCell -> geometry.widgetFrame(item.spanX, item.spanY)
+        item is AppCell && !item.isPlainIcon -> geometry.superIconFrame(item.spanX, (item.spanY / ROW_UNITS).coerceAtLeast(1))
+        else -> geometry.iconFrame
     }
     val ghostAlpha by animateFloatAsState(if (drag.overRemove) 0.32f else 0.62f, Motion.smooth(), label = "ghost")
     // Colour is drained out of the copy under your finger so it reads as a placeholder.
@@ -1153,6 +1223,28 @@ fun DragGhost(
         Modifier
             .offset { IntOffset(topLeft.x.roundToInt(), topLeft.y.roundToInt()) }
             .requiredSize(width, height)
+            // Off the page, it casts a shadow: a soft pool under it, a little lower than it is.
+            .drawWithCache {
+                val centre = Offset(
+                    (shadowFrame.left + shadowFrame.right) / 2f,
+                    (shadowFrame.top + shadowFrame.bottom) / 2f + shadowFrame.height * 0.16f,
+                )
+                val reach = shadowFrame.width * 0.72f
+                val squash = (shadowFrame.height * 0.72f / reach).coerceIn(0.3f, 1f)
+                val pool = Brush.radialGradient(
+                    listOf(Color.Black.copy(alpha = 0.34f), Color.Transparent),
+                    center = centre,
+                    radius = reach,
+                )
+                onDrawBehind {
+                    val up = ((lift.value - 1f) / 0.02f).coerceIn(0f, 1f)
+                    if (up > 0f) {
+                        scale(scaleX = 1f, scaleY = squash, pivot = centre) {
+                            drawCircle(pool, radius = reach, center = centre, alpha = up)
+                        }
+                    }
+                }
+            }
             .graphicsLayer {
                 scaleX = lift.value
                 scaleY = lift.value
@@ -1413,6 +1505,8 @@ fun DockBar(
 
 /** How far items spread apart, in cells per cell from the middle, as a page slides fully away. */
 private const val PAGE_PARALLAX = 0.35f
+
+private const val TWO_PI = 6.2831855f
 
 /** Height of a single 11sp app label line, plus its spacer — the same strip [HomeGeometry] counts. */
 private val LABEL_LINE_HEIGHT = HomeGeometry.LABEL_DP.dp

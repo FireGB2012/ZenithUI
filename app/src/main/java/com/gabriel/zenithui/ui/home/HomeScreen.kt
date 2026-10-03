@@ -108,6 +108,7 @@ import com.gabriel.zenithui.ui.common.appearIn
 import com.gabriel.zenithui.ui.common.pressBounce
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.common.LocalMotionLevel
+import com.gabriel.zenithui.ui.common.rememberHaptics
 import com.gabriel.zenithui.ui.settings.SettingsActions
 import com.gabriel.zenithui.ui.settings.SettingsPreview
 import com.gabriel.zenithui.ui.settings.SettingsScreen
@@ -679,6 +680,27 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         }
     }
 
+    // A tick each time the spot it would land in changes, so the hand knows without looking. Not
+    // for the first spot of a carry: picking it up has only just been felt.
+    val haptic = rememberHaptics()
+    val lastSpot = remember { arrayOfNulls<DropPlanner.Spot>(1) }
+    LaunchedEffect(dropPlan?.target, drag.isDragging) {
+        val spot = if (drag.isDragging) dropPlan?.target else null
+        if (spot != null && lastSpot[0] != null && spot != lastSpot[0]) haptic.tick()
+        if (spot != null || !drag.isDragging) lastSpot[0] = spot
+    }
+
+    // Everything else on the page rocks while something is carried. One clock for all of it, and
+    // it runs only from the moment something is picked up until the rocking has died away.
+    val jiggleStrength = animateFloatAsState(if (drag.isDragging && !motion.reduced) 1f else 0f, tween(200), label = "jiggle")
+    val jiggleClock = remember { mutableFloatStateOf(0f) }
+    val jiggling by remember { derivedStateOf { jiggleStrength.value > 0.001f } }
+    LaunchedEffect(jiggling) {
+        if (!jiggling) return@LaunchedEffect
+        val start = androidx.compose.runtime.withFrameNanos { it }
+        while (true) androidx.compose.runtime.withFrameNanos { jiggleClock.floatValue = (it - start) / 1_000_000_000f }
+    }
+
     // Rest over a spot for a moment and whatever is there steps aside, the way it does on a phone;
     // keep moving and nothing shuffles. Resting on an icon's middle is for making a folder, and
     // resting on the bin for throwing away, so nothing steps aside then.
@@ -790,6 +812,8 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 hover != null -> viewModel.combine(item.id, hover)
                 else -> dropOnPage(item)
             }
+            // Put down, thrown away or made into a folder: it is done, and the hand is told so.
+            haptic.confirm()
         }
         drag.clear()
     }
@@ -1108,6 +1132,8 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                             pageOffset = if (turn.parallax) offset else 0f,
                             arrivalClock = { arrivalClock.value },
                             arrivalDepth = { arrivalDepth.floatValue },
+                            jiggleClock = { jiggleClock.floatValue },
+                            jiggleStrength = { jiggleStrength.value },
                             modifier = Modifier
                                 .fillMaxSize()
                                 .graphicsLayer {

@@ -50,7 +50,7 @@ Spec: `specs/2026-10-01-zenith-overhaul-design.md`, "Stage 4: motion".
 - `Motion.press`, `.lift`, `.drop`, `.open`, `.close`, `.sheet`, `.page`, `.theme` (existing names stay).
 - `class Haptics { fun tick(); fun pickUp(); fun confirm() }`, `LocalHaptics`, and Compose's own `LocalHapticFeedback` silenced when the setting is off.
 
-- [ ] **Step 1: failing test** `MotionLevelTest`: Full only for `"full"` with system animations on; `"reduced"`, anything unknown, or system animations off give Reduced. **Step 2:** run, fail. **Step 3:** implement; provide the locals in `ZenithApp`. **Step 4:** pass; commit "MotionLevel, named motions and one Haptics".
+- [ ] **Step 1: failing test** `MotionLevelTest`: Reduced for `"reduced"`, or with system animations off whatever the setting; anything else, an unknown word included, is Full. **Step 2:** run, fail. **Step 3:** implement; provide the locals in `ZenithApp`. **Step 4:** pass; commit "MotionLevel, named motions and one Haptics".
 
 ### Task 2: page swipe styles, and dots that stretch
 

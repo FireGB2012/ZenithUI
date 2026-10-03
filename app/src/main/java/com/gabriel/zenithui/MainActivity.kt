@@ -33,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.IntSize
 import androidx.core.view.WindowCompat
@@ -43,6 +44,10 @@ import com.gabriel.zenithui.data.GridDensity
 import com.gabriel.zenithui.data.RefreshRate
 import com.gabriel.zenithui.data.findActivity
 import com.gabriel.zenithui.ui.common.LocalHapticsOn
+import com.gabriel.zenithui.ui.common.LocalMotionLevel
+import com.gabriel.zenithui.ui.common.MotionLevel
+import com.gabriel.zenithui.ui.common.NoHapticFeedback
+import com.gabriel.zenithui.ui.common.rememberAnimationsEnabled
 import com.gabriel.zenithui.ui.common.LocalIconLoader
 import com.gabriel.zenithui.ui.home.HomeScreen
 import com.gabriel.zenithui.ui.onboarding.OnboardingFlow
@@ -188,7 +193,14 @@ fun ZenithApp(viewModel: ZenithViewModel) {
             .fillMaxSize()
             .onSizeChanged { screenSize = it }
     ) {
-        CompositionLocalProvider(LocalIconLoader provides viewModel.icons, LocalHapticsOn provides settings.haptics) {
+        val systemHaptics = LocalHapticFeedback.current
+        CompositionLocalProvider(
+            LocalIconLoader provides viewModel.icons,
+            LocalHapticsOn provides settings.haptics,
+            // Older code asks Compose for haptics directly; with the switch off it gets silence.
+            LocalHapticFeedback provides if (settings.haptics) systemHaptics else NoHapticFeedback,
+            LocalMotionLevel provides MotionLevel.of(settings.motion, rememberAnimationsEnabled()),
+        ) {
             AnimatedContent(
                 targetState = settings.onboarded,
                 transitionSpec = {

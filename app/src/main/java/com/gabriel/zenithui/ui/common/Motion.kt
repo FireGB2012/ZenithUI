@@ -50,6 +50,35 @@ object Motion {
     /** Icons gliding to a new cell, with a little overshoot as they land. */
     val cell = spring<IntOffset>(dampingRatio = 0.66f, stiffness = 420f)
 
+    // By what is happening, so two things that are the same kind of event move the same way.
+
+    /** Something squeezed under a finger and let go. */
+    fun <T> press() = spring<T>(dampingRatio = 0.36f, stiffness = 420f)
+
+    /** Something picked up: it comes off the page quickly and rocks once. */
+    fun <T> lift() = spring<T>(dampingRatio = 0.38f, stiffness = 260f)
+
+    /** Something put down: firm, with one small bounce. */
+    fun <T> drop() = spring<T>(dampingRatio = 0.62f, stiffness = 380f)
+
+    /** Something growing out of what was tapped: a folder, a preview. */
+    fun <T> open() = spring<T>(dampingRatio = 0.78f, stiffness = 300f)
+
+    /** The same thing going back: quicker than it came, and it does not overshoot. */
+    fun <T> close() = spring<T>(dampingRatio = 1f, stiffness = 420f)
+
+    /** Sheets and pages coming up from an edge. */
+    fun <T> sheet() = smooth<T>()
+
+    /** One page of something giving way to the next. */
+    fun <T> page() = spring<T>(dampingRatio = 1f, stiffness = 420f)
+
+    /** Colours changing with the theme, in milliseconds: long enough to watch, short enough not to wait for. */
+    const val THEME_MS = 420
+
+    /** What stands in for a spring when movement is reduced: a fade this long, at most. */
+    const val REDUCED_MS = 150
+
     const val ENTER_STAGGER_MS = 34
     const val MAX_STAGGER_STEPS = 16
 

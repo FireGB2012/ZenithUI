@@ -41,6 +41,10 @@ class WallpaperSource(context: Context) {
     /** What the prepared copies were made from, so coming home again does not redo the work. */
     private var loadedKey: String? = null
 
+    /** Set while the glass is showing a picture that is not the wallpaper yet; see [present]. */
+    @Volatile
+    private var presenting = false
+
     private var listener: WallpaperManager.OnColorsChangedListener? = null
 
     /** Calls [onChange] whenever the wallpaper changes, wherever it was changed from, until [stopWatching]. */
@@ -65,8 +69,25 @@ class WallpaperSource(context: Context) {
         listener = null
     }
 
+    /**
+     * Gives the glass [bitmap] to bend before it is the wallpaper: a wallpaper that fades in has
+     * to bring its glass with it. The glass keeps it, whatever the real wallpaper does, until
+     * [release]. The bitmap is still the caller's; it is not kept and not recycled.
+     */
+    suspend fun present(bitmap: Bitmap) = refreshMutex.withLock {
+        withContext(Dispatchers.Default) {
+            presenting = true
+            prepare(bitmap, owned = false)
+            loadedKey = PRESENTED
+        }
+    }
+
+    /** Ends [present]. True if a picture was being presented, in which case a [refresh] is due. */
+    fun release(): Boolean = presenting.also { presenting = false }
+
     suspend fun refresh() = refreshMutex.withLock {
         withContext(Dispatchers.IO) {
+            if (presenting) return@withContext
             val manager = WallpaperManager.getInstance(appContext)
             if (runCatching { manager.wallpaperInfo != null }.getOrDefault(false)) {
                 // A live wallpaper moves; any still picture of it in the glass would be wrong.
@@ -114,13 +135,14 @@ class WallpaperSource(context: Context) {
         }
     }.getOrNull()
 
-    private fun prepare(source: Bitmap) {
+    /** Makes the two copies the glass uses. An [owned] source is used up; any other is left as it was. */
+    private fun prepare(source: Bitmap, owned: Boolean = true) {
         val scale = min(1f, min(SHARP_WIDTH.toFloat() / source.width, SHARP_HEIGHT.toFloat() / source.height))
-        val sharp = if (scale < 1f) {
-            Bitmap.createScaledBitmap(source, (source.width * scale).roundToInt(), (source.height * scale).roundToInt(), true)
-                .also { if (it !== source) source.recycle() }
-        } else {
-            source
+        val sharp = when {
+            scale < 1f -> Bitmap.createScaledBitmap(source, (source.width * scale).roundToInt(), (source.height * scale).roundToInt(), true)
+                .also { if (owned && it !== source) source.recycle() }
+            owned -> source
+            else -> source.copy(Bitmap.Config.ARGB_8888, false)
         }
         val blurWidth = min(BLUR_WIDTH, sharp.width)
         val blurHeight = (sharp.height * blurWidth.toFloat() / sharp.width).roundToInt().coerceAtLeast(1)
@@ -193,6 +215,7 @@ class WallpaperSource(context: Context) {
     }
 
     private companion object {
+        const val PRESENTED = "presented"
         const val BLUR_WIDTH = 220
         const val SHARP_WIDTH = 960
         const val SHARP_HEIGHT = 1920

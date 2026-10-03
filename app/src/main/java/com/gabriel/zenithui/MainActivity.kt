@@ -84,6 +84,16 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onStart() {
+        super.onStart()
+        viewModel.homeShowing(true)
+    }
+
+    override fun onStop() {
+        viewModel.homeShowing(false)
+        super.onStop()
+    }
+
     override fun onResume() {
         super.onResume()
         viewModel.refreshWallpaper()

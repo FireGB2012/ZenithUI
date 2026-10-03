@@ -26,6 +26,7 @@ import com.gabriel.zenithui.data.ROW_UNITS
 import com.gabriel.zenithui.data.SettingsStore
 import com.gabriel.zenithui.data.WidgetCell
 import com.gabriel.zenithui.data.Widgets
+import com.gabriel.zenithui.data.WallStyle
 import com.gabriel.zenithui.data.WallpaperSource
 import com.gabriel.zenithui.data.ZenithSettings
 import com.gabriel.zenithui.data.trialDaysLeft
@@ -50,6 +51,16 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
     val apps: StateFlow<List<AppInfo>> = repository.apps
     val backdrop = wallpaperSource.backdrop
     val sharpBackdrop = wallpaperSource.sharpBackdrop
+
+    private val director = WallpaperDirector(application, viewModelScope, store.settings, wallpaperSource) {
+        store.update { it.copy(wallpaperStyle = "") }
+    }
+
+    /** A wallpaper fading in over the old one, for the home screen to draw; null when there is none. */
+    val wallpaperIncoming: StateFlow<Incoming?> = director.incoming
+
+    /** Android would not take a wallpaper. */
+    val wallpaperRefused = director.refused
 
     /**
      * What Zenith Plus is worth to this user right now. Play is the authority on the purchase,
@@ -110,7 +121,11 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
         icons.prime(settings.value.iconPack, settings.value.iconShape)
         viewModelScope.launch { repository.refresh() }
         viewModelScope.launch { wallpaperSource.refresh() }
-        wallpaperSource.watch { viewModelScope.launch { wallpaperSource.refresh() } }
+        wallpaperSource.watch {
+            viewModelScope.launch { wallpaperSource.refresh() }
+            director.wallpaperChanged()
+        }
+        director.start()
         viewModelScope.launch {
             val current = settings.value
             icons.configure(current.iconPack, current.iconShape)
@@ -331,11 +346,37 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
 
     override fun onCleared() {
         wallpaperSource.stopWatching()
+        director.stop()
         repository.stopObserving()
         super.onCleared()
     }
 
     fun refreshWallpaper() = viewModelScope.launch { wallpaperSource.refresh() }
+
+    /**
+     * Makes one of Zenith's designs the wallpaper, from now on kept in step with the theme.
+     * [pinnedPalette] is the palette to paint it in whatever the theme is, or empty to follow the
+     * theme's own; [switchThemeTo] changes the theme as well, to match.
+     */
+    fun setWallpaper(style: WallStyle, pinnedPalette: String, lockToo: Boolean, switchThemeTo: String?) {
+        store.update {
+            it.copy(
+                wallpaperStyle = style.name,
+                wallpaperPalette = pinnedPalette,
+                wallpaperLock = lockToo,
+                paletteId = switchThemeTo ?: it.paletteId,
+            )
+        }
+        director.request()
+    }
+
+    /** A photo is the wallpaper now: no design of Zenith's is in use, and nothing follows the theme. */
+    fun photoWallpaperSet() = store.update { it.copy(wallpaperStyle = "") }
+
+    /** Whether the home screen is on show, which is when a new wallpaper can be faded in. */
+    fun homeShowing(showing: Boolean) {
+        director.homeShowing = showing
+    }
 
     fun refreshApps() = viewModelScope.launch { repository.refresh() }
 

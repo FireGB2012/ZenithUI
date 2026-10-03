@@ -29,10 +29,10 @@ Liquid glass launcher: matching wallpapers, widgets and thumb-first menus.
 Zenith UI is a home screen that pairs the calm of frosted glass with Android's freedom.
 
 LIQUID GLASS
-Panels are translucent, tinted and lit from the top edge, and once Zenith is your default home app they blur a copy of your own wallpaper - so the launcher looks made of your background, not painted over it. Tilt the phone and the light travels round the edge of every panel, the way a real bevel catches a real light.
+Panels are translucent, tinted and lit from the top edge, and once Zenith is your default home app they blur a copy of your own wallpaper - so the launcher looks made of your background, not painted over it. Tilt the phone and the light travels round the edge of every panel.
 
 WALLPAPERS MADE TO MATCH
-Zenith paints its own: eight designs - glow, dunes, waves, orbit, aurora, facets, ribbons and plain - in the colours of every theme, opening on the ones made for yours. Set one from another theme and Zenith offers to change colour with it. Your own photos are one row away.
+Zenith paints its own: twenty-two designs - soft glows, flowing lines, glass shapes and whole scenes - in every theme's colours, light and dark. And the wallpaper follows your theme: change the palette, or let the phone go dark in the evening, and the same design is repainted to match and faded in. Your own photos are one row away, and never touched.
 
 BUILT FOR ONE HAND
 Every menu is a bottom sheet. The app drawer's search field sits at the bottom where your thumb already is, and the drawer follows your finger as you pull it up or push it down.
@@ -44,25 +44,25 @@ PLACEMENT THAT JUST WORKS
 Icons size themselves to your grid, so there is no icon size slider to fiddle with. Drop one over an edge and it slides in rather than bouncing back; drop one on a full page and it carries on to the next page with room. Everything keeps to the same lines: widgets, icons and the dock.
 
 WIDGETS THAT FIT
-Five built-in widgets: an oversized clock, a live battery ring, a month calendar, a quick note and quick toggles with a working torch, plus a search bar for your apps or Google that sits above the dock. Long press any widget or app, tap Resize and pull the pointer on its corner - make it any size you like, up to the whole page. Widgets are cut to the same lines as the icons around them, so nothing looks out of place.
+Five built-in widgets: an oversized clock, a live battery ring, a month calendar, a quick note and quick toggles with a working torch, plus a search bar for your apps or Google that sits above the dock. Long press any widget or app, tap Resize and pull the pointer on its corner - make it any size you like, up to the whole page.
 
 SETTINGS YOU CAN READ
 Five short pages instead of one long list, and the first tells you how everything is set without opening anything. Customise is always in reach: pinch the home screen, hold your name, or open it from any long press menu.
 
 ZENITH PLUS
-Try the extras free for a week: a theme maker that builds a palette from any three colours you like, hidden apps that stay out of the drawer behind a PIN, and a backup you can save to a file and restore on any phone. After that it is $1.99 a month, or $14.99 once for the lifetime pass. No ads either way, and nothing that was free before is ever taken away.
+Try the extras free for a week: seven more wallpapers, a theme maker that builds a palette from any three colours you like, hidden apps that stay out of the drawer behind a PIN, and a backup you can save to a file and restore on any phone. After that it is $1.99 a month, or $14.99 once for the lifetime pass. No ads either way, and nothing that was free before is ever taken away.
 
 AS MANY PAGES AS YOU LIKE
 Tap the + beside the page dots for another page, or hold an icon against the side of the screen to carry it across. Pages you leave empty tidy themselves away.
 
 AURA
-Open Zenith once a day and the streak pays you: ten points on day one, more for every day in a row, up to fifty. Points buy themes - five to start with, from Ember to Obsidian. Miss a day and the streak starts again; nothing you have earned is taken back. It is counted on your phone, with no account and nothing sent anywhere.
+Open Zenith once a day and the streak pays you: ten points on day one, more for every day in a row, up to fifty. Points buy themes - five to start with, from Ember to Obsidian. Miss a day and the streak starts again; nothing you have earned is taken back. It is all counted on your phone.
 
 MAKE IT YOURS
 Six palettes, light, dark or automatic, adjustable glass, Compact, Balanced or Roomy grids that size themselves to your screen, labels on or off, four icon shapes, and support for any Nova or ADW compatible icon pack.
 
 BEDSIDE CLOCK
-Tap the clock widget for a dimmed full screen clock with the date and today's calendar - a quiet bedside face that keeps the screen awake while it is open.
+Tap the clock widget for a dimmed full screen clock with the date and today's calendar. It keeps the screen awake while it is open.
 
 SMOOTH BY DESIGN, FOR EVERYONE
 Nothing snaps. Icons glide to their new cell, sheets spring up from the edge, palettes cross-fade, and it all runs at your screen's full rate, up to 120Hz, whether or not you ever buy anything.
@@ -78,9 +78,9 @@ Beyond Google Play's own billing permissions, Zenith UI only asks to set your wa
 ```
 First release.
 - Liquid glass home screen that blurs your wallpaper
-- Wallpapers Zenith paints in your theme's colours
+- Twenty-two wallpapers that change colour with your theme
 - Twenty second setup with a live preview of your phone
-- Five built-in widgets and a search bar above the dock, all on the same lines as your icons
+- Five widgets and a search bar, all in line with your icons
 - A full page passes the icon on to the next page with room
 - Drawer that tracks your thumb, with app and Google search
 - Six palettes, icon packs, adjustable grid, bedside clock
@@ -155,7 +155,7 @@ address, then buy from a build signed with the upload key and installed from a P
 
 | Permission | Why |
 | --- | --- |
-| `SET_WALLPAPER` | The Customise sheet opens the system wallpaper picker |
+| `SET_WALLPAPER` | Zenith sets the wallpapers it paints, and a photo you pick in it |
 | `VIBRATE` | A short tick when you pick up an icon or resize a widget |
 | `READ_CALENDAR` | Optional. Requested at runtime the first time you ask the bedside clock to show today's events; the launcher works fully without it |
 | `com.android.vending.BILLING` | Selling Zenith Plus through Google Play |

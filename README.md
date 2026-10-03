@@ -75,6 +75,24 @@ circle / rounded / square) and icon packs. Any Nova- or ADW-compatible icon pack
 device is detected and its `appfilter.xml` is parsed. Changing the grid re-flows the existing layout
 instead of dropping items.
 
+## Wallpapers
+
+Zenith paints its own wallpapers on the phone (`WallpaperArt`, `WallDesigns`): twenty-two designs
+on four shelves — Soft, Lines, Shapes and Scenes — seven of them for Zenith Plus. Every design is
+drawn from a theme's five colours and has a light picture and a dark one, each made so labels and
+the status bar stay readable over it.
+
+A design, once set, **follows the theme**. Change the palette, or go from light to dark (by hand
+or with the phone, on Auto), and `WallpaperDirector` paints the same design again in the new
+colours, fades it in over the old wallpaper, moves the glass onto it half way, and then hands it to
+Android — which cannot fade between wallpapers itself. Only where a run of changes stops is
+painted. A design set in another theme's colours without switching Zenith to that theme keeps those
+colours and still changes between light and dark. The switch is under Wallpapers and under
+Settings → Look.
+
+Zenith only ever repaints a wallpaper it set and that is still on screen. A photo, or anything
+chosen in another app, is never replaced, and choosing one ends the following.
+
 ## How the glass works
 
 `Modifier.glass()` is Zenith's Liquid Glass, modelled on Apple's own description of it, in two
@@ -108,7 +126,7 @@ captured or blurred per frame.
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Compose BOM 2024.12.01, minSdk 31, application ID `com.gabriel.zenithui`, no third-party libraries.
+Compose BOM 2024.12.01, minSdk 29, application ID `com.gabriel.zenith_Launcher`, no third-party libraries.
 Settings and layout are stored as JSON in `SharedPreferences` (`SettingsStore`).
 
 For signed release builds and the Play Store checklist see [RELEASING.md](RELEASING.md); store

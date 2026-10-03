@@ -53,19 +53,19 @@ ZENITH PLUS
 Try the extras free for a week: seven more wallpapers, a theme maker that builds a palette from any three colours you like, hidden apps that stay out of the drawer behind a PIN, and a backup you can save to a file and restore on any phone. After that it is $1.99 a month, or $14.99 once for the lifetime pass. No ads either way, and nothing that was free before is ever taken away.
 
 AS MANY PAGES AS YOU LIKE
-Tap the + beside the page dots for another page, or hold an icon against the side of the screen to carry it across. Pages you leave empty tidy themselves away.
+Tap the + beside the page dots for another page, or hold an icon against the side of the screen to carry it across.
 
 AURA
 Open Zenith once a day and the streak pays you: ten points on day one, more for every day in a row, up to fifty. Points buy themes - five to start with, from Ember to Obsidian. Miss a day and the streak starts again; nothing you have earned is taken back. It is all counted on your phone.
 
 MAKE IT YOURS
-Six palettes, light, dark or automatic, adjustable glass, Compact, Balanced or Roomy grids that size themselves to your screen, labels on or off, four icon shapes, and support for any Nova or ADW compatible icon pack.
+Six palettes, light, dark or automatic, adjustable glass, Compact, Balanced or Roomy grids, labels on or off, four icon shapes, and support for any Nova or ADW compatible icon pack.
 
 BEDSIDE CLOCK
-Tap the clock widget for a dimmed full screen clock with the date and today's calendar. It keeps the screen awake while it is open.
+Tap the clock widget for a dimmed full screen clock with the date and today's calendar.
 
 SMOOTH BY DESIGN, FOR EVERYONE
-Nothing snaps. Icons glide to their new cell, sheets spring up from the edge, palettes cross-fade, and it all runs at your screen's full rate, up to 120Hz, whether or not you ever buy anything.
+Unlock and the home screen flies in. Turn pages your way: Depth, Slide, Cube or Stack. Pick up an icon and the rest jiggle; put it down and it lands with a ring. Folders open out of their own icon. All at your screen's full rate, up to 120Hz, free or not - and one switch turns it down to plain fades.
 
 PRIVATE BY DEFAULT
 No account, no analytics, no ads. Your name, layout, streak and settings never leave your phone - the only thing that goes online is Google Play checking whether you own Zenith Plus.
@@ -81,7 +81,7 @@ First release.
 - Twenty-two wallpapers that change colour with your theme
 - Twenty second setup with a live preview of your phone
 - Five widgets and a search bar, all in line with your icons
-- A full page passes the icon on to the next page with room
+- Fly-in, four page swipes, jiggle, folders that open in place
 - Drawer that tracks your thumb, with app and Google search
 - Six palettes, icon packs, adjustable grid, bedside clock
 - Zenith Plus free for a week; Aura streak points buy themes

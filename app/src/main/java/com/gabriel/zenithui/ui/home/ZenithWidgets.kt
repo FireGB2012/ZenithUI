@@ -503,10 +503,12 @@ private fun ClockWidget(form: WidgetForm, userName: String, width: Dp, height: D
 
 @Composable
 private fun AnimatedDigits(text: String, style: TextStyle, modifier: Modifier = Modifier) {
+    val reduced = LocalMotionLevel.current.reduced
     AnimatedContent(
         targetState = text,
         transitionSpec = {
-            (slideInVertically(spring(dampingRatio = 0.6f, stiffness = 180f)) { it / 3 } + fadeIn(tween(420)))
+            // With movement reduced the new figure fades in where the old one was.
+            if (reduced) fadeIn(tween(150)).togetherWith(fadeOut(tween(150))) else (slideInVertically(spring(dampingRatio = 0.6f, stiffness = 180f)) { it / 3 } + fadeIn(tween(420)))
                 .togetherWith(slideOutVertically(tween(560)) { -it / 3 } + fadeOut(tween(320)))
         },
         modifier = modifier,

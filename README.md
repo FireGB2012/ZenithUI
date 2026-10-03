@@ -100,6 +100,32 @@ Settings → Look.
 Zenith only ever repaints a wallpaper it set and that is still on screen. A photo, or anything
 chosen in another app, is never replaced, and choosing one ends the following.
 
+## Motion
+
+Everything that moves is a spring, and anything that can be worked out without a screen is a plain
+function with a test: `MotionLevel` (how much moves), `PageEffects` (where a page is drawn part way
+through a swipe) and `FlyIn` (when each item arrives).
+
+- **Arriving.** On a cold start and after an unlock the home screen flies in: every item starts
+  out from the middle and comes in to its place, the middle of the page first, inside 600 ms.
+  Coming back from an app it is the same movement over a fifth of the distance.
+- **Pages.** Four ways to turn one — Depth, Slide, Cube, Stack — and dots whose pill stretches
+  towards the next as the page turns.
+- **Carrying.** The copy under the finger lifts and casts a shadow; everything else on the page
+  rocks, each item out of step; a tick as the landing spot changes; a ring where it lands.
+- **Folders** grow out of their own icon into a pane of glass and go back into it.
+- **Widgets** animate their own changes: rolling digits, a ring that springs to its value and
+  glints while charging, today's dot drawing itself in, toggles that change shape.
+- **The drawer and sheets.** Rows rise in each time the drawer opens; a wallpaper's preview grows
+  out of the thumbnail that was tapped.
+
+Movement goes through `graphicsLayer` or draw-time state, never layout, and anything that runs
+for a while runs on one clock per page, so nothing is left running once it has settled (the one
+exception is the charging glint, while there is a charger). **Animations: Reduced** in Settings,
+or the phone's own *Remove animations*, turns all of it down to quick fades: no fly-in, no
+rocking, no tilt, pages simply slide. Haptics go through one `Haptics` helper — a tick, a pick-up,
+a confirmation — and are silent when the switch is off.
+
 ## How the glass works
 
 `Modifier.glass()` is Zenith's Liquid Glass, modelled on Apple's own description of it, in two

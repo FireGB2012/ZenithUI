@@ -69,6 +69,7 @@ import com.gabriel.zenithui.data.AppCell
 import com.gabriel.zenithui.data.AppInfo
 import com.gabriel.zenithui.data.FolderCell
 import com.gabriel.zenithui.data.HomeGeometry
+import com.gabriel.zenithui.data.HomeHeader
 import com.gabriel.zenithui.data.HomeItem
 import com.gabriel.zenithui.data.ROW_UNITS
 import com.gabriel.zenithui.data.WidgetCell
@@ -249,6 +250,7 @@ private fun MiniHome(
     backgroundAlpha: () -> Float,
 ) {
     val palette = LocalPalette.current
+    val hour = remember { java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY) }
     val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val backdrop = Brush.verticalGradient(
@@ -275,8 +277,10 @@ private fun MiniHome(
         }
         // Laid out exactly like the home screen it becomes: name, page, dots, dock.
         Column(Modifier.fillMaxSize().padding(top = statusTop)) {
-            Text(
-                text = settings.userName.trim().ifBlank { "Zenith" },
+            // What the real page writes at its top: your name, a greeting, or nothing.
+            val header = HomeHeader.text(settings.header, settings.userName, hour)
+            if (header == null) Spacer(Modifier.height(8.dp)) else Text(
+                text = header,
                 color = palette.onGlass.copy(alpha = 0.85f),
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Medium,

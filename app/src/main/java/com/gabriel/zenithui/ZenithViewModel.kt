@@ -380,6 +380,20 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
 
     fun refreshApps() = viewModelScope.launch { repository.refresh() }
 
+    /**
+     * Puts the layout back in line: anything overlapping, off the grid or between rows is moved
+     * to the nearest place it fits. Returns how many items had to move.
+     */
+    fun tidyUp(): Int {
+        val current = settings.value
+        val before = layout.value
+        val after = LayoutBuilder.settle(before, current.columns, current.rows, free = current.freeform && plus.value.active)
+        val was = before.associateBy { it.id }
+        val moved = after.count { was[it.id] != it }
+        if (moved > 0) store.setLayout(after)
+        return moved
+    }
+
     // ---------------------------------------------------------------- onboarding
 
     /** The real work behind the setup screen: read the device, then compose a home screen. */

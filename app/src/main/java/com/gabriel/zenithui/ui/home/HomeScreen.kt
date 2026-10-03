@@ -104,6 +104,9 @@ import com.gabriel.zenithui.ui.common.Motion
 import com.gabriel.zenithui.ui.common.appearIn
 import com.gabriel.zenithui.ui.common.pressBounce
 import com.gabriel.zenithui.ui.theme.LocalPalette
+import com.gabriel.zenithui.ui.settings.SettingsActions
+import com.gabriel.zenithui.ui.settings.SettingsPreview
+import com.gabriel.zenithui.ui.settings.SettingsScreen
 import com.gabriel.zenithui.ui.theme.LocalWallpaperOffset
 import com.gabriel.zenithui.ui.theme.ZenithShapes
 import com.gabriel.zenithui.ui.theme.glass
@@ -144,7 +147,6 @@ private sealed interface HomeSheet {
     data class DrawerApp(val key: String) : HomeSheet
     data object Customize : HomeSheet
     data object WidgetPicker : HomeSheet
-    data object Preferences : HomeSheet
     data object Help : HomeSheet
     data object Plus : HomeSheet
     data object Aura : HomeSheet
@@ -263,6 +265,10 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
     var ambient by remember { mutableStateOf(false) }
     var sheet by remember { mutableStateOf<HomeSheet?>(null) }
     var sheetVisible by remember { mutableStateOf(false) }
+    // Settings is a page of its own, under the sheets: one opened from it closes back onto it.
+    var settingsOpen by remember { mutableStateOf(false) }
+    val settingsShown = animateFloatAsState(if (settingsOpen) 1f else 0f, tween(280), label = "settingsShown")
+    val sharpBackdrop by viewModel.sharpBackdrop.collectAsState()
 
     var drawerHeightPx by remember { mutableFloatStateOf(0f) }
     var homeOrigin by remember { mutableStateOf(Offset.Zero) }
@@ -842,6 +848,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             // Home while an app is still opening sends it straight back into its icon.
             if (card != null && cardOpening) closeCard()
             hideSheet()
+            settingsOpen = false
             closeDrawer()
             if (pagerState.currentPage != 0) pagerState.animateScrollToPage(0)
         }
@@ -883,7 +890,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                         val span = (fingers[0].position - fingers[1].position).getDistance()
                         if (startSpan == 0f) {
                             startSpan = span
-                        } else if (!fired && !drag.isDragging && span < startSpan * 0.72f) {
+                        } else if (!fired && !drag.isDragging && !settingsOpen && span < startSpan * 0.72f) {
                             fired = true
                             haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
                             showSheet(HomeSheet.Customize)
@@ -927,7 +934,8 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     scaleX = scale
                     scaleY = scale
                     val sunk = depth.coerceIn(0f, 1f)
-                    alpha = (1f - 0.55f * drawerProgress) * (1f - 0.25f * sunk)
+                    // Settings is glass over the wallpaper; the home screen is not seen through it.
+                    alpha = (1f - 0.55f * drawerProgress) * (1f - 0.25f * sunk) * (1f - settingsShown.value)
                 }
                 // The blur is its own short animation rather than a per-frame effect rebuild:
                 // recreating a full screen RenderEffect on every drag frame is what made the
@@ -1258,6 +1266,40 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             )
         }
 
+        // ------------------------------------------------------------ settings
+        SettingsScreen(
+            visible = settingsOpen,
+            covered = sheetVisible,
+            settings = settings,
+            plus = plus,
+            preview = SettingsPreview(
+                items = remember(layout) { layout.filter { it.page == 0 } },
+                appsByKey = appsByKey,
+                wallpaper = sharpBackdrop,
+                screenWidth = with(density) { drawerWidthPx.toDp() },
+                screenHeight = with(density) { drawerHeightPx.toDp() },
+            ),
+            actions = SettingsActions(
+                change = { transform -> viewModel.updateSettings(transform) },
+                wallpaper = { showSheet(HomeSheet.Wallpapers) },
+                themeMaker = { withPlus { showSheet(HomeSheet.ThemeMaker) } },
+                hiddenApps = { withPlus { showSheet(HomeSheet.HiddenApps) } },
+                freeform = { on ->
+                    // Turning it on is the Plus part; turning it off is always allowed.
+                    if (on && !plus.active) showSheet(HomeSheet.Plus)
+                    else viewModel.updateSettings { it.copy(freeform = on) }
+                },
+                backup = { withPlus { saveBackup.launch(Backup.fileName()) } },
+                restore = { withPlus { openBackup.launch(arrayOf("*/*")) } },
+                plus = { showSheet(HomeSheet.Plus) },
+                aura = { showSheet(HomeSheet.Aura) },
+                help = { showSheet(HomeSheet.Help) },
+                reset = { viewModel.resetEverything() },
+                tidy = { viewModel.tidyUp() },
+            ),
+            onDismiss = { settingsOpen = false },
+        )
+
         // ------------------------------------------------------------ sheets
         when (val current = sheet) {
             is HomeSheet.Item -> {
@@ -1334,7 +1376,10 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     ambient = true
                 },
                 onWidgets = { showSheet(HomeSheet.WidgetPicker) },
-                onSettings = { showSheet(HomeSheet.Preferences) },
+                onSettings = {
+                    hideSheet()
+                    settingsOpen = true
+                },
                 onDefaultLauncher = {
                     runCatching {
                         context.startActivity(
@@ -1357,27 +1402,6 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
 
             HomeSheet.Help -> HelpSheet(
                 visible = sheetVisible,
-                onDismiss = { hideSheet() },
-            )
-
-            HomeSheet.Preferences -> SettingsSheet(
-                visible = sheetVisible,
-                settings = settings,
-                plus = plus,
-                onChange = { transform -> viewModel.updateSettings(transform) },
-                onAura = { showSheet(HomeSheet.Aura) },
-                onFreeform = { on ->
-                    // Turning it on is the Plus part; turning it off is always allowed.
-                    if (on && !plus.active) showSheet(HomeSheet.Plus)
-                    else viewModel.updateSettings { it.copy(freeform = on) }
-                },
-                onThemeMaker = { withPlus { showSheet(HomeSheet.ThemeMaker) } },
-                onHiddenApps = { withPlus { showSheet(HomeSheet.HiddenApps) } },
-                onBackup = { withPlus { saveBackup.launch(Backup.fileName()) } },
-                onRestore = { withPlus { openBackup.launch(arrayOf("*/*")) } },
-                onPlus = { showSheet(HomeSheet.Plus) },
-                onReset = { viewModel.resetEverything() },
-                onWallpaper = { showSheet(HomeSheet.Wallpapers) },
                 onDismiss = { hideSheet() },
             )
 

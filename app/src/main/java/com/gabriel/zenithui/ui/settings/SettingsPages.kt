@@ -246,7 +246,7 @@ internal fun HomeOptions(settings: ZenithSettings, plus: PlusStatus, preview: Se
                 icon = Icons.Rounded.AutoFixHigh,
                 title = "Tidy up",
                 subtitle = when (val moved = tidied) {
-                    null -> "Close the gaps and put everything back in line"
+                    null -> "Put anything out of line back in its place"
                     0 -> "Everything was already in place"
                     1 -> "Moved 1 item"
                     else -> "Moved $moved items"

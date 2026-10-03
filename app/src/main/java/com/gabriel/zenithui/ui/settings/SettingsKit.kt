@@ -432,7 +432,7 @@ private fun PaletteDot(name: String, colours: List<Color>, selected: Boolean, ic
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
-            .width(62.dp)
+            .width(58.dp)
             .pressBounce(0.9f)
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
                 if (!selected) tick()

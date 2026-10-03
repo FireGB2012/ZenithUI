@@ -69,11 +69,18 @@ version of.
 
 ## Customisation
 
-Long-press an empty spot → **Customise** → **Zenith settings**: palette, appearance, glass strength,
-grid density, labels, the search bar, what is written at the top of the page, icon shape (squircle /
-circle / rounded / square) and icon packs. Any Nova- or ADW-compatible icon pack installed on the
-device is detected and its `appfilter.xml` is parsed. Changing the grid re-flows the existing layout
-instead of dropping items.
+Long-press an empty spot → **Customise** → **Settings**. Settings is a page of its own, the full
+height of the screen (`ui/settings/`): a search box and eight groups, each saying how it is set
+now — Wallpaper & theme, Home screen, Motion & feel, Apps, Zenith Plus, Aura, Backup & reset, About
+& help. A group pushes in from the side; back, the arrow or a swipe from the left edge pops it.
+Search finds any option by its name or by other words for it ("dark", "vibrate", "battery"), opens
+its page and pulses the row. The Theme and Home pages start with a small live copy of your own home
+screen, drawn by the same code as the real one, so a change is seen as it is made.
+
+Every option is listed once in `SettingsCatalog`, which is what the search reads. Any Nova- or
+ADW-compatible icon pack installed on the device is detected and its `appfilter.xml` is parsed.
+Changing the grid re-flows the existing layout instead of dropping items, and **Tidy up** puts
+anything out of line back in its place.
 
 ## Wallpapers
 

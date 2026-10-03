@@ -38,7 +38,7 @@ BUILT FOR ONE HAND
 Every menu is a bottom sheet. The app drawer's search field sits at the bottom where your thumb already is, and the drawer follows your finger as you pull it up or push it down.
 
 SET UP IN TWENTY SECONDS
-Tell Zenith your name, pick a colour and watch a live picture of your own phone change with it, choose your widgets, and it builds the first page for you. Everything else stays one swipe away instead of being dumped across five pages.
+Tell Zenith your name, pick a colour and watch a live picture of your own phone change with it, choose your widgets, and it builds the first page for you. Everything else stays one swipe away.
 
 PLACEMENT THAT JUST WORKS
 Icons size themselves to your grid, so there is no icon size slider to fiddle with. Drop one over an edge and it slides in rather than bouncing back; drop one on a full page and it carries on to the next page with room. Everything keeps to the same lines: widgets, icons and the dock.
@@ -47,7 +47,7 @@ WIDGETS THAT FIT
 Five built-in widgets: an oversized clock, a live battery ring, a month calendar, a quick note and quick toggles with a working torch, plus a search bar for your apps or Google that sits above the dock. Long press any widget or app, tap Resize and pull the pointer on its corner - make it any size you like, up to the whole page.
 
 SETTINGS YOU CAN READ
-Five short pages instead of one long list, and the first tells you how everything is set without opening anything. Customise is always in reach: pinch the home screen, hold your name, or open it from any long press menu.
+One page with a search box: type "dark" or "vibrate" and it takes you to the switch. Eight groups say how they are set before you open them, and a small live copy of your home screen shows each change as you make it. To get there, pinch the home screen or hold your name.
 
 ZENITH PLUS
 Try the extras free for a week: seven more wallpapers, a theme maker that builds a palette from any three colours you like, hidden apps that stay out of the drawer behind a PIN, and a backup you can save to a file and restore on any phone. After that it is $1.99 a month, or $14.99 once for the lifetime pass. No ads either way, and nothing that was free before is ever taken away.

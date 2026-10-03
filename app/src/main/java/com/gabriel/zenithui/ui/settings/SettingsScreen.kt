@@ -5,6 +5,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -181,6 +182,9 @@ fun SettingsScreen(
     val rootScroll = rememberScrollState()
     val pageScroll = rememberScrollState()
     LaunchedEffect(page) { if (page != null) pageScroll.scrollTo(0) }
+    // Under a sheet the page empties to plain glass: where the glass is only frosted, a sheet is
+    // see-through, and two layers of words on top of each other can be read by nobody.
+    val uncovered = animateFloatAsState(if (covered) 0f else 1f, tween(200), label = "settingsUncovered")
 
     Box(Modifier.fillMaxSize()) {
         AnimatedVisibility(visible = visible, enter = fadeIn(tween(300)), exit = fadeOut(tween(260))) {
@@ -201,6 +205,7 @@ fun SettingsScreen(
                     .navigationBarsPadding()
                     .imePadding(),
             ) {
+                Column(Modifier.fillMaxSize().graphicsLayer { alpha = uncovered.value }) {
                 TopBar(
                     title = page?.title ?: "Settings",
                     canGoBack = page != null,
@@ -279,6 +284,7 @@ fun SettingsScreen(
                                 }
                         )
                     }
+                }
                 }
             }
         }

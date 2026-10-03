@@ -302,7 +302,6 @@ private fun Preview(
                         context = context,
                         style = style,
                         colors = palette.wallColors(),
-                        seed = seedFor(style, palette),
                         lockToo = target == "both",
                     )
                     busy = false
@@ -389,7 +388,7 @@ private fun WallpaperImage(style: WallStyle, palette: ZenithPalette, widthPx: In
     val image by produceState(initialValue = thumbCache.get(key), key) {
         if (value == null) {
             value = withContext(Dispatchers.Default) {
-                WallpaperArt.render(style, colors, widthPx, heightPx, seedFor(style, palette)).asImageBitmap()
+                WallpaperArt.render(style, colors, widthPx, heightPx).asImageBitmap()
             }.also { thumbCache.put(key, it) }
         }
     }
@@ -409,7 +408,4 @@ private fun WallpaperImage(style: WallStyle, palette: ZenithPalette, widthPx: In
 }
 
 private val thumbCache = LruCache<String, ImageBitmap>(120)
-
-/** The same design in the same theme is always the same picture, thumbnail or full size. */
-private fun seedFor(style: WallStyle, palette: ZenithPalette): Int = style.ordinal * 7919 + palette.id.hashCode()
 

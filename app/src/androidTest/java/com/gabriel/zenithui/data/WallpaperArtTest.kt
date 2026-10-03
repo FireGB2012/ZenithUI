@@ -97,16 +97,28 @@ class WallpaperArtTest {
         }
     }
 
-    /** Not a check: two pictures of every design side by side, to be pulled off the device and looked at. */
+    /** Not a check: every design side by side, to be pulled off the device and looked at. */
     @Test
     fun writesContactSheets() {
+        sheets("walls", WallStyle.entries, across = 6, thumbWidth = 180)
+    }
+
+    /**
+     * A closer look at a few: `-e detail Contour,Peaks` on the command line writes those designs
+     * large enough to judge their lines.
+     */
+    @Test
+    fun writesADetailSheetWhenAskedFor() {
+        val asked = InstrumentationRegistry.getArguments().getString("detail") ?: return
+        val styles = asked.split(',').mapNotNull { WallStyle.byName(it.trim()) }
+        if (styles.isNotEmpty()) sheets("detail", styles, across = 3, thumbWidth = 360)
+    }
+
+    private fun sheets(prefix: String, styles: List<WallStyle>, across: Int, thumbWidth: Int) {
         for (dark in listOf(true, false)) for (palette in listOf(Palettes.Midnight, Palettes.Sunset)) {
-            val across = 6
-            val thumbWidth = 180
-            val thumbHeight = 390
+            val thumbHeight = thumbWidth * 13 / 6
             val gap = 8
             val caption = 26
-            val styles = WallStyle.entries
             val down = (styles.size + across - 1) / across
             val sheet = Bitmap.createBitmap(
                 across * (thumbWidth + gap) + gap,
@@ -127,7 +139,7 @@ class WallpaperArtTest {
                 thumb.recycle()
                 canvas.drawText(style.label + if (style.plus) " +" else "", x.toFloat(), (y + thumbHeight + 20).toFloat(), text)
             }
-            val name = "walls-${palette.id}-${if (dark) "dark" else "light"}.png"
+            val name = "$prefix-${palette.id}-${if (dark) "dark" else "light"}.png"
             File(context.externalCacheDir, name).outputStream().use { sheet.compress(Bitmap.CompressFormat.PNG, 100, it) }
             sheet.recycle()
         }

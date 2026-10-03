@@ -43,12 +43,19 @@ enum class WallGroup(val label: String) {
 enum class WallStyle(val label: String, val group: WallGroup, val plus: Boolean = false) {
     Glow("Glow", WallGroup.Soft),
     Calm("Calm", WallGroup.Soft),
+    Mesh("Mesh", WallGroup.Soft),
+    Drift("Drift", WallGroup.Soft),
     Waves("Waves", WallGroup.Lines),
     Orbit("Orbit", WallGroup.Lines),
+    Contour("Contour", WallGroup.Lines),
+    Ripple("Ripple", WallGroup.Lines),
+    Grid("Grid", WallGroup.Lines),
     Facets("Facets", WallGroup.Shapes),
     Bands("Bands", WallGroup.Shapes),
+    Bubbles("Bubbles", WallGroup.Shapes),
     Dunes("Dunes", WallGroup.Scenes),
-    Aurora("Aurora", WallGroup.Scenes);
+    Aurora("Aurora", WallGroup.Scenes),
+    Peaks("Peaks", WallGroup.Scenes);
 
     companion object {
         fun byName(name: String): WallStyle? = entries.firstOrNull { it.name == name }
@@ -145,6 +152,9 @@ internal class Easel(val canvas: Canvas, val c: WallColors, val w: Float, val h:
         canvas.drawRect(0f, 0f, w, h, paint)
     }
 
+    /** The backdrop's colour at one height, 0 at the top to 1 at the foot, for designs worked out point by point. */
+    fun ground(v: Float): Int = if (v < 0.5f) mix(c.deep, c.mid, v * 2f) else mix(c.mid, c.base, v * 2f - 1f)
+
     /**
      * A soft pool of colour: strongest in the middle, gone by [radius]. On a pale page the same
      * pool reads far stronger than it does in the dark, so there it is laid on more thinly.
@@ -159,6 +169,16 @@ internal class Easel(val canvas: Canvas, val c: WallColors, val w: Float, val h:
             Shader.TileMode.CLAMP,
         )
         canvas.drawCircle(x, y, radius, paint)
+    }
+
+    /** A pool of light pulled long: [length] from end to end, [width] across, turned by [degrees]. */
+    fun streak(x: Float, y: Float, length: Float, width: Float, degrees: Float, color: Int, strength: Float) {
+        canvas.save()
+        canvas.translate(x, y)
+        canvas.rotate(degrees)
+        canvas.scale(length / width, 1f)
+        light(0f, 0f, width / 2f, color, strength)
+        canvas.restore()
     }
 
     /** A colour for a line: as it is on a dark page, a shade deeper on a pale one so it still shows. */
@@ -189,6 +209,13 @@ internal class Easel(val canvas: Canvas, val c: WallColors, val w: Float, val h:
     fun calmTop(strength: Int = 90) {
         canvas.drawRect(0f, 0f, w, h * 0.16f, Paint().apply {
             shader = LinearGradient(0f, 0f, 0f, h * 0.16f, alpha(shade, strength), alpha(shade, 0), Shader.TileMode.CLAMP)
+        })
+    }
+
+    /** Fades the lower part into the backdrop, so the icons and the dock sit on something quiet. */
+    fun settle(from: Float = 0.4f, strength: Int = 170) {
+        canvas.drawRect(0f, h * from, w, h, Paint().apply {
+            shader = LinearGradient(0f, h * from, 0f, h, alpha(c.base, 0), alpha(c.base, strength), Shader.TileMode.CLAMP)
         })
     }
 

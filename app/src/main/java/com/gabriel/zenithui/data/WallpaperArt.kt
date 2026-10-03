@@ -37,6 +37,7 @@ enum class WallGroup(val label: String) {
 
 /**
  * The designs Zenith can paint. Every one of them works in any theme's colours, light and dark.
+ * Those marked [plus] are for Zenith Plus; each shelf keeps designs anyone can use.
  * A design is remembered by its name, so the names stay as they are; the order here is the order
  * in the picker.
  */
@@ -45,17 +46,24 @@ enum class WallStyle(val label: String, val group: WallGroup, val plus: Boolean 
     Calm("Calm", WallGroup.Soft),
     Mesh("Mesh", WallGroup.Soft),
     Drift("Drift", WallGroup.Soft),
+    Silk("Silk", WallGroup.Soft, plus = true),
+    Halo("Halo", WallGroup.Soft, plus = true),
     Waves("Waves", WallGroup.Lines),
     Orbit("Orbit", WallGroup.Lines),
     Contour("Contour", WallGroup.Lines),
     Ripple("Ripple", WallGroup.Lines),
     Grid("Grid", WallGroup.Lines),
+    Ribbons("Ribbons", WallGroup.Lines, plus = true),
     Facets("Facets", WallGroup.Shapes),
     Bands("Bands", WallGroup.Shapes),
     Bubbles("Bubbles", WallGroup.Shapes),
+    Prism("Prism", WallGroup.Shapes, plus = true),
+    Bloom("Bloom", WallGroup.Shapes, plus = true),
     Dunes("Dunes", WallGroup.Scenes),
     Aurora("Aurora", WallGroup.Scenes),
-    Peaks("Peaks", WallGroup.Scenes);
+    Peaks("Peaks", WallGroup.Scenes),
+    Horizon("Horizon", WallGroup.Scenes, plus = true),
+    Nebula("Nebula", WallGroup.Scenes, plus = true);
 
     companion object {
         fun byName(name: String): WallStyle? = entries.firstOrNull { it.name == name }

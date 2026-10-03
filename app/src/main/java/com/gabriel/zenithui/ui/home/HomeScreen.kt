@@ -830,6 +830,12 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
     )
     val homePressed by viewModel.homePressed.collectAsState()
     val environmentTick by viewModel.environmentTick.collectAsState()
+    val wallpaperIncoming by viewModel.wallpaperIncoming.collectAsState()
+    LaunchedEffect(Unit) {
+        viewModel.wallpaperRefused.collect {
+            Toast.makeText(context, "Android would not set that wallpaper", Toast.LENGTH_SHORT).show()
+        }
+    }
     val isDefaultLauncher = remember(homePressed, environmentTick) { isDefaultLauncher(context) }
     LaunchedEffect(homePressed) {
         if (homePressed > 0) {
@@ -899,6 +905,9 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 }
             }
     ) {
+
+        // A wallpaper changing with the theme fades in here, behind everything.
+        WallpaperFade(wallpaperIncoming, wallpaperOffset)
 
         // ------------------------------------------------------------ home
         Box(
@@ -1375,11 +1384,17 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             HomeSheet.Wallpapers -> WallpaperSheet(
                 visible = sheetVisible,
                 settings = settings,
-                onApplied = { paletteId ->
+                plusActive = plus.active,
+                onSet = { style, pinnedPalette, lockToo, switchThemeTo ->
+                    viewModel.setWallpaper(style, pinnedPalette, lockToo, switchThemeTo)
+                },
+                onPhoto = {
+                    viewModel.photoWallpaperSet()
                     // The glass is drawn from the wallpaper, so read the new one straight away.
                     viewModel.refreshWallpaper()
-                    if (paletteId != null) viewModel.updateSettings { it.copy(paletteId = paletteId) }
                 },
+                onFollow = { on -> viewModel.updateSettings { it.copy(wallpaperFollow = on) } },
+                onPlus = { showSheet(HomeSheet.Plus) },
                 onDismiss = { hideSheet() },
             )
 

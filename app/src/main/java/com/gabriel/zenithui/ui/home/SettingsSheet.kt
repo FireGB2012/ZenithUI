@@ -278,6 +278,17 @@ private fun LookPage(settings: ZenithSettings, onChange: ((ZenithSettings) -> Ze
             onSelect = { value -> onChange { it.copy(appearance = value) } },
         )
     }
+    Group {
+        ToggleRow(
+            title = "Wallpaper follows theme",
+            subtitle = if (settings.wallpaperStyle.isEmpty()) {
+                "Works with Zenith's own wallpapers; pick one under Phone"
+            } else {
+                "Repaints in the palette above, light or dark"
+            },
+            checked = settings.wallpaperFollow,
+        ) { value -> onChange { it.copy(wallpaperFollow = value) } }
+    }
     Group(padding = 14.dp) {
         PillSlider(
             label = "Glass",

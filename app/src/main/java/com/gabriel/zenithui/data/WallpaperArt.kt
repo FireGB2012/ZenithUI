@@ -1,6 +1,5 @@
 package com.gabriel.zenithui.data
 
-import android.app.WallpaperManager
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapShader
@@ -16,8 +15,6 @@ import android.os.Build
 import android.util.DisplayMetrics
 import android.view.WindowManager
 import androidx.core.graphics.ColorUtils
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import kotlin.random.Random
 
 /**
@@ -106,28 +103,6 @@ object WallpaperArt {
         windows.defaultDisplay.getRealMetrics(metrics)
         return metrics.widthPixels to metrics.heightPixels
     }
-
-    /**
-     * Paints [style] at the size of this phone's screen and makes it the wallpaper. [lockToo] sets
-     * the lock screen as well. Returns false if Android would not take it.
-     */
-    suspend fun apply(context: Context, style: WallStyle, colors: WallColors, lockToo: Boolean): Boolean =
-        withContext(Dispatchers.Default) {
-            runCatching {
-                val (screenWidth, screenHeight) = screenSize(context)
-                val bitmap = render(style, colors, screenWidth, screenHeight)
-                val which = if (lockToo) {
-                    WallpaperManager.FLAG_SYSTEM or WallpaperManager.FLAG_LOCK
-                } else {
-                    WallpaperManager.FLAG_SYSTEM
-                }
-                // Set through GlassWallpaper, which keeps a copy: Android will not let a launcher
-                // read the wallpaper back, and the glass needs something to bend.
-                val ok = GlassWallpaper.set(context, bitmap, which)
-                bitmap.recycle()
-                ok
-            }.getOrDefault(false)
-        }
 
     internal val noise: Bitmap by lazy {
         val size = 160

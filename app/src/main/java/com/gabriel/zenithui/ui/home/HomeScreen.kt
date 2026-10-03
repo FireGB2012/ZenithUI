@@ -8,6 +8,9 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -104,6 +107,7 @@ import com.gabriel.zenithui.ui.common.Motion
 import com.gabriel.zenithui.ui.common.appearIn
 import com.gabriel.zenithui.ui.common.pressBounce
 import com.gabriel.zenithui.ui.theme.LocalPalette
+import com.gabriel.zenithui.ui.common.LocalMotionLevel
 import com.gabriel.zenithui.ui.settings.SettingsActions
 import com.gabriel.zenithui.ui.settings.SettingsPreview
 import com.gabriel.zenithui.ui.settings.SettingsScreen
@@ -140,6 +144,11 @@ private const val REORDER_DELAY = 280L
 
 /** The space between the edge of the screen and the page, the dock and everything else on it. */
 private val PAGE_MARGIN = 12.dp
+
+/** A page dot, the gap between two, and how much longer the dot of the page in view is, in dp. */
+private const val DOT = 6
+private const val DOT_GAP = 6
+private const val DOT_STRETCH = 16
 
 private sealed interface HomeSheet {
     data class Item(val id: String) : HomeSheet
@@ -261,6 +270,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
     var drawerEverOpened by remember { mutableStateOf(false) }
     var focusSearch by remember { mutableStateOf(false) }
     val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
+    val motion = LocalMotionLevel.current
     var resizingId by remember { mutableStateOf<String?>(null) }
     var ambient by remember { mutableStateOf(false) }
     var sheet by remember { mutableStateOf<HomeSheet?>(null) }
@@ -1021,6 +1031,8 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                         beyondViewportPageCount = if (drag.isDragging) LayoutBuilder.MAX_PAGES else 1,
                     ) { page ->
                         val offset = (pagerState.currentPage - page) + pagerState.currentPageOffsetFraction
+                        // With movement reduced a page simply slides.
+                        val turn = PageEffects.transform(if (motion.reduced) "slide" else settings.pageEffect, offset)
                         HomePage(
                             page = page,
                             active = page == pagerState.currentPage,
@@ -1047,15 +1059,19 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                             dropPlan = dropPlan,
                             freePlacement = settings.freeform && plus.active,
                             animateEntrance = entrance,
-                            pageOffset = offset,
+                            pageOffset = if (turn.parallax) offset else 0f,
                             modifier = Modifier
                                 .fillMaxSize()
                                 .graphicsLayer {
-                                    val distance = abs(offset).coerceIn(0f, 1f)
-                                    alpha = 1f - distance * 0.4f
-                                    val scale = 0.94f + 0.06f * (1f - distance)
-                                    scaleX = scale
-                                    scaleY = scale
+                                    alpha = turn.alpha
+                                    scaleX = turn.scale
+                                    scaleY = turn.scale
+                                    rotationY = turn.rotationY
+                                    transformOrigin = TransformOrigin(turn.pivotX, 0.5f)
+                                    translationX = turn.shiftX * size.width
+                                    // Further back than the default, so a turning page keeps its
+                                    // shape instead of flaring out towards the eye.
+                                    cameraDistance = 14f * this.density
                                 }
                                 .padding(horizontal = PAGE_MARGIN, vertical = 4.dp),
                         )
@@ -1096,7 +1112,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
 
                 PageDots(
                     count = pageCount,
-                    current = pagerState.currentPage,
+                    position = { pagerState.currentPage + pagerState.currentPageOffsetFraction },
                     canAdd = pageCount < LayoutBuilder.MAX_PAGES,
                     onAddPage = { revealPage(viewModel.addPage()) },
                     modifier = Modifier
@@ -1557,28 +1573,33 @@ private fun Greeting(text: String, modifier: Modifier = Modifier) {
 @Composable
 private fun PageDots(
     count: Int,
-    current: Int,
+    /** Where the pager is: a page number, with a fraction while a page is turning. */
+    position: () -> Float,
     canAdd: Boolean,
     onAddPage: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val palette = LocalPalette.current
+    val ink = palette.onGlass
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-        repeat(count) { index ->
-            val active = index == current
-            val width by animateDpAsState(if (active) 22.dp else 6.dp, Motion.bouncy(), label = "dotWidth")
-            val color by animateColorAsState(
-                if (active) palette.onGlass.copy(alpha = 0.85f) else palette.onGlass.copy(alpha = 0.28f),
-                tween(420),
-                label = "dotColor",
-            )
-            Box(
-                Modifier
-                    .height(6.dp)
-                    .width(width)
-                    .clip(RoundedCornerShape(50))
-                    .background(color)
-            )
+        // One pill shared out between the dots, drawn rather than laid out: as a page turns the
+        // pill stretches from its dot towards the next, and nothing has to be measured again.
+        Canvas(Modifier.size(width = (DOT * count + DOT_GAP * (count - 1) + DOT_STRETCH).dp, height = DOT.dp)) {
+            val at = position().coerceIn(0f, (count - 1).toFloat())
+            val radius = CornerRadius(size.height / 2f)
+            var x = 0f
+            for (index in 0 until count) {
+                val share = PageEffects.dotWidth(at, index)
+                val width = (DOT + DOT_STRETCH * share).dp.toPx()
+                drawRoundRect(
+                    color = ink,
+                    topLeft = Offset(x, 0f),
+                    size = androidx.compose.ui.geometry.Size(width, size.height),
+                    cornerRadius = radius,
+                    alpha = 0.28f + 0.57f * share,
+                )
+                x += width + DOT_GAP.dp.toPx()
+            }
         }
 
         // The one control that makes another page. It sits where the next dot would appear, so

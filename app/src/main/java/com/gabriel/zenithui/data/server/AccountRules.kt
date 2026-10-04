@@ -27,4 +27,12 @@ internal object AccountRules {
             referralsPaid = current.referralsPaid + (account.code to account.referrals),
         )
     }
+
+    /**
+     * The settings as they are sent to the account in a backup: without the hidden-apps PIN, and
+     * without anything about the trial or the purchase. Neither is ever put back from a backup,
+     * so neither has any business on the server.
+     */
+    fun forAccount(settings: ZenithSettings): ZenithSettings =
+        settings.copy(hiddenPin = "", plusTrialStart = 0L, plusPurchased = false)
 }

@@ -477,10 +477,13 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    /** Sends the home screen to the account, in place of whatever backup was there. The hidden-apps PIN stays on the phone. */
+    /**
+     * Sends the home screen to the account, in place of whatever backup was there. The hidden-apps
+     * PIN and the purchase stay on the phone: see [AccountRules.forAccount].
+     */
     suspend fun backUpToAccount(): String? = seenThrough {
         val signed = accounts.signed.value ?: return@seenThrough SIGN_IN_FIRST
-        when (val reply = server.saveBackup(signed.token, Backup.encode(settings.value.copy(hiddenPin = ""), layout.value))) {
+        when (val reply = server.saveBackup(signed.token, Backup.encode(AccountRules.forAccount(settings.value), layout.value))) {
             is Reply.Ok -> {
                 accounts.update(signed.account.copy(backupAt = reply.value))
                 null

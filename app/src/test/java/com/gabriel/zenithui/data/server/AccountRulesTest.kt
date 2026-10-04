@@ -79,4 +79,22 @@ class AccountRulesTest {
         val phone = ZenithSettings(aura = 70, referralCode = "BCDFGH")
         assertSame(phone, AccountRules.settle(phone, account(code = "", referrals = 9, redeemed = true)))
     }
+
+    @Test
+    fun `a backup for the account leaves the PIN and the purchase on the phone`() {
+        val phone = ZenithSettings(
+            userName = "Gabriel",
+            aura = 310,
+            hiddenApps = listOf("a/b"),
+            hiddenPin = "4321",
+            plusTrialStart = 1_791_000_000_000,
+            plusPurchased = true,
+        )
+        val sent = AccountRules.forAccount(phone)
+        assertEquals("", sent.hiddenPin)
+        assertEquals(0L, sent.plusTrialStart)
+        assertEquals(false, sent.plusPurchased)
+        // Everything else goes as it is.
+        assertEquals(phone, sent.copy(hiddenPin = "4321", plusTrialStart = 1_791_000_000_000, plusPurchased = true))
+    }
 }

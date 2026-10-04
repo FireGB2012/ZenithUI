@@ -94,10 +94,10 @@ class WallpaperSource(context: Context) {
                 clear()
                 return@withContext
             }
-            val signature = GlassWallpaper.currentSignature(appContext)
-            val keptKey = "kept:$signature:${GlassWallpaper.stamp(appContext)}"
+            val onScreen = GlassWallpaper.screenKey(appContext)
+            val keptKey = "kept:$onScreen:${GlassWallpaper.stamp(appContext)}"
             // Coming home is when this runs; if the wallpaper has not changed, there is nothing to do.
-            if (_backdrop.value != null && (loadedKey == "system:$signature" || loadedKey == keptKey)) {
+            if (_backdrop.value != null && (loadedKey == "system:$onScreen" || loadedKey == keptKey)) {
                 return@withContext
             }
             val system = readSystemWallpaper(manager)
@@ -106,7 +106,7 @@ class WallpaperSource(context: Context) {
                 clear()
                 return@withContext
             }
-            val key = if (system != null) "system:$signature" else keptKey
+            val key = if (system != null) "system:$onScreen" else keptKey
             prepare(source)
             loadedKey = key
         }

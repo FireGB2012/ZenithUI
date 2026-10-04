@@ -22,15 +22,18 @@ import kotlin.math.roundToInt
  * permission), so glass has nothing to bend. What Zenith can do is keep its own copy of any
  * wallpaper it sets — its own designs, or a photo you pick in Zenith — and use that.
  *
- * The copy is only trusted while it is still the wallpaper. Anyone may read the wallpaper's
- * colours, so when Android announces the colours of a wallpaper Zenith has just set, Zenith notes
- * them; if they later differ, the wallpaper was changed somewhere else and the copy is ignored.
+ * The copy is only trusted while it is still the wallpaper. Android numbers every wallpaper it
+ * is given: Zenith notes the number of each one it sets, and when the wallpaper on screen has
+ * another number it was changed somewhere else and the copy is ignored (see [WallpaperTrust]).
+ * The wallpaper's colours, noted when Android announces them, do the same for a copy made before
+ * numbers were kept; they cannot be the only test, because not every phone announces them.
  */
 object GlassWallpaper {
     private const val DIR = "glass"
     private const val FILE = "wallpaper.webp"
     private const val PENDING = "wallpaper.pending"
     private const val PREFS = "glass_wallpaper"
+    private const val KEY_ID = "id"
     private const val KEY_SIGNATURE = "signature"
     private const val KEY_SET_AT = "setAt"
     private const val KEY_SET_CLOCK = "setClock"
@@ -51,25 +54,38 @@ object GlassWallpaper {
         // Written aside first: if Android refuses the wallpaper, the copy of the old one stays put.
         val saved = runCatching { save(bitmap, pending) }.isSuccess
         val prefs = prefs(app)
+        val manager = WallpaperManager.getInstance(app)
         val claimedAt = prefs.getLong(KEY_SET_AT, 0L)
         val claimedClock = prefs.getLong(KEY_SET_CLOCK, 0L)
-        // Claimed before Android is asked, not after: it can announce the new picture's colours
-        // before setBitmap has returned, and they must be taken as this picture's. The old
-        // signature is kept until then, which also covers a new wallpaper whose colours come out
-        // exactly the same.
+        // Claimed before Android is asked, not after: the wallpaper has its new number, and may
+        // have its colours announced, before setBitmap has returned, and anyone asking in those
+        // moments must be told it is this picture's.
         prefs.edit()
             .putLong(KEY_SET_AT, SystemClock.elapsedRealtime())
             .putLong(KEY_SET_CLOCK, System.currentTimeMillis())
             .commit()
-        val ok = runCatching {
-            WallpaperManager.getInstance(app).setBitmap(bitmap, null, true, which)
-            true
-        }.getOrDefault(false)
-        if (!ok) {
+
+        /** Nothing changed on screen, so nothing was claimed either. */
+        fun unclaim() {
             pending.delete()
-            // Nothing changed on screen, so nothing was claimed either.
             prefs.edit().putLong(KEY_SET_AT, claimedAt).putLong(KEY_SET_CLOCK, claimedClock).apply()
+        }
+
+        val before = systemId(manager)
+        val returned = runCatching { manager.setBitmap(bitmap, null, true, which) }.getOrNull()
+        if (returned == null) {
+            unclaim()
             return@withContext false
+        }
+        val after = systemId(manager)
+        val id = WallpaperTrust.idAfterSet(before, returned, after)
+        if (id == 0 && after > 0) {
+            // Android took the call and the wallpaper is the one it was. Either it may not be
+            // changed on this phone, or it was handed the very picture it already shows. The
+            // kept copy says which: only the same picture again makes the same copy.
+            val same = saved && runCatching { pending.readBytes().contentEquals(File(dir, FILE).readBytes()) }.getOrDefault(false)
+            unclaim()
+            return@withContext same
         }
         if (!saved) {
             pending.delete()
@@ -78,7 +94,12 @@ object GlassWallpaper {
             return@withContext true
         }
         pending.renameTo(File(dir, FILE))
-        prefs.edit().apply { if (key == null) remove(KEY_APPLIED) else putString(KEY_APPLIED, key) }.apply()
+        prefs.edit().apply {
+            if (key == null) remove(KEY_APPLIED) else putString(KEY_APPLIED, key)
+            // The number is what vouches for the copy from now on. A phone that gives none
+            // (id is 0 here only when it will not say any number at all) is left to the colours.
+            if (id > 0) putInt(KEY_ID, id) else remove(KEY_ID)
+        }.apply()
         true
     }
 
@@ -119,7 +140,10 @@ object GlassWallpaper {
         ok
     }
 
-    /** Android announced new wallpaper colours. If Zenith set that wallpaper just now, they are its signature. */
+    /**
+     * Android announced new wallpaper colours. If Zenith set that wallpaper just now, they are its
+     * signature: what a phone that gives wallpapers no number is left to know the copy by.
+     */
     fun onColoursChanged(context: Context, colours: WallpaperColors?) {
         val prefs = prefs(context.applicationContext)
         if (colours == null || !justSet(prefs)) return
@@ -139,10 +163,22 @@ object GlassWallpaper {
         // A live wallpaper moves; a still copy of anything behind it would be a lie.
         if (runCatching { manager.wallpaperInfo != null }.getOrDefault(false)) return false
         val prefs = prefs(app)
-        // Just set by Zenith, before Android has finished working its colours out: it is ours.
-        if (justSet(prefs)) return true
-        val expected = prefs.getString(KEY_SIGNATURE, null) ?: return false
-        return currentSignature(app) == expected
+        val storedId = prefs.getInt(KEY_ID, 0)
+        val currentId = systemId(manager)
+        val current = WallpaperTrust.isCurrent(
+            // Just set by Zenith, while Android is still taking the picture in: it is ours.
+            justSet = justSet(prefs),
+            storedId = storedId,
+            currentId = currentId,
+            storedColours = prefs.getString(KEY_SIGNATURE, null),
+            currentColours = { currentSignature(app) },
+        )
+        // A copy vouched for by its colours alone, from before numbers were noted, is given the
+        // number of the wallpaper it has just been matched to, and is known by that from now on.
+        if (current && storedId <= 0 && currentId > 0 && !justSet(prefs)) {
+            prefs.edit().putInt(KEY_ID, currentId).apply()
+        }
+        return current
     }
 
     /** The kept copy, if it is still the wallpaper on screen; otherwise null. */
@@ -168,10 +204,23 @@ object GlassWallpaper {
     /** Changes whenever the kept copy is replaced, even by a picture with the same colours. */
     fun stamp(context: Context): Long = File(File(context.applicationContext.filesDir, DIR), FILE).lastModified()
 
-    /** What the wallpaper on screen is right now, as far as anyone may know: its colours. */
+    /** The colours of the wallpaper on screen right now, which anyone may read. */
     fun currentSignature(context: Context): String? = runCatching {
         WallpaperManager.getInstance(context.applicationContext).getWallpaperColors(WallpaperManager.FLAG_SYSTEM)
     }.getOrNull()?.let(::signature)
+
+    /**
+     * What the wallpaper on screen is right now, as far as anyone may know, in a word that
+     * changes when the wallpaper does: its number, or its colours on a phone that gives none.
+     */
+    fun screenKey(context: Context): String {
+        val id = systemId(WallpaperManager.getInstance(context.applicationContext))
+        return if (id > 0) "id:$id" else "colours:${currentSignature(context)}"
+    }
+
+    /** The number Android gave the wallpaper now on the home screen, or -1 if it will not say. */
+    private fun systemId(manager: WallpaperManager): Int =
+        runCatching { manager.getWallpaperId(WallpaperManager.FLAG_SYSTEM) }.getOrDefault(-1)
 
     private fun save(bitmap: Bitmap, target: File) {
         // A little over half the screen's resolution is plenty; glass softens most of what it shows.
@@ -190,7 +239,7 @@ object GlassWallpaper {
 
     private fun forget(context: Context) {
         File(File(context.filesDir, DIR), FILE).delete()
-        prefs(context).edit().remove(KEY_SIGNATURE).remove(KEY_SET_AT).remove(KEY_SET_CLOCK).remove(KEY_APPLIED).apply()
+        prefs(context).edit().remove(KEY_ID).remove(KEY_SIGNATURE).remove(KEY_SET_AT).remove(KEY_SET_CLOCK).remove(KEY_APPLIED).apply()
     }
 
     private fun signature(colours: WallpaperColors): String =

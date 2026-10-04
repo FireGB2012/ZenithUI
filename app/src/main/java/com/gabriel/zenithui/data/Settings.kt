@@ -95,10 +95,12 @@ data class ZenithSettings(
     /** Somebody else's code, once. */
     val referredBy: String = "",
     /**
-     * How many of the friends who used this account's code have been paid for. It travels with
-     * [aura] in a backup, so that restoring one neither pays a friend twice nor forgets one.
+     * For each Zenith account signed in to on this phone, by its code: how many of the friends
+     * who used that code have been paid for here. It travels with [aura] in a backup, so that
+     * restoring one neither pays a friend twice nor forgets one; and it is kept code by code, so
+     * that signing in to one account and then another never pays either of them again.
      */
-    val referralsPaid: Int = 0,
+    val referralsPaid: Map<String, Int> = emptyMap(),
 
     /** The palette you built yourself, used when [paletteId] is "custom". ARGB. */
     val customAccent: Long = 0xFF7C6CFF,
@@ -158,7 +160,7 @@ data class ZenithSettings(
         put("unlockedThemes", JSONArray(unlockedThemes))
         put("referralCode", referralCode)
         put("referredBy", referredBy)
-        put("referralsPaid", referralsPaid)
+        put("referralsPaid", JSONObject().apply { referralsPaid.forEach { (code, paid) -> put(code, paid) } })
         put("pages", pages)
         put("note", note)
         put("homePrompts", homePrompts)
@@ -216,7 +218,11 @@ data class ZenithSettings(
                 unlockedThemes = o.optJSONArray("unlockedThemes").toStringList(),
                 referralCode = o.optString("referralCode", d.referralCode),
                 referredBy = o.optString("referredBy", d.referredBy),
-                referralsPaid = o.optInt("referralsPaid", d.referralsPaid),
+                referralsPaid = o.optJSONObject("referralsPaid")?.let { paid ->
+                    paid.keys().asSequence()
+                        .mapNotNull { code -> (paid.opt(code) as? Int)?.takeIf { it >= 0 }?.let { code to it } }
+                        .toMap()
+                } ?: d.referralsPaid,
                 pages = o.optInt("pages", d.pages),
                 note = o.optString("note", d.note),
                 homePrompts = o.optInt("homePrompts", d.homePrompts),

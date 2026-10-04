@@ -59,7 +59,7 @@ class ZenithServerTest {
         assertEquals(Aura.REFERRAL_REWARD, Aura.referralPayout(referrals = 1, paid = 0))
         assertEquals(2 * Aura.REFERRAL_REWARD, Aura.referralPayout(referrals = 5, paid = 3))
         assertEquals(0, Aura.referralPayout(referrals = 5, paid = 5))
-        // The count can only have gone down if a backup from a later day was restored: nothing is taken back.
+        // A lower count is a new account that was given an old one's code: nothing is taken back.
         assertEquals(0, Aura.referralPayout(referrals = 2, paid = 5))
     }
 

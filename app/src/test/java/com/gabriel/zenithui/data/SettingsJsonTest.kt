@@ -55,7 +55,7 @@ class SettingsJsonTest {
         unlockedThemes = listOf("ember"),
         referralCode = "ZEN123",
         referredBy = "ZEN999",
-        referralsPaid = 3,
+        referralsPaid = mapOf("ZEN123" to 3),
         customAccent = 0xFF112233,
         customAccentAlt = 0xFF445566,
         customBackdrop = 0xFF778899,
@@ -93,6 +93,17 @@ class SettingsJsonTest {
         assertEquals("", old.wallpaperStyle)
         assertFalse(old.searchBar)
         assertEquals("name", old.header)
+    }
+
+    @Test
+    fun `what each account's code has paid out is remembered code by code`() {
+        val paid = ZenithSettings(referralsPaid = mapOf("WTR4RT" to 4, "BCDFGH" to 1))
+        assertEquals(paid, throughText(paid))
+        // Something that is not a count is not a count.
+        val odd = ZenithSettings.fromJson(JSONObject("""{"referralsPaid":{"WTR4RT":2,"BCDFGH":"many","ZZZZZZ":-3}}"""))
+        assertEquals(mapOf("WTR4RT" to 2), odd.referralsPaid)
+        // And settings from before there were accounts have paid nobody.
+        assertEquals(emptyMap<String, Int>(), ZenithSettings.fromJson(JSONObject("""{"referralsPaid":3}""")).referralsPaid)
     }
 
     @Test

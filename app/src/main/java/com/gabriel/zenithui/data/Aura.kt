@@ -24,14 +24,20 @@ object Aura {
     /** A one-off, for using someone else's code. */
     const val REFERRAL_REWARD = 150
 
+    /**
+     * What `referredBy` holds on a phone whose account used a friend's code somewhere else: the
+     * code was used, and this phone does not know which. No code looks like this.
+     */
+    const val USED_ON_ACCOUNT = "account"
+
     /** Points for a given day of a streak. Day one is [BASE_DAILY]. */
     fun dailyReward(streak: Int): Int =
         (BASE_DAILY + (streak - 1).coerceAtLeast(0) * STREAK_STEP).coerceAtMost(MAX_DAILY)
 
     /**
      * What the owner of a code is owed: [REFERRAL_REWARD] for each friend who has used it and has
-     * not been paid for yet. [referrals] is the server's count; [paid] is how many of them this
-     * phone has paid out already. Nothing is ever taken back.
+     * not been paid for yet. [referrals] is the server's count; [paid] is what that count was when
+     * this phone last paid. Nothing is ever taken back.
      */
     fun referralPayout(referrals: Int, paid: Int): Int = (referrals - paid).coerceAtLeast(0) * REFERRAL_REWARD
 

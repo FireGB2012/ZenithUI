@@ -1,6 +1,7 @@
 package com.gabriel.zenithui
 
 import android.app.Application
+import android.os.SystemClock
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.gabriel.zenithui.data.AppCell
@@ -30,6 +31,16 @@ import com.gabriel.zenithui.data.WallStyle
 import com.gabriel.zenithui.data.WallpaperSource
 import com.gabriel.zenithui.data.ZenithSettings
 import com.gabriel.zenithui.data.trialDaysLeft
+import com.gabriel.zenithui.data.server.Account
+import com.gabriel.zenithui.data.server.AccountRules
+import com.gabriel.zenithui.data.server.AccountStore
+import com.gabriel.zenithui.data.server.Reply
+import com.gabriel.zenithui.data.server.ServerConfig
+import com.gabriel.zenithui.data.server.Signed
+import com.gabriel.zenithui.data.server.SignedIn
+import com.gabriel.zenithui.data.server.ZenithServer
+import com.gabriel.zenithui.data.server.problem
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -37,6 +48,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 class ZenithViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -45,6 +58,13 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
     val icons = IconLoader(application, repository)
     private val wallpaperSource = WallpaperSource(application)
     val billing = BillingRepository(application)
+
+    /** Zenith's server, if this build has one; a test build may reach one on the test PC. */
+    private val server = ZenithServer(ServerConfig.url, allowPlainHttp = BuildConfig.DEBUG)
+    private val accounts = AccountStore(application)
+
+    /** This phone's sign-in to a Zenith account, or null. Always null in a build with no server. */
+    val account: StateFlow<Signed?> = accounts.signed
 
     val settings: StateFlow<ZenithSettings> = store.settings
     val layout: StateFlow<List<HomeItem>> = store.layout
@@ -326,15 +346,17 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
     /**
      * Puts a backup back. The trial and the purchase are deliberately taken from the phone you
      * are restoring onto, never from the file, so a backup can neither hand out Plus nor take it
-     * away from someone who paid.
+     * away from someone who paid. A backup [fromAccount] was sent without the hidden-apps PIN, so
+     * the one on this phone stays.
      */
-    fun restoreBackup(text: String): Boolean {
+    fun restoreBackup(text: String, fromAccount: Boolean = false): Boolean {
         val (restored, items) = Backup.decode(text) ?: return false
         val current = settings.value
         store.restore(
             settings = restored.copy(
                 plusTrialStart = current.plusTrialStart,
                 plusPurchased = current.plusPurchased,
+                hiddenPin = if (fromAccount) current.hiddenPin else restored.hiddenPin,
                 onboarded = true,
             ),
             items = items,
@@ -342,6 +364,181 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
         upgradeLayout()
         viewModelScope.launch { icons.configure(restored.iconPack, restored.iconShape) }
         return true
+    }
+
+    // ---------------------------------------------------------------- the account
+    //
+    // Each of these asks the server for something and answers with why it did not happen, in
+    // words for the person, or with null when it did. None of them is ever called in a build
+    // with no server, and none of them sends anything until somebody makes an account or signs in.
+    //
+    // They are seen through even if the page that asked is closed half way: an account the
+    // server has made, or a code it has counted, must not be lost on its way back to the phone.
+    // And they take turns, so that what the server says is taken in the order it was said.
+
+    private val accountTurn = Mutex()
+
+    private suspend fun <T> seenThrough(work: suspend () -> T): T =
+        viewModelScope.async { accountTurn.withLock { work() } }.await()
+
+    suspend fun createAccount(username: String, password: String): String? = seenThrough {
+        if (accounts.signed.value != null) return@seenThrough null
+        ensureReferralCode()
+        entered(server.createAccount(username.trim().lowercase(), password, settings.value.referralCode), email = null)
+    }
+
+    suspend fun signIn(username: String, password: String): String? = seenThrough {
+        if (accounts.signed.value != null) return@seenThrough null
+        entered(server.signIn(username.trim().lowercase(), password), email = null)
+    }
+
+    /** [idToken] is what Google handed the phone; [email] is only for showing who is signed in. */
+    suspend fun signInWithGoogle(idToken: String, email: String?): String? = seenThrough {
+        if (accounts.signed.value != null) return@seenThrough null
+        ensureReferralCode()
+        entered(server.signInWithGoogle(idToken, settings.value.referralCode), email)
+    }
+
+    private fun entered(reply: Reply<SignedIn>, email: String?): String? {
+        if (reply !is Reply.Ok) return reply.problem()
+        accounts.signIn(reply.value.token, reply.value.account, email)
+        settle(reply.value.account)
+        accountLooked = SystemClock.elapsedRealtime()
+        return null
+    }
+
+    /** Brings this phone into line with the account: see [AccountRules.settle]. */
+    private fun settle(account: Account) = store.update { AccountRules.settle(it, account) }
+
+    private var accountLooked = 0L
+    private var accountLooking = false
+
+    /**
+     * Asks the server how the account stands, if it has not been asked in the last few minutes
+     * (or [now] is true). Called when the home screen comes back: it is how a friend using your
+     * code reaches your phone.
+     */
+    fun refreshAccount(now: Boolean = false) {
+        if (accounts.signed.value == null || accountLooking) return
+        val moment = SystemClock.elapsedRealtime()
+        if (!now && accountLooked != 0L && moment - accountLooked < ACCOUNT_LOOK_EVERY_MS) return
+        accountLooked = moment
+        accountLooking = true
+        viewModelScope.launch {
+            try {
+                accountTurn.withLock {
+                    // Whoever is signed in by the time it is this one's turn.
+                    val signed = accounts.signed.value ?: return@withLock
+                    when (val reply = server.me(signed.token)) {
+                        is Reply.Ok -> {
+                            accounts.update(reply.value)
+                            settle(reply.value)
+                        }
+                        // The account was deleted somewhere else, or this sign-in was left unused too long.
+                        is Reply.Refused -> if (reply.signedOut) accounts.signOut()
+                        // Out of reach: look again in a minute, not in ten.
+                        is Reply.Unreachable -> accountLooked = moment - ACCOUNT_LOOK_EVERY_MS + ACCOUNT_LOOK_AGAIN_MS
+                    }
+                }
+            } finally {
+                accountLooking = false
+            }
+        }
+    }
+
+    /** Signs this phone out. What is on the phone stays; so does the account. */
+    suspend fun signOut(): Unit = seenThrough {
+        val signed = accounts.signed.value ?: return@seenThrough
+        accounts.signOut()
+        // Told so that the key stops working there too; if it cannot be reached, it is forgotten here all the same.
+        server.signOut(signed.token)
+    }
+
+    /**
+     * Deletes the account from the server, with its code and its backup. Nothing on the phone is
+     * touched. Null when it is gone.
+     */
+    suspend fun deleteAccount(password: String?): String? = seenThrough {
+        val signed = accounts.signed.value ?: return@seenThrough null
+        when (val reply = server.deleteAccount(signed.token, password)) {
+            is Reply.Ok -> {
+                accounts.signOut()
+                null
+            }
+            is Reply.Refused -> if (reply.signedOut) {
+                // The server no longer knows this sign-in, so it deleted nothing: say so, rather
+                // than leave somebody believing an account is gone that is still there.
+                accounts.signOut()
+                "You had been signed out, so nothing was deleted. Sign in again to delete the account."
+            } else {
+                reply.problem()
+            }
+            is Reply.Unreachable -> reply.problem()
+        }
+    }
+
+    /** Sends the home screen to the account, in place of whatever backup was there. The hidden-apps PIN stays on the phone. */
+    suspend fun backUpToAccount(): String? = seenThrough {
+        val signed = accounts.signed.value ?: return@seenThrough SIGN_IN_FIRST
+        when (val reply = server.saveBackup(signed.token, Backup.encode(settings.value.copy(hiddenPin = ""), layout.value))) {
+            is Reply.Ok -> {
+                accounts.update(signed.account.copy(backupAt = reply.value))
+                null
+            }
+            else -> lost(reply)
+        }
+    }
+
+    /** Fetches the account's backup and puts it back, as [restoreBackup] does a file. */
+    suspend fun restoreFromAccount(): String? = seenThrough {
+        val signed = accounts.signed.value ?: return@seenThrough SIGN_IN_FIRST
+        when (val reply = server.loadBackup(signed.token)) {
+            is Reply.Ok -> if (restoreBackup(reply.value.text, fromAccount = true)) {
+                // The backup carries the code and the counts it was made with; the account's are the ones that hold.
+                settle(signed.account)
+                null
+            } else {
+                "The backup in your account could not be read."
+            }
+            else -> lost(reply)
+        }
+    }
+
+    /**
+     * Uses a friend's code. With a server it is the server that says whether the code is real and
+     * counts it for the friend; without one it is the old rule, where any well-made code will do.
+     */
+    suspend fun redeemAuraCode(code: String): String? {
+        if (!server.isSetUp) return redeemReferral(code)
+        return seenThrough {
+            val cleaned = Aura.cleanCode(code)
+            val signed = accounts.signed.value
+            when {
+                settings.value.referredBy.isNotEmpty() -> "You have already used a code."
+                !Aura.isWellFormedCode(cleaned) -> "That is not a Zenith code."
+                signed == null -> "Sign in to your Zenith account to use a code."
+                else -> when (val reply = server.redeem(signed.token, cleaned)) {
+                    is Reply.Ok -> {
+                        accounts.update(reply.value)
+                        store.update { it.copy(referredBy = cleaned, aura = it.aura + Aura.REFERRAL_REWARD) }
+                        null
+                    }
+                    else -> lost(reply)
+                }
+            }
+        }
+    }
+
+    /** A reply that is not a yes, in words; and if it says this phone is no longer signed in, it is signed out. */
+    private fun lost(reply: Reply<*>): String? {
+        if (reply is Reply.Refused && reply.signedOut) accounts.signOut()
+        return reply.problem()
+    }
+
+    private companion object {
+        const val ACCOUNT_LOOK_EVERY_MS = 10 * 60 * 1000L
+        const val ACCOUNT_LOOK_AGAIN_MS = 60 * 1000L
+        const val SIGN_IN_FIRST = "Sign in to your Zenith account first."
     }
 
     override fun onCleared() {

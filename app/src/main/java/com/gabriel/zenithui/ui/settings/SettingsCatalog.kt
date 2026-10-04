@@ -1,13 +1,13 @@
 package com.gabriel.zenithui.ui.settings
 
-/** The groups on the first page of Settings. Two of them open a sheet of their own, not a page. */
+/** The groups on the first page of Settings. Zenith Plus opens a sheet of its own, not a page. */
 enum class SettingsPage(val title: String, val opensSheet: Boolean = false) {
     Theme("Wallpaper & theme"),
     Home("Home screen"),
     Motion("Motion & feel"),
     Apps("Apps"),
     Plus("Zenith Plus", opensSheet = true),
-    Aura("Aura", opensSheet = true),
+    Aura("Aura"),
     Backup("Backup & reset"),
     About("About & help"),
 }
@@ -52,7 +52,10 @@ object SettingsCatalog {
         SettingsEntry("hiddenApps", SettingsPage.Apps, "Hidden apps", "hide private pin plus lock"),
 
         SettingsEntry("plus", SettingsPage.Plus, "Zenith Plus", "subscribe subscription buy trial lifetime purchase"),
-        SettingsEntry("aura", SettingsPage.Aura, "Aura", "streak points themes daily reward referral code"),
+        SettingsEntry("aura", SettingsPage.Aura, "Aura", "streak points daily reward balance flame"),
+        SettingsEntry("auraThemes", SettingsPage.Aura, "Themes to unlock", "ember tide orchid solstice obsidian buy spend"),
+        SettingsEntry("auraCode", SettingsPage.Aura, "Your code", "referral share invite friend copy"),
+        SettingsEntry("auraRedeem", SettingsPage.Aura, "Redeem a code", "referral gift friend enter"),
 
         SettingsEntry("backup", SettingsPage.Backup, "Back up home screen", "save export file plus"),
         SettingsEntry("restore", SettingsPage.Backup, "Restore from a backup", "import load file plus"),

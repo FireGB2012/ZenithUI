@@ -77,9 +77,18 @@ class SettingsCatalogTest {
     }
 
     @Test
-    fun `the two groups that open a sheet are in the catalog too`() {
-        assertEquals(listOf(SettingsPage.Plus, SettingsPage.Aura), SettingsPage.entries.filter { it.opensSheet })
+    fun `only Zenith Plus opens a sheet, and it is in the catalog all the same`() {
+        assertEquals(listOf(SettingsPage.Plus), SettingsPage.entries.filter { it.opensSheet })
         assertEquals("plus", found("subscription").first())
+    }
+
+    @Test
+    fun `Aura is a page of its own, and what is on it can be searched for`() {
         assertEquals("aura", found("streak").first())
+        assertEquals("auraThemes", found("unlock").first())
+        assertEquals("auraThemes", found("obsidian").first())
+        assertEquals("auraCode", found("share").first())
+        assertEquals("auraRedeem", found("redeem").first())
+        SettingsCatalog.on(SettingsPage.Aura).forEach { assertTrue(it.id, it.id.startsWith("aura")) }
     }
 }

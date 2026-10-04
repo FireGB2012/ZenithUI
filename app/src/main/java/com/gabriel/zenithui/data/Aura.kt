@@ -43,7 +43,51 @@ object Aura {
 
     /** Today, as a day number. Local time, because a streak is about your days, not UTC's. */
     fun today(): Long = LocalDate.now().toEpochDay()
+
+    /**
+     * The seven days round where a streak stands, as a ladder: the days already climbed, today,
+     * the one that comes next, and the ones after it, each with what it pays. A streak that has
+     * not begun starts at day one; a long one shows three days back and three ahead.
+     */
+    fun ladder(streak: Int): List<AuraDay> {
+        val reached = streak.coerceAtLeast(0)
+        val first = (reached - 3).coerceAtLeast(1)
+        return (first until first + 7).map { day ->
+            AuraDay(
+                day = day,
+                reward = dailyReward(day),
+                state = when {
+                    day < reached -> AuraDayState.Done
+                    day == reached -> AuraDayState.Today
+                    day == reached + 1 -> AuraDayState.Next
+                    else -> AuraDayState.Later
+                },
+            )
+        }
+    }
+
+    /**
+     * How many more days of turning up, one after another from where the streak stands, before
+     * [price] can be paid out of [balance]. Nought if it already can.
+     */
+    fun daysToAfford(balance: Int, price: Int, streak: Int): Int {
+        var have = balance
+        var day = streak.coerceAtLeast(0)
+        var days = 0
+        while (have < price) {
+            day++
+            have += dailyReward(day)
+            days++
+        }
+        return days
+    }
 }
+
+/** One rung of the streak's ladder: which day in a row it is, what it pays, and where you are on it. */
+@Immutable
+data class AuraDay(val day: Int, val reward: Int, val state: AuraDayState)
+
+enum class AuraDayState { Done, Today, Next, Later }
 
 /** What happened when the launcher checked in for the day. */
 @Immutable

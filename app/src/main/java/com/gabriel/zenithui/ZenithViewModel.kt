@@ -553,10 +553,19 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     /** Adds a widget, returning the page it landed on, or null when nothing would fit. */
-    fun addWidget(type: String): Int? {
+    /**
+     * Puts a widget on the first page with room for it and returns that page, or null when no
+     * page has room. With no size given it is the widget's ordinary one; any size asked for is
+     * fitted to what the widget and the grid allow. [wantY] is in row units.
+     */
+    fun addWidget(type: String, wantX: Int? = null, wantY: Int? = null): Int? {
         val spec = Widgets.byType(type) ?: return null
         val s = settings.value
-        val (spanX, spanY) = Widgets.defaultSpan(spec, s.columns, s.rows)
+        val (spanX, spanY) = if (wantX != null && wantY != null) {
+            Widgets.clampSpan(spec, wantX, wantY, s.columns, s.rows)
+        } else {
+            Widgets.defaultSpan(spec, s.columns, s.rows)
+        }
         val slot = firstFreeSlot(spanX, spanY, rowStep()) ?: return null
         store.mutateLayout { items ->
             items + WidgetCell(LayoutBuilder.newId(), slot.first, slot.second, slot.third, spec.type, spanX, spanY)

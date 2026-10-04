@@ -1,0 +1,4 @@
+# The server program is installed by checksum: its bytes must be the same on every machine,
+# whatever that machine does to line endings. The same goes for the message it travels in.
+server/*.py text eol=lf
+server/*.md text eol=lf

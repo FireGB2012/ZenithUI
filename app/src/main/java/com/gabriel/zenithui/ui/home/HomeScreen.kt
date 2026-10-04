@@ -120,6 +120,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.roundToInt
+import com.gabriel.zenithui.data.server.ServerConfig
+import com.gabriel.zenithui.ui.settings.AccountActions
 
 /**
  * How close to the side of the glass the finger itself has to be to turn the page, for items too
@@ -176,6 +178,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
     val apps by viewModel.apps.collectAsState()
     val appsByKey = remember(apps) { apps.associateBy { it.key } }
     val plus by viewModel.plus.collectAsState()
+    val signed by viewModel.account.collectAsState()
     val checkIn by viewModel.checkIn.collectAsState()
     // Only true the first time the home screen appears after setup.
     val entrance = remember { viewModel.consumeHomeEntrance() }
@@ -195,6 +198,8 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
     LaunchedEffect(settings.onboarded, viewModel.homePressed.collectAsState().value) {
         viewModel.checkInForToday()
         viewModel.ensureReferralCode()
+        // How a friend using your code reaches this phone. Nothing is sent unless somebody is signed in.
+        viewModel.refreshAccount()
     }
 
     // Hiding an app is a Plus feature, so when Plus lapses the apps come back rather than staying
@@ -1445,10 +1450,23 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 restore = { withPlus { openBackup.launch(arrayOf("*/*")) } },
                 plus = { showSheet(HomeSheet.Plus) },
                 unlockTheme = { id -> viewModel.unlockTheme(id) },
-                redeem = { code -> viewModel.redeemReferral(code) },
+                redeem = { code -> viewModel.redeemAuraCode(code) },
                 help = { showSheet(HomeSheet.Help) },
                 reset = { viewModel.resetEverything() },
                 tidy = { viewModel.tidyUp() },
+                // A build with no server has no account, and nothing of one is shown.
+                account = if (!ServerConfig.enabled) null else AccountActions(
+                    signed = signed,
+                    googleClientId = ServerConfig.googleClientId,
+                    create = viewModel::createAccount,
+                    signIn = viewModel::signIn,
+                    signInWithGoogle = viewModel::signInWithGoogle,
+                    signOut = viewModel::signOut,
+                    delete = viewModel::deleteAccount,
+                    backUp = viewModel::backUpToAccount,
+                    restore = viewModel::restoreFromAccount,
+                    refresh = { viewModel.refreshAccount(now = true) },
+                ),
             ),
             onDismiss = { settingsOpen = false },
         )

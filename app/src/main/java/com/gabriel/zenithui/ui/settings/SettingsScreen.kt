@@ -95,6 +95,8 @@ import com.gabriel.zenithui.ui.common.pressBounce
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.Palettes
 import kotlinx.coroutines.delay
+import androidx.compose.material.icons.rounded.AccountCircle
+import com.gabriel.zenithui.data.server.Signed
 
 /** What the mini phone on the Theme and Home pages is a picture of: page one of the real home screen. */
 class SettingsPreview(
@@ -117,20 +119,22 @@ class SettingsActions(
     val plus: () -> Unit,
     /** Spends aura on a theme; false when there is not enough, or it is already owned. */
     val unlockTheme: (String) -> Boolean,
-    /** Takes somebody else's code; returns why not, or null when it was taken. */
-    val redeem: (String) -> String?,
+    /** Takes somebody else's code; returns why not, or null when it was taken. With a server it is the server that is asked. */
+    val redeem: suspend (String) -> String?,
     val help: () -> Unit,
     val reset: () -> Unit,
     /** Puts the layout back in line; returns how many items had to move. */
     val tidy: () -> Int,
+    /** The Zenith account, in a build that has a server to keep one on; null in a build that has none. */
+    val account: AccountActions? = null,
 )
 
 /**
  * Settings: a page of its own, the full height of the screen. The first page is a search box and
  * eight groups, each saying how it is set now, so most questions are answered without opening
- * anything. A group opens with a push from the side; back, the arrow or a swipe in from the left
- * edge pops it. Searching finds any option by its name or by other words for it, opens its page
- * and shows which row it is.
+ * anything; a build with a server has a ninth, the account. A group opens with a push from the
+ * side; back, the arrow or a swipe in from the left edge pops it. Searching finds any option by
+ * its name or by other words for it, opens its page and shows which row it is.
  *
  * It arrives in order: the search box, then each group, rising in one after another, and the same
  * for the blocks of a page as it is pushed. Coming back to the groups from a page they are simply
@@ -246,14 +250,15 @@ fun SettingsScreen(
                     LocalSettingsHighlight provides if (current == null) null else highlight,
                 ) {
                     when (current) {
-                        null -> Root(settings, plus, query, onQuery = { query = it }, onOpen = ::open)
+                        null -> Root(settings, plus, actions.account, query, onQuery = { query = it }, onOpen = ::open)
                         SettingsPage.Theme -> ThemeOptions(settings, preview, actions)
                         SettingsPage.Home -> HomeOptions(settings, plus, preview, actions)
                         SettingsPage.Motion -> MotionOptions(settings, actions)
                         SettingsPage.Apps -> AppsOptions(settings, plus, actions)
-                        SettingsPage.Backup -> BackupOptions(plus, actions, onClose = onDismiss)
+                        SettingsPage.Backup -> BackupOptions(plus, actions, onClose = onDismiss, onAccount = { open(SettingsPage.Account, null) })
                         SettingsPage.About -> AboutOptions(actions)
-                        SettingsPage.Aura -> AuraOptions(settings, actions)
+                        SettingsPage.Aura -> AuraOptions(settings, actions, onAccount = { open(SettingsPage.Account, null) })
+                        SettingsPage.Account -> AccountOptions(actions)
                         // Opens a sheet instead; see open().
                         SettingsPage.Plus -> Unit
                     }
@@ -290,6 +295,7 @@ fun SettingsScreen(
 private fun Root(
     settings: ZenithSettings,
     plus: PlusStatus,
+    account: AccountActions?,
     query: String,
     onQuery: (String) -> Unit,
     onOpen: (SettingsPage, String?) -> Unit,
@@ -307,22 +313,23 @@ private fun Root(
     ) { browsing ->
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             when {
-                browsing -> Groups(settings, plus, onOpen)
+                browsing -> Groups(settings, plus, account, onOpen)
                 // On its way out after the box was cleared there is nothing left to say.
-                query.isNotBlank() -> Results(query, onOpen)
+                query.isNotBlank() -> Results(query, server = account != null, onOpen = onOpen)
             }
         }
     }
 }
 
 @Composable
-private fun Groups(settings: ZenithSettings, plus: PlusStatus, onOpen: (SettingsPage, String?) -> Unit) {
+private fun Groups(settings: ZenithSettings, plus: PlusStatus, account: AccountActions?, onOpen: (SettingsPage, String?) -> Unit) {
     val context = LocalContext.current
     val isHome = remember { context.getSystemService(RoleManager::class.java)?.isRoleHeld(RoleManager.ROLE_HOME) == true }
     // Looks and feel; what you own; the phone itself.
     listOf(
         listOf(SettingsPage.Theme, SettingsPage.Home, SettingsPage.Motion, SettingsPage.Apps),
-        listOf(SettingsPage.Plus, SettingsPage.Aura),
+        // The account is only there in a build with a server to keep it on.
+        listOfNotNull(SettingsPage.Plus, SettingsPage.Aura, SettingsPage.Account.takeIf { account != null }),
         listOf(SettingsPage.Backup, SettingsPage.About),
     ).forEachIndexed { block, pages ->
         Group(rise = block + 1) {
@@ -332,7 +339,7 @@ private fun Groups(settings: ZenithSettings, plus: PlusStatus, onOpen: (Settings
                     icon = page.icon(),
                     tile = page.tile(),
                     title = page.title,
-                    summary = summary(page, settings, plus, isHome),
+                    summary = summary(page, settings, plus, isHome, account?.signed),
                     onClick = { onOpen(page, null) },
                 )
             }
@@ -341,8 +348,8 @@ private fun Groups(settings: ZenithSettings, plus: PlusStatus, onOpen: (Settings
 }
 
 @Composable
-private fun Results(query: String, onOpen: (SettingsPage, String?) -> Unit) {
-    val found = remember(query) { SettingsCatalog.search(query) }
+private fun Results(query: String, server: Boolean, onOpen: (SettingsPage, String?) -> Unit) {
+    val found = remember(query, server) { SettingsCatalog.search(query, server) }
     if (found.isEmpty()) {
         Note("Nothing in Settings is called “${query.trim()}”.", Modifier.padding(top = 6.dp))
         return
@@ -448,6 +455,7 @@ private fun SettingsPage.icon(): ImageVector = when (this) {
     SettingsPage.Apps -> Icons.Rounded.Apps
     SettingsPage.Plus -> Icons.Rounded.AutoAwesome
     SettingsPage.Aura -> Icons.Rounded.LocalFireDepartment
+    SettingsPage.Account -> Icons.Rounded.AccountCircle
     SettingsPage.Backup -> Icons.Rounded.SettingsBackupRestore
     SettingsPage.About -> Icons.Rounded.Info
 }
@@ -459,12 +467,13 @@ private fun SettingsPage.tile(): List<Color> = when (this) {
     SettingsPage.Apps -> listOf(Color(0xFF4FB3FF), Color(0xFF2F7FE6))
     SettingsPage.Plus -> listOf(Color(0xFFFFD36B), Color(0xFFF5A623))
     SettingsPage.Aura -> listOf(Color(0xFFFF9F5A), Color(0xFFFF6A4D))
+    SettingsPage.Account -> listOf(Color(0xFFC77DFF), Color(0xFF9D4EDD))
     SettingsPage.Backup -> listOf(Color(0xFF7BC96F), Color(0xFF4CA65A))
     SettingsPage.About -> listOf(Color(0xFF9AA3B2), Color(0xFF6B7384))
 }
 
 /** How a group is set right now, in a line: what the first page is for. */
-private fun summary(page: SettingsPage, settings: ZenithSettings, plus: PlusStatus, isHome: Boolean): String = when (page) {
+private fun summary(page: SettingsPage, settings: ZenithSettings, plus: PlusStatus, isHome: Boolean, signed: Signed?): String = when (page) {
     SettingsPage.Theme -> {
         val appearance = when (settings.appearance) {
             "light" -> "light"
@@ -490,6 +499,11 @@ private fun summary(page: SettingsPage, settings: ZenithSettings, plus: PlusStat
         else -> "Wallpapers, theme maker, hidden apps, backup"
     }
     SettingsPage.Aura -> if (settings.streak > 0) "${settings.aura} aura, ${settings.streak} day streak" else "${settings.aura} aura"
+    SettingsPage.Account -> when {
+        signed == null -> "Sign in, or create one"
+        signed.account.username != null -> "@${signed.account.username}"
+        else -> signed.email ?: "Signed in with Google"
+    }
     SettingsPage.Backup -> "Save your home screen, or start again"
     SettingsPage.About -> if (isHome) "Zenith is your home screen" else "Zenith is not your home screen yet"
 }

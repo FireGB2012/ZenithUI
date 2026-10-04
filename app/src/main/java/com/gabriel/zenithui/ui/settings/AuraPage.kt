@@ -93,6 +93,9 @@ import com.gabriel.zenithui.ui.theme.ZenithShapes
 import com.gabriel.zenithui.ui.theme.glass
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
+import androidx.compose.runtime.rememberCoroutineScope
+import com.gabriel.zenithui.data.server.Account
+import kotlinx.coroutines.launch
 
 /**
  * Aura, as a page of Settings: where points are earned and spent.
@@ -102,7 +105,7 @@ import kotlin.math.roundToInt
  * here is hidden behind a second screen.
  */
 @Composable
-internal fun AuraOptions(settings: ZenithSettings, actions: SettingsActions) {
+internal fun AuraOptions(settings: ZenithSettings, actions: SettingsActions, onAccount: () -> Unit) {
     val haptics = rememberHaptics()
     /** Goes up each time points arrive or are spent: the ring answers with a ripple. */
     var stirred by remember { mutableIntStateOf(0) }
@@ -136,23 +139,35 @@ internal fun AuraOptions(settings: ZenithSettings, actions: SettingsActions) {
         }
     }
 
-    Spot("auraCode") {
-        YourCode(settings.referralCode, Modifier.riseIn(8))
-    }
+    // With a server, codes are real: it knows whose each one is and counts who has used it, and
+    // that takes an account. Until somebody is signed in, one card stands where the two would
+    // be, and a search for either lands on it.
+    val account = actions.account
+    if (account != null && account.signed == null) {
+        Spot("auraCode") {
+            Spot("auraRedeem") { CodesNeedAccount(Modifier.riseIn(8), onAccount) }
+        }
+        // A code used before there were accounts is still a code used.
+        if (settings.referredBy.isNotEmpty()) Redeem(settings.referredBy, Modifier.riseIn(9), onRedeem = { null })
+    } else {
+        Spot("auraCode") {
+            YourCode(settings.referralCode, account?.signed?.account, Modifier.riseIn(8))
+        }
 
-    Spot("auraRedeem") {
-        Redeem(
-            redeemed = settings.referredBy,
-            modifier = Modifier.riseIn(9),
-            onRedeem = { code ->
-                val refused = actions.redeem(code)
-                if (refused == null) {
-                    haptics.confirm()
-                    stirred++
-                }
-                refused
-            },
-        )
+        Spot("auraRedeem") {
+            Redeem(
+                redeemed = settings.referredBy,
+                modifier = Modifier.riseIn(9),
+                onRedeem = { code ->
+                    val refused = actions.redeem(code)
+                    if (refused == null) {
+                        haptics.confirm()
+                        stirred++
+                    }
+                    refused
+                },
+            )
+        }
     }
 }
 
@@ -576,8 +591,33 @@ private fun ThemeCard(
 
 // ------------------------------------------------------------------------------- the codes
 
+/**
+ * In a build with a server, a code is only real once the server knows whose it is, and using one
+ * is counted against an account. Until somebody is signed in, this says so and leads there.
+ */
 @Composable
-private fun YourCode(code: String, modifier: Modifier) {
+private fun CodesNeedAccount(modifier: Modifier, onAccount: () -> Unit) {
+    val palette = LocalPalette.current
+    Column(modifier) {
+        Group(padding = 16.dp) {
+            Caption("Aura codes")
+            Spacer(Modifier.height(10.dp))
+            Text(
+                "With a Zenith account you get a code to give to friends. Each one who uses it gets " +
+                    "${Aura.REFERRAL_REWARD} aura, and so do you. An account is also how you use a code a friend gave you.",
+                color = palette.onGlass,
+                fontSize = 14.sp,
+                modifier = Modifier.padding(horizontal = 4.dp),
+            )
+            Spacer(Modifier.height(14.dp))
+            PrimaryButton(text = "Sign in or create an account", onClick = onAccount)
+        }
+    }
+}
+
+/** [account] is the one signed in to, in a build with a server; null in a build that has none. */
+@Composable
+private fun YourCode(code: String, account: Account?, modifier: Modifier) {
     val palette = LocalPalette.current
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
@@ -623,7 +663,12 @@ private fun YourCode(code: String, modifier: Modifier) {
                     modifier = Modifier.weight(1f),
                 ) { copy() }
                 CodeButton(Icons.Rounded.IosShare, "Share", Modifier.weight(1f)) {
-                    val words = "I use Zenith UI as my home screen. Put my code $code in under Settings > Aura and you get ${Aura.REFERRAL_REWARD} aura to start with."
+                    val words = if (account == null) {
+                        "I use Zenith UI as my home screen. Put my code $code in under Settings > Aura and you get ${Aura.REFERRAL_REWARD} aura to start with."
+                    } else {
+                        "I use Zenith UI as my home screen. Make an account under Settings > Account, then put my code $code in " +
+                            "under Settings > Aura, and we both get ${Aura.REFERRAL_REWARD} aura."
+                    }
                     runCatching {
                         context.startActivity(
                             Intent.createChooser(
@@ -635,11 +680,25 @@ private fun YourCode(code: String, modifier: Modifier) {
                 }
             }
             Spacer(Modifier.height(12.dp))
-            // Said plainly, because the alternative is people wondering why nothing arrived.
-            Note(
-                "Give this to someone setting up Zenith and they get ${Aura.REFERRAL_REWARD} aura. Zenith has no account and " +
-                    "no server, so it cannot tell when your code is used — you are not paid for handing it out.",
-            )
+            if (account == null) {
+                // Said plainly, because the alternative is people wondering why nothing arrived.
+                Note(
+                    "Give this to someone setting up Zenith and they get ${Aura.REFERRAL_REWARD} aura. Zenith has no account and " +
+                        "no server, so it cannot tell when your code is used — you are not paid for handing it out.",
+                )
+            } else {
+                val used = when {
+                    account.referralCap > 0 && account.referrals >= account.referralCap ->
+                        "All ${account.referralCap} have: it still gives a friend aura, but no more comes to you."
+                    account.referrals == 0 -> "Nobody has used it yet."
+                    account.referrals == 1 -> "One friend has used it."
+                    else -> "${account.referrals} friends have used it."
+                }
+                Note(
+                    "Give this to someone with a Zenith account. When they put it in they get ${Aura.REFERRAL_REWARD} aura, and so do you" +
+                        (if (account.referralCap > 0) ", for up to ${account.referralCap} friends. " else ". ") + used,
+                )
+            }
         }
     }
 }
@@ -677,9 +736,12 @@ private fun CodeButton(icon: ImageVector, label: String, modifier: Modifier, onC
  * one that will is taken, and the ring at the top of the page counts the points in.
  */
 @Composable
-private fun Redeem(redeemed: String, modifier: Modifier, onRedeem: (String) -> String?) {
+private fun Redeem(redeemed: String, modifier: Modifier, onRedeem: suspend (String) -> String?) {
     val palette = LocalPalette.current
     val reduced = LocalMotionLevel.current.reduced
+    val scope = rememberCoroutineScope()
+    /** True while the server is being asked about a code. */
+    var busy by remember { mutableStateOf(false) }
     var code by remember { mutableStateOf("") }
     var refusal by remember { mutableStateOf<String?>(null) }
     var refusals by remember { mutableIntStateOf(0) }
@@ -691,7 +753,11 @@ private fun Redeem(redeemed: String, modifier: Modifier, onRedeem: (String) -> S
                     Icon(Icons.Rounded.AutoAwesome, contentDescription = null, tint = palette.accent, modifier = Modifier.size(17.dp))
                     Spacer(Modifier.width(10.dp))
                     Text(
-                        "Code $redeemed redeemed: ${Aura.REFERRAL_REWARD} aura added.",
+                        if (redeemed == Aura.USED_ON_ACCOUNT) {
+                            "Your account has used a friend's code: ${Aura.REFERRAL_REWARD} aura added."
+                        } else {
+                            "Code $redeemed redeemed: ${Aura.REFERRAL_REWARD} aura added."
+                        },
                         color = palette.onGlass,
                         fontSize = 14.sp,
                     )
@@ -709,10 +775,21 @@ private fun Redeem(redeemed: String, modifier: Modifier, onRedeem: (String) -> S
                 )
                 Spacer(Modifier.height(10.dp))
                 PrimaryButton(
-                    text = "Redeem for ${Aura.REFERRAL_REWARD} aura",
+                    text = if (busy) "Checking\u2026" else "Redeem for ${Aura.REFERRAL_REWARD} aura",
                     onClick = {
-                        refusal = onRedeem(code)
-                        if (refusal == null) code = "" else refusals++
+                        if (!busy) {
+                            busy = true
+                            refusal = null
+                            scope.launch {
+                                val refused = try {
+                                    onRedeem(code)
+                                } finally {
+                                    busy = false
+                                }
+                                refusal = refused
+                                if (refused == null) code = "" else refusals++
+                            }
+                        }
                     },
                 )
                 AnimatedVisibility(

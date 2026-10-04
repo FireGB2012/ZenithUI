@@ -56,6 +56,14 @@ import com.gabriel.zenithui.ui.theme.Palettes
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.material.icons.rounded.CloudDownload
+import androidx.compose.material.icons.rounded.CloudUpload
+import androidx.compose.runtime.rememberCoroutineScope
+import com.gabriel.zenithui.ui.common.rememberHaptics
+import com.gabriel.zenithui.ui.common.unfoldIn
+import com.gabriel.zenithui.ui.common.unfoldOut
+import kotlinx.coroutines.launch
 
 // What is on each page of Settings. Every option sits in a Spot named after its entry in the
 // SettingsCatalog, which is how a search result finds its row; every block says how far down the
@@ -427,7 +435,7 @@ internal fun AppsOptions(settings: ZenithSettings, plus: PlusStatus, actions: Se
 }
 
 @Composable
-internal fun BackupOptions(plus: PlusStatus, actions: SettingsActions, onClose: () -> Unit) {
+internal fun BackupOptions(plus: PlusStatus, actions: SettingsActions, onClose: () -> Unit, onAccount: () -> Unit) {
     val locked = !plus.active
     Group(rise = 0) {
         Spot("backup") {
@@ -450,6 +458,9 @@ internal fun BackupOptions(plus: PlusStatus, actions: SettingsActions, onClose: 
     }
     if (locked) Note("Backing up and restoring come with Zenith Plus.", Modifier.riseIn(1).padding(horizontal = 4.dp))
 
+    val account = actions.account
+    if (account != null) CloudBackup(locked, account, onPlus = actions.plus, onAccount = onAccount)
+
     // Starting over wipes the home screen, so it asks twice. The second tap has to come within a
     // few seconds of the first, and the row says exactly what will happen before it happens.
     var armed by remember { mutableStateOf(false) }
@@ -461,7 +472,7 @@ internal fun BackupOptions(plus: PlusStatus, actions: SettingsActions, onClose: 
             armed = false
         }
     }
-    Group(rise = 2) {
+    Group(rise = if (account != null) 3 else 2) {
         Spot("reset") {
             ActionRow(
                 icon = Icons.Rounded.RestartAlt,
@@ -478,6 +489,118 @@ internal fun BackupOptions(plus: PlusStatus, actions: SettingsActions, onClose: 
                     warnings++
                 }
             }
+        }
+    }
+}
+
+/**
+ * The backup kept in the account: one, which each new one takes the place of. Sending it is one
+ * tap. Fetching it replaces the home screen, so it asks twice, the way starting over does.
+ */
+@Composable
+private fun CloudBackup(locked: Boolean, account: AccountActions, onPlus: () -> Unit, onAccount: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    val haptics = rememberHaptics()
+    val reduced = LocalMotionLevel.current.reduced
+    val signed = account.signed
+    val savedAt = signed?.account?.backupAt
+    /** "up" or "down" while the server is being talked to. */
+    var working by remember { mutableStateOf<String?>(null) }
+    var said by remember { mutableStateOf<String?>(null) }
+    var sent by remember { mutableIntStateOf(0) }
+    var fetched by remember { mutableIntStateOf(0) }
+    var armed by remember { mutableStateOf(false) }
+    // Another phone may have saved one since this phone last looked.
+    LaunchedEffect(Unit) { account.refresh() }
+    LaunchedEffect(armed) {
+        if (armed) {
+            delay(4_000)
+            armed = false
+        }
+    }
+
+    /** False when the tap went to getting Plus or to signing in instead, or something is already under way. */
+    fun ready(): Boolean = when {
+        working != null -> false
+        locked -> {
+            onPlus()
+            false
+        }
+        signed == null -> {
+            onAccount()
+            false
+        }
+        else -> true
+    }
+
+    Column(Modifier.riseIn(2)) {
+        Caption("In your Zenith account", Modifier.padding(top = 6.dp, bottom = 10.dp))
+        Group {
+            Spot("cloudBackup") {
+                ActionRow(
+                    icon = if (locked) Icons.Rounded.Lock else Icons.Rounded.CloudUpload,
+                    title = if (working == "up") "Backing up\u2026" else "Back up to your account",
+                    subtitle = when {
+                        signed == null -> "Sign in to your account first"
+                        savedAt != null -> "Last saved ${moment(savedAt)}"
+                        else -> "Nothing saved there yet"
+                    },
+                    spin = sent,
+                ) {
+                    if (!ready()) return@ActionRow
+                    working = "up"
+                    said = null
+                    scope.launch {
+                        val refused = try {
+                            account.backUp()
+                        } finally {
+                            working = null
+                        }
+                        said = refused ?: "Your home screen is saved in your account."
+                        if (refused == null) {
+                            sent++
+                            haptics.confirm()
+                        }
+                    }
+                }
+            }
+            GroupDivider()
+            Spot("cloudRestore") {
+                ActionRow(
+                    icon = if (locked) Icons.Rounded.Lock else Icons.Rounded.CloudDownload,
+                    title = when {
+                        working == "down" -> "Restoring\u2026"
+                        armed -> "Tap again to restore"
+                        else -> "Restore from your account"
+                    },
+                    subtitle = if (armed) "Your layout and settings will be replaced" else "Replaces your current layout",
+                    spin = fetched,
+                ) {
+                    if (!ready()) return@ActionRow
+                    if (!armed) {
+                        armed = true
+                        said = null
+                        return@ActionRow
+                    }
+                    armed = false
+                    working = "down"
+                    scope.launch {
+                        val refused = try {
+                            account.restore()
+                        } finally {
+                            working = null
+                        }
+                        said = refused ?: "Your home screen is back as it was saved."
+                        if (refused == null) {
+                            fetched++
+                            haptics.confirm()
+                        }
+                    }
+                }
+            }
+        }
+        AnimatedVisibility(visible = said != null, enter = unfoldIn(reduced), exit = unfoldOut(reduced)) {
+            Note(said.orEmpty(), Modifier.padding(top = 10.dp))
         }
     }
 }

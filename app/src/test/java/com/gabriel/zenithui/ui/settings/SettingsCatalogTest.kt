@@ -91,4 +91,24 @@ class SettingsCatalogTest {
         assertEquals("auraRedeem", found("redeem").first())
         SettingsCatalog.on(SettingsPage.Aura).forEach { assertTrue(it.id, it.id.startsWith("aura")) }
     }
+
+    @Test
+    fun `the account and its backup are found when the build has a server`() {
+        assertEquals("account", SettingsCatalog.search("sign in").first().id)
+        assertTrue("account" in SettingsCatalog.search("google").map { it.id })
+        assertEquals("accountDelete", SettingsCatalog.search("delete account").first().id)
+        assertEquals(listOf("cloudBackup", "cloudRestore"), SettingsCatalog.search("cloud").map { it.id })
+        assertEquals(SettingsPage.Backup, SettingsCatalog.search("cloud").first().page)
+    }
+
+    @Test
+    fun `a build with no server has no account to find, and nothing else goes missing`() {
+        assertEquals(emptyList<SettingsEntry>(), SettingsCatalog.search("sign in", server = false))
+        assertEquals(emptyList<SettingsEntry>(), SettingsCatalog.search("cloud", server = false))
+        assertEquals(emptyList<SettingsEntry>(), SettingsCatalog.on(SettingsPage.Account, server = false))
+        // What was there before accounts is found either way.
+        assertEquals(listOf("backup", "restore", "reset"), SettingsCatalog.on(SettingsPage.Backup, server = false).map { it.id })
+        assertEquals("backup", SettingsCatalog.search("back up", server = false).first().id)
+        assertEquals(SettingsCatalog.search("haptics"), SettingsCatalog.search("haptics", server = false))
+    }
 }

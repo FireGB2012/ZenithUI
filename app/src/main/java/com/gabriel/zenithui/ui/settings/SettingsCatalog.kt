@@ -8,6 +8,8 @@ enum class SettingsPage(val title: String, val opensSheet: Boolean = false) {
     Apps("Apps"),
     Plus("Zenith Plus", opensSheet = true),
     Aura("Aura"),
+    /** Only in a build that has a server: see `server.properties`. */
+    Account("Account"),
     Backup("Backup & reset"),
     About("About & help"),
 }
@@ -16,7 +18,14 @@ enum class SettingsPage(val title: String, val opensSheet: Boolean = false) {
  * One option: where it lives, what it is called on the page, and the other words somebody might
  * type when looking for it.
  */
-data class SettingsEntry(val id: String, val page: SettingsPage, val title: String, val keywords: String = "")
+data class SettingsEntry(
+    val id: String,
+    val page: SettingsPage,
+    val title: String,
+    val keywords: String = "",
+    /** Only there in a build that has a server to talk to. */
+    val server: Boolean = false,
+)
 
 /**
  * Every option in Settings, once. The search box reads it, and so does the page a search result
@@ -57,8 +66,13 @@ object SettingsCatalog {
         SettingsEntry("auraCode", SettingsPage.Aura, "Your code", "referral share invite friend copy"),
         SettingsEntry("auraRedeem", SettingsPage.Aura, "Redeem a code", "referral gift friend enter"),
 
+        SettingsEntry("account", SettingsPage.Account, "Account", "sign in log login register username password google create", server = true),
+        SettingsEntry("accountDelete", SettingsPage.Account, "Delete account", "remove erase close", server = true),
+
         SettingsEntry("backup", SettingsPage.Backup, "Back up home screen", "save export file plus"),
         SettingsEntry("restore", SettingsPage.Backup, "Restore from a backup", "import load file plus"),
+        SettingsEntry("cloudBackup", SettingsPage.Backup, "Back up to your account", "cloud online save plus", server = true),
+        SettingsEntry("cloudRestore", SettingsPage.Backup, "Restore from your account", "cloud online load plus", server = true),
         SettingsEntry("reset", SettingsPage.Backup, "Run setup again", "start over erase clear welcome"),
 
         SettingsEntry("defaultHome", SettingsPage.About, "Default home app", "launcher set"),
@@ -68,16 +82,19 @@ object SettingsCatalog {
         SettingsEntry("privacy", SettingsPage.About, "Privacy policy", "data"),
     )
 
-    fun on(page: SettingsPage): List<SettingsEntry> = entries.filter { it.page == page }
+    /** What is on [page]. In a build with no [server], what needs one is not there. */
+    fun on(page: SettingsPage, server: Boolean = true): List<SettingsEntry> = entries.filter { it.page == page && (server || !it.server) }
 
     /**
      * What a search for [query] finds. Every word typed has to start a word of the option's title,
      * of its other words, or of its page's name. Options matched by their title alone come first;
-     * otherwise they keep the order of the pages.
+     * otherwise they keep the order of the pages. In a build with no [server], what needs one is
+     * never found.
      */
-    fun search(query: String): List<SettingsEntry> {
+    fun search(query: String, server: Boolean = true): List<SettingsEntry> {
         val typed = words(query)
         if (typed.isEmpty()) return emptyList()
+        val entries = if (server) entries else entries.filter { !it.server }
         val byTitle = entries.filter { entry ->
             val title = words(entry.title)
             typed.all { word -> title.any { it.startsWith(word) } }

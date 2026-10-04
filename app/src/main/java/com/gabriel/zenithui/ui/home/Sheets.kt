@@ -1,10 +1,7 @@
 package com.gabriel.zenithui.ui.home
 
-import android.content.Intent
 import android.provider.Settings
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -12,15 +9,12 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -31,21 +25,10 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Add
-import androidx.compose.material.icons.rounded.AutoAwesome
-import androidx.compose.material.icons.rounded.LocalFireDepartment
-import androidx.compose.material.icons.rounded.Lock
-import androidx.compose.material.icons.rounded.Restore
-import androidx.compose.material.icons.rounded.Save
-import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Dashboard
@@ -56,60 +39,35 @@ import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.OpenInFull
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
-import androidx.compose.material.icons.rounded.PushPin
-import androidx.compose.material.icons.rounded.Palette
-import androidx.compose.material.icons.rounded.RestartAlt
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.Icon
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.gabriel.zenithui.data.AppInfo
 import com.gabriel.zenithui.data.FolderCell
 import com.gabriel.zenithui.data.HomeItem
-import com.gabriel.zenithui.data.IconPackInfo
-import com.gabriel.zenithui.data.PlusStatus
-import com.gabriel.zenithui.data.IconPacks
-import com.gabriel.zenithui.data.GridDensity
-import com.gabriel.zenithui.data.IconShapes
 import com.gabriel.zenithui.data.AppCell
 import com.gabriel.zenithui.data.WidgetCell
 import com.gabriel.zenithui.data.Widgets
-import com.gabriel.zenithui.data.ZenithSettings
 import com.gabriel.zenithui.ui.common.Motion
 import com.gabriel.zenithui.ui.common.appearIn
 import com.gabriel.zenithui.ui.common.pressBounce
 import com.gabriel.zenithui.ui.common.staggerDelay
-import com.gabriel.zenithui.ui.common.SectionLabel
 import com.gabriel.zenithui.ui.onboarding.TipList
 import com.gabriel.zenithui.ui.theme.LocalPalette
-import com.gabriel.zenithui.ui.theme.Palettes
-import com.gabriel.zenithui.ui.theme.ZenithShapes
 import com.gabriel.zenithui.ui.theme.glass
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
 /** Bottom-anchored glass sheet: springs up from the edge, fades its scrim, slides back out. */
 @Composable
@@ -341,54 +299,3 @@ fun HelpSheet(visible: Boolean, onDismiss: () -> Unit) {
         }
     }
 }
-
-@Composable
-fun WidgetPickerSheet(
-    visible: Boolean,
-    onAdd: (String) -> Boolean,
-    onDismiss: () -> Unit,
-) {
-    val palette = LocalPalette.current
-    var message by remember { mutableStateOf<String?>(null) }
-
-    fun add(type: String) {
-        message = if (onAdd(type)) null else "No room left — free up a cell first."
-        if (message == null) onDismiss()
-    }
-
-    ZenithSheet(visible = visible, onDismiss = onDismiss, title = "Add a widget") {
-        Column(Modifier.verticalScroll(rememberScrollState())) {
-            message?.let {
-                Text(it, color = palette.onGlassMuted, fontSize = 12.sp, modifier = Modifier.padding(8.dp))
-            }
-            Widgets.placeable.forEachIndexed { index, spec ->
-                MenuRow(
-                    icon = Icons.Rounded.Add,
-                    label = spec.title,
-                    subtitle = spec.description,
-                    index = index,
-                ) { add(spec.type) }
-            }
-
-            Spacer(Modifier.height(18.dp))
-            SectionLabel("No glass", Modifier.padding(horizontal = 8.dp))
-            Spacer(Modifier.height(4.dp))
-            Text(
-                "No pane round them: the numbers and icons are the glass, like an iPhone's Lock Screen clock.",
-                color = palette.onGlassMuted,
-                fontSize = 12.sp,
-                modifier = Modifier.padding(horizontal = 8.dp),
-            )
-            Spacer(Modifier.height(4.dp))
-            Widgets.noGlass.forEachIndexed { index, spec ->
-                MenuRow(
-                    icon = Icons.Rounded.AutoAwesome,
-                    label = spec.title,
-                    subtitle = spec.description,
-                    index = Widgets.placeable.size + index,
-                ) { add(spec.type) }
-            }
-        }
-    }
-}
-

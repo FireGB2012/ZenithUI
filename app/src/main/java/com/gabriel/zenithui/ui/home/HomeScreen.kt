@@ -150,7 +150,6 @@ private sealed interface HomeSheet {
     data class Item(val id: String) : HomeSheet
     data class DrawerApp(val key: String) : HomeSheet
     data object Customize : HomeSheet
-    data object WidgetPicker : HomeSheet
     data object Help : HomeSheet
     data object Plus : HomeSheet
     data object ThemeMaker : HomeSheet
@@ -271,7 +270,10 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
     var sheetVisible by remember { mutableStateOf(false) }
     // Settings is a page of its own, under the sheets: one opened from it closes back onto it.
     var settingsOpen by remember { mutableStateOf(false) }
-    val settingsShown = animateFloatAsState(if (settingsOpen) 1f else 0f, tween(280), label = "settingsShown")
+    // So is the widget gallery.
+    var widgetsOpen by remember { mutableStateOf(false) }
+    // The home screen fades out from under either of them.
+    val pageShown = animateFloatAsState(if (settingsOpen || widgetsOpen) 1f else 0f, tween(280), label = "pageShown")
     val sharpBackdrop by viewModel.sharpBackdrop.collectAsState()
 
     var drawerHeightPx by remember { mutableFloatStateOf(0f) }
@@ -947,6 +949,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             if (card != null && cardOpening) closeCard()
             hideSheet()
             settingsOpen = false
+            widgetsOpen = false
             closeFolder()
             closeDrawer()
             if (pagerState.currentPage != 0) pagerState.animateScrollToPage(0)
@@ -990,7 +993,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                         val span = (fingers[0].position - fingers[1].position).getDistance()
                         if (startSpan == 0f) {
                             startSpan = span
-                        } else if (!fired && !drag.isDragging && !settingsOpen && span < startSpan * 0.72f) {
+                        } else if (!fired && !drag.isDragging && !settingsOpen && !widgetsOpen && span < startSpan * 0.72f) {
                             fired = true
                             haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
                             showSheet(HomeSheet.Customize)
@@ -1035,7 +1038,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     scaleY = scale
                     val sunk = depth.coerceIn(0f, 1f)
                     // Settings is glass over the wallpaper; the home screen is not seen through it.
-                    alpha = (1f - 0.55f * drawerProgress) * (1f - 0.25f * sunk) * (1f - settingsShown.value)
+                    alpha = (1f - 0.55f * drawerProgress) * (1f - 0.25f * sunk) * (1f - pageShown.value)
                 }
                 // The blur is its own short animation rather than a per-frame effect rebuild:
                 // recreating a full screen RenderEffect on every drag frame is what made the
@@ -1443,6 +1446,19 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             onDismiss = { settingsOpen = false },
         )
 
+        // ------------------------------------------------------------ widgets
+        WidgetGallery(
+            visible = widgetsOpen,
+            settings = settings,
+            geometry = drag.geometry,
+            onAdd = { type, spanX, spanY ->
+                val page = viewModel.addWidget(type, spanX, spanY)
+                revealPage(page)
+                page != null
+            },
+            onDismiss = { widgetsOpen = false },
+        )
+
         // ------------------------------------------------------------ sheets
         when (val current = sheet) {
             is HomeSheet.Item -> {
@@ -1501,7 +1517,10 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     hideSheet()
                     ambient = true
                 },
-                onWidgets = { showSheet(HomeSheet.WidgetPicker) },
+                onWidgets = {
+                    hideSheet()
+                    widgetsOpen = true
+                },
                 onSettings = {
                     hideSheet()
                     settingsOpen = true
@@ -1512,16 +1531,6 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                             Intent(Settings.ACTION_HOME_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                         )
                     }
-                },
-                onDismiss = { hideSheet() },
-            )
-
-            HomeSheet.WidgetPicker -> WidgetPickerSheet(
-                visible = sheetVisible,
-                onAdd = { type ->
-                    val page = viewModel.addWidget(type)
-                    revealPage(page)
-                    page != null
                 },
                 onDismiss = { hideSheet() },
             )

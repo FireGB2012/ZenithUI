@@ -116,6 +116,13 @@ object LayoutBuilder {
     /** As many home pages as anyone sensibly needs, and few enough that the dots still fit. */
     const val MAX_PAGES = 8
 
+    /**
+     * The pages to look for room on, starting at [from]: every page in use, the last of them
+     * [lastPage], and one new page after them. Never a page past the last the pager shows: what
+     * was put there would be on the home screen and nowhere to be found.
+     */
+    fun pagesToTry(lastPage: Int, from: Int = 0): IntRange = from..minOf(maxOf(lastPage, from) + 1, MAX_PAGES - 1)
+
     /** [spanY] row units as whole rows: the nearest, and never fewer than one. */
     fun wholeRows(spanY: Int): Int = ((spanY + ROW_UNITS / 2) / ROW_UNITS).coerceAtLeast(1) * ROW_UNITS
 

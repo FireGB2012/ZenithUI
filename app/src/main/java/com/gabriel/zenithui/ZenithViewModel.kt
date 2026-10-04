@@ -552,7 +552,6 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
         return slot.first
     }
 
-    /** Adds a widget, returning the page it landed on, or null when nothing would fit. */
     /**
      * Puts a widget on the first page with room for it and returns that page, or null when no
      * page has room. With no size given it is the widget's ordinary one; any size asked for is
@@ -659,8 +658,7 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
     fun firstFreeSlotFrom(startPage: Int, spanX: Int, spanY: Int, rowStep: Int, ignoreId: String?): Triple<Int, Int, Int>? {
         val s = settings.value
         val items = layout.value.filter { it.id != ignoreId }
-        val lastPage = maxOf(items.maxOfOrNull { it.page } ?: 0, startPage)
-        for (page in startPage..minOf(lastPage + 1, LayoutBuilder.MAX_PAGES - 1)) {
+        for (page in LayoutBuilder.pagesToTry(items.maxOfOrNull { it.page } ?: 0, from = startPage)) {
             val grid = PageGrid(s.columns, s.rows * ROW_UNITS)
             items.filter { it.page == page }.forEach { grid.occupyItem(it) }
             val slot = grid.findSlot(spanX, spanY, rowStep) ?: continue
@@ -669,12 +667,14 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
         return null
     }
 
-    /** Returns page/col/row of the first opening big enough for the given span, in row units. */
+    /**
+     * Returns page/col/row of the first opening big enough for the given span, in row units, on
+     * a new page if the ones in use are full. Null when every page there can be is full.
+     */
     fun firstFreeSlot(spanX: Int, spanY: Int, rowStep: Int = 1): Triple<Int, Int, Int>? {
         val s = settings.value
         val items = layout.value
-        val lastPage = (items.maxOfOrNull { it.page } ?: 0)
-        for (page in 0..(lastPage + 1)) {
+        for (page in LayoutBuilder.pagesToTry(items.maxOfOrNull { it.page } ?: 0)) {
             val grid = PageGrid(s.columns, s.rows * ROW_UNITS)
             items.filter { it.page == page }.forEach { grid.occupyItem(it) }
             val slot = grid.findSlot(spanX, spanY, rowStep)

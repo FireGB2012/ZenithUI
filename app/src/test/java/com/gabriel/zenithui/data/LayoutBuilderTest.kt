@@ -93,4 +93,22 @@ class LayoutBuilderTest {
         assertEquals(listOf(Widgets.Clock, Widgets.Battery, Widgets.Calendar, Widgets.Notes, Widgets.Toggles), Widgets.placeable)
         assertTrue(Widgets.placeable.all { it.minSpanY % ROW_UNITS == 0 })
     }
+
+    @Test
+    fun `room is looked for on the pages in use and one new page after them`() {
+        assertEquals(0..1, LayoutBuilder.pagesToTry(lastPage = 0))
+        assertEquals(0..3, LayoutBuilder.pagesToTry(lastPage = 2))
+        // From the page something was dropped on, for a drop that did not fit there.
+        assertEquals(2..3, LayoutBuilder.pagesToTry(lastPage = 2, from = 2))
+        // A drop on the page after the last one in use.
+        assertEquals(3..4, LayoutBuilder.pagesToTry(lastPage = 2, from = 3))
+    }
+
+    @Test
+    fun `room is never looked for on a page the pager would not show`() {
+        val last = LayoutBuilder.MAX_PAGES - 1
+        assertEquals(0..last, LayoutBuilder.pagesToTry(lastPage = last))
+        assertEquals(0..last, LayoutBuilder.pagesToTry(lastPage = last - 1))
+        assertEquals(last..last, LayoutBuilder.pagesToTry(lastPage = last, from = last))
+    }
 }

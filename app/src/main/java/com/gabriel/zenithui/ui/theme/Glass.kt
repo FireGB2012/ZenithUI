@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import kotlin.math.ceil
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -332,16 +333,43 @@ internal fun DrawScope.drawLiquidGlass(
             SYSTEM_WALLPAPER_ZOOM
         val width = (softened.width * scale).roundToInt()
         val height = (softened.height * scale).roundToInt()
+        val left = (-origin.x - (width - screen.width) * shown.x).roundToInt()
+        val top = (-origin.y - (height - screen.height) * shown.y).roundToInt()
         drawImage(
             image = softened,
-            dstOffset = IntOffset(
-                (-origin.x - (width - screen.width) * shown.x).roundToInt(),
-                (-origin.y - (height - screen.height) * shown.y).roundToInt(),
-            ),
+            dstOffset = IntOffset(left, top),
             dstSize = IntSize(width, height),
             alpha = look.opacity,
             filterQuality = FilterQuality.Low,
         )
+        // A pane inside something that is still growing is larger than the room it has on screen,
+        // and can reach past the right or the foot of the picture as it is lined up. The picture's
+        // last column and last row are drawn out over what that would leave bare, which is what
+        // the shader does at its edges too.
+        val beyondRight = ceil(paneSize.width).toInt() - (left + width)
+        if (beyondRight > 0) {
+            drawImage(
+                image = softened,
+                srcOffset = IntOffset(softened.width - 1, 0),
+                srcSize = IntSize(1, softened.height),
+                dstOffset = IntOffset(left + width, top),
+                dstSize = IntSize(beyondRight, height),
+                alpha = look.opacity,
+                filterQuality = FilterQuality.Low,
+            )
+        }
+        val beyondFoot = ceil(paneSize.height).toInt() - (top + height)
+        if (beyondFoot > 0) {
+            drawImage(
+                image = softened,
+                srcOffset = IntOffset(0, softened.height - 1),
+                srcSize = IntSize(softened.width, 1),
+                dstOffset = IntOffset(left, top + height),
+                dstSize = IntSize(width + beyondRight.coerceAtLeast(0), beyondFoot),
+                alpha = look.opacity,
+                filterQuality = FilterQuality.Low,
+            )
+        }
         drawRect(look.wash, size = paneSize, alpha = look.opacity)
     } else {
         // Nothing readable behind (a live wallpaper, or setup): a frosted body of its own, lit

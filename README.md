@@ -41,8 +41,9 @@ built entirely in Jetpack Compose.
   screen blurs and scales behind it in step with the drag. The single-line search field sits at the
   *bottom*, next to your thumb; it searches installed apps and falls through to Google: enter opens
   the first match or, when nothing matches, the web search.
-- **Every menu is a bottom sheet** — item menus, Customise, widget picker, settings. Nothing needs
-  a second hand.
+- **Every menu is a bottom sheet** — item menus, Customise, wallpapers. Nothing needs a second
+  hand. Settings and the widget gallery are pages of their own, the full height of the screen, on
+  one shell (`ui/common/FullPage.kt`): a bar with a way back and a way out, pulled down to close.
 - **Dock** — one pinned app for each column of the page, each standing under the icons above it,
   and never fewer than four (on a three-column grid the four are spread evenly); pin from any
   app's long-press menu.
@@ -60,7 +61,15 @@ built entirely in Jetpack Compose.
 The **search bar** is not a widget: switch it on under Zenith settings → Home screen and it sits
 above the dock, as wide as the icons above it. Tap to search apps, or hit the button for Google.
 
-**No glass** — a second section in the widget picker with the same widgets and no pane round
+**The gallery** — long-press an empty spot → **Customise** → **Widgets**
+(`ui/home/WidgetGallery.kt`). Every widget is drawn by the code that draws it on the home screen,
+at the size it is there, on a window onto your wallpaper, so what you see is what lands on the
+page. Tap one and it grows into a showcase: its sizes in a row, all to one scale — Small, Medium,
+Wide, Tall and Large, each fitted to the widget and to your grid (`WidgetSizes`), and each a
+different design — with a switch between Glass and No glass and one button that adds the size in
+the middle.
+
+**No glass** — the other side of that switch: the same widgets with no pane round
 them, like the clock on an iPhone's Lock Screen: the big numbers, rings and icons are made of glass
 themselves and sit straight on the wallpaper, with small glass icons added (a sun or moon on the
 clock, a battery on Power, a calendar, a pencil). Their words are white with a soft shadow. They are
@@ -76,6 +85,13 @@ now — Wallpaper & theme, Home screen, Motion & feel, Apps, Zenith Plus, Aura, 
 Search finds any option by its name or by other words for it ("dark", "vibrate", "battery"), opens
 its page and pulses the row. The Theme and Home pages start with a small live copy of your own home
 screen, drawn by the same code as the real one, so a change is seen as it is made.
+
+**Aura** is one of those pages (`ui/settings/AuraPage.kt`): the balance, counted up inside a ring
+drawn round to how far it goes towards the next theme; the streak as a ladder of seven days, each
+with what it pays; every theme on a card in its own colours, with a bar towards its price and,
+when it is out of reach, how many more days it will take; your code to copy or share, and the box
+for somebody else's. `Aura.ladder`, `Aura.daysToAfford` and `AuraThemes.next` are plain functions
+with tests.
 
 Every option is listed once in `SettingsCatalog`, which is what the search reads. Any Nova- or
 ADW-compatible icon pack installed on the device is detected and its `appfilter.xml` is parsed.
@@ -118,6 +134,9 @@ through a swipe) and `FlyIn` (when each item arrives).
   glints while charging, today's dot drawing itself in, toggles that change shape.
 - **The drawer and sheets.** Rows rise in each time the drawer opens; a wallpaper's preview grows
   out of the thumbnail that was tapped.
+- **Settings and the gallery.** Settings arrives in order — its title, the search box, then each
+  group in turn — and a row answers a press. The gallery's cards come in one after another, and a
+  widget's showcase grows out of the card that was tapped and goes back into it.
 
 Movement goes through `graphicsLayer` or draw-time state, never layout, and anything that runs
 for a while runs on one clock per page, so nothing is left running once it has settled (the one

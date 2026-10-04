@@ -35,7 +35,7 @@ WALLPAPERS MADE TO MATCH
 Zenith paints its own: twenty-two designs - soft glows, flowing lines, glass shapes and whole scenes - in every theme's colours, light and dark. And the wallpaper follows your theme: change the palette, or let the phone go dark in the evening, and the same design is repainted to match and faded in. Your own photos are one row away, and never touched.
 
 BUILT FOR ONE HAND
-Every menu is a bottom sheet. The app drawer's search field sits at the bottom where your thumb already is, and the drawer follows your finger as you pull it up or push it down.
+Menus are bottom sheets. The app drawer's search field sits at the bottom where your thumb already is, and the drawer follows your finger as you pull it up or push it down.
 
 SET UP IN TWENTY SECONDS
 Tell Zenith your name, pick a colour and watch a live picture of your own phone change with it, choose your widgets, and it builds the first page for you. Everything else stays one swipe away.
@@ -44,7 +44,7 @@ PLACEMENT THAT JUST WORKS
 Icons size themselves to your grid, so there is no icon size slider to fiddle with. Drop one over an edge and it slides in rather than bouncing back; drop one on a full page and it carries on to the next page with room. Everything keeps to the same lines: widgets, icons and the dock.
 
 WIDGETS THAT FIT
-Five built-in widgets: an oversized clock, a live battery ring, a month calendar, a quick note and quick toggles with a working torch, plus a search bar for your apps or Google that sits above the dock. Long press any widget or app, tap Resize and pull the pointer on its corner - make it any size you like, up to the whole page.
+Five widgets: an oversized clock, a live battery ring, a month calendar, a quick note and quick toggles with a working torch, plus a search bar for apps or Google above the dock. A gallery shows each one live on your wallpaper, in every size, glass or not. Long press any widget or app, tap Resize and pull its corner - any size, up to the whole page.
 
 SETTINGS YOU CAN READ
 One page with a search box: type "dark" or "vibrate" and it takes you to the switch. Eight groups say how they are set before you open them, and a small live copy of your home screen shows each change as you make it. To get there, pinch the home screen or hold your name.
@@ -80,7 +80,7 @@ First release.
 - Liquid glass home screen that blurs your wallpaper
 - Twenty-two wallpapers that change colour with your theme
 - Twenty second setup with a live preview of your phone
-- Five widgets and a search bar, all in line with your icons
+- Five widgets in a live gallery, plus a search bar
 - Fly-in, four page swipes, jiggle, folders that open in place
 - Drawer that tracks your thumb, with app and Google search
 - Six palettes, icon packs, adjustable grid, bedside clock

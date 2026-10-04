@@ -153,7 +153,6 @@ private sealed interface HomeSheet {
     data object WidgetPicker : HomeSheet
     data object Help : HomeSheet
     data object Plus : HomeSheet
-    data object Aura : HomeSheet
     data object ThemeMaker : HomeSheet
     data object HiddenApps : HomeSheet
     data object Toggles : HomeSheet
@@ -1435,7 +1434,8 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 backup = { withPlus { saveBackup.launch(Backup.fileName()) } },
                 restore = { withPlus { openBackup.launch(arrayOf("*/*")) } },
                 plus = { showSheet(HomeSheet.Plus) },
-                aura = { showSheet(HomeSheet.Aura) },
+                unlockTheme = { id -> viewModel.unlockTheme(id) },
+                redeem = { code -> viewModel.redeemReferral(code) },
                 help = { showSheet(HomeSheet.Help) },
                 reset = { viewModel.resetEverything() },
                 tidy = { viewModel.tidyUp() },
@@ -1584,15 +1584,6 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 visible = sheetVisible,
                 selected = settings.toggles,
                 onChange = { chosen -> viewModel.updateSettings { it.copy(toggles = chosen) } },
-                onDismiss = { hideSheet() },
-            )
-
-            HomeSheet.Aura -> AuraSheet(
-                visible = sheetVisible,
-                settings = settings,
-                onUnlock = { id -> viewModel.unlockTheme(id) },
-                onApply = { id -> viewModel.updateSettings { it.copy(paletteId = id) } },
-                onRedeem = { code -> viewModel.redeemReferral(code) },
                 onDismiss = { hideSheet() },
             )
 

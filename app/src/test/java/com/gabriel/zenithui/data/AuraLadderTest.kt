@@ -70,4 +70,13 @@ class AuraLadderTest {
         // A streak below nought is no streak.
         assertEquals(7, Aura.daysToAfford(balance = 0, price = 150, streak = -3))
     }
+
+    @Test
+    fun `what the points are being saved towards is the cheapest theme not yet owned`() {
+        assertEquals("ember", AuraThemes.next(emptyList())?.id)
+        assertEquals("tide", AuraThemes.next(listOf("ember"))?.id)
+        // Whatever order they were bought in.
+        assertEquals("ember", AuraThemes.next(listOf("obsidian", "tide"))?.id)
+        assertEquals(null, AuraThemes.next(AuraThemes.all.map { it.id }))
+    }
 }

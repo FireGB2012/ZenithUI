@@ -111,7 +111,10 @@ class SettingsActions(
     val backup: () -> Unit,
     val restore: () -> Unit,
     val plus: () -> Unit,
-    val aura: () -> Unit,
+    /** Spends aura on a theme; false when there is not enough, or it is already owned. */
+    val unlockTheme: (String) -> Boolean,
+    /** Takes somebody else's code; returns why not, or null when it was taken. */
+    val redeem: (String) -> String?,
     val help: () -> Unit,
     val reset: () -> Unit,
     /** Puts the layout back in line; returns how many items had to move. */
@@ -158,13 +161,11 @@ fun SettingsScreen(
     }
 
     fun open(target: SettingsPage, entry: String?) {
-        when (target) {
-            SettingsPage.Plus -> actions.plus()
-            SettingsPage.Aura -> actions.aura()
-            else -> {
-                highlight = entry
-                page = target
-            }
+        if (target.opensSheet) {
+            actions.plus()
+        } else {
+            highlight = entry
+            page = target
         }
     }
 
@@ -239,8 +240,9 @@ fun SettingsScreen(
                         SettingsPage.Apps -> AppsOptions(settings, plus, actions)
                         SettingsPage.Backup -> BackupOptions(plus, actions, onClose = onDismiss)
                         SettingsPage.About -> AboutOptions(actions)
-                        // These open a sheet instead; see open().
-                        SettingsPage.Plus, SettingsPage.Aura -> Unit
+                        SettingsPage.Aura -> AuraOptions(settings, actions)
+                        // Opens a sheet instead; see open().
+                        SettingsPage.Plus -> Unit
                     }
                 }
                 Spacer(Modifier.height(28.dp))

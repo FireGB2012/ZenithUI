@@ -130,5 +130,11 @@ object AuraThemes {
 
     fun byId(id: String): AuraTheme? = all.firstOrNull { it.id == id }
 
+    /**
+     * What the points are being saved towards: the cheapest theme not yet among [unlocked]. Null
+     * once every one of them is owned.
+     */
+    fun next(unlocked: List<String>): AuraTheme? = all.filter { it.id !in unlocked }.minByOrNull { it.price }
+
     fun isAuraTheme(paletteId: String): Boolean = all.any { it.id == paletteId }
 }

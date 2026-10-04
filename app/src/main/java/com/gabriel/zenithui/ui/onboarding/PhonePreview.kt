@@ -392,25 +392,19 @@ private fun MiniHome(
             }
 
             if (settings.showDock && dock.isNotEmpty()) {
-                // On the page's own columns, exactly as the real dock stands.
+                // As wide as the page, its apps sharing it out, exactly as the real dock stands.
                 val g = page
-                val pane = g?.dockPane(dock.size)
                 val arrangement = remember(g, dock.size) {
-                    if (g == null) {
-                        null
-                    } else {
-                        val paneLeft = g.dockPane(dock.size).first
-                        SlotArrangement(List(dock.size) { g.dockIconLeft(it, dock.size) - paneLeft })
-                    }
+                    if (g == null) null else SlotArrangement(List(dock.size) { g.dockIconLeft(it, dock.size) })
                 }
                 Box(Modifier.padding(horizontal = 12.dp).padding(bottom = navBottom + 10.dp).fillMaxWidth()) {
                 Row(
                     Modifier
                         .then(
-                            if (g != null && pane != null) {
+                            if (g != null) {
                                 Modifier
-                                    .padding(start = with(density) { (g.originX + pane.first).toDp() })
-                                    .size(with(density) { (pane.second - pane.first).toDp() }, with(density) { g.dockHeight.toDp() })
+                                    .padding(start = with(density) { g.originX.toDp() })
+                                    .size(with(density) { g.gridWidth.toDp() }, with(density) { g.dockHeight.toDp() })
                             } else {
                                 Modifier.fillMaxWidth()
                             }

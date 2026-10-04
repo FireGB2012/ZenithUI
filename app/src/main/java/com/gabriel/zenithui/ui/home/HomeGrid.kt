@@ -1294,7 +1294,8 @@ internal class SlotArrangement(private val lefts: List<Int>) : Arrangement.Horiz
  * The dock. Apps arrive by being dragged onto it from the home screen, and once there they are
  * rearranged the same way: hold one, slide it along and the others make room; lift it up off the
  * bar and it goes back to the home screen. Holding without moving still opens the app's menu.
- * Its icons stand on the page's own columns, so each is under the icons above it.
+ * Its bar is always as wide as the page, and its apps share it out equally: with one for each
+ * column, each stands under the icons above it.
  */
 @Composable
 fun DockBar(
@@ -1321,15 +1322,14 @@ fun DockBar(
     // The page's icon size, or a little smaller when more apps than columns have to share the bar.
     val iconSize = geometry?.let { with(density) { it.dockIcon(keys.size).toDp() } } ?: STANDARD_ICON_SIZE
     val iconSizePx = with(density) { iconSize.toPx() }
-    // Where the pane and each icon stand, on the page's own columns (see HomeGeometry.dockIconLeft).
-    // Before a page has been measured there is no geometry, and the icons are simply spread out.
-    val pane = geometry?.dockPane(keys.size)
+    // The bar is the width of the page's grid whatever it holds; where each icon stands in it is
+    // HomeGeometry.dockIconLeft. Before a page has been measured there is no geometry, and the
+    // icons are simply spread out.
     val arrangement = remember(geometry, keys.size) {
         if (geometry == null || keys.isEmpty()) {
             null
         } else {
-            val paneLeft = geometry.dockPane(keys.size).first
-            SlotArrangement(List(keys.size) { geometry.dockIconLeft(it, keys.size) - paneLeft })
+            SlotArrangement(List(keys.size) { geometry.dockIconLeft(it, keys.size) })
         }
     }
 
@@ -1376,11 +1376,11 @@ fun DockBar(
         Row(
             modifier = Modifier
                 .then(
-                    if (geometry != null && pane != null) {
+                    if (geometry != null) {
                         // Its height comes from the grid, not from its icons: see HomeGeometry.dockHeight.
                         Modifier
-                            .padding(start = with(density) { (geometry.originX + pane.first).toDp() })
-                            .size(with(density) { (pane.second - pane.first).toDp() }, with(density) { geometry.dockHeight.toDp() })
+                            .padding(start = with(density) { geometry.originX.toDp() })
+                            .size(with(density) { geometry.gridWidth.toDp() }, with(density) { geometry.dockHeight.toDp() })
                     } else {
                         Modifier.fillMaxWidth()
                     }

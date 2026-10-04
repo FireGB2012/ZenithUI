@@ -120,10 +120,10 @@ The search bar stops being a grid widget.
 
 ### Dock
 
-- Slots use the page's column spacing. With `n` apps and `n <= columns`, the group is centred: app
-  `i` sits at column position `(columns - n) / 2 + i`. With `n == columns` each icon is exactly
-  under a column. With a different count the group is still on the grid's spacing, offset by half
-  a column when the difference is odd, as on an iPhone.
+- The dock's pane is always as wide as the grid, as on an iPhone, and its `n` apps share it out
+  equally, each in the middle of its share. With `n == columns` a share is a column, so each icon
+  is exactly under a column; with fewer they spread across the bar. (Changed 2026-10-04 at
+  Gabriel's request: until then a smaller dock kept the grid's spacing in a pane that hugged it.)
 - The dock takes at most `columns` apps, and never fewer than four: on a three-column grid a
   fourth is allowed, spread evenly with the others. A dock that already holds more keeps them, spread evenly
   and drawn a little smaller if that is what it takes to fit, and takes no more until it is back

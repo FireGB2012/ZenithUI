@@ -23,7 +23,7 @@ built entirely in Jetpack Compose.
 - **Everything lines up** — icons and widgets keep to whole rows. A widget runs from the left edge
   of the icon in its first column to the right edge of the icon in its last, and from the top of
   its first row's icons to the bottom of its last row's labels, so the space under a widget is the
-  space under any icon. The dock stands on the same columns as the page, and the name at the top
+  space under any icon. A full dock stands on the same columns as the page, and the name at the top
   starts on the same line as the first column. One class, `HomeGeometry`, works out every position
   in whole pixels. (Zenith Plus free placement still puts things anywhere.)
 - **Folders** — drop one app onto another to create a folder; drop onto a folder to add to it.
@@ -44,9 +44,10 @@ built entirely in Jetpack Compose.
 - **Every menu is a bottom sheet** — item menus, Customise, wallpapers. Nothing needs a second
   hand. Settings and the widget gallery are pages of their own, the full height of the screen, on
   one shell (`ui/common/FullPage.kt`): a bar with a way back and a way out, pulled down to close.
-- **Dock** — one pinned app for each column of the page, each standing under the icons above it,
-  and never fewer than four (on a three-column grid the four are spread evenly); pin from any
-  app's long-press menu.
+- **Dock** — a bar as wide as the page however many apps it holds, as on an iPhone. It takes one
+  app for each column of the page, and never fewer than four, and they share the bar out equally:
+  a full dock has each app under the icons above it, and a smaller one spreads across the bar
+  (`HomeGeometry.dockIconLeft`). Pin from any app's long-press menu.
 
 ## Built-in widgets
 

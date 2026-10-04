@@ -118,25 +118,17 @@ class HomeGeometry(
         if (count > columns && count > 0) minOf(icon, (gridWidth / count * DOCK_FILL).toInt()) else icon
 
     /**
-     * The left edge of dock icon [index] of [count], from the grid's left edge. The dock stands on
-     * the page's own columns: with one app for each column every icon is under its column, and
-     * with fewer the group is centred on the same spacing. More than fit are spread evenly.
+     * The left edge of dock icon [index] of [count], from the grid's left edge. The dock's bar is
+     * as wide as the grid however many apps it holds, as on an iPhone, and the apps share it out
+     * equally, each in the middle of its share. With one app for each column a share is a column,
+     * so every icon is under the icons above it; with fewer they spread across the bar, and with
+     * more they close up.
      */
     fun dockIconLeft(index: Int, count: Int): Int {
-        if (count > columns) {
-            val slot = gridWidth.toFloat() / count
-            return ((index + 0.5f) * slot - dockIcon(count) / 2f).roundToInt()
-        }
-        // Counted in half columns, so a group one short of the columns sits between them.
-        val halfColumns = (columns - count) + 2 * index
-        return sideInset + halfColumns * cellWidth / 2
-    }
-
-    /** The left and right edges of the dock's pane for [count] apps: one column for each icon. */
-    fun dockPane(count: Int): Pair<Int, Int> {
-        if (count <= 0 || count >= columns) return 0 to gridWidth
-        val left = dockIconLeft(0, count) - sideInset
-        return left to left + count * cellWidth
+        // One for each column: on the page's own lines exactly, with no rounding of its own.
+        if (count == columns) return sideInset + index * cellWidth
+        val share = gridWidth.toFloat() / count.coerceAtLeast(1)
+        return ((index + 0.5f) * share - dockIcon(count) / 2f).roundToInt()
     }
 
     companion object {

@@ -101,21 +101,27 @@ class HomeGeometryTest {
         for (index in 0 until g.columns) {
             assertEquals(index * g.cellWidth + g.iconFrame.left, g.dockIconLeft(index, g.columns))
         }
-        assertEquals(0 to g.gridWidth, g.dockPane(g.columns))
     }
 
     @Test
-    fun `a smaller dock is centred on the same spacing`() = everyPage { g ->
+    fun `a smaller dock shares the whole bar out equally between its apps`() = everyPage { g ->
         for (count in 1 until g.columns) {
-            for (index in 1 until count) {
-                assertEquals(g.cellWidth, g.dockIconLeft(index, count) - g.dockIconLeft(index - 1, count))
+            val lefts = (0 until count).map { g.dockIconLeft(it, count) }
+            // The bar is the grid's width whatever it holds: each app stands in the middle of
+            // its share of that, give or take a pixel of rounding.
+            lefts.forEachIndexed { index, left ->
+                assertEquals((index + 0.5f) * g.gridWidth / count, left + g.icon / 2f, 1f)
             }
-            val (left, right) = g.dockPane(count)
-            assertEquals(count * g.cellWidth, right - left)
-            // As far from the left edge as from the right, give or take a pixel of rounding.
-            assertTrue(abs(left - (g.gridWidth - right)) <= 1)
-            assertEquals(left + g.sideInset, g.dockIconLeft(0, count))
+            // So they are as far from the left edge as from the right...
+            assertTrue(abs(lefts.first() - (g.gridWidth - lefts.last() - g.icon)) <= 1)
+            // ...and further apart than the columns above them, not huddled on the same spacing.
+            lefts.zipWithNext().forEach { (a, b) -> assertTrue("$count apps on ${g.columns} columns", b - a > g.cellWidth) }
         }
+    }
+
+    @Test
+    fun `a single app stands in the middle of the bar`() = everyPage { g ->
+        assertTrue(abs(g.dockIconLeft(0, 1) + g.icon / 2f - g.gridWidth / 2f) <= 1f)
     }
 
     @Test
@@ -128,7 +134,6 @@ class HomeGeometryTest {
             assertTrue("$count apps on ${g.columns} columns end past the grid", lefts.last() + size <= g.gridWidth)
             assertTrue("$count apps on ${g.columns} columns touch", lefts.zipWithNext().all { (a, b) -> b - a > size })
             assertTrue(size in 1..g.icon)
-            assertEquals(0 to g.gridWidth, g.dockPane(count))
         }
     }
 
@@ -159,11 +164,6 @@ class HomeGeometryTest {
     @Test
     fun `the dock has room for the page's icons and a margin above and below`() = everyPage { g ->
         assertTrue(g.dockHeight >= g.icon + 2 * (12f * g.density).roundToInt())
-    }
-
-    @Test
-    fun `an empty dock is as wide as the grid`() {
-        assertEquals(0 to pixel.gridWidth, pixel.dockPane(0))
     }
 
     @Test

@@ -166,7 +166,9 @@ the highlight runs along them. What is drawn white is clear glass; a colour beco
 
 Android 13+ does not let a launcher read the wallpaper, so `GlassWallpaper` keeps its own copy of
 any wallpaper Zenith sets (its own designs, or a photo picked under Wallpapers → Your photos) and
-checks it is still current by comparing the wallpaper colours Android reports. Android 14+ shows a
+checks it is still current by the number Android gives every wallpaper (`WallpaperManager.getWallpaperId`,
+noted when the copy is made; see `WallpaperTrust`). The wallpaper's colours are only the fallback:
+Samsung phones never announce them to the app that set the wallpaper. Android 14+ shows a
 still wallpaper zoomed by a tenth to leave room for parallax, and the shader matches that. With no
 usable copy (a live wallpaper, or one set in another app) panes fall back to frosted glass with the
 same rim, rather than showing a picture that is not really behind them. Android 12 uses the cached

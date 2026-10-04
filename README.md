@@ -142,7 +142,8 @@ Movement goes through `graphicsLayer` or draw-time state, never layout, and anyt
 for a while runs on one clock per page, so nothing is left running once it has settled (the one
 exception is the charging glint, while there is a charger). **Animations: Reduced** in Settings,
 or the phone's own *Remove animations*, turns all of it down to quick fades: no fly-in, no
-rocking, no tilt, pages simply slide. Haptics go through one `Haptics` helper — a tick, a pick-up,
+rocking, no tilt; sheets and full-screen pages fade in where they stand, and home pages simply
+slide. Haptics go through one `Haptics` helper — a tick, a pick-up,
 a confirmation — and are silent when the switch is off.
 
 ## How the glass works

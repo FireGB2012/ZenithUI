@@ -60,8 +60,7 @@ covers its side.
 ## Deleting your account
 
 You can delete your account at any time: in the app under Settings > Account > Delete account, or
-without the app on the account deletion page linked from Zenith UI's Google Play listing. Deleting
-removes the account, its sign-in keys, its Aura code and its backup from the server at once. The
+without the app at <https://zenithlabz.duckdns.org/delete-account>. Deleting removes the account, its sign-in keys, its Aura code and its backup from the server at once. The
 records of codes used stay, with nothing left in them that says whose they were. Signing out removes
 the sign-in key for that phone. Uninstalling the app does not delete an account. For a copy of what
 is kept about your account, write to the address at the end.

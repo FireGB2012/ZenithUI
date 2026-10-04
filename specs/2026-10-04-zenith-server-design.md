@@ -103,6 +103,28 @@ redeeming a friend's (and an unknown one, and one's own), backup, restore, delet
 light theme, the shrunk release build. **Not checked: Continue with Google itself**, which needs
 the real client IDs and a phone with a Google account.
 
+## The server, as installed (2026-10-04)
+
+`https://zenithlabz.duckdns.org`, in `server.properties` since the report came back. The program
+is the one in `server/`, unchanged (same sha256). It runs on a desktop PC in Gabriel's home, behind
+his router: Caddy with a Let's Encrypt certificate in front, a free DuckDNS name kept up to date by
+a cron job, the router's ports 80 and 443 forwarded by UPnP, a copy of the database every night
+with fourteen kept. Google sign-in is off there until it is given the Web client ID; the app has
+none either, so it shows no Google button.
+
+Checked from this PC on 2026-10-04: the health route and the delete page answer from the internet
+(asked from France and Singapore); the app on the API 29 emulator made an account there over
+HTTPS, backed up, restored, signed out and in, and deleted the account, which left nothing behind.
+
+Two things that come with a server at home, both told to Gabriel:
+
+- **Inside his own home network the name does not answer**: the router does not send traffic for
+  its own outside address back in. A phone on his Wi-Fi cannot reach the server by name; on mobile
+  data, and everywhere else, it can. (The emulator test went round this with a hosts entry.)
+- **It is up only while that PC is on and online**, and the name gives away the home's internet
+  address to anyone who looks it up. The name can be pointed at a hosted server later without a
+  new build of the app, as long as the DuckDNS name is kept.
+
 ## What changes for privacy
 
 The internet permission is new. The listing and `docs/index.html` stop saying "no account, no

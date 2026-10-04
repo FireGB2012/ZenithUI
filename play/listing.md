@@ -168,8 +168,8 @@ this file's history.)
 - **Do you provide a way for users to request that their data is deleted?** Yes: in the app
   (Settings > Account > Delete account) and on the web page below.
 - **Account creation:** the app lets people create an account: "Username and password" and "OAuth"
-  (Google). **Delete account URL:** `https://<the server's address>/delete-account` (the page the
-  server itself serves; the address is in the ZENITH SERVER REPORT).
+  (Google). **Delete account URL:** `https://zenithlabz.duckdns.org/delete-account` (the page the
+  server itself serves).
 
 Data types, each **collected, not shared, optional** (only if the person makes an account, and for
 the last three only if they also send a backup), purpose **App functionality** (and **Account

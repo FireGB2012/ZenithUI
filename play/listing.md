@@ -2,6 +2,11 @@
 
 Paste these into Play Console → Grow → Store presence → Main store listing.
 
+> Since 2026-10-04 this describes a build **with a server** (an address in `server.properties`):
+> accounts, a backup in the account, Aura codes that pay both ways. Put it on Play together with
+> that build, the new privacy policy and the new Data safety answers below — not before, or the
+> listing promises what the installed app cannot do.
+
 ## App details
 
 | Field | Value |
@@ -35,28 +40,28 @@ WALLPAPERS MADE TO MATCH
 Zenith paints its own: twenty-two designs - soft glows, flowing lines, glass shapes and whole scenes - in every theme's colours, light and dark. And the wallpaper follows your theme: change the palette, or let the phone go dark in the evening, and the same design is repainted to match and faded in. Your own photos are one row away, and never touched.
 
 BUILT FOR ONE HAND
-Menus are bottom sheets. The app drawer's search field sits at the bottom where your thumb already is, and the drawer follows your finger as you pull it up or push it down.
+Menus are bottom sheets. The app drawer's search field sits at the bottom where your thumb already is, and the drawer follows your finger up and down.
 
 SET UP IN TWENTY SECONDS
-Tell Zenith your name, pick a colour and watch a live picture of your own phone change with it, choose your widgets, and it builds the first page for you. Everything else stays one swipe away.
+Tell Zenith your name, pick a colour and watch a live picture of your own phone change with it, choose your widgets, and it builds the first page for you.
 
 PLACEMENT THAT JUST WORKS
-Icons size themselves to your grid, so there is no icon size slider to fiddle with. Drop one over an edge and it slides in rather than bouncing back; drop one on a full page and it carries on to the next page with room. Everything keeps to the same lines: widgets, icons and the dock.
+Icons size themselves to your grid: no size slider to fiddle with. Drop one over an edge and it slides in rather than bouncing back; drop one on a full page and it carries on to the next page with room.
 
 WIDGETS THAT FIT
 Five widgets: an oversized clock, a live battery ring, a month calendar, a quick note and quick toggles with a working torch, plus a search bar for apps or Google above the dock. A gallery shows each one live on your wallpaper, in every size, glass or not. Long press any widget or app, tap Resize and pull its corner - any size, up to the whole page.
 
 SETTINGS YOU CAN READ
-One page with a search box: type "dark" or "vibrate" and it takes you to the switch. Eight groups say how they are set before you open them, and a small live copy of your home screen shows each change as you make it. To get there, pinch the home screen or hold your name.
+One page with a search box: type "dark" or "vibrate" and it takes you to the switch. Nine groups say how they are set before you open them, and a small live copy of your home screen shows each change as you make it. To get there, pinch the home screen or hold your name.
 
 ZENITH PLUS
-Try the extras free for a week: seven more wallpapers, a theme maker that builds a palette from any three colours you like, hidden apps that stay out of the drawer behind a PIN, and a backup you can save to a file and restore on any phone. After that it is $1.99 a month, or $14.99 once for the lifetime pass. No ads either way, and nothing that was free before is ever taken away.
+Try the extras free for a week: seven more wallpapers, a theme maker that builds a palette from any three colours you like, hidden apps that stay out of the drawer behind a PIN, and a backup, in a file or in your Zenith account, to restore on any phone. After that it is $1.99 a month, or $14.99 once for the lifetime pass. No ads either way, and nothing that was free before is ever taken away.
 
 AS MANY PAGES AS YOU LIKE
 Tap the + beside the page dots for another page, or hold an icon against the side of the screen to carry it across.
 
 AURA
-Open Zenith once a day and the streak pays you: ten points on day one, more for every day in a row, up to fifty. Points buy themes - five to start with, from Ember to Obsidian. Miss a day and the streak starts again; nothing you have earned is taken back. It is all counted on your phone.
+Open Zenith once a day and the streak pays you: ten points on day one, more for every day in a row, up to fifty. Points buy themes - five to start with, from Ember to Obsidian. Miss a day and the streak starts again; what you earned stays. With a Zenith account, a friend who uses your code gets 150 points, and so do you.
 
 MAKE IT YOURS
 Six palettes, light, dark or automatic, adjustable glass, Compact, Balanced or Roomy grids, labels on or off, four icon shapes, and support for any Nova or ADW compatible icon pack.
@@ -65,12 +70,12 @@ BEDSIDE CLOCK
 Tap the clock widget for a dimmed full screen clock with the date and today's calendar.
 
 SMOOTH BY DESIGN, FOR EVERYONE
-Unlock and the home screen flies in. Turn pages your way: Depth, Slide, Cube or Stack. Pick up an icon and the rest jiggle; put it down and it lands with a ring. Folders open out of their own icon. All at your screen's full rate, up to 120Hz, free or not - and one switch turns it down to plain fades.
+Unlock and the home screen flies in. Turn pages your way: Depth, Slide, Cube or Stack. Pick up an icon and the rest jiggle; put it down and it lands with a ring. Folders open out of their own icon. All at your screen's full rate, up to 120Hz - and one switch turns it down to plain fades.
 
 PRIVATE BY DEFAULT
-No account, no analytics, no ads. Your name, layout, streak and settings never leave your phone - the only thing that goes online is Google Play checking whether you own Zenith Plus.
+No analytics, no ads, and no account unless you want one. Without one, nothing leaves your phone but Google Play checking whether you own Zenith Plus. An account keeps your sign-in, your Aura code and the backup you choose to send; delete it any time, in the app or on the web.
 
-Beyond Google Play's own billing permissions, Zenith UI only asks to set your wallpaper and to vibrate when you pick up an icon. Calendar access is optional, for the bedside clock.
+Zenith UI asks to set your wallpaper, to vibrate, and for the internet (Google Play's billing, and your account if you make one). Calendar access is optional, for the bedside clock.
 ```
 
 ## What's new (500 characters max)
@@ -85,6 +90,17 @@ First release.
 - Drawer that tracks your thumb, with app and Google search
 - Six palettes, icon packs, adjustable grid, bedside clock
 - Zenith Plus free for a week; Aura streak points buy themes
+```
+
+For the first update that has a server:
+
+```
+New: a Zenith account, if you want one.
+- Sign in with a username and a password, or with Google
+- Your Aura code now counts: a friend who uses it gets 150 points, and so do you
+- Zenith Plus can keep a backup of your home screen in your account
+- Delete the account whenever you like, in the app or on the web
+Without an account Zenith works as before, and nothing leaves your phone.
 ```
 
 ## Graphics
@@ -142,14 +158,47 @@ address, then buy from a build signed with the upload key and installed from a P
 
 ## Data safety form answers
 
-- **Does your app collect or share any of the required user data types?** No. The Zenith Plus
-  purchase is handled entirely by Google Play; the app never sees or stores a payment detail, and
-  records only a single "purchased" flag on the device. The `INTERNET`, `ACCESS_NETWORK_STATE` and
-  `BILLING` permissions in the manifest come from Google's Play Billing library and carry only
-  Play's own purchase check; Zenith UI opens no network connections itself.
-- **Is all of the user data collected by your app encrypted in transit?** Not applicable — no data leaves the device.
-- **Do you provide a way for users to request that their data is deleted?** Not applicable; clearing app storage removes everything.
-- Note for the reviewer, if asked: the launcher reads the list of installed applications through `LauncherApps` in order to display them, and — only with the user's consent — today's calendar entries for the bedside clock. Neither is transmitted, logged or stored off-device.
+For a build with a server. (A build without one collects nothing: the answers before 2026-10-04 in
+this file's history.)
+
+- **Does your app collect or share any of the required user data types?** Yes, collects. Nothing is
+  shared with third parties.
+- **Is all of the user data collected by your app encrypted in transit?** Yes (HTTPS only; the
+  release build refuses to talk to an address that is not HTTPS).
+- **Do you provide a way for users to request that their data is deleted?** Yes: in the app
+  (Settings > Account > Delete account) and on the web page below.
+- **Account creation:** the app lets people create an account: "Username and password" and "OAuth"
+  (Google). **Delete account URL:** `https://<the server's address>/delete-account` (the page the
+  server itself serves; the address is in the ZENITH SERVER REPORT).
+
+Data types, each **collected, not shared, optional** (only if the person makes an account, and for
+the last three only if they also send a backup), purpose **App functionality** (and **Account
+management** for the first two):
+
+| Data type | What it is here | Notes |
+| --- | --- | --- |
+| Personal info → User IDs | The username, or Google's number for the Google account | |
+| Personal info → Email address | Inside Google's sign-in token, with Continue with Google | Tick "processed ephemerally": the server checks the token and keeps only the number |
+| Personal info → Name | The name typed during setup, inside a backup | Only in a backup. Google's token also carries a name, read and not kept |
+| App activity → Installed apps | The apps placed on the home screen and the apps hidden, inside a backup | Never the whole list of installed apps |
+| App activity → Other user-generated content | The Quick Note widget's text, inside a backup | |
+
+Not collected: location, contacts, photos, files, messages, device IDs, diagnostics, and anything
+financial. The Zenith Plus purchase is handled entirely by Google Play; the server is told nothing
+about it, and a backup sent to the account leaves the purchase and the trial out.
+
+Note for the reviewer, if asked: the launcher reads the list of installed applications through
+`LauncherApps` in order to display them, and — only with the user's consent — today's calendar
+entries for the bedside clock. The calendar entries are never transmitted, logged or stored
+off-device. Nor is the list of installed applications as a whole; a backup the user chooses to send
+to their account names the apps on their home screen and the ones they hid, which is what "Installed
+apps" above declares.
+
+## App access
+
+Tick "All functionality is available without special access": an account is optional, anyone can
+make one in the app (Settings > Account) with any username and a password, and no code or invitation
+is needed. Backing up to the account needs Zenith Plus, which the seven free days unlock.
 
 ## Permissions declared
 
@@ -159,7 +208,7 @@ address, then buy from a build signed with the upload key and installed from a P
 | `VIBRATE` | A short tick when you pick up an icon or resize a widget |
 | `READ_CALENDAR` | Optional. Requested at runtime the first time you ask the bedside clock to show today's events; the launcher works fully without it |
 | `com.android.vending.BILLING` | Selling Zenith Plus through Google Play |
-| `INTERNET`, `ACCESS_NETWORK_STATE` | Merged in by the Play Billing library so it can reach Google Play; the app's own code makes no network calls |
+| `INTERNET`, `ACCESS_NETWORK_STATE` | `INTERNET` is the app's own since 2026-10-04: it reaches Zenith's server once somebody makes or signs in to an account, and never before. Both are also merged in by the Play Billing library so it can reach Google Play |
 
 `READ_CALENDAR` is in the "personal and sensitive" family, so the listing must explain it: the bedside clock shows today's events on a dimmed screen, the data is read on the device and never leaves it, and every other feature works if you decline.
 

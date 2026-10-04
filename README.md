@@ -82,7 +82,7 @@ version of.
 Long-press an empty spot → **Customise** → **Settings**. Settings is a page of its own, the full
 height of the screen (`ui/settings/`): a search box and eight groups, each saying how it is set
 now — Wallpaper & theme, Home screen, Motion & feel, Apps, Zenith Plus, Aura, Backup & reset, About
-& help. A group pushes in from the side; back, the arrow or a swipe from the left edge pops it.
+& help — and a ninth, Account, in a build that has a server. A group pushes in from the side; back, the arrow or a swipe from the left edge pops it.
 Search finds any option by its name or by other words for it ("dark", "vibrate", "battery"), opens
 its page and pulses the row. The Theme and Home pages start with a small live copy of your own home
 screen, drawn by the same code as the real one, so a change is seen as it is made.
@@ -175,6 +175,36 @@ same rim, rather than showing a picture that is not really behind them. Android 
 blur, and "No glass" widgets draw their numbers and icons plain white below Android 13. Nothing is
 captured or blurred per frame.
 
+## Accounts and the server
+
+Zenith works with no account, and then nothing leaves the phone. `server.properties` says where
+Zenith's server is; while its two lines are empty the app has no server, shows nothing of accounts
+and sends nothing. With an address:
+
+- **Settings → Account** (`ui/settings/AccountPage.kt`): create an account or sign in with a
+  username and a password, or Continue with Google (Credential Manager, `GoogleSignIn.kt`) when a
+  client ID is set; then who you are, your code, how many friends used it, when the backup was
+  saved, sign out, and delete — which asks twice and, for a password account, for the password.
+- **Backup & reset** gains "Back up to your account" and "Restore from your account" for Zenith
+  Plus. The copy sent leaves out the hidden-apps PIN and the purchase; restoring keeps the phone's.
+- **Aura**: a code is checked by the server. One nobody has, or your own, is refused; a real one
+  pays you 150 and its owner 150, for the owner's first ten friends. The owner's phone is paid the
+  next time it asks how the account stands: on the Account or Backup page, and at most every ten
+  minutes on the way back to the home screen.
+
+`data/server/` is the app's side: `ZenithServer` (every route, over `HttpURLConnection` and
+`org.json`; it answers yes, a no the app can act on, or "out of reach", and never throws),
+`AccountStore` (the sign-in, in a preferences file that Android's backups leave out) and
+`AccountRules` (what an account changes on the phone, as plain functions with tests). The view
+model sees each request through even if the page that asked is closed, one at a time.
+
+`server/` is the other side: `zenith_server.py`, one file of standard-library Python with SQLite,
+and `PROMPT-FOR-SERVER-AI.md`, the message that has it installed. `ZenithServerTest` starts that
+program and runs the app's own client against it, so the two cannot drift apart (it needs Python on
+the PC, and is skipped without it). What the two say to each other, and what was decided, is in
+[`specs/2026-10-04-zenith-server-design.md`](specs/2026-10-04-zenith-server-design.md); turning it
+on is in [RELEASING.md](RELEASING.md).
+
 ## Building
 
 ```bash
@@ -182,7 +212,8 @@ captured or blurred per frame.
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Compose BOM 2024.12.01, minSdk 29, application ID `com.gabriel.zenith_Launcher`, no third-party libraries.
+Compose BOM 2024.12.01, minSdk 29, application ID `com.gabriel.zenith_Launcher`, no third-party libraries:
+only Google's own (Play Billing, and Credential Manager with `googleid` for Continue with Google).
 Settings and layout are stored as JSON in `SharedPreferences` (`SettingsStore`).
 
 For signed release builds and the Play Store checklist see [RELEASING.md](RELEASING.md); store

@@ -65,10 +65,12 @@ Verify a build before uploading:
 - [ ] Graphics: `play/icon-512.png`, `play/feature-graphic-1024x500.png`, `play/screenshots/`.
 - [ ] Privacy policy: paste `https://firegb2012.github.io/zenith-privacy/`. It is served from `docs/index.html`
       by GitHub Pages (Settings -> Pages -> Source: `main`, folder `/docs`).
-- [ ] Data safety: "No data collected" — full answers in `play/listing.md`.
+- [ ] Data safety: full answers in `play/listing.md`. "No data collected" only for a build with no
+      server address; a build with one collects what is listed there.
 - [ ] Content rating questionnaire: no user-generated content, no ads, no data sharing.
 - [ ] Target audience: 13+ or Everyone; no ads declaration.
-- [ ] App access: no login required — tick "All functionality is available without special access".
+- [ ] App access: tick "All functionality is available without special access". An account is
+      optional and anyone can make one in the app; see `play/listing.md`.
 - [ ] Monetisation → In-app products: create `zenith_plus` (the $14.99 lifetime pass) exactly as
       specified in `play/listing.md` and **activate** it.
 - [ ] Monetisation → Subscriptions: create `zenith_plus_monthly` at $1.99/month with a 7 day free
@@ -79,6 +81,31 @@ Verify a build before uploading:
       instead of the app. No new build needed — see `play/listing.md`.
 - [ ] Declare in-app purchases on the store listing (the Ads answer stays "No").
 - [ ] Keep Play App Signing enabled (default) so Google holds the release key.
+
+## Turning the server on
+
+The app has no server until `server.properties` says where it is. With both lines empty, nothing of
+accounts is shown and the app sends nothing. To turn it on:
+
+1. Send `server/PROMPT-FOR-SERVER-AI.md` to whoever runs the server. It installs
+   `server/zenith_server.py` unchanged and answers with a ZENITH SERVER REPORT.
+2. In Google Cloud (APIs & Services → Credentials) make one **Web application** OAuth client and an
+   **Android** client for each key the app is ever signed with: this PC's debug key
+   (`com.gabriel.zenith_Launcher.debug`), the upload key and — after the first upload — Play's
+   **App signing** key, whose SHA-1 is in Play Console → Setup → App signing
+   (`com.gabriel.zenith_Launcher` for both). Without the App signing one, Continue with Google
+   works in a build installed by hand and fails in the one installed from Play.
+3. Put the server's `https://` address and the Web client ID in `server.properties`, and give the
+   same Web client ID to the server (`ZENITH_GOOGLE_CLIENT_ID`, as the prompt's "Later" says).
+4. Build, and walk it on a real phone: create an account, sign out, sign in, Continue with Google,
+   back up to the account and restore, use a code from a second account, delete the account.
+5. Before that build reaches anybody: copy `docs/index.html` to the `zenith-privacy` repo (the
+   policy now describes accounts), fill in Data safety and the Delete account URL from
+   `play/listing.md`, and paste the new listing text.
+
+To try it without any of that: `python server/zenith_server.py` on this PC, then
+`./gradlew :app:assembleDebug -PzenithServerUrl=http://10.0.2.2:8787` and install on an emulator.
+A debug build may talk plain HTTP to the PC it runs beside, and to nothing else.
 
 ## Notes for the reviewer
 

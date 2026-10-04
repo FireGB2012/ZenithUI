@@ -313,6 +313,36 @@ Settings and layout are stored as JSON in `SharedPreferences` (`SettingsStore`).
 For signed release builds and the Play Store checklist see [RELEASING.md](RELEASING.md); store
 copy, graphics and the privacy policy live in [`play/`](play/).
 
+## Working on another PC
+
+Everything the app needs is in the repository, including where its server is (`server.properties`),
+so a fresh copy builds the same app, talking to the same server:
+
+```bash
+git clone https://github.com/FireGB2012/ZenithUI.git
+cd ZenithUI
+./gradlew :app:assembleDebug
+```
+
+Opening the folder in Android Studio writes `local.properties` (where the Android SDK is); from a
+bare terminal set `ANDROID_HOME` instead. The unit tests that start the server program need Python
+and are skipped without it.
+
+Three things are left out of the repository on purpose, and travel by hand when they are needed:
+
+- **The debug key**, `.android/debug.keystore` in your user folder. Every PC makes its own, and
+  Android will not install a build signed with one key over a build signed with another. To install
+  from a second PC onto a phone that already has Zenith from the first, copy that one file across to
+  the same place. Do not uninstall instead: that clears the home screen. Continue with Google is
+  tied to the same key.
+- **The upload key**, `zenith-upload.jks` with `keystore.properties`, for builds that go to Play:
+  see RELEASING.md.
+- **`.superpowers/`**: working notes, and the copies of the phone's settings taken before each
+  install.
+
+Finish a piece of work by committing and pushing it. Work left on one PC has been lost to the other
+before.
+
 ## Known limits
 
 - Third-party `AppWidgetHost` widgets are not hosted yet — the widgets above are Zenith's own.

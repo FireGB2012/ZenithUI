@@ -7,6 +7,7 @@ import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.keyframes
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.Spring
@@ -31,6 +32,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 
 /**
@@ -137,6 +139,8 @@ fun Modifier.appearIn(
     fromScale: Float = 0.84f,
     riseFrom: Float = 28f,
     replay: Any? = Unit,
+    /** Settles without the bounce: for whole blocks of a page, where a wobble would be too much. */
+    gentle: Boolean = false,
 ): Modifier {
     val reduced = LocalMotionLevel.current.reduced
     val progress = remember(replay) { Animatable(0f) }
@@ -145,7 +149,10 @@ fun Modifier.appearIn(
             progress.animateTo(1f, tween(Motion.REDUCED_MS))
         } else {
             if (delayMillis > 0) delay(delayMillis.toLong())
-            progress.animateTo(1f, spring(dampingRatio = 0.55f, stiffness = 170f))
+            progress.animateTo(
+                1f,
+                if (gentle) spring(dampingRatio = 0.86f, stiffness = 240f) else spring(dampingRatio = 0.55f, stiffness = 170f),
+            )
         }
     }
     return this.graphicsLayer {
@@ -158,6 +165,35 @@ fun Modifier.appearIn(
             translationY = (1f - value) * riseFrom
         }
     }
+}
+
+/**
+ * A short shake of the head, played each time [trigger] changes: "no", without a word. Nothing
+ * happens when it first appears, and nothing at all with movement reduced.
+ */
+@Composable
+fun Modifier.shake(trigger: Int): Modifier {
+    val reduced = LocalMotionLevel.current.reduced
+    val offset = remember { Animatable(0f) }
+    val seen = remember { intArrayOf(trigger) }
+    LaunchedEffect(trigger) {
+        if (trigger == seen[0]) return@LaunchedEffect
+        seen[0] = trigger
+        if (reduced) return@LaunchedEffect
+        offset.snapTo(0f)
+        offset.animateTo(
+            0f,
+            keyframes {
+                durationMillis = 420
+                -1f at 50
+                0.85f at 130
+                -0.55f at 210
+                0.3f at 290
+                0f at 420
+            },
+        )
+    }
+    return this.graphicsLayer { translationX = offset.value * 10.dp.toPx() }
 }
 
 /** A light sweep that travels across the content, used on the wordmark. */

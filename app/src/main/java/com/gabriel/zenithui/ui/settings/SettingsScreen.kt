@@ -5,7 +5,8 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.ContentTransform
-import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -15,12 +16,11 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,11 +30,8 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -58,28 +55,26 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -89,11 +84,13 @@ import com.gabriel.zenithui.data.HomeItem
 import com.gabriel.zenithui.data.IconShapes
 import com.gabriel.zenithui.data.PlusStatus
 import com.gabriel.zenithui.data.ZenithSettings
-import com.gabriel.zenithui.ui.common.Motion
+import com.gabriel.zenithui.ui.common.FullPage
+import com.gabriel.zenithui.ui.common.LargeTitle
+import com.gabriel.zenithui.ui.common.TITLE_GONE_PX
+import com.gabriel.zenithui.ui.common.appearIn
 import com.gabriel.zenithui.ui.common.pressBounce
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.Palettes
-import com.gabriel.zenithui.ui.theme.glass
 
 /** What the mini phone on the Theme and Home pages is a picture of: page one of the real home screen. */
 class SettingsPreview(
@@ -128,8 +125,12 @@ class SettingsActions(
  * edge pops it. Searching finds any option by its name or by other words for it, opens its page
  * and shows which row it is.
  *
- * It sits under the sheets, not among them: a sheet opened from here — wallpapers, Plus, aura —
- * closes back onto Settings. While one is open ([covered]) back belongs to the sheet.
+ * It arrives in order: the search box, then each group, rising in one after another, and the same
+ * for the blocks of a page as it is pushed. Coming back to the groups from a page they are simply
+ * there; they have been seen.
+ *
+ * A sheet opened from here — wallpapers, Plus — closes back onto Settings. While one is open
+ * ([covered]) back belongs to the sheet.
  */
 @Composable
 fun SettingsScreen(
@@ -144,6 +145,9 @@ fun SettingsScreen(
     var page by remember { mutableStateOf<SettingsPage?>(null) }
     var query by remember { mutableStateOf("") }
     var highlight by remember { mutableStateOf<String?>(null) }
+    // Set when the groups come back on show because a page was popped. Not state: nothing has to
+    // be redrawn when it changes, it is only read as the groups are composed again.
+    val returned = remember { booleanArrayOf(false) }
     // Opening Settings again always starts at the top.
     LaunchedEffect(visible) {
         if (visible) {
@@ -165,6 +169,7 @@ fun SettingsScreen(
     }
 
     fun pop() {
+        returned[0] = true
         page = null
         highlight = null
     }
@@ -177,163 +182,89 @@ fun SettingsScreen(
         }
     }
 
-    val palette = LocalPalette.current
-    val focus = LocalFocusManager.current
     val rootScroll = rememberScrollState()
     val pageScroll = rememberScrollState()
     LaunchedEffect(page) { if (page != null) pageScroll.scrollTo(0) }
-    // Under a sheet the page empties to plain glass: where the glass is only frosted, a sheet is
-    // see-through, and two layers of words on top of each other can be read by nobody.
-    val uncovered = animateFloatAsState(if (covered) 0f else 1f, tween(200), label = "settingsUncovered")
 
-    Box(Modifier.fillMaxSize()) {
-        AnimatedVisibility(visible = visible, enter = fadeIn(tween(300)), exit = fadeOut(tween(260))) {
-            Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.35f)))
-        }
-        AnimatedVisibility(
-            visible = visible,
-            enter = slideInVertically(Motion.smooth()) { it } + fadeIn(tween(220)),
-            exit = slideOutVertically(tween(320)) { it } + fadeOut(tween(260)),
-        ) {
+    FullPage(
+        visible = visible,
+        covered = covered,
+        title = page?.title ?: "Settings",
+        canGoBack = page != null,
+        titleShown = { ((if (page == null) rootScroll.value else pageScroll.value) / TITLE_GONE_PX).coerceIn(0f, 1f) },
+        onBack = { pop() },
+        onClose = onDismiss,
+    ) {
+        // Closed and gone: the next time Settings opens, its groups rise in again.
+        DisposableEffect(Unit) { onDispose { returned[0] = false } }
+
+        AnimatedContent(
+            targetState = page,
+            transitionSpec = {
+                val push = targetState != null
+                val slide = spring(dampingRatio = 1f, stiffness = 420f, visibilityThreshold = IntOffset(1, 1))
+                // The page comes in over the groups from the right, and leaves the same way; the
+                // groups shift a little and dim underneath it.
+                ContentTransform(
+                    targetContentEnter = slideInHorizontally(slide) { if (push) it else -it / 4 } + fadeIn(tween(220)),
+                    initialContentExit = slideOutHorizontally(slide) { if (push) -it / 4 else it } + fadeOut(tween(220)),
+                    targetContentZIndex = if (push) 1f else 0f,
+                )
+            },
+            label = "settingsPage",
+        ) { current ->
+            val scroll = if (current == null) rootScroll else pageScroll
             Column(
                 Modifier
                     .fillMaxSize()
-                    .glass(RectangleShape, strength = 1.2f, solid = 0.9f, border = false, shadow = false)
-                    // Nothing underneath takes a touch; a tap on empty space puts the keyboard away.
-                    .pointerInput(Unit) { detectTapGestures { focus.clearFocus() } }
-                    .statusBarsPadding()
-                    .navigationBarsPadding()
-                    .imePadding(),
+                    .verticalScroll(scroll)
+                    .padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Column(Modifier.fillMaxSize().graphicsLayer { alpha = uncovered.value }) {
-                TopBar(
-                    title = page?.title ?: "Settings",
-                    canGoBack = page != null,
-                    // The small title comes in as the large one scrolls away under the bar.
-                    titleShown = { ((if (page == null) rootScroll.value else pageScroll.value) / 110f).coerceIn(0f, 1f) },
-                    onBack = { pop() },
-                    onClose = onDismiss,
-                )
-                Box(Modifier.weight(1f).fillMaxWidth()) {
-                    AnimatedContent(
-                        targetState = page,
-                        transitionSpec = {
-                            val push = targetState != null
-                            val slide = spring(dampingRatio = 1f, stiffness = 420f, visibilityThreshold = IntOffset(1, 1))
-                            // The page comes in over the groups from the right, and leaves the same
-                            // way; the groups shift a little and dim underneath it.
-                            ContentTransform(
-                                targetContentEnter = slideInHorizontally(slide) { if (push) it else -it / 4 } + fadeIn(tween(220)),
-                                initialContentExit = slideOutHorizontally(slide) { if (push) -it / 4 else it } + fadeOut(tween(220)),
-                                targetContentZIndex = if (push) 1f else 0f,
-                            )
-                        },
-                        label = "settingsPage",
-                    ) { current ->
-                        Column(
-                            Modifier
-                                .fillMaxSize()
-                                .verticalScroll(if (current == null) rootScroll else pageScroll)
-                                .padding(horizontal = 16.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp),
-                        ) {
-                            Text(
-                                current?.title ?: "Settings",
-                                color = palette.onGlass,
-                                fontSize = 32.sp,
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = (-0.6).sp,
-                                modifier = Modifier.padding(start = 4.dp, top = 2.dp, bottom = 4.dp),
-                            )
-                            if (current == null) {
-                                Root(settings, plus, query, onQuery = { query = it }, onOpen = ::open)
-                            } else {
-                                CompositionLocalProvider(LocalSettingsHighlight provides highlight) {
-                                    when (current) {
-                                        SettingsPage.Theme -> ThemeOptions(settings, preview, actions)
-                                        SettingsPage.Home -> HomeOptions(settings, plus, preview, actions)
-                                        SettingsPage.Motion -> MotionOptions(settings, actions)
-                                        SettingsPage.Apps -> AppsOptions(settings, plus, actions)
-                                        SettingsPage.Backup -> BackupOptions(plus, actions, onClose = onDismiss)
-                                        SettingsPage.About -> AboutOptions(actions)
-                                        // These two open a sheet instead; see open().
-                                        SettingsPage.Plus, SettingsPage.Aura -> Unit
-                                    }
-                                }
-                            }
-                            Spacer(Modifier.height(28.dp))
+                LargeTitle(current?.title ?: "Settings", scrolled = { scroll.value })
+                CompositionLocalProvider(
+                    // What rises in: the groups when Settings opens, a page's blocks when it is pushed.
+                    LocalSettingsRise provides when {
+                        current != null -> current
+                        returned[0] -> null
+                        else -> "groups"
+                    },
+                    LocalSettingsHighlight provides if (current == null) null else highlight,
+                ) {
+                    when (current) {
+                        null -> Root(settings, plus, query, onQuery = { query = it }, onOpen = ::open)
+                        SettingsPage.Theme -> ThemeOptions(settings, preview, actions)
+                        SettingsPage.Home -> HomeOptions(settings, plus, preview, actions)
+                        SettingsPage.Motion -> MotionOptions(settings, actions)
+                        SettingsPage.Apps -> AppsOptions(settings, plus, actions)
+                        SettingsPage.Backup -> BackupOptions(plus, actions, onClose = onDismiss)
+                        SettingsPage.About -> AboutOptions(actions)
+                        // These open a sheet instead; see open().
+                        SettingsPage.Plus, SettingsPage.Aura -> Unit
+                    }
+                }
+                Spacer(Modifier.height(28.dp))
+            }
+        }
+        if (page != null) {
+            // A drag in from the left edge goes back, for phones with buttons instead of gestures.
+            // Where the system has its own back swipe, that gets there first.
+            Box(
+                Modifier
+                    .align(Alignment.CenterStart)
+                    .fillMaxHeight()
+                    .width(20.dp)
+                    .pointerInput(Unit) {
+                        var travelled = 0f
+                        detectHorizontalDragGestures(
+                            onDragStart = { travelled = 0f },
+                            onDragEnd = { if (travelled > 56.dp.toPx()) pop() },
+                        ) { change, amount ->
+                            change.consume()
+                            travelled += amount
                         }
                     }
-                    if (page != null) {
-                        // A drag in from the left edge goes back, for phones with buttons instead
-                        // of gestures. Where the system has its own back swipe, that gets there first.
-                        Box(
-                            Modifier
-                                .align(Alignment.CenterStart)
-                                .fillMaxHeight()
-                                .width(20.dp)
-                                .pointerInput(Unit) {
-                                    var travelled = 0f
-                                    detectHorizontalDragGestures(
-                                        onDragStart = { travelled = 0f },
-                                        onDragEnd = { if (travelled > 56.dp.toPx()) pop() },
-                                    ) { change, amount ->
-                                        change.consume()
-                                        travelled += amount
-                                    }
-                                }
-                        )
-                    }
-                }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun TopBar(title: String, canGoBack: Boolean, titleShown: () -> Float, onBack: () -> Unit, onClose: () -> Unit) {
-    val palette = LocalPalette.current
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .height(52.dp)
-            // Pulling the bar down closes Settings, the way pulling a sheet down closes a sheet.
-            .pointerInput(Unit) { detectVerticalDragGestures { _, delta -> if (delta > 30f) onClose() } }
-            .padding(horizontal = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(Modifier.size(36.dp)) {
-            androidx.compose.animation.AnimatedVisibility(
-                visible = canGoBack,
-                enter = fadeIn(tween(180)) + scaleIn(initialScale = 0.7f),
-                exit = fadeOut(tween(120)) + scaleOut(targetScale = 0.7f),
-            ) {
-                BackButton(onBack)
-            }
-        }
-        Text(
-            title,
-            color = palette.onGlass,
-            fontSize = 16.sp,
-            fontWeight = FontWeight.SemiBold,
-            textAlign = TextAlign.Center,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier
-                .weight(1f)
-                .graphicsLayer { alpha = titleShown() },
-        )
-        Box(
-            Modifier
-                .size(36.dp)
-                .pressBounce(0.88f)
-                .clip(CircleShape)
-                .background(palette.onGlass.copy(alpha = 0.08f))
-                .clickable(onClick = onClose),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(Icons.Rounded.Close, contentDescription = "Close settings", tint = palette.onGlass, modifier = Modifier.size(19.dp))
+            )
         }
     }
 }
@@ -348,36 +279,64 @@ private fun Root(
     onQuery: (String) -> Unit,
     onOpen: (SettingsPage, String?) -> Unit,
 ) {
-    SearchField(query, onQuery)
-    if (query.isBlank()) {
-        val context = LocalContext.current
-        val isHome = remember { context.getSystemService(RoleManager::class.java)?.isRoleHeld(RoleManager.ROLE_HOME) == true }
-        // Looks and feel; what you own; the phone itself.
-        listOf(
-            listOf(SettingsPage.Theme, SettingsPage.Home, SettingsPage.Motion, SettingsPage.Apps),
-            listOf(SettingsPage.Plus, SettingsPage.Aura),
-            listOf(SettingsPage.Backup, SettingsPage.About),
-        ).forEach { pages ->
-            Group {
-                pages.forEachIndexed { index, page ->
-                    if (index > 0) GroupDivider()
-                    NavRow(
-                        icon = page.icon(),
-                        tile = page.tile(),
-                        title = page.title,
-                        summary = summary(page, settings, plus, isHome),
-                        onClick = { onOpen(page, null) },
-                    )
-                }
+    SearchField(query, onQuery, Modifier.riseIn(0))
+    // The groups give way to what a search finds, and come back when the box is cleared.
+    AnimatedContent(
+        targetState = query.isBlank(),
+        transitionSpec = {
+            (fadeIn(tween(200, delayMillis = 60)) + slideInVertically(tween(260)) { it / 24 })
+                .togetherWith(fadeOut(tween(110)))
+                .using(SizeTransform(clip = false))
+        },
+        label = "settingsFind",
+    ) { browsing ->
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            when {
+                browsing -> Groups(settings, plus, onOpen)
+                // On its way out after the box was cleared there is nothing left to say.
+                query.isNotBlank() -> Results(query, onOpen)
             }
         }
-    } else {
-        val found = remember(query) { SettingsCatalog.search(query) }
-        if (found.isEmpty()) {
-            Note("Nothing in Settings is called “${query.trim()}”.", Modifier.padding(top = 6.dp))
-        } else {
-            Group {
-                found.forEachIndexed { index, entry ->
+    }
+}
+
+@Composable
+private fun Groups(settings: ZenithSettings, plus: PlusStatus, onOpen: (SettingsPage, String?) -> Unit) {
+    val context = LocalContext.current
+    val isHome = remember { context.getSystemService(RoleManager::class.java)?.isRoleHeld(RoleManager.ROLE_HOME) == true }
+    // Looks and feel; what you own; the phone itself.
+    listOf(
+        listOf(SettingsPage.Theme, SettingsPage.Home, SettingsPage.Motion, SettingsPage.Apps),
+        listOf(SettingsPage.Plus, SettingsPage.Aura),
+        listOf(SettingsPage.Backup, SettingsPage.About),
+    ).forEachIndexed { block, pages ->
+        Group(rise = block + 1) {
+            pages.forEachIndexed { index, page ->
+                if (index > 0) GroupDivider()
+                NavRow(
+                    icon = page.icon(),
+                    tile = page.tile(),
+                    title = page.title,
+                    summary = summary(page, settings, plus, isHome),
+                    onClick = { onOpen(page, null) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun Results(query: String, onOpen: (SettingsPage, String?) -> Unit) {
+    val found = remember(query) { SettingsCatalog.search(query) }
+    if (found.isEmpty()) {
+        Note("Nothing in Settings is called “${query.trim()}”.", Modifier.padding(top = 6.dp))
+        return
+    }
+    Group {
+        found.forEachIndexed { index, entry ->
+            // A result that was already there stays put as you type on; a new one rises in.
+            key(entry.id) {
+                Column(Modifier.appearIn(fromScale = 1f, riseFrom = 20f, gentle = true)) {
                     if (index > 0) GroupDivider(inset = 16.dp)
                     ResultRow(entry) { onOpen(entry.page, entry.id) }
                 }
@@ -387,18 +346,23 @@ private fun Root(
 }
 
 @Composable
-private fun SearchField(query: String, onQuery: (String) -> Unit) {
+private fun SearchField(query: String, onQuery: (String) -> Unit, modifier: Modifier = Modifier) {
     val palette = LocalPalette.current
+    var focused by remember { mutableStateOf(false) }
+    // In use, the box is ringed in the accent and its glass lights up.
+    val ring by animateColorAsState(if (focused) palette.accent.copy(alpha = 0.75f) else Color.Transparent, tween(220), label = "searchRing")
+    val lens by animateColorAsState(if (focused) palette.accent else palette.onGlassMuted, tween(220), label = "searchLens")
     Row(
-        Modifier
+        modifier
             .fillMaxWidth()
             .height(46.dp)
             .clip(RoundedCornerShape(16.dp))
             .background(palette.onGlass.copy(alpha = 0.08f))
+            .border(1.5.dp, ring, RoundedCornerShape(16.dp))
             .padding(horizontal = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(Icons.Rounded.Search, contentDescription = null, tint = palette.onGlassMuted, modifier = Modifier.size(20.dp))
+        Icon(Icons.Rounded.Search, contentDescription = null, tint = lens, modifier = Modifier.size(20.dp))
         Spacer(Modifier.width(10.dp))
         Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
             if (query.isEmpty()) Text("Search settings", color = palette.onGlassMuted, fontSize = 15.sp)
@@ -409,10 +373,16 @@ private fun SearchField(query: String, onQuery: (String) -> Unit) {
                 textStyle = TextStyle(color = palette.onGlass, fontSize = 15.sp),
                 cursorBrush = SolidColor(palette.accent),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .onFocusChanged { focused = it.isFocused },
             )
         }
-        if (query.isNotEmpty()) {
+        AnimatedVisibility(
+            visible = query.isNotEmpty(),
+            enter = fadeIn(tween(140)) + scaleIn(initialScale = 0.5f),
+            exit = fadeOut(tween(100)) + scaleOut(targetScale = 0.5f),
+        ) {
             Icon(
                 Icons.Rounded.Close,
                 contentDescription = "Clear search",
@@ -442,7 +412,9 @@ private fun ResultRow(entry: SettingsEntry, onClick: () -> Unit) {
         Column(Modifier.weight(1f)) {
             Text(entry.title, color = palette.onGlass, fontSize = 16.sp, fontWeight = FontWeight.Medium)
             // A group that is its own sheet needs no "in": the title already says where it goes.
-            if (!entry.page.opensSheet) Text(entry.page.title, color = palette.onGlassMuted, fontSize = 13.sp)
+            if (!entry.page.opensSheet && entry.title != entry.page.title) {
+                Text(entry.page.title, color = palette.onGlassMuted, fontSize = 13.sp)
+            }
         }
         Icon(
             Icons.AutoMirrored.Rounded.KeyboardArrowRight,

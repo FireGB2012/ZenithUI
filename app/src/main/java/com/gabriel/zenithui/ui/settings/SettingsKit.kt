@@ -2,6 +2,10 @@ package com.gabriel.zenithui.ui.settings
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.scaleIn
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateDpAsState
@@ -71,6 +75,10 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.gabriel.zenithui.data.IconShapes
+import com.gabriel.zenithui.ui.common.BackButton
+import com.gabriel.zenithui.ui.common.LocalMotionLevel
+import com.gabriel.zenithui.ui.common.Motion
+import com.gabriel.zenithui.ui.common.appearIn
 import com.gabriel.zenithui.ui.common.pressBounce
 import com.gabriel.zenithui.ui.common.rememberTick
 import com.gabriel.zenithui.ui.theme.LocalPalette
@@ -100,29 +108,41 @@ internal fun SettingsHeader(title: String, canGoBack: Boolean, onBack: () -> Uni
     }
 }
 
+/**
+ * What makes the blocks of a page rise in one after another as it arrives: a key that changes
+ * with each arrival, or null when the page is simply there (coming back to the groups from a
+ * page, they are already known and do not perform again).
+ */
+internal val LocalSettingsRise = compositionLocalOf<Any?> { null }
+
+/** How long after the block above it a block sets off, and how many blocks get a turn of their own. */
+private const val RISE_STEP_MS = 34
+private const val RISE_TURNS = 9
+
+/** A block of a page, [index] down from its top, rising into place after the ones above it. */
 @Composable
-internal fun BackButton(onBack: () -> Unit, modifier: Modifier = Modifier) {
-    val palette = LocalPalette.current
-    Box(
-        modifier
-            .size(36.dp)
-            .pressBounce(0.88f)
-            .clip(CircleShape)
-            .background(palette.onGlass.copy(alpha = 0.08f))
-            .clickable(onClick = onBack),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back", tint = palette.onGlass, modifier = Modifier.size(19.dp))
-    }
+internal fun Modifier.riseIn(index: Int): Modifier {
+    val arrival = LocalSettingsRise.current ?: return this
+    return appearIn(
+        delayMillis = RISE_STEP_MS * index.coerceIn(0, RISE_TURNS),
+        fromScale = 0.985f,
+        riseFrom = 54f,
+        replay = arrival,
+        gentle = true,
+    )
 }
 
-/** A rounded group of rows, the way a settings page is usually set out. */
+/**
+ * A rounded group of rows, the way a settings page is usually set out. With [rise], it is the
+ * block that many down its page and rises in after the ones above it.
+ */
 @Composable
-internal fun Group(padding: Dp = 0.dp, content: @Composable ColumnScope.() -> Unit) {
+internal fun Group(padding: Dp = 0.dp, rise: Int? = null, content: @Composable ColumnScope.() -> Unit) {
     val palette = LocalPalette.current
     Column(
         Modifier
             .fillMaxWidth()
+            .then(if (rise != null) Modifier.riseIn(rise) else Modifier)
             .clip(RoundedCornerShape(22.dp))
             .background(palette.onGlass.copy(alpha = 0.07f))
             .padding(padding),
@@ -164,21 +184,34 @@ internal fun Note(text: String, modifier: Modifier = Modifier) {
     )
 }
 
-/** A row that opens a page: a coloured tile, what it is, how it is set, and a chevron. */
+/**
+ * A row that opens a page: a coloured tile, what it is, how it is set, and a chevron. Under a
+ * finger the tile swells and tips and the chevron leans the way you are about to go; when the
+ * setting it describes changes, the line saying so cross-fades to the new one.
+ */
 @Composable
 internal fun NavRow(icon: ImageVector, tile: List<Color>, title: String, summary: String, onClick: () -> Unit) {
     val palette = LocalPalette.current
+    val touch = remember { MutableInteractionSource() }
+    val pressed by touch.collectIsPressedAsState()
+    val lean by animateFloatAsState(if (pressed) 1f else 0f, Motion.press(), label = "navLean")
     Row(
         Modifier
             .fillMaxWidth()
             .pressBounce(0.98f)
-            .clickable(onClick = onClick)
+            .clickable(interactionSource = touch, indication = LocalIndication.current, onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
             Modifier
                 .size(36.dp)
+                .graphicsLayer {
+                    val grown = 1f + 0.16f * lean
+                    scaleX = grown
+                    scaleY = grown
+                    rotationZ = -9f * lean
+                }
                 .clip(RoundedCornerShape(11.dp))
                 .background(Brush.linearGradient(tile)),
             contentAlignment = Alignment.Center,
@@ -188,13 +221,21 @@ internal fun NavRow(icon: ImageVector, tile: List<Color>, title: String, summary
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
             Text(title, color = palette.onGlass, fontSize = 16.sp, fontWeight = FontWeight.Medium)
-            Text(summary, color = palette.onGlassMuted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            AnimatedContent(
+                targetState = summary,
+                transitionSpec = { fadeIn(tween(220, delayMillis = 60)).togetherWith(fadeOut(tween(120))) },
+                label = "navSummary",
+            ) { line ->
+                Text(line, color = palette.onGlassMuted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
         }
         Icon(
             Icons.AutoMirrored.Rounded.KeyboardArrowRight,
             contentDescription = null,
-            tint = palette.onGlass.copy(alpha = 0.35f),
-            modifier = Modifier.size(22.dp),
+            tint = palette.onGlass.copy(alpha = 0.35f + 0.4f * lean.coerceIn(0f, 1f)),
+            modifier = Modifier
+                .size(22.dp)
+                .graphicsLayer { translationX = 5.dp.toPx() * lean },
         )
     }
 }
@@ -207,12 +248,21 @@ internal fun ActionRow(
     subtitle: String? = null,
     danger: Boolean = false,
     status: String? = null,
+    modifier: Modifier = Modifier,
+    /** Each time this goes up the icon turns once round: something was done. */
+    spin: Int = 0,
     onClick: () -> Unit,
 ) {
     val palette = LocalPalette.current
+    val reduced = LocalMotionLevel.current.reduced
     val tint by animateColorAsState(if (danger) Color(0xFFFF6B6B) else palette.onGlass, tween(200), label = "actionTint")
+    val turned by animateFloatAsState(
+        targetValue = 360f * spin,
+        animationSpec = if (reduced) snap() else spring(dampingRatio = 0.62f, stiffness = 110f),
+        label = "actionSpin",
+    )
     Row(
-        Modifier
+        modifier
             .fillMaxWidth()
             .pressBounce(0.98f)
             .clickable(onClick = onClick)
@@ -226,7 +276,14 @@ internal fun ActionRow(
                 .background(tint.copy(alpha = 0.1f)),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(19.dp))
+            Icon(
+                icon,
+                contentDescription = null,
+                tint = tint,
+                modifier = Modifier
+                    .size(19.dp)
+                    .graphicsLayer { rotationZ = turned },
+            )
         }
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
@@ -237,10 +294,22 @@ internal fun ActionRow(
             ) { text ->
                 Text(text, color = tint, fontSize = 16.sp, fontWeight = FontWeight.Medium)
             }
-            if (subtitle != null) Text(subtitle, color = palette.onGlassMuted, fontSize = 13.sp)
+            if (subtitle != null) {
+                AnimatedContent(
+                    targetState = subtitle,
+                    transitionSpec = { fadeIn(tween(200, delayMillis = 40)).togetherWith(fadeOut(tween(100))) },
+                    label = "actionSubtitle",
+                ) { line ->
+                    Text(line, color = palette.onGlassMuted, fontSize = 13.sp)
+                }
+            }
         }
-        if (status != null) {
-            Text(status, color = palette.accent, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+        AnimatedVisibility(
+            visible = status != null,
+            enter = fadeIn(tween(160)) + scaleIn(Motion.snappy(), initialScale = 0.5f),
+            exit = fadeOut(tween(120)),
+        ) {
+            Text(status.orEmpty(), color = palette.accent, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
         }
     }
 }
@@ -413,26 +482,41 @@ internal fun PaletteGrid(
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        options.forEach { option ->
-            PaletteDot(option.name, listOf(option.accent, option.accentAlt), selected = option.id == selectedId) { onSelect(option) }
+        options.forEachIndexed { index, option ->
+            PaletteDot(option.name, listOf(option.accent, option.accentAlt), selected = option.id == selectedId, turn = index) { onSelect(option) }
         }
         if (onMake != null) {
             val palette = LocalPalette.current
-            PaletteDot("Your own", listOf(palette.onGlass.copy(alpha = 0.14f), palette.onGlass.copy(alpha = 0.14f)), selected = false, icon = Icons.Rounded.Add, onClick = onMake)
+            PaletteDot(
+                "Your own",
+                listOf(palette.onGlass.copy(alpha = 0.14f), palette.onGlass.copy(alpha = 0.14f)),
+                selected = false,
+                turn = options.size,
+                icon = Icons.Rounded.Add,
+                onClick = onMake,
+            )
         }
     }
 }
 
 @Composable
-private fun PaletteDot(name: String, colours: List<Color>, selected: Boolean, icon: ImageVector? = null, onClick: () -> Unit) {
+private fun PaletteDot(name: String, colours: List<Color>, selected: Boolean, turn: Int, icon: ImageVector? = null, onClick: () -> Unit) {
     val palette = LocalPalette.current
     val tick = rememberTick()
+    // As the page arrives the dots pop up one after another, like a row of lights coming on.
+    val arrival = LocalSettingsRise.current
+    val pop = if (arrival != null) {
+        Modifier.appearIn(delayMillis = 140 + 26 * turn.coerceAtMost(12), fromScale = 0.4f, riseFrom = 0f, replay = arrival)
+    } else {
+        Modifier
+    }
     val ring by animateColorAsState(if (selected) palette.onGlass else Color.Transparent, tween(220), label = "dotRing")
     val inner by animateDpAsState(if (selected) 34.dp else 40.dp, spring(dampingRatio = 0.7f, stiffness = 420f), label = "dotInner")
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
             .width(58.dp)
+            .then(pop)
             .pressBounce(0.9f)
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
                 if (!selected) tick()

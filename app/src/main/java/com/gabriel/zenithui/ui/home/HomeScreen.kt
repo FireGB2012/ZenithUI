@@ -146,11 +146,6 @@ private const val REORDER_DELAY = 280L
 /** The space between the edge of the screen and the page, the dock and everything else on it. */
 private val PAGE_MARGIN = 12.dp
 
-/** A page dot, the gap between two, and how much longer the dot of the page in view is, in dp. */
-private const val DOT = 6
-private const val DOT_GAP = 6
-private const val DOT_STRETCH = 16
-
 private sealed interface HomeSheet {
     data class Item(val id: String) : HomeSheet
     data class DrawerApp(val key: String) : HomeSheet
@@ -1695,27 +1690,8 @@ private fun PageDots(
     modifier: Modifier = Modifier,
 ) {
     val palette = LocalPalette.current
-    val ink = palette.onGlass
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-        // One pill shared out between the dots, drawn rather than laid out: as a page turns the
-        // pill stretches from its dot towards the next, and nothing has to be measured again.
-        Canvas(Modifier.size(width = (DOT * count + DOT_GAP * (count - 1) + DOT_STRETCH).dp, height = DOT.dp)) {
-            val at = position().coerceIn(0f, (count - 1).toFloat())
-            val radius = CornerRadius(size.height / 2f)
-            var x = 0f
-            for (index in 0 until count) {
-                val share = PageEffects.dotWidth(at, index)
-                val width = (DOT + DOT_STRETCH * share).dp.toPx()
-                drawRoundRect(
-                    color = ink,
-                    topLeft = Offset(x, 0f),
-                    size = androidx.compose.ui.geometry.Size(width, size.height),
-                    cornerRadius = radius,
-                    alpha = 0.28f + 0.57f * share,
-                )
-                x += width + DOT_GAP.dp.toPx()
-            }
-        }
+        PagerDots(count, position)
 
         // The one control that makes another page. It sits where the next dot would appear, so
         // it reads as "one more of these" rather than as a button bolted on.

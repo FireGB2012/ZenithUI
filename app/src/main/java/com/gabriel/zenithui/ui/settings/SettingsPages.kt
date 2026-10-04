@@ -5,7 +5,11 @@ import android.content.Intent
 import android.net.Uri
 import android.os.PowerManager
 import android.provider.Settings
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -28,6 +32,7 @@ import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -43,6 +48,8 @@ import com.gabriel.zenithui.data.IconShapes
 import com.gabriel.zenithui.data.PlusStatus
 import com.gabriel.zenithui.data.WallStyle
 import com.gabriel.zenithui.data.ZenithSettings
+import com.gabriel.zenithui.ui.common.LocalMotionLevel
+import com.gabriel.zenithui.ui.common.shake
 import com.gabriel.zenithui.ui.onboarding.PhonePreview
 import com.gabriel.zenithui.ui.onboarding.Segmented
 import com.gabriel.zenithui.ui.theme.Palettes
@@ -51,28 +58,50 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
 // What is on each page of Settings. Every option sits in a Spot named after its entry in the
-// SettingsCatalog, which is how a search result finds its row.
+// SettingsCatalog, which is how a search result finds its row; every block says how far down the
+// page it is, which is the order the blocks rise in as the page arrives.
 
 /**
  * Your own home screen, small: the same code that draws the real one, so a change made below is
- * seen here as it is made. A picture only; it takes no touches.
+ * seen here as it is made. A picture only; it takes no touches. It rises in first, and when
+ * something about how the home screen looks is changed a band of light crosses it once, so the eye
+ * goes to where the change can be seen.
  */
 @Composable
 private fun MiniPhone(settings: ZenithSettings, preview: SettingsPreview) {
-    PhonePreview(
-        items = preview.items,
-        dock = settings.dock,
-        appsByKey = preview.appsByKey,
-        settings = settings,
-        wallpaper = preview.wallpaper,
-        screenWidth = preview.screenWidth,
-        screenHeight = preview.screenHeight,
-        shown = Int.MAX_VALUE,
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(250.dp)
-            .padding(bottom = 6.dp),
+    val reduced = LocalMotionLevel.current.reduced
+    val sweep = remember { Animatable(1f) }
+    val look = listOf(
+        settings.paletteId, settings.appearance, settings.gridDensity, settings.iconShape, settings.iconPack,
+        settings.showLabels, settings.showDock, settings.searchBar, settings.header,
     )
+    val shown = remember { arrayOf<List<Any>?>(null) }
+    LaunchedEffect(look) {
+        // Not as the page arrives, only when something is changed while it is on show.
+        val changed = shown[0] != null && shown[0] != look
+        shown[0] = look
+        if (changed && !reduced) {
+            sweep.snapTo(0f)
+            sweep.animateTo(1f, tween(720, easing = FastOutSlowInEasing))
+        }
+    }
+    Box(Modifier.riseIn(0)) {
+        PhonePreview(
+            items = preview.items,
+            dock = settings.dock,
+            appsByKey = preview.appsByKey,
+            settings = settings,
+            wallpaper = preview.wallpaper,
+            screenWidth = preview.screenWidth,
+            screenHeight = preview.screenHeight,
+            shown = Int.MAX_VALUE,
+            sweep = { sweep.value },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(250.dp)
+                .padding(bottom = 6.dp),
+        )
+    }
 }
 
 @Composable
@@ -90,7 +119,7 @@ internal fun ThemeOptions(settings: ZenithSettings, preview: SettingsPreview, ac
     val design = WallStyle.byName(settings.wallpaperStyle)
 
     MiniPhone(settings, preview)
-    Group {
+    Group(rise = 1) {
         Spot("palette") {
             Column(Modifier.padding(14.dp)) {
                 Caption("Colour")
@@ -104,7 +133,7 @@ internal fun ThemeOptions(settings: ZenithSettings, preview: SettingsPreview, ac
             }
         }
     }
-    Group {
+    Group(rise = 2) {
         Spot("appearance") {
             Column(Modifier.padding(14.dp)) {
                 Caption("Light or dark")
@@ -121,7 +150,7 @@ internal fun ThemeOptions(settings: ZenithSettings, preview: SettingsPreview, ac
             }
         }
     }
-    Group {
+    Group(rise = 3) {
         Spot("wallpaper") {
             ActionRow(
                 icon = Icons.Rounded.Image,
@@ -143,7 +172,7 @@ internal fun ThemeOptions(settings: ZenithSettings, preview: SettingsPreview, ac
             ) { value -> change { it.copy(wallpaperFollow = value) } }
         }
     }
-    Group {
+    Group(rise = 4) {
         Spot("glass") {
             Column(Modifier.padding(14.dp)) {
                 PillSlider(
@@ -173,9 +202,11 @@ internal fun HomeOptions(settings: ZenithSettings, plus: PlusStatus, preview: Se
     }
     /** How many items the last tidy moved; null until it has been run on this visit. */
     var tidied by remember { mutableStateOf<Int?>(null) }
+    /** How many times it has been run: the wand turns once for each. */
+    var tidies by remember { mutableIntStateOf(0) }
 
     MiniPhone(settings, preview)
-    Group {
+    Group(rise = 1) {
         Spot("grid") {
             Column(Modifier.padding(14.dp)) {
                 Caption("Grid")
@@ -191,7 +222,7 @@ internal fun HomeOptions(settings: ZenithSettings, plus: PlusStatus, preview: Se
             }
         }
     }
-    Group {
+    Group(rise = 2) {
         Spot("iconShape") {
             Column(Modifier.padding(14.dp)) {
                 Caption("Icon shape")
@@ -204,7 +235,7 @@ internal fun HomeOptions(settings: ZenithSettings, plus: PlusStatus, preview: Se
             }
         }
     }
-    Group {
+    Group(rise = 3) {
         Spot("labels") {
             ToggleRow("Labels", "App names under the icons", settings.showLabels) { value -> change { it.copy(showLabels = value) } }
         }
@@ -217,7 +248,7 @@ internal fun HomeOptions(settings: ZenithSettings, plus: PlusStatus, preview: Se
             ToggleRow("Search bar", "Above the dock, for your apps and the web", settings.searchBar) { value -> change { it.copy(searchBar = value) } }
         }
     }
-    Group {
+    Group(rise = 4) {
         Spot("header") {
             Column(Modifier.padding(14.dp)) {
                 Caption("Top of the page")
@@ -230,7 +261,7 @@ internal fun HomeOptions(settings: ZenithSettings, plus: PlusStatus, preview: Se
             }
         }
     }
-    Group {
+    Group(rise = 5) {
         Spot("freeform") {
             ToggleRow(
                 title = "Free placement",
@@ -252,10 +283,14 @@ internal fun HomeOptions(settings: ZenithSettings, plus: PlusStatus, preview: Se
                     else -> "Moved $moved items"
                 },
                 status = if (tidied != null) "Done" else null,
-            ) { tidied = actions.tidy() }
+                spin = tidies,
+            ) {
+                tidied = actions.tidy()
+                tidies++
+            }
         }
     }
-    Group {
+    Group(rise = 6) {
         Spot("iconPack") {
             Caption("Icon pack", Modifier.padding(start = 12.dp, top = 14.dp, bottom = 4.dp))
             ChoiceRow("System icons", selected = settings.iconPack.isEmpty()) { change { it.copy(iconPack = "") } }
@@ -276,7 +311,7 @@ internal fun HomeOptions(settings: ZenithSettings, plus: PlusStatus, preview: Se
 @Composable
 internal fun MotionOptions(settings: ZenithSettings, actions: SettingsActions) {
     val change = actions.change
-    Group {
+    Group(rise = 0) {
         Spot("animations") {
             Column(Modifier.padding(14.dp)) {
                 Caption("Animations")
@@ -297,7 +332,7 @@ internal fun MotionOptions(settings: ZenithSettings, actions: SettingsActions) {
             }
         }
     }
-    Group {
+    Group(rise = 1) {
         Spot("openAnimation") {
             Column(Modifier.padding(14.dp)) {
                 Caption("Opening apps")
@@ -318,7 +353,7 @@ internal fun MotionOptions(settings: ZenithSettings, actions: SettingsActions) {
             }
         }
     }
-    Group {
+    Group(rise = 2) {
         Spot("pageEffect") {
             Column(Modifier.padding(14.dp)) {
                 Caption("Page swipe")
@@ -340,7 +375,7 @@ internal fun MotionOptions(settings: ZenithSettings, actions: SettingsActions) {
             }
         }
     }
-    Group {
+    Group(rise = 3) {
         Spot("haptics") {
             ToggleRow(
                 title = "Haptics",
@@ -354,7 +389,7 @@ internal fun MotionOptions(settings: ZenithSettings, actions: SettingsActions) {
 @Composable
 internal fun AppsOptions(settings: ZenithSettings, plus: PlusStatus, actions: SettingsActions) {
     val change = actions.change
-    Group {
+    Group(rise = 0) {
         Spot("appsView") {
             Column(Modifier.padding(14.dp)) {
                 Caption("Swipe up for")
@@ -375,7 +410,7 @@ internal fun AppsOptions(settings: ZenithSettings, plus: PlusStatus, actions: Se
             }
         }
     }
-    Group {
+    Group(rise = 1) {
         Spot("hiddenApps") {
             ActionRow(
                 icon = if (plus.active) Icons.Rounded.VisibilityOff else Icons.Rounded.Lock,
@@ -394,7 +429,7 @@ internal fun AppsOptions(settings: ZenithSettings, plus: PlusStatus, actions: Se
 @Composable
 internal fun BackupOptions(plus: PlusStatus, actions: SettingsActions, onClose: () -> Unit) {
     val locked = !plus.active
-    Group {
+    Group(rise = 0) {
         Spot("backup") {
             ActionRow(
                 icon = if (locked) Icons.Rounded.Lock else Icons.Rounded.Save,
@@ -413,30 +448,34 @@ internal fun BackupOptions(plus: PlusStatus, actions: SettingsActions, onClose: 
             )
         }
     }
-    if (locked) Note("Backing up and restoring come with Zenith Plus.", Modifier.padding(horizontal = 4.dp))
+    if (locked) Note("Backing up and restoring come with Zenith Plus.", Modifier.riseIn(1).padding(horizontal = 4.dp))
 
     // Starting over wipes the home screen, so it asks twice. The second tap has to come within a
     // few seconds of the first, and the row says exactly what will happen before it happens.
     var armed by remember { mutableStateOf(false) }
+    /** Counts the times it has been armed: the row shakes its head once for each. */
+    var warnings by remember { mutableIntStateOf(0) }
     LaunchedEffect(armed) {
         if (armed) {
             delay(4_000)
             armed = false
         }
     }
-    Group {
+    Group(rise = 2) {
         Spot("reset") {
             ActionRow(
                 icon = Icons.Rounded.RestartAlt,
                 title = if (armed) "Tap again to start over" else "Run setup again",
                 subtitle = if (armed) "Your layout and settings will be cleared" else "Start from the welcome screen",
                 danger = true,
+                modifier = Modifier.shake(warnings),
             ) {
                 if (armed) {
                     actions.reset()
                     onClose()
                 } else {
                     armed = true
+                    warnings++
                 }
             }
         }
@@ -455,7 +494,7 @@ internal fun AboutOptions(actions: SettingsActions) {
         runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull().orEmpty()
     }
 
-    Group {
+    Group(rise = 0) {
         Spot("defaultHome") {
             ActionRow(
                 icon = Icons.Rounded.Home,
@@ -487,7 +526,7 @@ internal fun AboutOptions(actions: SettingsActions) {
             }
         }
     }
-    Group {
+    Group(rise = 1) {
         Spot("help") {
             ActionRow(
                 icon = Icons.AutoMirrored.Rounded.HelpOutline,

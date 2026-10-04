@@ -186,15 +186,18 @@ internal fun Note(text: String, modifier: Modifier = Modifier) {
 
 /**
  * A row that opens a page: a coloured tile, what it is, how it is set, and a chevron. Under a
- * finger the tile swells and tips and the chevron leans the way you are about to go; when the
- * setting it describes changes, the line saying so cross-fades to the new one.
+ * finger the tile swells and tips and the chevron leans the way you are about to go, unless
+ * movement is reduced; when the setting it describes changes, the line saying so cross-fades to
+ * the new one.
  */
 @Composable
 internal fun NavRow(icon: ImageVector, tile: List<Color>, title: String, summary: String, onClick: () -> Unit) {
     val palette = LocalPalette.current
     val touch = remember { MutableInteractionSource() }
     val pressed by touch.collectIsPressedAsState()
-    val lean by animateFloatAsState(if (pressed) 1f else 0f, Motion.press(), label = "navLean")
+    val reduced = LocalMotionLevel.current.reduced
+    // Read only where things are drawn, so a press redraws two layers and composes nothing again.
+    val lean = animateFloatAsState(if (pressed && !reduced) 1f else 0f, Motion.press(), label = "navLean")
     Row(
         Modifier
             .fillMaxWidth()
@@ -207,10 +210,10 @@ internal fun NavRow(icon: ImageVector, tile: List<Color>, title: String, summary
             Modifier
                 .size(36.dp)
                 .graphicsLayer {
-                    val grown = 1f + 0.16f * lean
+                    val grown = 1f + 0.16f * lean.value
                     scaleX = grown
                     scaleY = grown
-                    rotationZ = -9f * lean
+                    rotationZ = -9f * lean.value
                 }
                 .clip(RoundedCornerShape(11.dp))
                 .background(Brush.linearGradient(tile)),
@@ -232,10 +235,14 @@ internal fun NavRow(icon: ImageVector, tile: List<Color>, title: String, summary
         Icon(
             Icons.AutoMirrored.Rounded.KeyboardArrowRight,
             contentDescription = null,
-            tint = palette.onGlass.copy(alpha = 0.35f + 0.4f * lean.coerceIn(0f, 1f)),
+            tint = palette.onGlass,
             modifier = Modifier
                 .size(22.dp)
-                .graphicsLayer { translationX = 5.dp.toPx() * lean },
+                .graphicsLayer {
+                    // Faint at rest; it darkens as it leans.
+                    alpha = 0.35f + 0.4f * lean.value.coerceIn(0f, 1f)
+                    translationX = 5.dp.toPx() * lean.value
+                },
         )
     }
 }
@@ -306,7 +313,7 @@ internal fun ActionRow(
         }
         AnimatedVisibility(
             visible = status != null,
-            enter = fadeIn(tween(160)) + scaleIn(Motion.snappy(), initialScale = 0.5f),
+            enter = if (reduced) fadeIn(tween(Motion.REDUCED_MS)) else fadeIn(tween(160)) + scaleIn(Motion.snappy(), initialScale = 0.5f),
             exit = fadeOut(tween(120)),
         ) {
             Text(status.orEmpty(), color = palette.accent, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)

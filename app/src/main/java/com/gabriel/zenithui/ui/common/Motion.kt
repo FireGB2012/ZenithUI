@@ -1,6 +1,14 @@
 package com.gabriel.zenithui.ui.common
 
 import android.provider.Settings
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.LinearEasing
@@ -87,6 +95,28 @@ object Motion {
     /** Fast out of the gate, then a long, soft landing. For things arriving that should feel expensive. */
     val emphasized = CubicBezierEasing(0.16f, 1f, 0.3f, 1f)
 }
+
+/**
+ * A small thing appearing where it stands: a tick, a badge, the icon in a button. It comes in
+ * from a little smaller; with movement reduced it only fades.
+ */
+fun popIn(reduced: Boolean, from: Float = 0.5f, millis: Int = 160): EnterTransition =
+    if (reduced) fadeIn(tween(Motion.REDUCED_MS)) else fadeIn(tween(millis)) + scaleIn(initialScale = from)
+
+/** The same thing going. */
+fun popOut(reduced: Boolean, to: Float = 0.5f, millis: Int = 110): ExitTransition =
+    if (reduced) fadeOut(tween(Motion.REDUCED_MS)) else fadeOut(tween(millis)) + scaleOut(targetScale = to)
+
+/**
+ * A line of words opening up under what it belongs to, moving what is below it down. With
+ * movement reduced it is simply there.
+ */
+fun unfoldIn(reduced: Boolean): EnterTransition =
+    if (reduced) fadeIn(tween(Motion.REDUCED_MS)) else fadeIn(tween(180)) + expandVertically()
+
+/** The same line closing. */
+fun unfoldOut(reduced: Boolean): ExitTransition =
+    if (reduced) fadeOut(tween(Motion.REDUCED_MS)) else fadeOut(tween(150)) + shrinkVertically()
 
 /**
  * False when the phone's "Remove animations" is on. Springs and tweens already honour that on

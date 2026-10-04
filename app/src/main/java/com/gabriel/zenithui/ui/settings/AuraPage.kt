@@ -8,12 +8,8 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -66,6 +62,8 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -80,9 +78,13 @@ import com.gabriel.zenithui.data.AuraThemes
 import com.gabriel.zenithui.data.ZenithSettings
 import com.gabriel.zenithui.ui.common.LocalMotionLevel
 import com.gabriel.zenithui.ui.common.appearIn
+import com.gabriel.zenithui.ui.common.popIn
+import com.gabriel.zenithui.ui.common.popOut
 import com.gabriel.zenithui.ui.common.pressBounce
 import com.gabriel.zenithui.ui.common.rememberHaptics
 import com.gabriel.zenithui.ui.common.shake
+import com.gabriel.zenithui.ui.common.unfoldIn
+import com.gabriel.zenithui.ui.common.unfoldOut
 import com.gabriel.zenithui.ui.onboarding.PrimaryButton
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.Palettes
@@ -231,13 +233,7 @@ private fun AuraRing(settings: ZenithSettings, stirred: Int) {
                 }
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    text = counted.value.roundToInt().toString(),
-                    color = palette.onGlass,
-                    fontSize = 46.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = (-1).sp,
-                )
+                Counted(settings.aura) { counted.value }
                 Text("aura", color = palette.onGlassMuted, fontSize = 13.sp)
             }
         }
@@ -252,6 +248,23 @@ private fun AuraRing(settings: ZenithSettings, stirred: Int) {
             fontWeight = FontWeight.SemiBold,
         )
     }
+}
+
+/**
+ * The number in the ring. On its own so that, while it counts, it is the only thing composed
+ * again on each frame. A screen reader is told the [balance] itself, not whichever step of the
+ * count happens to be showing.
+ */
+@Composable
+private fun Counted(balance: Int, value: () -> Float) {
+    Text(
+        text = value().roundToInt().toString(),
+        color = LocalPalette.current.onGlass,
+        fontSize = 46.sp,
+        fontWeight = FontWeight.Bold,
+        letterSpacing = (-1).sp,
+        modifier = Modifier.clearAndSetSemantics { contentDescription = balance.toString() },
+    )
 }
 
 /**
@@ -466,7 +479,7 @@ private fun ThemeCard(
                             owned -> null
                             else -> Icons.Rounded.Lock
                         },
-                        transitionSpec = { (fadeIn(tween(200)) + scaleIn(initialScale = 0.4f)).togetherWith(fadeOut(tween(120)) + scaleOut(targetScale = 0.4f)) },
+                        transitionSpec = { popIn(reduced, from = 0.4f, millis = 200).togetherWith(popOut(reduced, to = 0.4f, millis = 120)) },
                         label = "themeBadge",
                     ) { badge: ImageVector? ->
                         if (badge != null) {
@@ -549,8 +562,8 @@ private fun ThemeCard(
         }
         AnimatedVisibility(
             visible = refused && !owned,
-            enter = fadeIn(tween(180)) + expandVertically(),
-            exit = fadeOut(tween(160)) + shrinkVertically(),
+            enter = unfoldIn(reduced),
+            exit = unfoldOut(reduced),
         ) {
             val days = Aura.daysToAfford(settings.aura, theme.price, settings.streak)
             Note(
@@ -610,7 +623,7 @@ private fun YourCode(code: String, modifier: Modifier) {
                     modifier = Modifier.weight(1f),
                 ) { copy() }
                 CodeButton(Icons.Rounded.IosShare, "Share", Modifier.weight(1f)) {
-                    val words = "I use Zenith UI as my home screen. Type my code $code when you set it up and you start with ${Aura.REFERRAL_REWARD} aura."
+                    val words = "I use Zenith UI as my home screen. Put my code $code in under Settings > Aura and you get ${Aura.REFERRAL_REWARD} aura to start with."
                     runCatching {
                         context.startActivity(
                             Intent.createChooser(
@@ -634,6 +647,7 @@ private fun YourCode(code: String, modifier: Modifier) {
 @Composable
 private fun CodeButton(icon: ImageVector, label: String, modifier: Modifier, onClick: () -> Unit) {
     val palette = LocalPalette.current
+    val reduced = LocalMotionLevel.current.reduced
     Row(
         modifier
             .height(46.dp)
@@ -646,7 +660,7 @@ private fun CodeButton(icon: ImageVector, label: String, modifier: Modifier, onC
     ) {
         AnimatedContent(
             targetState = icon to label,
-            transitionSpec = { (fadeIn(tween(160)) + scaleIn(initialScale = 0.7f)).togetherWith(fadeOut(tween(100))) },
+            transitionSpec = { popIn(reduced, from = 0.7f).togetherWith(fadeOut(tween(100))) },
             label = "codeButton",
         ) { (image, words) ->
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -665,6 +679,7 @@ private fun CodeButton(icon: ImageVector, label: String, modifier: Modifier, onC
 @Composable
 private fun Redeem(redeemed: String, modifier: Modifier, onRedeem: (String) -> String?) {
     val palette = LocalPalette.current
+    val reduced = LocalMotionLevel.current.reduced
     var code by remember { mutableStateOf("") }
     var refusal by remember { mutableStateOf<String?>(null) }
     var refusals by remember { mutableIntStateOf(0) }
@@ -702,8 +717,8 @@ private fun Redeem(redeemed: String, modifier: Modifier, onRedeem: (String) -> S
                 )
                 AnimatedVisibility(
                     visible = refusal != null,
-                    enter = fadeIn(tween(180)) + expandVertically(),
-                    exit = fadeOut(tween(140)) + shrinkVertically(),
+                    enter = unfoldIn(reduced),
+                    exit = unfoldOut(reduced),
                 ) {
                     Note(refusal.orEmpty(), Modifier.padding(top = 10.dp))
                 }

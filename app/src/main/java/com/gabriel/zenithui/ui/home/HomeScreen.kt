@@ -993,7 +993,14 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                         val span = (fingers[0].position - fingers[1].position).getDistance()
                         if (startSpan == 0f) {
                             startSpan = span
-                        } else if (!fired && !drag.isDragging && !settingsOpen && !widgetsOpen && span < startSpan * 0.72f) {
+                        } else if (
+                            !fired && !drag.isDragging && !settingsOpen && !widgetsOpen &&
+                            // Only on the home screen itself. Through the drawer, a folder, a sheet
+                            // or an app on its way open, Customise would open with those still up
+                            // underneath it, and Back would go to them first.
+                            !sheetVisible && folderUp == null && card == null && !dragging && drawer.value < 0.02f &&
+                            span < startSpan * 0.72f
+                        ) {
                             fired = true
                             haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
                             showSheet(HomeSheet.Customize)
@@ -1493,10 +1500,15 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                         closeDrawer()
                     },
                     onAddToHome = {
-                        // The app may well have gone onto a page you are not looking at, so put
-                        // the drawer away and take you to it.
-                        revealPage(viewModel.addAppToFirstFreeSlot(current.key))
-                        closeDrawer()
+                        val page = viewModel.addAppToFirstFreeSlot(current.key)
+                        if (page == null) {
+                            Toast.makeText(context, "Every page is full", Toast.LENGTH_SHORT).show()
+                        } else {
+                            // The app may well have gone onto a page you are not looking at, so
+                            // put the drawer away and take you to it.
+                            revealPage(page)
+                            closeDrawer()
+                        }
                     },
                     onToggleDock = {
                     if (!viewModel.toggleDock(current.key)) {

@@ -8,10 +8,8 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
@@ -65,6 +63,8 @@ import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -82,10 +82,13 @@ import com.gabriel.zenithui.ui.common.FullPage
 import com.gabriel.zenithui.ui.common.LargeTitle
 import com.gabriel.zenithui.ui.common.LocalMotionLevel
 import com.gabriel.zenithui.ui.common.Motion
+import com.gabriel.zenithui.ui.common.PAGE_GONE_MS
 import com.gabriel.zenithui.ui.common.TITLE_GONE_PX
 import com.gabriel.zenithui.ui.common.pressBounce
 import com.gabriel.zenithui.ui.common.rememberHaptics
 import com.gabriel.zenithui.ui.common.shake
+import com.gabriel.zenithui.ui.common.unfoldIn
+import com.gabriel.zenithui.ui.common.unfoldOut
 import com.gabriel.zenithui.ui.onboarding.PrimaryButton
 import com.gabriel.zenithui.ui.onboarding.Segmented
 import com.gabriel.zenithui.ui.theme.GlassMaterial
@@ -116,7 +119,7 @@ fun WidgetGallery(
     onDismiss: () -> Unit,
 ) {
     var bare by remember { mutableStateOf(false) }
-    var picked by remember { mutableStateOf<WidgetSpec?>(null) }
+    var picked by remember { mutableStateOf<Picked?>(null) }
     // Where the card that was tapped sits within the page, for its showcase to grow out of.
     var pagesAt by remember { mutableStateOf(Rect.Zero) }
     var growFrom by remember { mutableStateOf(TransformOrigin.Center) }
@@ -143,7 +146,7 @@ fun WidgetGallery(
     FullPage(
         visible = visible,
         covered = false,
-        title = picked?.let { (if (bare) bareOf(it) else it).title } ?: "Widgets",
+        title = picked?.let { (if (bare) bareOf(it.spec) else it.spec).title } ?: "Widgets",
         canGoBack = picked != null,
         titleShown = { maxOf(inShowcase.value, (scroll.value / TITLE_GONE_PX).coerceIn(0f, 1f)) },
         onBack = { picked = null },
@@ -164,8 +167,8 @@ fun WidgetGallery(
                 .fillMaxSize()
                 .onGloballyPositioned { pagesAt = it.boundsInRoot() },
             label = "widgetPage",
-        ) { spec ->
-            if (spec == null) {
+        ) { chosen ->
+            if (chosen == null) {
                 Gallery(
                     settings = settings,
                     geometry = geometry,
@@ -173,7 +176,7 @@ fun WidgetGallery(
                     onBare = { bare = it },
                     scrolled = scroll,
                     arrive = remember { !returned[0] },
-                    onPick = { chosen, centre ->
+                    onPick = { spec, size, centre ->
                         returned[0] = true
                         if (!pagesAt.isEmpty) {
                             growFrom = TransformOrigin(
@@ -181,12 +184,13 @@ fun WidgetGallery(
                                 ((centre.y - pagesAt.top) / pagesAt.height).coerceIn(0f, 1f),
                             )
                         }
-                        picked = chosen
+                        picked = Picked(spec, size)
                     },
                 )
             } else {
                 Showcase(
-                    spec = spec,
+                    spec = chosen.spec,
+                    opensOn = chosen.size,
                     settings = settings,
                     geometry = geometry,
                     bare = bare,
@@ -201,6 +205,9 @@ fun WidgetGallery(
     }
 }
 
+/** What was tapped in the gallery: the widget, and the size its card showed it at. */
+private data class Picked(val spec: WidgetSpec, val size: WidgetSize)
+
 // ------------------------------------------------------------------------------- the gallery
 
 @Composable
@@ -212,12 +219,15 @@ private fun Gallery(
     scrolled: ScrollState,
     /** Whether the page is opening, and the cards should come in one after another. */
     arrive: Boolean,
-    onPick: (WidgetSpec, Offset) -> Unit,
+    onPick: (WidgetSpec, WidgetSize, Offset) -> Unit,
 ) {
     val palette = LocalPalette.current
-    // Four of them at their ordinary size, two to a row; the toggles as a strip across the foot,
-    // because that is the shape they are best in.
+    // Four of them at their ordinary size, two to a row; the toggles at their widest across the
+    // foot. Every card shows a size its showcase offers, and the showcase opens on that size.
     val square = Widgets.placeable.filter { it != Widgets.Toggles }
+    val toggleSizes = remember(settings.columns, settings.rows) {
+        WidgetSizes.options(Widgets.Toggles, settings.columns, settings.rows)
+    }
     Column(
         Modifier
             .fillMaxSize()
@@ -266,12 +276,9 @@ private fun Gallery(
         }
         WidgetCard(
             spec = Widgets.Toggles,
-            // The whole width of the page and one row tall.
-            size = WidgetSize(WidgetSizes.WIDE, settings.columns, 1),
-            sizes = remember(settings.columns, settings.rows) {
-                WidgetSizes.options(Widgets.Toggles, settings.columns, settings.rows).size
-            },
-            wellHeight = 104.dp,
+            size = toggleSizes.firstOrNull { it.name == WidgetSizes.WIDE } ?: toggleSizes[WidgetSizes.startIndex(toggleSizes)],
+            sizes = toggleSizes.size,
+            wellHeight = 196.dp,
             settings = settings,
             geometry = geometry,
             bare = bare,
@@ -361,7 +368,7 @@ private fun WidgetCard(
     geometry: HomeGeometry?,
     bare: Boolean,
     modifier: Modifier,
-    onPick: (WidgetSpec, Offset) -> Unit,
+    onPick: (WidgetSpec, WidgetSize, Offset) -> Unit,
 ) {
     val palette = LocalPalette.current
     val centre = remember { arrayOf(Offset.Zero) }
@@ -375,7 +382,7 @@ private fun WidgetCard(
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
-            ) { onPick(spec, centre[0]) }
+            ) { onPick(spec, size, centre[0]) }
             .padding(10.dp),
     ) {
         BoxWithConstraints(
@@ -422,6 +429,8 @@ private fun WidgetCard(
 @Composable
 private fun Showcase(
     spec: WidgetSpec,
+    /** The size its card in the gallery showed: the one to open on. */
+    opensOn: WidgetSize,
     settings: ZenithSettings,
     geometry: HomeGeometry?,
     bare: Boolean,
@@ -436,7 +445,7 @@ private fun Showcase(
     val reduced = LocalMotionLevel.current.reduced
     val density = LocalDensity.current
     val sizes = remember(spec, settings.columns, settings.rows) { WidgetSizes.options(spec, settings.columns, settings.rows) }
-    val start = WidgetSizes.startIndex(sizes)
+    val start = sizes.indexOf(opensOn).takeIf { it >= 0 } ?: WidgetSizes.startIndex(sizes)
     val real = sizes.map { realSize(geometry, it, settings.columns) }
 
     val grow = remember { Animatable(1f) }
@@ -474,7 +483,7 @@ private fun Showcase(
         // How far past the start of the row a size has to be for it to stand in the middle. The
         // row is padded so that the first does at nought.
         val toMiddle = { index: Int -> with(density) { ((widths[index] - widths[0]) / 2).roundToPx() } }
-        // It opens on the ordinary size.
+        // It opens on the size that was tapped.
         val strip = rememberLazyListState(start, toMiddle(start))
         // The size in the middle of the row: the one the words describe and the button adds.
         val current by remember(strip, sizes) {
@@ -505,6 +514,7 @@ private fun Showcase(
                 width = stageWidth,
                 strip = strip,
                 toMiddle = toMiddle,
+                names = sizes.map { "${it.name}, ${it.spanX} by ${it.rows}" },
                 bare = bare,
                 settings = settings,
             )
@@ -562,8 +572,8 @@ private fun Showcase(
                 )
                 AnimatedVisibility(
                     visible = full,
-                    enter = fadeIn(tween(180)) + expandVertically(),
-                    exit = fadeOut(tween(140)) + shrinkVertically(),
+                    enter = unfoldIn(reduced),
+                    exit = unfoldOut(reduced),
                 ) {
                     Text(
                         "No page has room for it at this size. Try a smaller one, or free up some space.",
@@ -600,6 +610,8 @@ private fun Stage(
     strip: LazyListState,
     /** How far along the row has to be for a size to stand in the middle of it. */
     toMiddle: (Int) -> Int,
+    /** What each size is called, for a screen reader. */
+    names: List<String>,
     bare: Boolean,
     settings: ZenithSettings,
 ) {
@@ -615,7 +627,7 @@ private fun Stage(
         contentPadding = PaddingValues(start = (width - real.first().width * scale) / 2, end = (width - real.last().width * scale) / 2),
         horizontalArrangement = Arrangement.spacedBy(STAGE_GAP),
         verticalAlignment = Alignment.CenterVertically,
-        flingBehavior = rememberSnapFlingBehavior(strip, SnapPosition.Center),
+        flingBehavior = rememberSnapFlingBehavior(strip, MiddleOfStage),
     ) {
         itemsIndexed(real) { index, size ->
             LiveWidget(
@@ -624,6 +636,7 @@ private fun Stage(
                 scale = scale,
                 bare = bare,
                 settings = settings,
+                label = names[index],
                 modifier = Modifier
                     .graphicsLayer {
                         if (reduced) return@graphicsLayer
@@ -640,10 +653,31 @@ private fun Stage(
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
-                    ) { scope.launch { strip.animateScrollToItem(index, toMiddle(index)) } },
+                    ) {
+                        scope.launch {
+                            if (reduced) strip.scrollToItem(index, toMiddle(index)) else strip.animateScrollToItem(index, toMiddle(index))
+                        }
+                    },
             )
         }
     }
+}
+
+/**
+ * Where a size comes to rest: the middle of the stage. The library's own Center is the middle of
+ * what is left of the row once its padding is taken off each end, and this row is padded more at
+ * one end than the other (each end by what lets its own size reach the middle), so that would
+ * rest every size off to one side, and not where the dots, the words and the button look.
+ */
+private object MiddleOfStage : SnapPosition {
+    override fun position(
+        layoutSize: Int,
+        itemSize: Int,
+        beforeContentPadding: Int,
+        afterContentPadding: Int,
+        itemIndex: Int,
+        itemCount: Int,
+    ): Int = layoutSize / 2 - beforeContentPadding - itemSize / 2
 }
 
 /**
@@ -671,9 +705,6 @@ private fun stripPosition(strip: LazyListState, opensOn: Int): Float {
 
 /** How small the showcase is when it starts out of a card, as a share of itself. */
 private const val GROWS_FROM = 0.35f
-
-/** How long the page takes to go once it is closed, and a little over. */
-private const val PAGE_GONE_MS = 420L
 
 /** The gap between the stage and the sides of the page. */
 private val STAGE_INSET = 16.dp
@@ -736,7 +767,8 @@ private fun realSize(geometry: HomeGeometry?, size: WidgetSize, columns: Int): D
  * ([real]), then scaled by [scale]. It takes up exactly the room it is drawn in.
  *
  * It is a picture of the widget, not the widget: nothing inside it takes a touch, though a touch
- * on it still reaches whatever it sits on.
+ * on it still reaches whatever it sits on. A screen reader is told the same: the buttons and the
+ * note inside it are not there to be pressed, so all it hears of the picture is [label], if any.
  */
 @Composable
 private fun LiveWidget(
@@ -746,12 +778,14 @@ private fun LiveWidget(
     bare: Boolean,
     settings: ZenithSettings,
     modifier: Modifier = Modifier,
+    label: String? = null,
 ) {
     val shown = DpSize(real.width * scale, real.height * scale)
     Box(modifier.size(shown)) {
         AnimatedContent(
             targetState = bare,
             transitionSpec = { fadeIn(tween(240)).togetherWith(fadeOut(tween(160))) },
+            modifier = Modifier.clearAndSetSemantics { if (label != null) contentDescription = label },
             label = "widgetStyle",
         ) { noGlass ->
             Box(Modifier.size(shown)) {

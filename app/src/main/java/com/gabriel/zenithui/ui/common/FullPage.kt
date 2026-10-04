@@ -73,16 +73,22 @@ fun FullPage(
     content: @Composable BoxScope.() -> Unit,
 ) {
     val focus = LocalFocusManager.current
+    val reduced = LocalMotionLevel.current.reduced
     val uncovered = animateFloatAsState(if (covered) 0f else 1f, tween(200), label = "pageUncovered")
 
     Box(Modifier.fillMaxSize()) {
-        AnimatedVisibility(visible = visible, enter = fadeIn(tween(300)), exit = fadeOut(tween(260))) {
+        AnimatedVisibility(
+            visible = visible,
+            enter = fadeIn(tween(if (reduced) Motion.REDUCED_MS else 300)),
+            exit = fadeOut(tween(if (reduced) Motion.REDUCED_MS else 260)),
+        ) {
             Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.35f)))
         }
         AnimatedVisibility(
             visible = visible,
-            enter = slideInVertically(Motion.sheet()) { it } + fadeIn(tween(220)),
-            exit = slideOutVertically(tween(320)) { it } + fadeOut(tween(260)),
+            // With movement reduced the page does not travel: it is there, and then it is not.
+            enter = if (reduced) fadeIn(tween(Motion.REDUCED_MS)) else slideInVertically(Motion.sheet()) { it } + fadeIn(tween(220)),
+            exit = if (reduced) fadeOut(tween(Motion.REDUCED_MS)) else slideOutVertically(tween(320)) { it } + fadeOut(tween(260)),
         ) {
             Column(
                 Modifier
@@ -185,6 +191,13 @@ fun BackButton(onBack: () -> Unit, modifier: Modifier = Modifier) {
         Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back", tint = palette.onGlass, modifier = Modifier.size(19.dp))
     }
 }
+
+/**
+ * How long a page takes to go once it is closed, and a little over. What a page was showing is
+ * put away after this, out of sight, so that the next time it opens it starts at the top without
+ * first arriving on whatever it was closed on.
+ */
+const val PAGE_GONE_MS = 420L
 
 /** How far a page has to scroll before its large title has gone and the bar's small one is fully in. */
 const val TITLE_GONE_PX = 110f

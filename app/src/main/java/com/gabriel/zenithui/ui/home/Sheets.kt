@@ -61,6 +61,7 @@ import com.gabriel.zenithui.data.HomeItem
 import com.gabriel.zenithui.data.AppCell
 import com.gabriel.zenithui.data.WidgetCell
 import com.gabriel.zenithui.data.Widgets
+import com.gabriel.zenithui.ui.common.LocalMotionLevel
 import com.gabriel.zenithui.ui.common.Motion
 import com.gabriel.zenithui.ui.common.appearIn
 import com.gabriel.zenithui.ui.common.pressBounce
@@ -80,13 +81,14 @@ fun ZenithSheet(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val palette = LocalPalette.current
+    val reduced = LocalMotionLevel.current.reduced
     val maxHeight = LocalConfiguration.current.screenHeightDp.dp * maxHeightFraction
 
     Box(Modifier.fillMaxSize()) {
         AnimatedVisibility(
             visible = visible,
-            enter = fadeIn(tween(300)),
-            exit = fadeOut(tween(260)),
+            enter = fadeIn(tween(if (reduced) Motion.REDUCED_MS else 300)),
+            exit = fadeOut(tween(if (reduced) Motion.REDUCED_MS else 260)),
         ) {
             Box(
                 Modifier
@@ -98,8 +100,9 @@ fun ZenithSheet(
 
         AnimatedVisibility(
             visible = visible,
-            enter = slideInVertically(Motion.smooth()) { it } + fadeIn(tween(220)),
-            exit = slideOutVertically(tween(320)) { it } + fadeOut(tween(260)),
+            // With movement reduced a sheet does not travel: it is there, and then it is not.
+            enter = if (reduced) fadeIn(tween(Motion.REDUCED_MS)) else slideInVertically(Motion.smooth()) { it } + fadeIn(tween(220)),
+            exit = if (reduced) fadeOut(tween(Motion.REDUCED_MS)) else slideOutVertically(tween(320)) { it } + fadeOut(tween(260)),
             modifier = Modifier.align(Alignment.BottomCenter),
         ) {
             Column(

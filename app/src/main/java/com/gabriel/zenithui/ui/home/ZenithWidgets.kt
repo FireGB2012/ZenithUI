@@ -1298,6 +1298,9 @@ private val MIN_TOGGLE_CELL = 30.dp
 private val MAX_TILE_WIDTH = 168.dp
 private val MAX_TILE_HEIGHT = 118.dp
 
+/** The height of cell from which a tile has room for a second line under its name. */
+private val TILE_DETAIL_FROM = 92.dp
+
 /** One control the Quick Toggles widget can show. */
 @Immutable
 private data class ToggleOption(val id: String, val label: String, val detail: String, val icon: ImageVector)
@@ -1416,6 +1419,9 @@ private fun TogglesWidget(form: WidgetForm, chosen: List<String>, width: Dp, hei
                                     .sizeIn(maxWidth = MAX_TILE_WIDTH, maxHeight = MAX_TILE_HEIGHT)
                                     .fillMaxSize()
                                     .padding(4.dp),
+                                // A short tile has room for the name only: its second line would
+                                // be cut through the middle.
+                                detail = cellHeight >= TILE_DETAIL_FROM,
                             )
                             list -> Row(verticalAlignment = Alignment.CenterVertically) {
                                 ToggleButton(toggle, button)
@@ -1556,7 +1562,7 @@ private fun ToggleButton(toggle: Toggle, size: Dp) {
 }
 
 @Composable
-private fun ToggleTile(toggle: Toggle, modifier: Modifier) {
+private fun ToggleTile(toggle: Toggle, modifier: Modifier, detail: Boolean) {
     val palette = LocalPalette.current
     if (LocalBare.current) {
         val ink by animateColorAsState(
@@ -1573,7 +1579,7 @@ private fun ToggleTile(toggle: Toggle, modifier: Modifier) {
             verticalArrangement = Arrangement.SpaceBetween,
         ) {
             Symbol(toggle.icon, 34.dp, tint = ink)
-            TileText(toggle, Color.White)
+            TileText(toggle, Color.White, detail)
         }
         return
     }
@@ -1593,13 +1599,14 @@ private fun ToggleTile(toggle: Toggle, modifier: Modifier) {
         verticalArrangement = Arrangement.SpaceBetween,
     ) {
         Icon(toggle.icon, contentDescription = null, tint = ink, modifier = Modifier.size(22.dp))
-        TileText(toggle, ink)
+        TileText(toggle, ink, detail)
     }
 }
 
 @Composable
-private fun ColumnScope.TileText(toggle: Toggle, ink: Color) {
+private fun ColumnScope.TileText(toggle: Toggle, ink: Color, detail: Boolean) {
     Text(toggle.label, color = ink, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    if (!detail) return
     Text(
         text = if (toggle.option.id == "torch") (if (toggle.active) "On" else "Off") else "Open",
         color = ink.copy(alpha = 0.7f),

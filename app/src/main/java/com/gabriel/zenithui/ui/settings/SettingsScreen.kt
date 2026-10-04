@@ -11,8 +11,6 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
@@ -86,11 +84,17 @@ import com.gabriel.zenithui.data.PlusStatus
 import com.gabriel.zenithui.data.ZenithSettings
 import com.gabriel.zenithui.ui.common.FullPage
 import com.gabriel.zenithui.ui.common.LargeTitle
+import com.gabriel.zenithui.ui.common.LocalMotionLevel
+import com.gabriel.zenithui.ui.common.Motion
+import com.gabriel.zenithui.ui.common.PAGE_GONE_MS
 import com.gabriel.zenithui.ui.common.TITLE_GONE_PX
 import com.gabriel.zenithui.ui.common.appearIn
+import com.gabriel.zenithui.ui.common.popIn
+import com.gabriel.zenithui.ui.common.popOut
 import com.gabriel.zenithui.ui.common.pressBounce
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.Palettes
+import kotlinx.coroutines.delay
 
 /** What the mini phone on the Theme and Home pages is a picture of: page one of the real home screen. */
 class SettingsPreview(
@@ -151,12 +155,18 @@ fun SettingsScreen(
     // Set when the groups come back on show because a page was popped. Not state: nothing has to
     // be redrawn when it changes, it is only read as the groups are composed again.
     val returned = remember { booleanArrayOf(false) }
-    // Opening Settings again always starts at the top.
+    val reduced = LocalMotionLevel.current.reduced
+    val rootScroll = rememberScrollState()
+    val pageScroll = rememberScrollState()
+    // The next time Settings opens it starts at the top. That is put right once the page has
+    // gone, not as it comes back, so it never arrives showing the page it was closed on.
     LaunchedEffect(visible) {
-        if (visible) {
+        if (!visible) {
+            delay(PAGE_GONE_MS)
             page = null
             query = ""
             highlight = null
+            rootScroll.scrollTo(0)
         }
     }
 
@@ -183,8 +193,6 @@ fun SettingsScreen(
         }
     }
 
-    val rootScroll = rememberScrollState()
-    val pageScroll = rememberScrollState()
     LaunchedEffect(page) { if (page != null) pageScroll.scrollTo(0) }
 
     FullPage(
@@ -204,13 +212,18 @@ fun SettingsScreen(
             transitionSpec = {
                 val push = targetState != null
                 val slide = spring(dampingRatio = 1f, stiffness = 420f, visibilityThreshold = IntOffset(1, 1))
-                // The page comes in over the groups from the right, and leaves the same way; the
-                // groups shift a little and dim underneath it.
-                ContentTransform(
-                    targetContentEnter = slideInHorizontally(slide) { if (push) it else -it / 4 } + fadeIn(tween(220)),
-                    initialContentExit = slideOutHorizontally(slide) { if (push) -it / 4 else it } + fadeOut(tween(220)),
-                    targetContentZIndex = if (push) 1f else 0f,
-                )
+                if (reduced) {
+                    // No travelling: one gives way to the other where it stands.
+                    fadeIn(tween(Motion.REDUCED_MS)).togetherWith(fadeOut(tween(Motion.REDUCED_MS)))
+                } else {
+                    // The page comes in over the groups from the right, and leaves the same way;
+                    // the groups shift a little and dim underneath it.
+                    ContentTransform(
+                        targetContentEnter = slideInHorizontally(slide) { if (push) it else -it / 4 } + fadeIn(tween(220)),
+                        initialContentExit = slideOutHorizontally(slide) { if (push) -it / 4 else it } + fadeOut(tween(220)),
+                        targetContentZIndex = if (push) 1f else 0f,
+                    )
+                }
             },
             label = "settingsPage",
         ) { current ->
@@ -350,6 +363,7 @@ private fun Results(query: String, onOpen: (SettingsPage, String?) -> Unit) {
 @Composable
 private fun SearchField(query: String, onQuery: (String) -> Unit, modifier: Modifier = Modifier) {
     val palette = LocalPalette.current
+    val reduced = LocalMotionLevel.current.reduced
     var focused by remember { mutableStateOf(false) }
     // In use, the box is ringed in the accent and its glass lights up.
     val ring by animateColorAsState(if (focused) palette.accent.copy(alpha = 0.75f) else Color.Transparent, tween(220), label = "searchRing")
@@ -382,8 +396,8 @@ private fun SearchField(query: String, onQuery: (String) -> Unit, modifier: Modi
         }
         AnimatedVisibility(
             visible = query.isNotEmpty(),
-            enter = fadeIn(tween(140)) + scaleIn(initialScale = 0.5f),
-            exit = fadeOut(tween(100)) + scaleOut(targetScale = 0.5f),
+            enter = popIn(reduced, millis = 140),
+            exit = popOut(reduced, millis = 100),
         ) {
             Icon(
                 Icons.Rounded.Close,

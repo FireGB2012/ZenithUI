@@ -55,6 +55,7 @@ class SettingsJsonTest {
         unlockedThemes = listOf("ember"),
         referralCode = "ZEN123",
         referredBy = "ZEN999",
+        referralsPaid = 3,
         customAccent = 0xFF112233,
         customAccentAlt = 0xFF445566,
         customBackdrop = 0xFF778899,

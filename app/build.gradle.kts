@@ -12,6 +12,18 @@ val keystoreProperties = Properties().apply {
     if (file.exists()) file.inputStream().use { load(it) }
 }
 
+// Where Zenith's server is: see server.properties. A value given on the command line wins, which
+// is how a test build is pointed at a server on the test PC without changing any file:
+//   gradlew assembleDebug -PzenithServerUrl=http://10.0.2.2:8787
+val serverProperties = Properties().apply {
+    val file = rootProject.file("server.properties")
+    if (file.exists()) file.inputStream().use { load(it) }
+}
+
+fun serverSetting(name: String, override: String): String =
+    ((project.findProperty(override) as String?) ?: serverProperties.getProperty(name) ?: "")
+        .trim().filter { it != '"' && it != '\\' }
+
 android {
     namespace = "com.gabriel.zenithui"
     compileSdk {
@@ -28,6 +40,9 @@ android {
         versionName = "3.7"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        buildConfigField("String", "SERVER_URL", "\"${serverSetting("url", "zenithServerUrl")}\"")
+        buildConfigField("String", "GOOGLE_CLIENT_ID", "\"${serverSetting("googleClientId", "zenithGoogleClientId")}\"")
     }
 
     signingConfigs {
@@ -71,6 +86,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
@@ -95,6 +111,10 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.billing.ktx)
     implementation(libs.androidx.fragment)
+    // Sign in with Google, through Android's own account chooser.
+    implementation(libs.androidx.credentials)
+    implementation(libs.androidx.credentials.play.services.auth)
+    implementation(libs.googleid)
     debugImplementation(libs.compose.ui.tooling)
 
     testImplementation(libs.junit)

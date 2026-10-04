@@ -14,6 +14,10 @@ lifecycle = "2.8.7"
 coroutines = "1.9.0"
 billing = "8.3.0"
 fragment = "1.8.6"
+credentials = "1.6.0"
+# 1.2.1 was built with a newer Kotlin than this project compiles with (metadata 2.4): move up
+# together with the Kotlin plugin, not before it.
+googleid = "1.2.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -39,6 +43,9 @@ kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-
 billing-ktx = { group = "com.android.billingclient", name = "billing-ktx", version.ref = "billing" }
 # Play Billing drags in an ancient fragment; the ActivityResult APIs need 1.3+.
 androidx-fragment = { group = "androidx.fragment", name = "fragment", version.ref = "fragment" }
+androidx-credentials = { group = "androidx.credentials", name = "credentials", version.ref = "credentials" }
+androidx-credentials-play-services-auth = { group = "androidx.credentials", name = "credentials-play-services-auth", version.ref = "credentials" }
+googleid = { group = "com.google.android.libraries.identity.googleid", name = "googleid", version.ref = "googleid" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

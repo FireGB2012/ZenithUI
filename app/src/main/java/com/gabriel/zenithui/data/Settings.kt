@@ -94,6 +94,11 @@ data class ZenithSettings(
     val referralCode: String = "",
     /** Somebody else's code, once. */
     val referredBy: String = "",
+    /**
+     * How many of the friends who used this account's code have been paid for. It travels with
+     * [aura] in a backup, so that restoring one neither pays a friend twice nor forgets one.
+     */
+    val referralsPaid: Int = 0,
 
     /** The palette you built yourself, used when [paletteId] is "custom". ARGB. */
     val customAccent: Long = 0xFF7C6CFF,
@@ -153,6 +158,7 @@ data class ZenithSettings(
         put("unlockedThemes", JSONArray(unlockedThemes))
         put("referralCode", referralCode)
         put("referredBy", referredBy)
+        put("referralsPaid", referralsPaid)
         put("pages", pages)
         put("note", note)
         put("homePrompts", homePrompts)
@@ -210,6 +216,7 @@ data class ZenithSettings(
                 unlockedThemes = o.optJSONArray("unlockedThemes").toStringList(),
                 referralCode = o.optString("referralCode", d.referralCode),
                 referredBy = o.optString("referredBy", d.referredBy),
+                referralsPaid = o.optInt("referralsPaid", d.referralsPaid),
                 pages = o.optInt("pages", d.pages),
                 note = o.optString("note", d.note),
                 homePrompts = o.optInt("homePrompts", d.homePrompts),

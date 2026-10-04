@@ -28,6 +28,13 @@ object Aura {
     fun dailyReward(streak: Int): Int =
         (BASE_DAILY + (streak - 1).coerceAtLeast(0) * STREAK_STEP).coerceAtMost(MAX_DAILY)
 
+    /**
+     * What the owner of a code is owed: [REFERRAL_REWARD] for each friend who has used it and has
+     * not been paid for yet. [referrals] is the server's count; [paid] is how many of them this
+     * phone has paid out already. Nothing is ever taken back.
+     */
+    fun referralPayout(referrals: Int, paid: Int): Int = (referrals - paid).coerceAtLeast(0) * REFERRAL_REWARD
+
     /** Codes are six characters, no vowels, so nothing accidentally spells anything. */
     private const val ALPHABET = "BCDFGHJKLMNPQRSTVWXZ23456789"
 

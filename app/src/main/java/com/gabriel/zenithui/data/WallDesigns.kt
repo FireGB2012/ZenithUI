@@ -13,6 +13,7 @@ import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.exp
 import kotlin.math.floor
+import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.pow
 import kotlin.math.sin
@@ -30,6 +31,9 @@ internal object WallDesigns {
             WallStyle.Calm -> calm()
             WallStyle.Mesh -> mesh()
             WallStyle.Drift -> drift()
+            WallStyle.Dawn -> dawn()
+            WallStyle.Haze -> haze()
+            WallStyle.Bokeh -> bokeh()
             WallStyle.Silk -> silk()
             WallStyle.Halo -> halo()
             WallStyle.Waves -> waves()
@@ -37,15 +41,23 @@ internal object WallDesigns {
             WallStyle.Contour -> contour()
             WallStyle.Ripple -> ripple()
             WallStyle.Grid -> grid()
+            WallStyle.Rays -> rays()
+            WallStyle.Spiral -> spiral()
+            WallStyle.Weave -> weave()
             WallStyle.Ribbons -> ribbons()
             WallStyle.Facets -> facets()
             WallStyle.Bands -> bands()
             WallStyle.Bubbles -> bubbles()
+            WallStyle.Tiles -> tiles()
+            WallStyle.Dots -> dots()
+            WallStyle.Hex -> hex()
             WallStyle.Prism -> prism()
             WallStyle.Bloom -> bloom()
             WallStyle.Dunes -> dunes()
             WallStyle.Aurora -> aurora()
             WallStyle.Peaks -> peaks()
+            WallStyle.City -> city()
+            WallStyle.Forest -> forest()
             WallStyle.Horizon -> horizon()
             WallStyle.Nebula -> nebula()
         }
@@ -115,6 +127,65 @@ internal object WallDesigns {
             val tone = tones[i % tones.size]
             streak(x, y, length, width, -34f, tone, strength)
             streak(x, y, length * 0.8f, width * 0.16f, -34f, mix(tone, if (dark) Color.WHITE else c.base, 0.35f), strength * 0.8f)
+        }
+    }
+
+    /** First light: a band of glow lying along the horizon a third of the way down, brightest at its heart. */
+    private fun Easel.dawn() {
+        backdrop()
+        val line = h * 0.34f
+        streak(w * 0.5f, line, w * 2.4f, h * 0.44f, 0f, c.accent, 0.5f)
+        streak(w * 0.5f, line + h * 0.02f, w * 1.9f, h * 0.2f, 0f, c.accentAlt, 0.55f)
+        streak(w * 0.5f, line + h * 0.03f, w * 1.3f, h * 0.07f, 0f, mix(c.accentAlt, if (dark) Color.WHITE else c.base, 0.45f), 0.6f)
+        light(w * 0.5f, line + h * 0.03f, w * 0.32f, if (dark) Color.WHITE else c.accent, if (dark) 0.2f else 0.28f)
+        settle(0.5f, if (dark) 190 else 200)
+    }
+
+    /** Banks of mist lying one above another, each a different colour, thinning towards the dock. */
+    private fun Easel.haze() {
+        backdrop()
+        val tones = intArrayOf(c.accent, c.accentAlt, mix(c.accent, c.accentAlt, 0.5f), c.accent)
+        val banks = 7
+        repeat(banks) { i ->
+            val t = i / (banks - 1f)
+            val x = w * (0.2f + random.nextFloat() * 0.6f)
+            val y = h * (0.1f + 0.76f * t + (random.nextFloat() - 0.5f) * 0.05f)
+            val length = w * (1.6f + random.nextFloat() * 0.8f)
+            val depth = h * (0.1f + random.nextFloat() * 0.08f)
+            val lean = (random.nextFloat() - 0.5f) * 8f
+            streak(x, y, length, depth, lean, tones[i % tones.size], 0.52f - 0.38f * t)
+        }
+        calmTop(if (dark) 60 else 40)
+    }
+
+    /** Lights out of focus: soft discs of colour with a faint rim, crowded at the top and few lower down. */
+    private fun Easel.bokeh() {
+        backdrop()
+        light(w * 0.3f, h * 0.24f, w * 0.9f, c.accent, 0.28f)
+        light(w * 0.85f, h * 0.5f, w * 0.7f, c.accentAlt, 0.18f)
+        val tones = intArrayOf(c.accent, c.accentAlt, mix(c.accent, c.accentAlt, 0.5f))
+        val disc = Paint(Paint.ANTI_ALIAS_FLAG)
+        val rim = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = max(1f, 1.5f * unit)
+        }
+        repeat(28) { i ->
+            val x = w * random.nextFloat()
+            // Most of them in the upper half; the few lower down are faint.
+            val v = random.nextFloat().pow(1.6f)
+            val y = h * (0.04f + 0.82f * v)
+            val r = w * (0.035f + 0.11f * random.nextFloat())
+            val tone = tones[i % tones.size]
+            val a = ((if (dark) 50 else 36) * (1f - 0.75f * v) * (0.5f + 0.5f * random.nextFloat())).toInt()
+            disc.shader = RadialGradient(
+                x, y, r,
+                intArrayOf(alpha(tone, a), alpha(tone, a), alpha(tone, 0)),
+                floatArrayOf(0f, 0.86f, 1f),
+                Shader.TileMode.CLAMP,
+            )
+            canvas.drawCircle(x, y, r, disc)
+            rim.color = alpha(if (dark) mix(tone, Color.WHITE, 0.4f) else ink(tone), (a * 1.6f).toInt())
+            canvas.drawCircle(x, y, r * 0.88f, rim)
         }
     }
 
@@ -374,6 +445,90 @@ internal object WallDesigns {
         })
     }
 
+    /** Fine lines fanning out from a light beyond the top corner, each fading as it goes. */
+    private fun Easel.rays() {
+        backdrop()
+        val cx = w * 1.08f
+        val cy = -h * 0.04f
+        light(cx, cy, w * 1.2f, c.accent, 0.5f)
+        val reach = hypot(w, h) * 1.1f
+        val count = 34
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeCap = Paint.Cap.ROUND
+        }
+        for (i in 0 until count) {
+            val t = i / (count - 1f)
+            // From straight down the right edge round to straight along the top, none quite evenly.
+            val angle = PI.toFloat() * (0.5f + 0.5f * t) + (random.nextFloat() - 0.5f) * 0.012f
+            val length = reach * (0.55f + 0.45f * random.nextFloat())
+            val ex = cx + cos(angle) * length
+            val ey = cy + sin(angle) * length
+            val tone = ink(mix(c.accent, c.accentAlt, t))
+            paint.strokeWidth = max(1f, (1.5f + i % 3) * unit)
+            paint.shader = LinearGradient(cx, cy, ex, ey, alpha(tone, if (dark) 170 else 190), alpha(tone, 0), Shader.TileMode.CLAMP)
+            canvas.drawLine(cx, cy, ex, ey, paint)
+        }
+        settle(0.55f, if (dark) 120 else 150)
+    }
+
+    /** One line wound round and round from a point high on the page, fading as its turns widen. */
+    private fun Easel.spiral() {
+        backdrop()
+        val cx = w * 0.66f
+        val cy = h * 0.3f
+        light(cx, cy, w * 0.85f, c.accent, 0.42f)
+        val turns = 10
+        val steps = turns * 120
+        val apart = w * 0.062f
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeCap = Paint.Cap.ROUND
+            strokeWidth = max(1f, 2.2f * unit)
+        }
+        var fromX = cx
+        var fromY = cy
+        // Drawn a short run at a time, so each run can take its own colour and strength.
+        for (s in 1..steps) {
+            val t = s / steps.toFloat()
+            val angle = t * turns * 2f * PI.toFloat()
+            val r = apart * turns * t
+            val x = cx + r * cos(angle)
+            val y = cy + r * sin(angle)
+            paint.color = alpha(ink(mix(c.accent, c.accentAlt, t)), ((if (dark) 190 else 200) * (1f - 0.82f * t)).toInt())
+            canvas.drawLine(fromX, fromY, x, y, paint)
+            fromX = x
+            fromY = y
+        }
+        settle(0.55f, if (dark) 130 else 160)
+    }
+
+    /** Two sets of fine lines crossing at a slant, like cloth seen close, thinning out towards the dock. */
+    private fun Easel.weave() {
+        backdrop()
+        light(w * 0.2f, h * 0.16f, w * 0.95f, c.accent, 0.4f)
+        light(w * 0.9f, h * 0.4f, w * 0.7f, c.accentAlt, 0.24f)
+        val gap = w * 0.055f
+        val lean = h * 0.7f
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = max(1f, 1.6f * unit)
+        }
+        for ((side, tone) in listOf(1f to c.accent, -1f to c.accentAlt)) {
+            paint.shader = LinearGradient(
+                0f, 0f, 0f, h * 0.82f,
+                alpha(ink(tone), if (dark) 120 else 140), alpha(ink(tone), 0),
+                Shader.TileMode.CLAMP,
+            )
+            var x = -lean
+            while (x < w + lean) {
+                canvas.drawLine(x, 0f, x + side * lean, h, paint)
+                x += gap
+            }
+        }
+        calmTop(if (dark) 70 else 50)
+    }
+
     /** Wide ribbons you can see through, crossing the page; each turns over as it goes. */
     private fun Easel.ribbons() {
         backdrop()
@@ -527,6 +682,105 @@ internal object WallDesigns {
             canvas.drawCircle(x, y, r - rim.strokeWidth / 2f, rim)
             streak(x - r * 0.42f, y - r * 0.46f, r * 0.52f, r * 0.2f, -40f, Color.WHITE, if (dark) 0.6f else 1f)
         }
+    }
+
+    /** A wall of rounded tiles, no two quite the same depth of colour, fading out towards the dock. */
+    private fun Easel.tiles() {
+        backdrop()
+        light(w * 0.75f, h * 0.18f, w * 0.9f, c.accent, 0.3f)
+        val across = 6
+        val size = w / across
+        val gap = size * 0.09f
+        val down = (h / size).toInt() + 1
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        for (j in 0 until down) for (i in 0 until across) {
+            // Every tile takes its two numbers whether or not it is drawn, so the wall is the
+            // same wall at any size.
+            val tone = mix(c.accent, c.accentAlt, random.nextFloat())
+            val depth = 0.25f + 0.75f * random.nextFloat()
+            // Gone by three quarters of the way down.
+            val fade = (1f - (j * size / h) / 0.74f).coerceIn(0f, 1f)
+            if (fade <= 0f) continue
+            paint.color = alpha(tone, ((if (dark) 112 else 72) * fade * depth).toInt())
+            canvas.drawRoundRect(
+                i * size + gap, j * size + gap, (i + 1) * size - gap, (j + 1) * size - gap,
+                size * 0.2f, size * 0.2f, paint,
+            )
+        }
+        calmTop(if (dark) 80 else 50)
+    }
+
+    /**
+     * A sheet of dots as a printed picture is made of them: large round a point high on the page,
+     * shrinking to nothing away from it, each row half a step across from the last.
+     */
+    private fun Easel.dots() {
+        backdrop()
+        val fx = w * 0.3f
+        val fy = h * 0.24f
+        light(fx, fy, w * 0.9f, c.accent, 0.3f)
+        val across = 16
+        val pitch = w / across
+        val rowHeight = pitch * 0.866f
+        val down = (h / rowHeight).toInt() + 2
+        val reach = w * 1.05f
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        for (j in 0 until down) for (i in 0..across) {
+            val x = i * pitch + (if (j % 2 == 0) 0f else pitch / 2f)
+            val y = j * rowHeight
+            val far = hypot(x - fx, y - fy) / reach
+            val size = 1f - far
+            if (size <= 0.02f) continue
+            val tone = mix(c.accent, c.accentAlt, (far * 1.2f).coerceIn(0f, 1f))
+            paint.color = alpha(ink(tone), ((if (dark) 150 else 130) * (0.35f + 0.65f * size)).toInt())
+            canvas.drawCircle(x, y, pitch * 0.42f * size, paint)
+        }
+        settle(0.5f, if (dark) 130 else 170)
+    }
+
+    /** A honeycomb drawn in fine line, a few of its cells filled, thinning out towards the dock. */
+    private fun Easel.hex() {
+        backdrop()
+        light(w * 0.8f, h * 0.2f, w * 0.9f, c.accentAlt, 0.3f)
+        light(w * 0.1f, h * 0.45f, w * 0.7f, c.accent, 0.25f)
+        val r = w / 9f
+        val across = r * 1.7320508f
+        val downBy = r * 1.5f
+        val line = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = max(1f, 1.8f * unit)
+        }
+        val fill = Paint(Paint.ANTI_ALIAS_FLAG)
+        var row = 0
+        var y = 0f
+        while (y < h + r) {
+            var x = if (row % 2 == 0) 0f else across / 2f
+            while (x < w + across) {
+                val filled = random.nextFloat() < 0.16f
+                val fade = (1f - (y / h) / 0.76f).coerceIn(0f, 1f)
+                if (fade > 0f) {
+                    val cell = Path()
+                    for (k in 0 until 6) {
+                        val angle = PI.toFloat() * (k / 3f + 1f / 6f)
+                        val px = x + r * 0.93f * cos(angle)
+                        val py = y + r * 0.93f * sin(angle)
+                        if (k == 0) cell.moveTo(px, py) else cell.lineTo(px, py)
+                    }
+                    cell.close()
+                    val tone = mix(c.accent, c.accentAlt, (x / w).coerceIn(0f, 1f))
+                    if (filled) {
+                        fill.color = alpha(tone, ((if (dark) 84 else 58) * fade).toInt())
+                        canvas.drawPath(cell, fill)
+                    }
+                    line.color = alpha(ink(tone), ((if (dark) 112 else 124) * fade).toInt())
+                    canvas.drawPath(cell, line)
+                }
+                x += across
+            }
+            y += downBy
+            row++
+        }
+        calmTop(if (dark) 70 else 50)
     }
 
     /** Long shards of colour fanning out from one corner, each lying partly over the last. */
@@ -758,6 +1012,91 @@ internal object WallDesigns {
         val span = (worn.max() - low).coerceAtLeast(0.001f)
         for (i in worn.indices) worn[i] = (worn[i] - low) / span
         return worn
+    }
+
+    /** A town at the foot of the page: three rows of buildings, the far ones pale in the haze, a few windows lit. */
+    private fun Easel.city() {
+        backdrop()
+        light(w * 0.5f, h * 0.6f, w * 1.1f, c.accent, 0.5f)
+        light(w * 0.78f, h * 0.2f, w * 0.5f, c.accentAlt, 0.22f)
+        val far = if (dark) mix(c.mid, c.accent, 0.36f) else mix(c.mid, c.accentAlt, 0.14f)
+        val near = if (dark) mix(c.base, Color.BLACK, 0.4f) else mix(c.base, ink(c.accent), 0.3f)
+        val lit = if (dark) mix(c.accentAlt, Color.WHITE, 0.45f) else ink(c.accent)
+        val rows = 3
+        val wall = Paint(Paint.ANTI_ALIAS_FLAG)
+        val window = Paint(Paint.ANTI_ALIAS_FLAG)
+        val pane = w * 0.012f
+        for (row in 0 until rows) {
+            val t = row / (rows - 1f)
+            val tone = mix(far, near, t)
+            var x = -w * 0.03f * random.nextFloat()
+            while (x < w) {
+                val broad = w * (0.07f + 0.09f * random.nextFloat())
+                val roof = h * (0.5f + 0.1f * row + 0.13f * random.nextFloat())
+                wall.shader = LinearGradient(0f, roof, 0f, h, tone, mix(tone, c.base, if (dark) 0.5f else 0.62f), Shader.TileMode.CLAMP)
+                canvas.drawRect(x, roof, x + broad, h, wall)
+                // Windows on the two nearer rows, and only near the roofs: the icons and the dock
+                // sit over the lower floors, which stay dark.
+                val across = (broad / (pane * 2.4f)).toInt()
+                for (floor in 0 until 7) for (k in 0 until across) {
+                    val on = random.nextFloat() < 0.3f
+                    if (row == 0 || !on) continue
+                    val wx = x + pane * 1.2f + k * pane * 2.4f
+                    val wy = roof + pane * 2f + floor * pane * 2.6f
+                    if (wx + pane > x + broad - pane * 0.6f) continue
+                    window.color = alpha(lit, ((if (dark) 150 else 64) * (1f - floor / 7f)).toInt())
+                    canvas.drawRect(wx, wy, wx + pane, wy + pane * 1.3f, window)
+                }
+                x += broad + w * 0.008f
+            }
+        }
+        settle(0.72f, if (dark) 150 else 190)
+    }
+
+    /** Fir trees, row behind row, with mist lying between the rows and light coming through from behind. */
+    private fun Easel.forest() {
+        backdrop()
+        light(w * 0.62f, h * 0.34f, w * 0.9f, c.accent, 0.5f)
+        light(w * 0.2f, h * 0.2f, w * 0.6f, c.accentAlt, 0.2f)
+        val far = if (dark) mix(c.mid, c.accent, 0.38f) else mix(c.mid, c.accentAlt, 0.16f)
+        val near = if (dark) mix(c.base, Color.BLACK, 0.4f) else mix(c.base, ink(c.accent), 0.36f)
+        val haze = if (dark) mix(c.mid, c.accentAlt, 0.16f) else c.base
+        val rows = 4
+        val fill = Paint(Paint.ANTI_ALIAS_FLAG)
+        for (row in 0 until rows) {
+            val t = row / (rows - 1f)
+            val foot = h * (0.56f + 0.13f * row)
+            // The far trees are small and close together; the near ones stand tall.
+            val tall = h * (0.1f + 0.06f * t)
+            val broad = w * (0.075f + 0.04f * t)
+            // The ground the row stands on, and then every fir as a shape of its own, all drawn the
+            // same way round: where two overlap they are simply both there. One outline run
+            // through them all would double back at each overlap and leave a notch between trees.
+            val trees = Path().apply { addRect(0f, foot - 1f, w, h, Path.Direction.CW) }
+            var x = -broad * random.nextFloat()
+            while (x < w + broad) {
+                val height = tall * (0.6f + 0.4f * random.nextFloat())
+                val half = broad * (0.4f + 0.14f * random.nextFloat())
+                val cx = x + half
+                // A fir in three tiers: up and in from the foot, twice more, to the tip, and down.
+                trees.moveTo(cx - half, foot)
+                trees.lineTo(cx - half * 0.42f, foot - height * 0.38f)
+                trees.lineTo(cx - half * 0.7f, foot - height * 0.38f)
+                trees.lineTo(cx - half * 0.26f, foot - height * 0.7f)
+                trees.lineTo(cx - half * 0.46f, foot - height * 0.7f)
+                trees.lineTo(cx, foot - height)
+                trees.lineTo(cx + half * 0.46f, foot - height * 0.7f)
+                trees.lineTo(cx + half * 0.26f, foot - height * 0.7f)
+                trees.lineTo(cx + half * 0.7f, foot - height * 0.38f)
+                trees.lineTo(cx + half * 0.42f, foot - height * 0.38f)
+                trees.lineTo(cx + half, foot)
+                trees.close()
+                x += half * 2f * (0.72f + 0.3f * random.nextFloat())
+            }
+            val tone = mix(far, near, t)
+            fill.shader = LinearGradient(0f, foot - tall, 0f, foot + h * 0.14f, tone, mix(tone, haze, if (dark) 0.55f else 0.4f), Shader.TileMode.CLAMP)
+            canvas.drawPath(trees, fill)
+        }
     }
 
     /** Water to the horizon, haze lying on it, and over it the moon by night and the sun by day. */

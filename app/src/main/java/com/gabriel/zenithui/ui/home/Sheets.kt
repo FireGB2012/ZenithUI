@@ -53,6 +53,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.gabriel.zenithui.data.AppInfo
@@ -204,24 +205,24 @@ fun ItemMenuSheet(
     ZenithSheet(visible = visible, onDismiss = onDismiss, title = title) {
         when (item) {
             is AppCell -> {
-                MenuRow(Icons.Rounded.OpenInFull, "Resize", "Pull the pointer to make it any size") { onResize() }
+                MenuRow(Icons.Rounded.OpenInFull, "Resize and move", "Pull its corner to any size, or move it a cell at a time") { onResize() }
                 MenuRow(Icons.AutoMirrored.Rounded.OpenInNew, "Open") { onOpen(item.key); onDismiss() }
-                MenuRow(Icons.Rounded.Info, "App info") { onAppInfo(item.key); onDismiss() }
-                MenuRow(Icons.Rounded.Home, "Remove from home", danger = true) { onRemove(); onDismiss() }
-                MenuRow(Icons.Rounded.Delete, "Uninstall", danger = true) { onUninstall(item.key); onDismiss() }
+                MenuRow(Icons.Rounded.Info, "App info", "Storage, permissions and notifications, in the phone's settings") { onAppInfo(item.key); onDismiss() }
+                MenuRow(Icons.Rounded.Home, "Remove from home", "The app stays installed, and in the drawer", danger = true) { onRemove(); onDismiss() }
+                MenuRow(Icons.Rounded.Delete, "Uninstall", "Takes the app off the phone", danger = true) { onUninstall(item.key); onDismiss() }
             }
 
             is FolderCell -> {
                 MenuRow(Icons.Rounded.Edit, "Rename folder") { onRename(item.id); }
-                MenuRow(Icons.Rounded.Home, "Remove from home", danger = true) { onRemove(); onDismiss() }
+                MenuRow(Icons.Rounded.Home, "Remove from home", "Its apps stay installed, and in the drawer", danger = true) { onRemove(); onDismiss() }
             }
 
             is WidgetCell -> {
                 if (Widgets.baseType(item.type) == "toggles") {
                     MenuRow(Icons.Rounded.Tune, "Choose buttons", "Pick which controls it shows") { onChooseToggles() }
                 }
-                MenuRow(Icons.Rounded.OpenInFull, "Resize", "Pull the pointer to change its size") { onResize() }
-                MenuRow(Icons.Rounded.Home, "Remove widget", danger = true) { onRemove(); onDismiss() }
+                MenuRow(Icons.Rounded.OpenInFull, "Resize and move", "Pull its corner, pick a size, or move it a cell at a time") { onResize() }
+                MenuRow(Icons.Rounded.Home, "Remove widget", "It can be added again from Widgets", danger = true) { onRemove(); onDismiss() }
             }
         }
         MenuRow(Icons.Rounded.Tune, "Customise home screen", "Widgets, wallpaper and settings") { onCustomize() }
@@ -247,29 +248,32 @@ fun CustomizeSheet(
     ZenithSheet(visible = visible, onDismiss = onDismiss, title = "Customise") {
         // The four things people come here for, as big targets; the rest underneath.
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            QuickTile(Icons.Rounded.Dashboard, "Widgets", index = 0, modifier = Modifier.weight(1f)) { onWidgets() }
-            QuickTile(Icons.Rounded.Image, "Wallpaper", index = 1, modifier = Modifier.weight(1f)) { onWallpaper() }
+            QuickTile(Icons.Rounded.Dashboard, "Widgets", "Add a clock, calendar, note, battery or toggles", index = 0, modifier = Modifier.weight(1f)) { onWidgets() }
+            QuickTile(Icons.Rounded.Image, "Wallpaper", "Zenith's own designs, or a photo of yours", index = 1, modifier = Modifier.weight(1f)) { onWallpaper() }
         }
         Spacer(Modifier.height(10.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            QuickTile(Icons.Rounded.Tune, "Settings", index = 2, modifier = Modifier.weight(1f)) { onSettings() }
-            QuickTile(Icons.Rounded.Bedtime, "Bedside clock", index = 3, modifier = Modifier.weight(1f)) { onAmbient() }
+            QuickTile(Icons.Rounded.Tune, "Settings", "Colours, grid, glass, motion and backup", index = 2, modifier = Modifier.weight(1f)) { onSettings() }
+            QuickTile(Icons.Rounded.Bedtime, "Bedside clock", "A dim full-screen clock for the night", index = 3, modifier = Modifier.weight(1f)) { onAmbient() }
         }
         Spacer(Modifier.height(8.dp))
         if (!isHome) {
-            MenuRow(Icons.Rounded.Home, "Make Zenith your home screen", index = 4) { onDefaultLauncher(); onDismiss() }
+            MenuRow(Icons.Rounded.Home, "Make Zenith your home screen", "So the home button always comes back here", index = 4) { onDefaultLauncher(); onDismiss() }
         }
         MenuRow(Icons.Rounded.HelpOutline, "How it works", "Every gesture in one page", index = 5) { onHelp() }
     }
 }
 
-/** A big square-ish button: the icon in the corner, the name underneath, lit with the accent. */
+/**
+ * A big square-ish button: the icon in the corner, the name underneath with a line saying what is
+ * behind it, lit with the accent.
+ */
 @Composable
-private fun QuickTile(icon: ImageVector, label: String, index: Int, modifier: Modifier = Modifier, onClick: () -> Unit) {
+private fun QuickTile(icon: ImageVector, label: String, detail: String, index: Int, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val palette = LocalPalette.current
     Column(
         modifier
-            .height(96.dp)
+            .height(128.dp)
             .appearIn(delayMillis = staggerDelay(index), riseFrom = 18f)
             .pressBounce(0.95f)
             .clip(RoundedCornerShape(22.dp))
@@ -287,7 +291,10 @@ private fun QuickTile(icon: ImageVector, label: String, index: Int, modifier: Mo
         ) {
             Icon(icon, contentDescription = null, tint = palette.accent, modifier = Modifier.size(20.dp))
         }
-        Text(label, color = palette.onGlass, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+        Column {
+            Text(label, color = palette.onGlass, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+            Text(detail, color = palette.onGlassMuted, fontSize = 12.sp, lineHeight = 16.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        }
     }
 }
 

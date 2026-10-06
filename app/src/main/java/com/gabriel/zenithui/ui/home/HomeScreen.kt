@@ -1330,6 +1330,23 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             }
         }
 
+        // The same thing in taps: a widget's named sizes, and arrows that move it a cell at a time.
+        val reshaping = resizingId?.let { id -> layout.firstOrNull { it.id == id } }
+        if (reshaping != null) {
+            ResizeBar(
+                item = reshaping,
+                columns = settings.columns,
+                rows = settings.rows,
+                onSize = { size -> viewModel.resizeWidgetTo(reshaping.id, size.spanX, size.spanY) },
+                onNudge = { dCol, dRows -> viewModel.nudgeItem(reshaping.id, dCol, dRows) },
+                onDone = { resizingId = null },
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .navigationBarsPadding()
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+            )
+        }
+
         // ------------------------------------------------------------ drag layer
         if (drag.isDragging) {
             // Rest on a neighbour for a moment before a folder is on the cards.
@@ -1410,7 +1427,12 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         )
 
         if (ambient) {
-            AmbientScreen(userName = settings.userName, onDismiss = { ambient = false })
+            AmbientScreen(
+                userName = settings.userName,
+                calendarDeclined = settings.calendarDeclined,
+                onCalendarDeclined = { declined -> viewModel.updateSettings { it.copy(calendarDeclined = declined) } },
+                onDismiss = { ambient = false },
+            )
         }
 
         card?.let { moving ->

@@ -8,13 +8,26 @@ import org.junit.Test
 class WallStyleTest {
 
     @Test
-    fun `there are twenty-two designs, sorted onto four shelves`() {
-        assertEquals(22, WallStyle.entries.size)
+    fun `there are thirty-three designs, sorted onto four shelves`() {
+        assertEquals(33, WallStyle.entries.size)
         val shelves = WallStyle.entries.groupBy { it.group }.mapValues { it.value.size }
         assertEquals(
-            mapOf(WallGroup.Soft to 6, WallGroup.Lines to 6, WallGroup.Shapes to 5, WallGroup.Scenes to 5),
+            mapOf(WallGroup.Soft to 9, WallGroup.Lines to 9, WallGroup.Shapes to 8, WallGroup.Scenes to 7),
             shelves,
         )
+    }
+
+    @Test
+    fun `the eleven designs added for the testers are for everyone, and come before a shelf's Plus ones`() {
+        val added = listOf("Dawn", "Haze", "Bokeh", "Rays", "Spiral", "Weave", "Tiles", "Dots", "Hex", "City", "Forest")
+        added.forEach { assertEquals(it, false, WallStyle.byName(it)!!.plus) }
+        // On every shelf, once a Plus design has been passed there are only Plus designs left.
+        WallGroup.entries.forEach { group ->
+            val shelf = WallStyle.entries.filter { it.group == group }
+            assertEquals(group.name, shelf.sortedBy { it.plus }, shelf)
+        }
+        // And a shelf is all in one run: the picker's "All" keeps the shelves together.
+        assertEquals(WallStyle.entries.toList(), WallStyle.entries.sortedBy { it.group.ordinal })
     }
 
     @Test

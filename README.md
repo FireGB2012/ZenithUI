@@ -29,11 +29,16 @@ built entirely in Jetpack Compose.
 - **Folders** — drop one app onto another to create a folder; drop onto a folder to add to it.
   Tap a folder for a bottom sheet with an editable name; long-press an app inside to take it out.
 - **Remove** — drag to the "Remove" target at the top.
-- **Resize** — long-press any app or widget → **Resize**, then pull the pointer on its bottom-right
-  corner. The outline follows your finger and the item snaps to whole cells and whole rows as you
+- **Resize and move** — long-press any app or widget → **Resize and move**, then pull the pointer
+  on its bottom-right corner. The outline follows your finger and the item snaps to whole cells and whole rows as you
   pass them, with a size badge; it can be any size up to the whole page (a widget stops at the
   smallest its design allows). An app bigger than 1×1 becomes a super icon, its icon stretched to fill the space. A
   size with no room turns the outline red. Tap anywhere to finish.
+  While it is up, a bar at the foot of the screen does the same in taps (`ui/home/ResizeBar.kt`):
+  a widget's named sizes — Small, Medium, Wide, Tall, Large — one tap each, and four arrows that
+  move the item a cell at a time. A named size is taken where the widget stands, or at the closest
+  opening on its page when there is no room there; an arrow never pushes anything aside, and a tap
+  with no room shakes the bar instead. The rules are `Reshape.resized` and `Reshape.nudged`.
 - **App drawer** — a sheet that tracks your finger: drag up anywhere on the page and it follows,
   release and a fling (or the halfway point) decides whether it opens or falls back. Close it by
   dragging down anywhere — the handle, the header, the search row, or the app grid once it is
@@ -77,6 +82,14 @@ clock, a battery on Power, a calendar, a pencil). Their words are white with a s
 stored as `bare_<type>` (`bare_clock`, …) and otherwise behave exactly like the widget they are a
 version of.
 
+**Words that can be read.** A widget is read at a glance, over a wallpaper, so its second line (the
+date, "On battery", "25 days left") is set stronger than the muted grey a page uses, nothing in a
+widget is smaller than 11sp at its ordinary size, and the accent is taken part of the way towards
+the pane's own ink when it is used for letters. The names under the Quick Toggles are the size of
+the label under an app; one too long for its cell ("Do Not Disturb" in a two by two) goes onto a
+second line, and every name takes the same number of lines so the buttons stay level
+(`ToggleNames.fit`).
+
 ## Customisation
 
 Long-press an empty spot → **Customise** → **Settings**. Settings is a page of its own, the full
@@ -96,12 +109,18 @@ with tests.
 
 Every option is listed once in `SettingsCatalog`, which is what the search reads. Any Nova- or
 ADW-compatible icon pack installed on the device is detected and its `appfilter.xml` is parsed.
-Changing the grid re-flows the existing layout instead of dropping items, and **Tidy up** puts
-anything out of line back in its place.
+The grid is Compact, Balanced or Roomy — a cell size, from which the columns and rows are worked out
+for the screen — or **Custom**: columns and rows of your own, three to six across and three to
+eight down on a phone and more on a bigger screen (`GridDensity.resolve`). Changing the grid
+re-flows the existing layout instead of dropping items, and **Tidy up** puts anything out of line
+back in its place.
+
+Every choice says what it does: the four tiles of Customise each carry a line, and under each
+control in Settings a line of small print describes the option that is selected.
 
 ## Wallpapers
 
-Zenith paints its own wallpapers on the phone (`WallpaperArt`, `WallDesigns`): twenty-two designs
+Zenith paints its own wallpapers on the phone (`WallpaperArt`, `WallDesigns`): thirty-three designs
 on four shelves — Soft, Lines, Shapes and Scenes — seven of them for Zenith Plus. Every design is
 drawn from a theme's five colours and has a light picture and a dark one, each made so labels and
 the status bar stay readable over it.
@@ -157,12 +176,17 @@ shows the wallpaper exactly where it is, the rounded rim bends and magnifies it 
 edge of a thick lens with a faint colour split — a bigger pane is a thicker slab and bends more —
 and a crisp highlight runs round the rim where it faces the light, with a weaker one opposite, both
 moving as the phone tilts. A readable veil thickens only over parts of the wallpaper that would
-fight the text. Every pane floats on a soft shadow, and panes you press (`interactive = true`: the
+fight the text. And glass never quite matches what is behind it: over a wallpaper as dark as the
+pane itself, or in the light as pale, a little frost in the theme's colour lifts the pane a step
+away, there and nowhere else (`glassLift`). That is **Glass panels: Frosted** in Settings → Wallpaper
+& theme, the default; **Clear** leaves it out and **Solid** adds a fuller veil (`GlassBody`). Every pane floats on a soft shadow, and panes you press (`interactive = true`: the
 dock, folders, widgets, search) light up from within, the glow starting under your finger.
 
 `Modifier.glassInk()` makes whatever a composable draws out of glass, for the "No glass" widgets:
 its own outline becomes the rim, so the wallpaper bends at the edges of each numeral and icon and
 the highlight runs along them. What is drawn white is clear glass; a colour becomes tinted glass.
+Lifted glass gathers more light over a dark wallpaper, so a glass clock is read as easily as a
+printed one.
 
 Android 13+ does not let a launcher read the wallpaper, so `GlassWallpaper` keeps its own copy of
 any wallpaper Zenith sets (its own designs, or a photo picked under Wallpapers → Your photos) and

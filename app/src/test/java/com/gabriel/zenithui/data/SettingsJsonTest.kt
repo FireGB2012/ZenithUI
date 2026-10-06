@@ -16,7 +16,10 @@ class SettingsJsonTest {
         paletteId = "sunset",
         appearance = "auto",
         glass = 0.55f,
+        glassBody = "solid",
         gridDensity = "roomy",
+        gridColumns = 6,
+        gridRows = 7,
         columns = 5,
         rows = 6,
         iconSize = 48,
@@ -44,6 +47,7 @@ class SettingsJsonTest {
         pages = 3,
         note = "milk",
         homePrompts = 2,
+        calendarDeclined = true,
         layoutVersion = 2,
         plusTrialStart = 1_700_000_000_000L,
         plusPurchased = true,
@@ -93,6 +97,9 @@ class SettingsJsonTest {
         assertEquals("", old.wallpaperStyle)
         assertFalse(old.searchBar)
         assertEquals("name", old.header)
+        // Panels that stand out from the wallpaper are what everybody gets, old settings or new.
+        assertEquals("frosted", old.glassBody)
+        assertEquals(GlassBody.Frosted, GlassBody.byId(old.glassBody))
     }
 
     @Test

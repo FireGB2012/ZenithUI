@@ -2,6 +2,9 @@ package com.gabriel.zenithui.ui.home
 
 import android.Manifest
 import android.app.Activity
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import android.text.format.DateFormat
 import android.view.WindowManager
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -15,6 +18,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -48,8 +52,13 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.app.ActivityCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
+import com.gabriel.zenithui.data.CalendarAccess
 import com.gabriel.zenithui.data.CalendarEvent
 import com.gabriel.zenithui.data.CalendarRepository
+import com.gabriel.zenithui.data.findActivity
 import com.gabriel.zenithui.ui.common.GlassButton
 import com.gabriel.zenithui.ui.common.appearIn
 import com.gabriel.zenithui.ui.common.staggerDelay
@@ -65,25 +74,52 @@ import java.time.format.DateTimeFormatter
  * the next best thing: a dimmed full screen clock that keeps the display awake while it is open.
  */
 @Composable
-fun AmbientScreen(userName: String, onDismiss: () -> Unit) {
+fun AmbientScreen(
+    userName: String,
+    /** "Not now" to today's events, remembered from an earlier visit. */
+    calendarDeclined: Boolean,
+    onCalendarDeclined: (Boolean) -> Unit,
+    onDismiss: () -> Unit,
+) {
     val palette = LocalPalette.current
     val context = LocalContext.current
     val view = LocalView.current
 
     var permission by remember { mutableStateOf(CalendarRepository.hasPermission(context)) }
     var reload by remember { mutableStateOf(0) }
+    // Whether Android's question has been put on this visit and refused, and whether it would
+    // still be shown if it were put again. After a second refusal Android stops showing it, and
+    // a button that then did nothing would look broken.
+    var refused by remember { mutableStateOf(false) }
+    var canAskAgain by remember { mutableStateOf(true) }
     val requestPermission = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         permission = granted
+        refused = !granted
+        canAskAgain = context.findActivity()?.let {
+            ActivityCompat.shouldShowRequestPermissionRationale(it, Manifest.permission.READ_CALENDAR)
+        } ?: true
+        if (granted) onCalendarDeclined(false)
         reload += 1
     }
+    // It may have been allowed, or taken away again, in the phone's settings while this was open.
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        val now = CalendarRepository.hasPermission(context)
+        if (now != permission) {
+            permission = now
+            reload += 1
+        }
+    }
+    val access = CalendarAccess.of(permission, calendarDeclined, refused, canAskAgain)
 
-    // Keep the screen awake and dim it right down while the clock is showing.
-    DisposableEffect(Unit) {
+    // Keep the screen awake and dim it right down while the clock is showing. Not while it is
+    // saying what the calendar is for, though: small print cannot be read on a screen that dim.
+    val reading = access == CalendarAccess.Offer || access == CalendarAccess.Blocked
+    DisposableEffect(reading) {
         val window = (view.context as? Activity)?.window
         val previous = window?.attributes?.screenBrightness
-        window?.attributes = window.attributes?.apply { screenBrightness = 0.04f }
+        if (!reading) window?.attributes = window.attributes?.apply { screenBrightness = 0.04f }
         view.keepScreenOn = true
         onDispose {
             view.keepScreenOn = false
@@ -156,16 +192,52 @@ fun AmbientScreen(userName: String, onDismiss: () -> Unit) {
             Spacer(Modifier.height(44.dp))
 
             when {
-                !permission -> Column(Modifier.appearIn()) {
+                // What it is for and what is read, before Android asks: its own question says
+                // only "access your calendar".
+                access == CalendarAccess.Offer -> CalendarOffer(
+                    title = "Today's events, under the clock",
+                    lines = listOf(
+                        "Zenith can list what is on your calendar today: each event's name, its time and its colour.",
+                        "It only reads them, each time this clock opens. Nothing is changed, kept or sent anywhere.",
+                        "The clock works without it, and you can take it back in the phone's settings.",
+                    ),
+                    action = "Allow calendar",
+                    onAction = { requestPermission.launch(Manifest.permission.READ_CALENDAR) },
+                    onNotNow = { onCalendarDeclined(true) },
+                )
+
+                access == CalendarAccess.Blocked -> CalendarOffer(
+                    title = "Calendar is switched off for Zenith",
+                    lines = listOf(
+                        "Android has stopped asking, so it has to be allowed in the phone's settings: Permissions, then Calendar, then Allow.",
+                        "Zenith would only read today's events to list them here. Nothing is changed, kept or sent anywhere.",
+                    ),
+                    action = "Open settings",
+                    onAction = {
+                        runCatching {
+                            context.startActivity(
+                                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null))
+                                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            )
+                        }
+                    },
+                    onNotNow = {
+                        refused = false
+                        onCalendarDeclined(true)
+                    },
+                )
+
+                access == CalendarAccess.Declined -> Row(Modifier.appearIn(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Today's events are off.", color = Color.White.copy(alpha = 0.45f), fontSize = 14.sp)
                     Text(
-                        text = "Show today's events here",
-                        color = Color.White.copy(alpha = 0.6f),
-                        fontSize = 15.sp,
-                    )
-                    Spacer(Modifier.height(14.dp))
-                    GlassButton(
-                        text = "Allow calendar",
-                        onClick = { requestPermission.launch(Manifest.permission.READ_CALENDAR) },
+                        text = "Turn on",
+                        color = Color.White.copy(alpha = 0.8f),
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .clickable { onCalendarDeclined(false) }
+                            .padding(horizontal = 10.dp, vertical = 8.dp),
                     )
                 }
 
@@ -195,6 +267,42 @@ fun AmbientScreen(userName: String, onDismiss: () -> Unit) {
                 modifier = Modifier
                     .align(Alignment.CenterHorizontally)
                     .appearIn(delayMillis = 500),
+            )
+        }
+    }
+}
+
+/**
+ * The offer of today's events: what it is, the reasons in plain lines, the button that goes on to
+ * Android's question (or to the phone's settings) and a way to say no that is remembered.
+ */
+@Composable
+private fun CalendarOffer(
+    title: String,
+    lines: List<String>,
+    action: String,
+    onAction: () -> Unit,
+    onNotNow: () -> Unit,
+) {
+    Column(Modifier.appearIn()) {
+        Text(title, color = Color.White.copy(alpha = 0.85f), fontSize = 16.sp, fontWeight = FontWeight.Medium)
+        Spacer(Modifier.height(8.dp))
+        lines.forEach { line ->
+            Text(line, color = Color.White.copy(alpha = 0.6f), fontSize = 13.sp, lineHeight = 19.sp)
+            Spacer(Modifier.height(6.dp))
+        }
+        Spacer(Modifier.height(10.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            GlassButton(text = action, onClick = onAction)
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = "Not now",
+                color = Color.White.copy(alpha = 0.6f),
+                fontSize = 14.sp,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(50))
+                    .clickable(onClick = onNotNow)
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
             )
         }
     }

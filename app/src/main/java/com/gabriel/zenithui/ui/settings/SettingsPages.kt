@@ -40,6 +40,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.gabriel.zenithui.data.GlassBody
 import com.gabriel.zenithui.data.GridDensity
 import com.gabriel.zenithui.data.HomeHeader
 import com.gabriel.zenithui.data.IconPackInfo
@@ -80,7 +81,8 @@ private fun MiniPhone(settings: ZenithSettings, preview: SettingsPreview) {
     val reduced = LocalMotionLevel.current.reduced
     val sweep = remember { Animatable(1f) }
     val look = listOf(
-        settings.paletteId, settings.appearance, settings.gridDensity, settings.iconShape, settings.iconPack,
+        settings.paletteId, settings.appearance, settings.gridDensity, settings.columns, settings.rows,
+        settings.iconShape, settings.iconPack, settings.glassBody,
         settings.showLabels, settings.showDock, settings.searchBar, settings.header,
     )
     val shown = remember { arrayOf<List<Any>?>(null) }
@@ -138,6 +140,8 @@ internal fun ThemeOptions(settings: ZenithSettings, preview: SettingsPreview, ac
                     onSelect = { option -> change { it.copy(paletteId = option.id) } },
                     onMake = actions.themeMaker,
                 )
+                Spacer(Modifier.height(10.dp))
+                Note("Colours the glass, the highlights and Zenith's own wallpapers.")
             }
         }
     }
@@ -151,10 +155,14 @@ internal fun ThemeOptions(settings: ZenithSettings, preview: SettingsPreview, ac
                     selected = settings.appearance,
                     onSelect = { value -> change { it.copy(appearance = value) } },
                 )
-                if (settings.appearance == "auto") {
-                    Spacer(Modifier.height(8.dp))
-                    Note("Follows the phone: light by day and dark at night, if the phone is set that way.")
-                }
+                Spacer(Modifier.height(8.dp))
+                Note(
+                    when (settings.appearance) {
+                        "auto" -> "Follows the phone: light by day and dark at night, if the phone is set that way."
+                        "light" -> "Pale panels and dark words, whatever the phone is set to."
+                        else -> "Dark panels and white words, whatever the phone is set to."
+                    }
+                )
             }
         }
     }
@@ -189,8 +197,25 @@ internal fun ThemeOptions(settings: ZenithSettings, preview: SettingsPreview, ac
                     range = 0.2f..1.2f,
                     display = "${(settings.glass * 100).toInt()}%",
                 ) { value -> change { it.copy(glass = value) } }
+                Spacer(Modifier.height(8.dp))
+                Note("How strongly panels bend and catch the light. Lower is flatter and calmer.")
             }
         }
+        GroupDivider(inset = 16.dp)
+        Spot("glassBody") {
+            Column(Modifier.padding(14.dp)) {
+                Caption("Glass panels")
+                Spacer(Modifier.height(10.dp))
+                Segmented(
+                    options = GlassBody.entries.map { it.id to it.label },
+                    selected = GlassBody.byId(settings.glassBody).id,
+                    onSelect = { value -> change { it.copy(glassBody = value) } },
+                )
+                Spacer(Modifier.height(8.dp))
+                Note(GlassBody.byId(settings.glassBody).detail)
+            }
+        }
+        GroupDivider(inset = 16.dp)
         Spot("tiltShine") {
             ToggleRow(
                 title = "Tilt shine",
@@ -219,14 +244,45 @@ internal fun HomeOptions(settings: ZenithSettings, plus: PlusStatus, preview: Se
             Column(Modifier.padding(14.dp)) {
                 Caption("Grid")
                 Spacer(Modifier.height(10.dp))
+                val custom = settings.gridDensity == GridDensity.CUSTOM
                 Segmented(
-                    options = GridDensity.entries.map { it.id to it.label },
-                    selected = settings.gridDensity,
-                    onSelect = { value -> change { it.copy(gridDensity = value) } },
+                    options = GridDensity.entries.map { it.id to it.label } + (GridDensity.CUSTOM to "Custom"),
+                    selected = if (custom) GridDensity.CUSTOM else GridDensity.byId(settings.gridDensity).id,
+                    onSelect = { value ->
+                        change {
+                            // A grid of your own starts as the grid you have, so choosing Custom
+                            // moves nothing until a number is changed.
+                            if (value == GridDensity.CUSTOM && (it.gridColumns <= 0 || it.gridRows <= 0)) {
+                                it.copy(gridDensity = value, gridColumns = it.columns, gridRows = it.rows)
+                            } else {
+                                it.copy(gridDensity = value)
+                            }
+                        }
+                    },
                 )
+                if (custom) {
+                    Spacer(Modifier.height(10.dp))
+                    // Set straight onto the page as well as kept: the grid follows the finger
+                    // rather than the moment the screen is next measured.
+                    StepperRow("Columns", settings.columns, GridDensity.columnChoices(preview.screenWidth.value)) { n ->
+                        change { it.copy(gridColumns = n, columns = n) }
+                    }
+                    StepperRow("Rows", settings.rows, GridDensity.rowChoices(preview.screenHeight.value)) { n ->
+                        change { it.copy(gridRows = n, rows = n) }
+                    }
+                }
                 Spacer(Modifier.height(8.dp))
-                // How many cells that works out to depends on the screen, so it is reported, not chosen.
-                Note("${settings.columns} across, ${settings.rows} down on this screen. Icons size themselves to fit.")
+                // For a preset, how many cells that works out to depends on the screen, so it is
+                // reported, not chosen.
+                val counts = "${settings.columns} across, ${settings.rows} down"
+                Note(
+                    when {
+                        custom -> "Your own grid: $counts. Icons size themselves to fit, and anything left without room moves to the closest free spot."
+                        settings.gridDensity == GridDensity.Compact.id -> "Smaller cells, so more fits on a page: $counts on this screen."
+                        settings.gridDensity == GridDensity.Roomy.id -> "Larger cells with more room round each icon: $counts on this screen."
+                        else -> "$counts on this screen. Icons size themselves to fit."
+                    }
+                )
             }
         }
     }
@@ -240,6 +296,8 @@ internal fun HomeOptions(settings: ZenithSettings, plus: PlusStatus, preview: Se
                         ShapeChoice(id = id, selected = id == settings.iconShape) { change { it.copy(iconShape = id) } }
                     }
                 }
+                Spacer(Modifier.height(10.dp))
+                Note("The outline every app icon and folder is cut to.")
             }
         }
     }
@@ -249,7 +307,11 @@ internal fun HomeOptions(settings: ZenithSettings, plus: PlusStatus, preview: Se
         }
         GroupDivider(inset = 16.dp)
         Spot("dock") {
-            ToggleRow("Dock", "Its apps are kept while it is hidden", settings.showDock) { value -> change { it.copy(showDock = value) } }
+            ToggleRow(
+                "Dock",
+                if (settings.showDock) "Favourite apps at the foot of every page" else "Hidden. Its apps are kept for when it is back",
+                settings.showDock,
+            ) { value -> change { it.copy(showDock = value) } }
         }
         GroupDivider(inset = 16.dp)
         Spot("searchBar") {
@@ -265,6 +327,14 @@ internal fun HomeOptions(settings: ZenithSettings, plus: PlusStatus, preview: Se
                     options = listOf(HomeHeader.NAME to "Name", HomeHeader.GREETING to "Greeting", HomeHeader.OFF to "Nothing"),
                     selected = settings.header,
                     onSelect = { value -> change { it.copy(header = value) } },
+                )
+                Spacer(Modifier.height(8.dp))
+                Note(
+                    when (settings.header) {
+                        HomeHeader.GREETING -> "A greeting for the time of day, with your name, above the first row."
+                        HomeHeader.OFF -> "Nothing is written above the first row."
+                        else -> "Your name, small, above the first row."
+                    }
                 )
             }
         }
@@ -300,7 +370,8 @@ internal fun HomeOptions(settings: ZenithSettings, plus: PlusStatus, preview: Se
     }
     Group(rise = 6) {
         Spot("iconPack") {
-            Caption("Icon pack", Modifier.padding(start = 12.dp, top = 14.dp, bottom = 4.dp))
+            Caption("Icon pack", Modifier.padding(start = 12.dp, top = 14.dp, bottom = 2.dp))
+            Note("Redraws your apps' icons in a set from an icon pack app.", Modifier.padding(start = 12.dp, end = 12.dp, bottom = 4.dp))
             ChoiceRow("System icons", selected = settings.iconPack.isEmpty()) { change { it.copy(iconPack = "") } }
             packs.forEach { pack ->
                 GroupDivider(inset = 52.dp)
@@ -442,7 +513,7 @@ internal fun BackupOptions(plus: PlusStatus, actions: SettingsActions, onClose: 
             ActionRow(
                 icon = if (locked) Icons.Rounded.Lock else Icons.Rounded.Save,
                 title = "Back up home screen",
-                subtitle = "Save everything to a file",
+                subtitle = "Your layout, widgets and settings, saved to a file you keep",
                 onClick = actions.backup,
             )
         }
@@ -451,7 +522,7 @@ internal fun BackupOptions(plus: PlusStatus, actions: SettingsActions, onClose: 
             ActionRow(
                 icon = if (locked) Icons.Rounded.Lock else Icons.Rounded.Restore,
                 title = "Restore from a backup",
-                subtitle = "Replaces your current layout",
+                subtitle = "Puts a saved file back. Replaces your current layout and settings",
                 onClick = actions.restore,
             )
         }

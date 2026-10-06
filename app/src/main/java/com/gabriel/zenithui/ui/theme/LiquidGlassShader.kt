@@ -76,6 +76,8 @@ internal class LiquidGlassShader(sharp: ImageBitmap, blurred: ImageBitmap) {
         val wash = look.wash
         shader.setFloatUniform("wash", wash.red, wash.green, wash.blue, wash.alpha)
         shader.setFloatUniform("adapt", look.adapt)
+        val lift = look.lift
+        shader.setFloatUniform("lift", lift.red, lift.green, lift.blue, lift.alpha)
         // Glass materialises by bending light, not by fading: a pane on its way in bends less.
         shader.setFloatUniform("presence", look.opacity.coerceIn(0f, 1f))
         shader.setFloatUniform("touch", touch.at.x, touch.at.y, touch.reach, touch.strength)
@@ -129,6 +131,7 @@ internal class LiquidGlassShader(sharp: ImageBitmap, blurred: ImageBitmap) {
             uniform float dark;
             uniform float4 wash;
             uniform float adapt;
+            uniform float4 lift;
             uniform float presence;
             uniform float4 touch;
 
@@ -203,6 +206,11 @@ internal class LiquidGlassShader(sharp: ImageBitmap, blurred: ImageBitmap) {
                 float seen = dot(color, float3(0.2126, 0.7152, 0.0722));
                 float fight = dark > 0.5 ? smoothstep(0.42, 0.95, seen) : 1.0 - smoothstep(0.08, 0.55, seen);
                 color = mix(color, wash.rgb, clamp(wash.a + fight * adapt, 0.0, 0.95));
+                // Separation. Over a picture as dark as the pane itself, or in the light as pale,
+                // the glass would vanish into it; there, and only there, a little frost lifts the
+                // pane a step away from what is round it.
+                float same = dark > 0.5 ? 1.0 - smoothstep(0.05, 0.42, seen) : smoothstep(0.84, 0.99, seen);
+                color = mix(color, lift.rgb, lift.a * same);
 
                 // Light. A crisp line right on the rim, brightest where it faces the light, and a
                 // weaker reflection opposite, where light that crossed the glass leaves it.
@@ -252,6 +260,8 @@ internal data class GlassLook(
     /** How much thicker the veil gets over backgrounds that would make the text hard to read. */
     val adapt: Float,
     val opacity: Float,
+    /** The frost that lifts the pane off a picture of its own tone; its alpha is how much. */
+    val lift: Color = Color.Transparent,
 )
 
 /** A finger on a pane: where, in pane pixels; how far its glow has spread; and how bright it is. */

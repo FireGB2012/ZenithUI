@@ -316,7 +316,13 @@ private fun Browse(
             val toned = remember(theme, dark) { theme.toned(dark) }
             val styles = remember(group) { WallStyle.entries.filter { group == null || it.group == group } }
             Column {
-                Caption(if (theme.id == currentId) "Made to match your theme" else "In ${theme.name}'s colours")
+                Caption(
+                    if (theme.id == currentId) {
+                        "${styles.size} designs, painted in your theme's colours"
+                    } else {
+                        "${styles.size} designs, painted in ${theme.name}'s colours"
+                    }
+                )
                 Spacer(Modifier.height(10.dp))
                 styles.chunked(3).forEach { row ->
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {

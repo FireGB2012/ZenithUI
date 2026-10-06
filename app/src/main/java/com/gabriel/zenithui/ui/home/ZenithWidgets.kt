@@ -110,6 +110,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.isSpecified
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -117,6 +118,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextAlign
@@ -125,6 +127,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.gabriel.zenithui.data.ToggleNames
 import com.gabriel.zenithui.data.Widgets
 import com.gabriel.zenithui.ui.common.pressBounce
 import com.gabriel.zenithui.ui.theme.GlassMaterial
@@ -204,13 +207,18 @@ fun ZenithWidget(
 
     val palette = LocalPalette.current
     if (type.startsWith(Widgets.BARE_PREFIX)) {
+        // Straight on the wallpaper, words take the ink the labels under the icons have: white in
+        // the dark, near-black in the light, where Zenith's own wallpapers are pale and white
+        // words would be lost. Each gets a soft edge of the opposite tone to stand on.
         val shadow = with(LocalDensity.current) {
-            Shadow(Color.Black.copy(alpha = 0.5f), Offset(0f, 1.dp.toPx()), 6.dp.toPx())
+            if (palette.dark) {
+                Shadow(Color.Black.copy(alpha = 0.72f), Offset(0f, 1.dp.toPx()), 5.dp.toPx())
+            } else {
+                Shadow(Color.White.copy(alpha = 0.9f), Offset.Zero, 5.dp.toPx())
+            }
         }
         CompositionLocalProvider(
             LocalBare provides true,
-            // Straight on the wallpaper, words read best white, as they do on a lock screen.
-            LocalPalette provides palette.copy(dark = true),
             LocalTextStyle provides LocalTextStyle.current.merge(TextStyle(shadow = shadow)),
         ) {
             BoxWithConstraints(modifier) {
@@ -289,12 +297,31 @@ private fun tight(size: TextUnit, weight: FontWeight = FontWeight.Light) = TextS
     lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.Both),
 )
 
+/**
+ * The colour of a widget's second line: the date under the time, "On battery", "25 days left".
+ * Stronger than the muted grey a page uses, because a widget is read at a glance and over a
+ * wallpaper, and stronger still with no pane behind it.
+ */
+@Composable
+private fun quiet(): Color = LocalPalette.current.onGlass.copy(alpha = if (LocalBare.current) 0.94f else 0.82f)
+
+/**
+ * The accent as ink on a pane. A palette's accent is chosen to glow as a fill; as small letters on
+ * glass of nearly its own colour, Frost's blue over a blue wallpaper, it is hard to read. So words
+ * take it part of the way towards the pane's own ink: still the theme's colour, and legible.
+ */
+@Composable
+private fun accentInk(): Color {
+    val palette = LocalPalette.current
+    return lerp(palette.accent, palette.onGlass, if (palette.dark) 0.4f else 0.3f)
+}
+
 /** The small upper-case accent label that heads most widgets. White on the wallpaper, to be read. */
 @Composable
-private fun Caps(text: String, size: TextUnit = 10.sp, modifier: Modifier = Modifier) {
+private fun Caps(text: String, size: TextUnit = 11.sp, modifier: Modifier = Modifier) {
     Text(
         text = text.uppercase(),
-        color = if (LocalBare.current) Color.White.copy(alpha = 0.92f) else LocalPalette.current.accent,
+        color = if (LocalBare.current) LocalPalette.current.onGlass else accentInk(),
         fontSize = size,
         fontWeight = FontWeight.SemiBold,
         letterSpacing = 1.4.sp,
@@ -307,7 +334,12 @@ private fun Caps(text: String, size: TextUnit = 10.sp, modifier: Modifier = Modi
 @Composable
 private fun accentBrush(): Brush {
     val palette = LocalPalette.current
-    return Brush.linearGradient(listOf(palette.onGlass, palette.accent, palette.accentAlt))
+    // The accents a little towards the pane's ink, so the far end of a number is as easy to read
+    // as the near one.
+    val towards = if (palette.dark) 0.22f else 0.12f
+    return Brush.linearGradient(
+        listOf(palette.onGlass, lerp(palette.accent, palette.onGlass, towards), lerp(palette.accentAlt, palette.onGlass, towards))
+    )
 }
 
 /**
@@ -416,7 +448,7 @@ private fun ClockWidget(form: WidgetForm, userName: String, width: Dp, height: D
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Caps(shortDay)
-                Text(date, color = palette.onGlass.copy(alpha = 0.8f), fontSize = 12.sp, maxLines = 1)
+                Text(date, color = quiet(), fontSize = 13.sp, maxLines = 1)
             }
             if (bare) Symbol(sky, minOf(height * 0.36f, 26.dp))
         }
@@ -430,13 +462,18 @@ private fun ClockWidget(form: WidgetForm, userName: String, width: Dp, height: D
                 Caps(weekday, modifier = Modifier.weight(1f))
                 if (bare) Symbol(sky, 20.dp)
             }
-            // With no pane to fill, the numbers get the room: as big as a lock screen's.
-            val size = if (bare) fit(width * 0.4f, height * 0.29f) else fit(width * 0.27f, height * 0.19f)
+            // With no pane to fill, the numbers get the room: as big as a lock screen's, less what
+            // the day above them and the date below need, so a short widget keeps all three.
+            val size = if (bare) {
+                fit(width * 0.4f, minOf(height * 0.29f, (height - 80.dp) / 2))
+            } else {
+                fit(width * 0.27f, minOf(height * 0.19f, (height - 80.dp) / 2))
+            }
             Column {
                 Figure(hours, size, FontWeight.Medium, accent = false, animated = true)
                 Figure(minutes, size, FontWeight.Light, animated = true)
             }
-            Text(date, color = palette.onGlassMuted, fontSize = 11.sp, maxLines = 1)
+            Text(date, color = quiet(), fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1)
         }
 
         // The time big on the left, the day and a greeting on the right.
@@ -452,10 +489,10 @@ private fun ClockWidget(form: WidgetForm, userName: String, width: Dp, height: D
                         Symbol(sky, 18.dp)
                         Spacer(Modifier.width(6.dp))
                     }
-                    Caps(weekday, 11.sp)
+                    Caps(weekday, 12.sp)
                 }
                 Text(date, color = palette.onGlass, fontSize = 15.sp, fontWeight = FontWeight.Medium, maxLines = 1)
-                Text(hello, color = palette.onGlassMuted, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(hello, color = quiet(), fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
         }
 
@@ -474,7 +511,7 @@ private fun ClockWidget(form: WidgetForm, userName: String, width: Dp, height: D
             }
             AnalogFace(now, Modifier.fillMaxWidth(0.78f).aspectRatio(1f))
             Figure(time, fit(width * 0.15f, 24.dp), FontWeight.Medium, accent = false)
-            Text(date, color = palette.onGlassMuted, fontSize = 11.sp, maxLines = 1)
+            Text(date, color = quiet(), fontSize = 12.sp, maxLines = 1)
         }
 
         // A large face, the full date above it and a greeting below.
@@ -488,7 +525,7 @@ private fun ClockWidget(form: WidgetForm, userName: String, width: Dp, height: D
                     Spacer(Modifier.width(10.dp))
                 }
                 Column(Modifier.weight(1f)) {
-                    Caps(weekday, 11.sp)
+                    Caps(weekday, 12.sp)
                     Text(date, color = palette.onGlass, fontSize = 16.sp, fontWeight = FontWeight.Medium)
                 }
                 Figure(time, 22.sp, FontWeight.Medium)
@@ -496,7 +533,7 @@ private fun ClockWidget(form: WidgetForm, userName: String, width: Dp, height: D
             Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                 AnalogFace(now, Modifier.fillMaxHeight(0.8f).aspectRatio(1f, matchHeightConstraintsFirst = true))
             }
-            Text(hello, color = palette.onGlassMuted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(hello, color = quiet(), fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -643,7 +680,7 @@ private fun BatteryWidget(form: WidgetForm, width: Dp, height: Dp) {
             Spacer(Modifier.width(10.dp))
             Capsule(battery.fraction, Modifier.weight(1f).height(if (bare) 12.dp else 9.dp))
             Spacer(Modifier.width(12.dp))
-            Text(battery.percent, color = palette.onGlass, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+            Text(battery.percent, color = palette.onGlass, fontSize = 14.sp, fontWeight = FontWeight.Medium)
         }
 
         // The ring.
@@ -654,9 +691,9 @@ private fun BatteryWidget(form: WidgetForm, width: Dp, height: Dp) {
                     Symbol(symbol, 22.dp)
                     Spacer(Modifier.height(4.dp))
                 }
-                Figure(battery.percent, fit(width * 0.13f, 20.dp), FontWeight.Medium, accent = false)
+                Figure(battery.percent, fit(width * 0.15f, 24.dp), FontWeight.Medium, accent = false)
                 Spacer(Modifier.height(4.dp))
-                Text(battery.status, color = palette.onGlassMuted, fontSize = 11.sp)
+                Text(battery.status, color = quiet(), fontSize = 12.sp)
             }
         }
 
@@ -674,7 +711,7 @@ private fun BatteryWidget(form: WidgetForm, width: Dp, height: Dp) {
                 Caps("Battery")
                 Figure(battery.percent, fit(height * 0.2f, 28.dp))
                 Spacer(Modifier.height(6.dp))
-                Text(battery.status, color = palette.onGlassMuted, fontSize = 12.sp)
+                Text(battery.status, color = quiet(), fontSize = 13.sp)
                 Spacer(Modifier.height(10.dp))
                 Segments(battery.fraction, Modifier.fillMaxWidth())
             }
@@ -700,7 +737,7 @@ private fun BatteryWidget(form: WidgetForm, width: Dp, height: Dp) {
                         .weight(1f)
                         .fillMaxWidth(0.42f)
                         .clip(RoundedCornerShape(percent = 30))
-                        .background(Color.White.copy(alpha = 0.14f)),
+                        .background(palette.onGlass.copy(alpha = 0.14f)),
                 ) {
                     Box(
                         Modifier
@@ -733,7 +770,7 @@ private fun BatteryWidget(form: WidgetForm, width: Dp, height: Dp) {
                 }
             }
             Spacer(Modifier.height(10.dp))
-            Text(battery.status, color = palette.onGlassMuted, fontSize = 12.sp)
+            Text(battery.status, color = quiet(), fontSize = 13.sp)
         }
 
         // A large ring with the number in the middle and a gauge below.
@@ -743,8 +780,8 @@ private fun BatteryWidget(form: WidgetForm, width: Dp, height: Dp) {
                     Symbol(symbol, 22.dp)
                     Spacer(Modifier.width(8.dp))
                 }
-                Caps("Battery", 11.sp, Modifier.weight(1f))
-                Text(battery.status, color = palette.onGlassMuted, fontSize = 12.sp)
+                Caps("Battery", 12.sp, Modifier.weight(1f))
+                Text(battery.status, color = quiet(), fontSize = 13.sp)
             }
             Box(Modifier.weight(1f).fillMaxWidth().padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
                 Ring(battery.fraction, if (bare) 13.dp else 10.dp, Modifier.fillMaxSize(0.8f), charging = battery.charging)
@@ -795,7 +832,7 @@ private fun Ring(fraction: Float, stroke: Dp, modifier: Modifier, charging: Bool
     }
     Box(modifier) {
         Canvas(Modifier.fillMaxSize()) {
-            arc(280f, SolidColor(if (bare) Color.White.copy(alpha = 0.16f) else palette.onGlass.copy(alpha = 0.12f)))
+            arc(280f, SolidColor(palette.onGlass.copy(alpha = if (bare) 0.16f else 0.12f)))
             val sweep = (280f * filled.value).coerceIn(0f, 280f)
             if (!bare) arc(sweep, fill)
             val along = glint?.value
@@ -830,7 +867,7 @@ private const val GLINT = 26f
 private fun Capsule(fraction: Float, modifier: Modifier) {
     val palette = LocalPalette.current
     val bare = LocalBare.current
-    val track = if (bare) Color.White.copy(alpha = 0.16f) else palette.onGlass.copy(alpha = 0.12f)
+    val track = palette.onGlass.copy(alpha = if (bare) 0.16f else 0.12f)
     Box(modifier.clip(RoundedCornerShape(percent = 50)).background(track)) {
         Box(
             Modifier
@@ -858,7 +895,7 @@ private fun Segments(fraction: Float, modifier: Modifier) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             repeat(10) { index ->
                 val colour = when {
-                    bare -> Color.White.copy(alpha = 0.16f)
+                    bare -> palette.onGlass.copy(alpha = 0.16f)
                     index < lit -> palette.accent
                     else -> palette.onGlass.copy(alpha = 0.12f)
                 }
@@ -902,7 +939,7 @@ private fun CalendarWidget(form: WidgetForm, width: Dp, height: Dp) {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
-            Caps(today.format(DateTimeFormatter.ofPattern("EEE")), 8.sp)
+            Caps(today.format(DateTimeFormatter.ofPattern("EEE")), 9.sp)
             Spacer(Modifier.height(2.dp))
             Figure(day, fit(width * 0.36f, height * 0.34f), FontWeight.Medium, accent = false)
         }
@@ -920,7 +957,7 @@ private fun CalendarWidget(form: WidgetForm, width: Dp, height: Dp) {
             Spacer(Modifier.width(12.dp))
             Column {
                 Caps(weekday)
-                Text(month, color = palette.onGlass.copy(alpha = 0.8f), fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(month, color = quiet(), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
 
@@ -936,7 +973,7 @@ private fun CalendarWidget(form: WidgetForm, width: Dp, height: Dp) {
             Figure(day, fit(width * 0.32f, height * 0.28f))
             Column {
                 Text(month, color = palette.onGlass, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                Text(left, color = palette.onGlassMuted, fontSize = 11.sp)
+                Text(left, color = quiet(), fontSize = 12.sp)
             }
         }
 
@@ -951,15 +988,15 @@ private fun CalendarWidget(form: WidgetForm, width: Dp, height: Dp) {
                         Symbol(Icons.Rounded.CalendarMonth, 16.dp)
                         Spacer(Modifier.width(6.dp))
                     }
-                    Caps(weekday, 11.sp)
+                    Caps(weekday, 12.sp)
                 }
                 Figure(day, fit(height * 0.26f, 38.dp))
                 Spacer(Modifier.height(6.dp))
-                Text(month, color = palette.onGlass.copy(alpha = 0.85f), fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                Text(left, color = palette.onGlassMuted, fontSize = 11.sp)
+                Text(month, color = palette.onGlass, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                Text(left, color = quiet(), fontSize = 12.sp)
             }
             Spacer(Modifier.width(10.dp))
-            MonthGrid(today, 9.5.sp, 18.dp, Modifier.weight(1.2f).fillMaxHeight())
+            MonthGrid(today, 10.5.sp, 18.dp, Modifier.weight(1.2f).fillMaxHeight())
         }
 
         // The month, headed by today.
@@ -969,11 +1006,11 @@ private fun CalendarWidget(form: WidgetForm, width: Dp, height: Dp) {
                     Symbol(Icons.Rounded.CalendarMonth, 16.dp)
                     Spacer(Modifier.width(6.dp))
                 }
-                Caps(month, 11.sp)
+                Caps(month, 12.sp)
             }
             Figure(day, fit(width * 0.22f, 32.dp), modifier = Modifier.padding(start = 4.dp, top = 4.dp, bottom = 8.dp))
-            MonthGrid(today, 10.sp, 20.dp, Modifier.weight(1f).fillMaxWidth())
-            Text(left, color = palette.onGlassMuted, fontSize = 11.sp, modifier = Modifier.padding(start = 4.dp, top = 6.dp))
+            MonthGrid(today, 11.sp, 20.dp, Modifier.weight(1f).fillMaxWidth())
+            Text(left, color = quiet(), fontSize = 12.sp, modifier = Modifier.padding(start = 4.dp, top = 6.dp))
         }
 
         // A full month with room to breathe.
@@ -984,13 +1021,13 @@ private fun CalendarWidget(form: WidgetForm, width: Dp, height: Dp) {
                     Spacer(Modifier.width(10.dp))
                 }
                 Column(Modifier.weight(1f)) {
-                    Caps(weekday, 11.sp)
+                    Caps(weekday, 12.sp)
                     Text("${today.dayOfMonth} $month", color = palette.onGlass, fontSize = 18.sp, fontWeight = FontWeight.Medium)
                 }
-                Text(left, color = palette.onGlassMuted, fontSize = 12.sp)
+                Text(left, color = quiet(), fontSize = 13.sp)
             }
             Spacer(Modifier.height(12.dp))
-            MonthGrid(today, 12.sp, 26.dp, Modifier.weight(1f).fillMaxWidth())
+            MonthGrid(today, 13.sp, 26.dp, Modifier.weight(1f).fillMaxWidth())
         }
     }
 }
@@ -1096,8 +1133,8 @@ private fun MonthGrid(today: LocalDate, fontSize: TextUnit, dot: Dp, modifier: M
                                             color = when {
                                                 isToday && bare -> Color.White
                                                 isToday -> Color(0xFF0A0B12)
-                                                dow >= 5 -> palette.onGlass.copy(alpha = 0.5f)
-                                                else -> palette.onGlass.copy(alpha = 0.8f)
+                                                dow >= 5 -> palette.onGlass.copy(alpha = 0.62f)
+                                                else -> palette.onGlass.copy(alpha = 0.92f)
                                             },
                                             fontWeight = if (isToday) FontWeight.Bold else FontWeight.Normal,
                                         ),
@@ -1164,7 +1201,7 @@ private fun NotesWidget(form: WidgetForm, note: String, onNoteChange: (String) -
         WidgetForm.Square -> Column(Modifier.fillMaxSize().padding(14.dp)) {
             Heading()
             Spacer(Modifier.height(6.dp))
-            NoteField(note, onNoteChange, 13.sp, 18.sp, singleLine = false, ruled = false, placeholder = "Tap to jot something down", modifier = Modifier.weight(1f))
+            NoteField(note, onNoteChange, 14.sp, 19.sp, singleLine = false, ruled = false, placeholder = "Tap to jot something down", modifier = Modifier.weight(1f))
         }
 
         // A coloured margin down the side, like a sticky note.
@@ -1196,7 +1233,7 @@ private fun NotesWidget(form: WidgetForm, note: String, onNoteChange: (String) -
         WidgetForm.Tall -> Column(Modifier.fillMaxSize().padding(14.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Heading(Modifier.weight(1f))
-                Text(today, color = palette.onGlassMuted, fontSize = 10.sp)
+                Text(today, color = quiet(), fontSize = 12.sp)
             }
             Spacer(Modifier.height(8.dp))
             NoteField(note, onNoteChange, 14.sp, 22.sp, singleLine = false, ruled = true, placeholder = "Tap to write", modifier = Modifier.weight(1f))
@@ -1211,7 +1248,7 @@ private fun NotesWidget(form: WidgetForm, note: String, onNoteChange: (String) -
                 }
                 Column {
                     Text("Notes", color = palette.onGlass, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
-                    Text(today, color = palette.onGlassMuted, fontSize = 12.sp)
+                    Text(today, color = quiet(), fontSize = 13.sp)
                 }
             }
             Spacer(Modifier.height(12.dp))
@@ -1276,7 +1313,7 @@ private fun NoteField(
                 if (note.isEmpty()) {
                     Text(
                         placeholder,
-                        color = palette.onGlass.copy(alpha = if (bare) 0.6f else 0.32f),
+                        color = palette.onGlass.copy(alpha = if (bare) 0.74f else 0.5f),
                         fontSize = fontSize,
                         maxLines = if (singleLine) 1 else 3,
                         softWrap = !singleLine,
@@ -1300,6 +1337,22 @@ private val MAX_TILE_HEIGHT = 118.dp
 
 /** The height of cell from which a tile has room for a second line under its name. */
 private val TILE_DETAIL_FROM = 92.dp
+
+/** The name under a round toggle: the size of the label under an app, and a little heavier. */
+private val TOGGLE_NAME = 12.sp
+private val TOGGLE_NAME_LINE = 15.sp
+private val TOGGLE_NAME_STYLE = TextStyle(
+    fontSize = TOGGLE_NAME,
+    lineHeight = TOGGLE_NAME_LINE,
+    fontWeight = FontWeight.Medium,
+    textAlign = TextAlign.Center,
+)
+
+/** Between a round toggle and its name. */
+private val TOGGLE_NAME_GAP = 5.dp
+
+/** The smallest a round toggle may get to make room for a second line of name under it. */
+private val TOGGLE_NAMED_BUTTON = 38.dp
 
 /** One control the Quick Toggles widget can show. */
 @Immutable
@@ -1398,9 +1451,32 @@ private fun TogglesWidget(form: WidgetForm, chosen: List<String>, width: Dp, hei
     val tiles = cellWidth >= 120.dp && cellHeight >= 80.dp
     val list = !tiles && columns == 1 && cellWidth >= 110.dp
     val named = !tiles && !list && cellHeight >= 66.dp && cellWidth >= 58.dp
+
+    // A name under a button is set like the label under an app. The longest decides for them all,
+    // so every button in the widget stays level: see ToggleNames for the rule.
+    val density = LocalDensity.current
+    val measurer = rememberTextMeasurer()
+    val labels = toggles.map { it.label }
+    val nameLine = with(density) { TOGGLE_NAME_LINE.toDp() }
+    val names = remember(labels, cellWidth, cellHeight, density.density, density.fontScale) {
+        fun widthOf(text: String) = with(density) {
+            measurer.measure(text, TOGGLE_NAME_STYLE, softWrap = false, maxLines = 1).size.width.toDp().value
+        }
+        ToggleNames.fit(
+            widestName = labels.maxOf { widthOf(it) },
+            widestWord = labels.flatMap { it.split(' ') }.maxOf { widthOf(it) },
+            cell = (cellWidth - 2.dp).value,
+            roomForTwo = (cellHeight - TOGGLE_NAME_GAP - nameLine * 2) * 0.9f >= TOGGLE_NAMED_BUTTON,
+        )
+    }
+    val nameStyle = TOGGLE_NAME_STYLE.copy(
+        fontSize = TOGGLE_NAME * names.scale,
+        lineHeight = TOGGLE_NAME_LINE * names.scale,
+        color = palette.onGlass,
+    )
     val button = when {
         list -> minOf(cellHeight * 0.72f, 42.dp)
-        named -> minOf(cellWidth * 0.6f, (cellHeight - 18.dp) * 0.82f, 46.dp)
+        named -> minOf(cellWidth * 0.6f, (cellHeight - TOGGLE_NAME_GAP - nameLine * names.scale * names.lines) * 0.9f, 46.dp)
         else -> minOf(cellWidth, cellHeight) * 0.74f
     }.coerceAtMost(46.dp)
 
@@ -1426,12 +1502,19 @@ private fun TogglesWidget(form: WidgetForm, chosen: List<String>, width: Dp, hei
                             list -> Row(verticalAlignment = Alignment.CenterVertically) {
                                 ToggleButton(toggle, button)
                                 Spacer(Modifier.width(10.dp))
-                                Text(toggle.label, color = palette.onGlass, fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(toggle.label, color = palette.onGlass, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             }
                             named -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 ToggleButton(toggle, button)
-                                Spacer(Modifier.height(5.dp))
-                                Text(toggle.label, color = palette.onGlass.copy(alpha = 0.8f), fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Spacer(Modifier.height(TOGGLE_NAME_GAP))
+                                // Every name takes the same number of lines, so the buttons line up.
+                                Text(
+                                    toggle.label,
+                                    style = nameStyle,
+                                    minLines = names.lines,
+                                    maxLines = names.lines,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
                             }
                             else -> ToggleButton(toggle, button)
                         }
@@ -1579,7 +1662,7 @@ private fun ToggleTile(toggle: Toggle, modifier: Modifier, detail: Boolean) {
             verticalArrangement = Arrangement.SpaceBetween,
         ) {
             Symbol(toggle.icon, 34.dp, tint = ink)
-            TileText(toggle, Color.White, detail)
+            TileText(toggle, palette.onGlass, detail)
         }
         return
     }
@@ -1605,12 +1688,12 @@ private fun ToggleTile(toggle: Toggle, modifier: Modifier, detail: Boolean) {
 
 @Composable
 private fun ColumnScope.TileText(toggle: Toggle, ink: Color, detail: Boolean) {
-    Text(toggle.label, color = ink, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    Text(toggle.label, color = ink, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
     if (!detail) return
     Text(
         text = if (toggle.option.id == "torch") (if (toggle.active) "On" else "Off") else "Open",
-        color = ink.copy(alpha = 0.7f),
-        fontSize = 11.sp,
+        color = ink.copy(alpha = 0.8f),
+        fontSize = 12.sp,
         maxLines = 1,
     )
 }

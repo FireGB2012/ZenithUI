@@ -45,6 +45,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -70,6 +71,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -439,6 +441,57 @@ internal fun PillSlider(
         ) {
             Text(label, color = palette.onGlass, fontSize = 15.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
             Text(display, color = palette.onGlass.copy(alpha = 0.8f), fontSize = 14.sp)
+        }
+    }
+}
+
+/**
+ * A number that goes up and down a step at a time: what it counts, the number, and a minus and a
+ * plus either side of it. At the end of its range that button dims and does nothing.
+ */
+@Composable
+internal fun StepperRow(title: String, value: Int, range: IntRange, onChange: (Int) -> Unit) {
+    val palette = LocalPalette.current
+    val tick = rememberTick()
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 4.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(title, color = palette.onGlass, fontSize = 16.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+        listOf(-1, 1).forEach { step ->
+            val next = value + step
+            val can = next in range
+            if (step == 1) {
+                Text(
+                    "$value",
+                    color = palette.onGlass,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.width(44.dp),
+                )
+            }
+            Box(
+                Modifier
+                    .size(44.dp)
+                    .pressBounce(0.9f, enabled = can)
+                    .clip(CircleShape)
+                    .background(palette.onGlass.copy(alpha = if (can) 0.10f else 0.04f))
+                    .clickable(enabled = can, onClickLabel = if (step < 0) "One fewer" else "One more") {
+                        tick()
+                        onChange(next)
+                    },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    if (step < 0) Icons.Rounded.Remove else Icons.Rounded.Add,
+                    contentDescription = if (step < 0) "Fewer $title" else "More $title",
+                    tint = palette.onGlass.copy(alpha = if (can) 1f else 0.3f),
+                    modifier = Modifier.size(20.dp),
+                )
+            }
         }
     }
 }

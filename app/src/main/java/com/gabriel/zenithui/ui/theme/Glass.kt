@@ -43,6 +43,7 @@ import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import com.gabriel.zenithui.data.GlassBody
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlin.math.ceil
@@ -97,6 +98,7 @@ fun Modifier.glass(
         dark = palette.dark,
         tint = if (tint.isSpecified) tint else palette.glassTint,
         border = border,
+        depth = LocalGlassBody.current,
     )
     val lens = rememberLens(sharp, backdrop)
     var origin by remember { mutableStateOf(Offset.Zero) }
@@ -274,10 +276,12 @@ internal fun glassLook(
     dark: Boolean,
     tint: Color,
     border: Boolean = true,
+    /** How much body the person asked the glass to have. Clear is the glass with nothing added. */
+    depth: GlassBody = GlassBody.Clear,
 ): GlassLook {
     val clear = material == GlassMaterial.Clear
     val amount = strength.coerceIn(0f, 1.4f)
-    val body = solid.coerceIn(0f, 1.5f)
+    val body = (solid + depth.solid).coerceIn(0f, 1.5f)
     // A whisper of the theme in the veil, never enough to turn the glass into a coloured card.
     val veil = lerp(if (dark) Color(0xFF0A0C12) else Color.White, tint, 0.10f)
     val veilAlpha = if (dark) {
@@ -289,13 +293,37 @@ internal fun glassLook(
         refraction = (if (clear) 1f else 0.72f) * (0.35f + 0.65f * min(amount, 1f)),
         frost = ((if (clear) 0.08f else 0.80f) + 0.20f * body).coerceIn(0f, 1f),
         dispersion = (if (clear) 0.08f else 0.05f) * min(amount, 1f),
-        shine = if (border) 0.32f + 0.26f * min(amount, 1.2f) else 0f,
+        // A lifted pane gets a slightly surer rim too: the edge is what is read first.
+        shine = if (border) 0.32f + 0.26f * min(amount, 1.2f) + 0.06f * depth.lift else 0f,
         vibrance = if (clear) 1.14f else 1.22f,
         wash = veil.copy(alpha = veilAlpha.coerceIn(0f, 0.92f)),
         adapt = (if (clear) 0.30f else 0.34f) + 0.2f * min(body, 1f),
         opacity = opacity.coerceIn(0f, 1f),
+        lift = glassLift(clear, dark, tint, body, depth.lift),
     )
 }
+
+/**
+ * The frost that lifts a pane off a picture of its own tone. In the dark a pane over a dark
+ * wallpaper is a dark veil on a dark picture, and only its rim says it is there; a little pale
+ * frost, in the theme's colour, makes it a shade lighter than what is round it. In the light it is
+ * the other way about: over a near-white picture the pane takes a faint cool shade. The colour is
+ * the frost; its alpha is how much of it, and the shader lays it on only where the picture behind
+ * really is that dark or that pale, so glass over anything else stays as clear as it was.
+ *
+ * A pane that already has a full veil, like a sheet, needs less of it.
+ */
+internal fun glassLift(clear: Boolean, dark: Boolean, tint: Color, body: Float, lift: Float): Color {
+    val tone = if (dark) lerp(Color.White, tint, 0.22f) else lerp(Color(0xFF5E6878), tint, 0.18f)
+    val most = if (dark) (if (clear) LIFT_DARK_CLEAR else LIFT_DARK) else (if (clear) LIFT_LIGHT_CLEAR else LIFT_LIGHT)
+    val amount = most * lift.coerceIn(0f, 1f) * (1f - 0.5f * body.coerceIn(0f, 1f))
+    return tone.copy(alpha = amount)
+}
+
+internal const val LIFT_DARK = 0.115f
+internal const val LIFT_DARK_CLEAR = 0.085f
+internal const val LIFT_LIGHT = 0.14f
+internal const val LIFT_LIGHT_CLEAR = 0.10f
 
 /**
  * Paints one pane of glass into [paneSize] at the top-left of the current draw scope. [origin] is
@@ -371,6 +399,11 @@ internal fun DrawScope.drawLiquidGlass(
             )
         }
         drawRect(look.wash, size = paneSize, alpha = look.opacity)
+        // No shader to see how dark the picture is under each point, so the lift goes on evenly
+        // and a little thinner.
+        if (look.lift.alpha > 0f) {
+            drawRect(look.lift.copy(alpha = look.lift.alpha * 0.7f), size = paneSize, alpha = look.opacity)
+        }
     } else {
         // Nothing readable behind (a live wallpaper, or setup): a frosted body of its own, lit
         // from the top, so the pane still reads as glass rather than a flat card.

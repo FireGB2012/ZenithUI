@@ -37,7 +37,7 @@ LIQUID GLASS
 Panels are translucent, tinted and lit from the top edge, and once Zenith is your default home app they blur a copy of your own wallpaper - so the launcher looks made of your background, not painted over it. Tilt the phone and the light travels round the edge of every panel.
 
 WALLPAPERS MADE TO MATCH
-Zenith paints its own: twenty-two designs - soft glows, flowing lines, glass shapes and whole scenes - in every theme's colours, light and dark. And the wallpaper follows your theme: change the palette, or let the phone go dark in the evening, and the same design is repainted to match and faded in. Your own photos are one row away, and never touched.
+Zenith paints its own: thirty-three designs - soft glows, flowing lines, glass shapes and whole scenes - in every theme's colours, light and dark. And the wallpaper follows your theme: change the palette, or let the phone go dark in the evening, and the same design is repainted to match and faded in. Your own photos are one row away, and never touched.
 
 BUILT FOR ONE HAND
 Menus are bottom sheets. The app drawer's search field sits at the bottom where your thumb already is, and the drawer follows your finger up and down.
@@ -64,7 +64,7 @@ AURA
 Open Zenith once a day and the streak pays you: ten points on day one, more for every day in a row, up to fifty. Points buy themes - five to start with, from Ember to Obsidian. Miss a day and the streak starts again; what you earned stays. With a Zenith account, a friend who uses your code gets 150 points, and so do you.
 
 MAKE IT YOURS
-Six palettes, light, dark or automatic, adjustable glass, Compact, Balanced or Roomy grids, labels on or off, four icon shapes, and support for any Nova or ADW compatible icon pack.
+Six palettes, light, dark or automatic, adjustable glass, Compact, Balanced, Roomy or your own grid, labels on or off, four icon shapes, and support for any Nova or ADW compatible icon pack.
 
 BEDSIDE CLOCK
 Tap the clock widget for a dimmed full screen clock with the date and today's calendar.
@@ -83,7 +83,7 @@ Zenith UI asks to set your wallpaper, to vibrate, and for the internet (Google P
 ```
 First release.
 - Liquid glass home screen that blurs your wallpaper
-- Twenty-two wallpapers that change colour with your theme
+- Thirty-three wallpapers that change colour with your theme
 - Twenty second setup with a live preview of your phone
 - Five widgets in a live gallery, plus a search bar
 - Fly-in, four page swipes, jiggle, folders that open in place

@@ -40,9 +40,10 @@ object SettingsCatalog {
         SettingsEntry("wallpaper", SettingsPage.Theme, "Wallpaper", "background picture photo design"),
         SettingsEntry("wallpaperFollow", SettingsPage.Theme, "Wallpaper follows theme", "repaint match colour color"),
         SettingsEntry("glass", SettingsPage.Theme, "Glass", "blur frost transparency strength liquid"),
+        SettingsEntry("glassBody", SettingsPage.Theme, "Glass panels", "clear frosted solid contrast readable see through transparent blend wallpaper stand out"),
         SettingsEntry("tiltShine", SettingsPage.Theme, "Tilt shine", "highlight light reflection gyro"),
 
-        SettingsEntry("grid", SettingsPage.Home, "Grid", "density compact balanced roomy columns rows size icons"),
+        SettingsEntry("grid", SettingsPage.Home, "Grid", "density compact balanced roomy custom columns rows size icons layout cells"),
         SettingsEntry("iconShape", SettingsPage.Home, "Icon shape", "squircle circle rounded square"),
         SettingsEntry("iconPack", SettingsPage.Home, "Icon pack", "icons nova adw"),
         SettingsEntry("labels", SettingsPage.Home, "Labels", "names text app names"),

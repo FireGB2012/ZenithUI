@@ -54,6 +54,7 @@ fun Modifier.glassInk(bevel: Dp = 4.dp, halo: Boolean = true): Modifier {
     val wallpaperOffset = LocalWallpaperOffset.current
     val tilt = LocalTilt.current
     val strength = LocalGlassStrength.current.coerceIn(0f, 1.4f)
+    val lift = LocalGlassBody.current.lift
     val ink = remember(sharp, backdrop) {
         // A GPU that cannot compile it still shows the shape, plainly.
         runCatching { GlassInkShader(sharp, backdrop) }.getOrNull()
@@ -76,12 +77,16 @@ fun Modifier.glassInk(bevel: Dp = 4.dp, halo: Boolean = true): Modifier {
                 light = Offset(-0.45f - 1.6f * lean.x, -1f - 1.2f * lean.y),
                 strength = strength,
                 halo = halo,
+                lift = lift,
             )?.asComposeRenderEffect()
         }
         .padding(INK_BLEED)
 }
 
 private val INK_BLEED = 8.dp
+
+/** How much more light lifted glass gathers over a dark picture, on top of what it always does. */
+private const val INK_GATHER = 0.27f
 
 /**
  * Lets the next modifiers draw [margin] past this element's edges on every side without taking
@@ -123,6 +128,8 @@ internal class GlassInkShader(sharp: ImageBitmap?, blurred: ImageBitmap?) {
         light: Offset,
         strength: Float,
         halo: Boolean,
+        /** How far the glass is lifted off a picture of its own tone: see GlassBody. */
+        lift: Float = 0f,
     ): RenderEffect? {
         if (size.width <= 0f || size.height <= 0f) return null
         val visible = seeThrough && sharpSize != null && blurSize != null && screen.width > 0 && screen.height > 0
@@ -144,7 +151,9 @@ internal class GlassInkShader(sharp: ImageBitmap?, blurred: ImageBitmap?) {
         shader.setFloatUniform("refraction", 0.55f + 0.45f * strength.coerceAtMost(1.2f))
         val length = hypot(light.x, light.y).coerceAtLeast(0.001f)
         shader.setFloatUniform("light", light.x / length, light.y / length)
-        shader.setFloatUniform("halo", if (halo) 0.26f else 0f)
+        val lifted = lift.coerceIn(0f, 1f)
+        shader.setFloatUniform("halo", if (halo) 0.26f + 0.10f * lifted else 0f)
+        shader.setFloatUniform("gather", INK_GATHER * lifted)
         // The uniforms are copied into the effect as it is made, so every change needs a new one.
         return RenderEffect.createRuntimeShaderEffect(shader, "content")
     }
@@ -175,6 +184,7 @@ internal class GlassInkShader(sharp: ImageBitmap?, blurred: ImageBitmap?) {
             uniform float refraction;
             uniform float2 light;
             uniform float halo;
+            uniform float gather;
 
             float3 behind(float2 point, float blur) {
                 if (seeThrough < 0.5) {
@@ -246,15 +256,19 @@ internal class GlassInkShader(sharp: ImageBitmap?, blurred: ImageBitmap?) {
                 float3 ink = clamp(float3(src.rgb) / max(a, 0.001), 0.0, 1.0);
                 float chroma = max(ink.r, max(ink.g, ink.b)) - min(ink.r, min(ink.g, ink.b));
                 color = mix(color, ink * (0.35 + 0.9 * luma), clamp(chroma * 1.4, 0.0, 0.85));
-                // Glass gathers light: it reads brighter than the picture it sits on.
-                color = mix(color, float3(1.0), 0.12);
+                // Glass gathers light: it reads brighter than the picture it sits on, and most
+                // over a dark one, where clear glass would be lost. Over a pale one it is the other
+                // way about, and the glass holds a little shade of its own.
+                float lowlight = 1.0 - smoothstep(0.08, 0.62, luma);
+                color = mix(color, float3(1.0), 0.12 + gather * lowlight);
+                color *= 1.0 - 1.5 * gather * smoothstep(0.62, 0.95, luma);
 
                 // Light: a crisp line along the edges facing it, a weaker one where it leaves,
                 // a soft bloom on the lit curve, and the rim brighter at its grazing angle.
                 float facing = dot(normal, light);
                 float lit = max(facing, 0.0);
                 float away = max(-facing, 0.0);
-                float rim = hairline * (0.12 + 0.58 * pow(lit, 1.4) + 0.28 * pow(away, 1.8));
+                float rim = hairline * (0.12 + 0.3 * gather + 0.58 * pow(lit, 1.4) + 0.28 * pow(away, 1.8));
                 float bloom = t * t * t * (0.18 * pow(lit, 2.0) + 0.06 * pow(away, 2.4));
                 color += rim + bloom + pow(t, 4.0) * 0.04;
                 // The curve turned from the light sits in the glass's own shadow.

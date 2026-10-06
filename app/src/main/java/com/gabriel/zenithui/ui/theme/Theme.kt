@@ -22,6 +22,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.gabriel.zenithui.data.GlassBody
 import com.gabriel.zenithui.data.ZenithSettings
 
 val LocalPalette = staticCompositionLocalOf { Palettes.Midnight }
@@ -40,6 +41,9 @@ val LocalScreenSize = staticCompositionLocalOf { IntSize.Zero }
 
 /** 0f = flat translucency, 1f = full liquid glass. */
 val LocalGlassStrength = staticCompositionLocalOf { 0.8f }
+
+/** How much body every pane has: whether it is lifted off a wallpaper of its own tone. */
+val LocalGlassBody = staticCompositionLocalOf { GlassBody.Frosted }
 
 private val ZenithTypography = Typography(
     displayLarge = TextStyle(fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.Light, fontSize = 64.sp, letterSpacing = (-2).sp),
@@ -111,6 +115,7 @@ fun ZenithTheme(
         LocalGlassBackdrop provides sharpBackdrop,
         LocalScreenSize provides screenSize,
         LocalGlassStrength provides settings.glass,
+        LocalGlassBody provides GlassBody.byId(settings.glassBody),
     ) {
         MaterialTheme(
             colorScheme = scheme,

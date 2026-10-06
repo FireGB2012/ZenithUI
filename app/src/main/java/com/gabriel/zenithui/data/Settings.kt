@@ -16,8 +16,13 @@ data class ZenithSettings(
     /** auto | light | dark */
     val appearance: String = "dark",
     val glass: Float = 0.8f,
-    /** compact | balanced | roomy — the cell size you asked for. */
+    /** How much body the glass panels have: clear | frosted | solid. See [GlassBody]. */
+    val glassBody: String = "frosted",
+    /** compact | balanced | roomy — the cell size you asked for — or custom, for a grid of your own. */
     val gridDensity: String = "balanced",
+    /** The grid picked by hand, used when [gridDensity] is custom. 0 means none has been picked. */
+    val gridColumns: Int = 0,
+    val gridRows: Int = 0,
     /** Derived from [gridDensity] and the screen; never edited directly. */
     val columns: Int = 4,
     val rows: Int = 5,
@@ -69,6 +74,8 @@ data class ZenithSettings(
     val note: String = "",
     /** How many times we have shown the system "default home app" prompt. */
     val homePrompts: Int = 0,
+    /** "Not now" to today's events on the bedside clock: it stops offering them until asked. */
+    val calendarDeclined: Boolean = false,
     /** 0 = rows only, 1 = rows divided into units, 2 = everything on whole rows. */
     val layoutVersion: Int = 0,
 
@@ -121,7 +128,10 @@ data class ZenithSettings(
         put("paletteId", paletteId)
         put("appearance", appearance)
         put("glass", glass.toDouble())
+        put("glassBody", glassBody)
         put("gridDensity", gridDensity)
+        put("gridColumns", gridColumns)
+        put("gridRows", gridRows)
         put("columns", columns)
         put("rows", rows)
         put("iconSize", iconSize)
@@ -164,6 +174,7 @@ data class ZenithSettings(
         put("pages", pages)
         put("note", note)
         put("homePrompts", homePrompts)
+        put("calendarDeclined", calendarDeclined)
         put("layoutVersion", layoutVersion)
     }
 
@@ -178,8 +189,11 @@ data class ZenithSettings(
                 paletteId = o.optString("paletteId", d.paletteId),
                 appearance = o.optString("appearance", d.appearance),
                 glass = o.optDouble("glass", d.glass.toDouble()).toFloat(),
+                glassBody = o.optString("glassBody", d.glassBody),
                 // Layouts saved before densities existed are matched to the nearest preset.
                 gridDensity = o.optString("gridDensity", GridDensity.fromGrid(columns, rows).id),
+                gridColumns = o.optInt("gridColumns", d.gridColumns),
+                gridRows = o.optInt("gridRows", d.gridRows),
                 columns = columns,
                 rows = rows,
                 iconSize = o.optInt("iconSize", d.iconSize),
@@ -226,6 +240,7 @@ data class ZenithSettings(
                 pages = o.optInt("pages", d.pages),
                 note = o.optString("note", d.note),
                 homePrompts = o.optInt("homePrompts", d.homePrompts),
+                calendarDeclined = o.optBoolean("calendarDeclined", d.calendarDeclined),
                 layoutVersion = o.optInt("layoutVersion", d.layoutVersion),
             )
         }

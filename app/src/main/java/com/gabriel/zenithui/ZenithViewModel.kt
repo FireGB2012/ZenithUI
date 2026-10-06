@@ -24,6 +24,7 @@ import com.gabriel.zenithui.data.occupyItem
 import com.gabriel.zenithui.data.Plus
 import com.gabriel.zenithui.data.PlusStatus
 import com.gabriel.zenithui.data.ROW_UNITS
+import com.gabriel.zenithui.data.Reshape
 import com.gabriel.zenithui.data.SettingsStore
 import com.gabriel.zenithui.data.WidgetCell
 import com.gabriel.zenithui.data.Widgets
@@ -682,9 +683,9 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
      * size — a fold opening, a rotation, a tablet — so cells keep the size the user asked for
      * instead of stretching to fill whatever glass they are on.
      */
-    fun resolveGrid(density: GridDensity, widthDp: Float, heightDp: Float) {
-        val (columns, rows) = density.gridFor(widthDp, heightDp)
+    fun resolveGrid(widthDp: Float, heightDp: Float) {
         val current = settings.value
+        val (columns, rows) = GridDensity.resolve(current.gridDensity, current.gridColumns, current.gridRows, widthDp, heightDp)
         if (columns == current.columns && rows == current.rows) return
         updateSettings { it.copy(columns = columns, rows = rows) }
     }
@@ -789,6 +790,32 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
         store.mutateLayout { items ->
             items.map { if (it.id == id) widget.copy(spanX = targetX, spanY = targetY) else it }
         }
+        return true
+    }
+
+    /**
+     * Gives a widget one of the gallery's named sizes while it is on the page: where it stands if
+     * there is room, otherwise the closest opening on its page. False when the page has no room.
+     */
+    fun resizeWidgetTo(id: String, spanX: Int, spanY: Int): Boolean {
+        val widget = layout.value.firstOrNull { it.id == id } as? WidgetCell ?: return false
+        val spec = Widgets.byType(widget.type) ?: return false
+        val s = settings.value
+        val (targetX, targetY) = Widgets.clampSpan(spec, spanX, LayoutBuilder.wholeRows(spanY), s.columns, s.rows)
+        val next = Reshape.resized(layout.value, id, targetX, targetY, s.columns, s.rows, rowStep()) ?: return false
+        if (next != layout.value) store.setLayout(next)
+        return true
+    }
+
+    /**
+     * Moves an item one cell across or one row up or down from the resize bar. A row is a whole
+     * row, or a quarter of one with free placement on. False when the page ends there or
+     * something is in the way.
+     */
+    fun nudgeItem(id: String, dCol: Int, dRows: Int): Boolean {
+        val s = settings.value
+        val next = Reshape.nudged(layout.value, id, dCol, dRows * rowStep(), s.columns, s.rows) ?: return false
+        if (next != layout.value) store.setLayout(next)
         return true
     }
 

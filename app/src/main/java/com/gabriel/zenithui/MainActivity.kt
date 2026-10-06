@@ -40,7 +40,6 @@ import androidx.core.view.WindowCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
-import com.gabriel.zenithui.data.GridDensity
 import com.gabriel.zenithui.data.RefreshRate
 import com.gabriel.zenithui.data.findActivity
 import com.gabriel.zenithui.ui.common.LocalHapticsOn
@@ -153,7 +152,7 @@ fun ZenithApp(viewModel: ZenithViewModel) {
     // The grid is a function of the screen, not a stored number: re-derive it whenever the window
     // resizes, so a fold opening or a tablet gets more cells rather than bigger ones.
     val pixelsPerDp = LocalDensity.current.density
-    LaunchedEffect(screenSize, settings.gridDensity, settings.onboarded) {
+    LaunchedEffect(screenSize, settings.gridDensity, settings.gridColumns, settings.gridRows, settings.onboarded) {
         if (!settings.onboarded || screenSize == IntSize.Zero) return@LaunchedEffect
         // Only a size that has settled counts. While the window is still being laid out it can
         // report a smaller size for a frame or two, and a grid worked out from that would tidy
@@ -161,7 +160,6 @@ fun ZenithApp(viewModel: ZenithViewModel) {
         kotlinx.coroutines.delay(350)
         if (screenSize.width / pixelsPerDp < 280f || screenSize.height / pixelsPerDp < 400f) return@LaunchedEffect
         viewModel.resolveGrid(
-            density = GridDensity.byId(settings.gridDensity),
             widthDp = screenSize.width / pixelsPerDp,
             heightDp = screenSize.height / pixelsPerDp,
         )

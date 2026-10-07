@@ -97,9 +97,13 @@ class SettingsJsonTest {
         assertEquals("", old.wallpaperStyle)
         assertFalse(old.searchBar)
         assertEquals("name", old.header)
-        // Panels that stand out from the wallpaper are what everybody gets, old settings or new.
-        assertEquals("frosted", old.glassBody)
-        assertEquals(GlassBody.Frosted, GlassBody.byId(old.glassBody))
+        // The glass is the glass it has always been unless more body is asked for.
+        assertEquals("clear", old.glassBody)
+        assertEquals(GlassBody.Clear, GlassBody.byId(old.glassBody))
+        // Frosted was what everybody got for a day, saved under another name: that is not kept.
+        assertEquals("clear", ZenithSettings.fromJson(JSONObject("""{"glassBody":"frosted"}""")).glassBody)
+        // Asked for by name, it is.
+        assertEquals("frosted", ZenithSettings.fromJson(JSONObject("""{"glassPanels":"frosted"}""")).glassBody)
     }
 
     @Test

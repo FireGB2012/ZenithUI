@@ -176,17 +176,18 @@ shows the wallpaper exactly where it is, the rounded rim bends and magnifies it 
 edge of a thick lens with a faint colour split — a bigger pane is a thicker slab and bends more —
 and a crisp highlight runs round the rim where it faces the light, with a weaker one opposite, both
 moving as the phone tilts. A readable veil thickens only over parts of the wallpaper that would
-fight the text. And glass never quite matches what is behind it: over a wallpaper as dark as the
-pane itself, or in the light as pale, a little frost in the theme's colour lifts the pane a step
-away, there and nowhere else (`glassLift`). That is **Glass panels: Frosted** in Settings → Wallpaper
-& theme, the default; **Clear** leaves it out and **Solid** adds a fuller veil (`GlassBody`). Every pane floats on a soft shadow, and panes you press (`interactive = true`: the
+fight the text. That is **Glass panels: Clear** in Settings → Wallpaper & theme, the glass as it has
+always been and what everybody has unless they ask for more. **Frosted** is for a wallpaper as
+dark as the pane itself, or in the light as pale, where clear glass is mostly its rim: a little
+frost in the theme's colour lifts the pane a step away, there and nowhere else (`glassLift`).
+**Solid** adds a fuller veil on top of that (`GlassBody`). Every pane floats on a soft shadow, and panes you press (`interactive = true`: the
 dock, folders, widgets, search) light up from within, the glow starting under your finger.
 
 `Modifier.glassInk()` makes whatever a composable draws out of glass, for the "No glass" widgets:
 its own outline becomes the rim, so the wallpaper bends at the edges of each numeral and icon and
 the highlight runs along them. What is drawn white is clear glass; a colour becomes tinted glass.
-Lifted glass gathers more light over a dark wallpaper, so a glass clock is read as easily as a
-printed one.
+With Glass panels on Frosted or Solid the glass also gathers more light over a dark wallpaper, so
+a glass clock stands out from it.
 
 Android 13+ does not let a launcher read the wallpaper, so `GlassWallpaper` keeps its own copy of
 any wallpaper Zenith sets (its own designs, or a photo picked under Wallpapers → Your photos) and

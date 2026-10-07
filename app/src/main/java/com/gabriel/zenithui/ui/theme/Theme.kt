@@ -43,7 +43,7 @@ val LocalScreenSize = staticCompositionLocalOf { IntSize.Zero }
 val LocalGlassStrength = staticCompositionLocalOf { 0.8f }
 
 /** How much body every pane has: whether it is lifted off a wallpaper of its own tone. */
-val LocalGlassBody = staticCompositionLocalOf { GlassBody.Frosted }
+val LocalGlassBody = staticCompositionLocalOf { GlassBody.Clear }
 
 private val ZenithTypography = Typography(
     displayLarge = TextStyle(fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.Light, fontSize = 64.sp, letterSpacing = (-2).sp),

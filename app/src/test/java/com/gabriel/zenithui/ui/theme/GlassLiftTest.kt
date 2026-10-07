@@ -59,9 +59,9 @@ class GlassLiftTest {
     }
 
     @Test
-    fun `a body nobody has heard of is frosted`() {
-        assertEquals(GlassBody.Frosted, GlassBody.byId("crystal"))
-        assertEquals(GlassBody.Frosted, GlassBody.byId(""))
+    fun `a body nobody has heard of is clear`() {
+        assertEquals(GlassBody.Clear, GlassBody.byId("crystal"))
+        assertEquals(GlassBody.Clear, GlassBody.byId(""))
         GlassBody.entries.forEach { assertEquals(it, GlassBody.byId(it.id)) }
         assertEquals(GlassBody.entries.size, GlassBody.entries.map { it.id }.toSet().size)
         assertEquals(Color.Transparent.alpha, look(GlassBody.Clear).lift.alpha, 0f)

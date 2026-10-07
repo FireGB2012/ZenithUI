@@ -17,7 +17,7 @@ data class ZenithSettings(
     val appearance: String = "dark",
     val glass: Float = 0.8f,
     /** How much body the glass panels have: clear | frosted | solid. See [GlassBody]. */
-    val glassBody: String = "frosted",
+    val glassBody: String = "clear",
     /** compact | balanced | roomy — the cell size you asked for — or custom, for a grid of your own. */
     val gridDensity: String = "balanced",
     /** The grid picked by hand, used when [gridDensity] is custom. 0 means none has been picked. */
@@ -128,7 +128,10 @@ data class ZenithSettings(
         put("paletteId", paletteId)
         put("appearance", appearance)
         put("glass", glass.toDouble())
-        put("glassBody", glassBody)
+        // Saved as "glassPanels". For a day it was saved as "glassBody" with Frosted as what
+        // everybody got; nobody chose that, so those copies are not read and the glass goes back
+        // to Clear.
+        put("glassPanels", glassBody)
         put("gridDensity", gridDensity)
         put("gridColumns", gridColumns)
         put("gridRows", gridRows)
@@ -189,7 +192,7 @@ data class ZenithSettings(
                 paletteId = o.optString("paletteId", d.paletteId),
                 appearance = o.optString("appearance", d.appearance),
                 glass = o.optDouble("glass", d.glass.toDouble()).toFloat(),
-                glassBody = o.optString("glassBody", d.glassBody),
+                glassBody = o.optString("glassPanels", d.glassBody),
                 // Layouts saved before densities existed are matched to the nearest preset.
                 gridDensity = o.optString("gridDensity", GridDensity.fromGrid(columns, rows).id),
                 gridColumns = o.optInt("gridColumns", d.gridColumns),

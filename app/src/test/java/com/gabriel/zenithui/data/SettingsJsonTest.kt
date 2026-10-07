@@ -41,6 +41,7 @@ class SettingsJsonTest {
         wallpaperLock = true,
         wallpaperFollow = false,
         motion = "reduced",
+        animation = AnimationTuning(preset = "bouncy", speed = 1.25f, changed = mapOf("openArc" to 24f, "homeScale" to 1.05f)),
         pageEffect = "cube",
         haptics = false,
         toggles = listOf("wifi", "torch"),

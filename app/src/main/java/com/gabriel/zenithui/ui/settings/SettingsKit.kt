@@ -389,6 +389,7 @@ internal fun PillSlider(
     value: Float,
     range: ClosedFloatingPointRange<Float>,
     display: String,
+    modifier: Modifier = Modifier,
     onChange: (Float) -> Unit,
 ) {
     val palette = LocalPalette.current
@@ -412,7 +413,7 @@ internal fun PillSlider(
     }
 
     Box(
-        Modifier
+        modifier
             .fillMaxWidth()
             .height(52.dp)
             .clip(RoundedCornerShape(16.dp))

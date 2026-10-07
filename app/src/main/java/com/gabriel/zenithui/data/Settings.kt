@@ -63,6 +63,8 @@ data class ZenithSettings(
     val wallpaperFollow: Boolean = true,
     /** How much moves: full | reduced. The phone's own "Remove animations" reduces it too. */
     val motion: String = "full",
+    /** The numbers apps open and close on: a preset, and whatever has been tuned by hand. */
+    val animation: AnimationTuning = AnimationTuning(),
     /** How one page gives way to the next: depth | slide | cube | stack. */
     val pageEffect: String = "depth",
     /** The small ticks under your finger when you pick something up, switch something or drop it. */
@@ -156,6 +158,7 @@ data class ZenithSettings(
         put("wallpaperLock", wallpaperLock)
         put("wallpaperFollow", wallpaperFollow)
         put("motion", motion)
+        put("animation", animation.toJson())
         put("pageEffect", pageEffect)
         put("haptics", haptics)
         put("toggles", JSONArray(toggles))
@@ -218,6 +221,7 @@ data class ZenithSettings(
                 wallpaperLock = o.optBoolean("wallpaperLock", d.wallpaperLock),
                 wallpaperFollow = o.optBoolean("wallpaperFollow", d.wallpaperFollow),
                 motion = o.optString("motion", d.motion),
+                animation = AnimationTuning.fromJson(o.optJSONObject("animation")),
                 pageEffect = o.optString("pageEffect", d.pageEffect),
                 haptics = o.optBoolean("haptics", d.haptics),
                 toggles = o.optJSONArray("toggles").toStringList().ifEmpty { d.toggles },

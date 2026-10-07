@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
@@ -23,15 +24,23 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.geometry.isSpecified
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import com.gabriel.zenithui.data.AnimationTuning
+import com.gabriel.zenithui.data.LaunchMotion
+import com.gabriel.zenithui.data.Tune
 import com.gabriel.zenithui.ui.theme.GlassMaterial
 import com.gabriel.zenithui.ui.theme.drawLiquidGlass
 import com.gabriel.zenithui.ui.theme.glassLook
@@ -59,32 +68,53 @@ data class AppExpansion(
 )
 
 /**
- * The spring every opening and closing runs on. A spring, not a timer, is what lets the card be
- * turned round mid-flight: it carries on from wherever it is at whatever speed it has, so opening
- * and closing an app over and over stays one continuous, fluid motion — the way iOS and HyperOS do.
+ * One of the springs an opening or a closing runs on, from the numbers in use (see
+ * [AnimationTuning]). Springs, not timers, are what let the card be turned round mid-flight: each
+ * carries on from wherever it is at whatever speed it has, so opening and closing an app over and
+ * over stays one continuous, fluid motion — the way iOS and One UI do.
  */
-fun launchSpring(): AnimationSpec<Float> = spring(dampingRatio = 0.8f, stiffness = 300f)
+fun AnimationTuning.springOf(pull: Tune, rest: Tune): AnimationSpec<Float> =
+    spring(dampingRatio = this[rest], stiffness = stiffness(pull))
 
-/**
- * The home screen coming forward again after an app closes. A touch under-damped, so it swells a
- * hair past full size and settles, the way One UI's grid expands back when you go home.
- */
-fun homeReturnSpring(): AnimationSpec<Float> = spring(dampingRatio = 0.72f, stiffness = 320f)
-
-/** How far the card has to grow before the app itself is asked to open, so it is ready as the card fills. */
-const val LAUNCH_AT = 0.55f
+/** What the card is drawn with, apart from where it is: taken from the tuning in use. */
+@Immutable
+data class CardLook(
+    /** How far the path bows upward at its half way point. */
+    val arc: Dp = 0.dp,
+    /** The rounding of the card's corners as it fills the screen. */
+    val corner: Dp = 28.dp,
+    /** The size of the app's logo in the middle of the full card. */
+    val logo: Dp = 96.dp,
+    /** How dark the shadow under the card is at its darkest, 0 for none. */
+    val shadow: Float = 0f,
+) {
+    companion object {
+        fun of(tuning: AnimationTuning) = CardLook(
+            arc = tuning[Tune.OpenArc].dp,
+            corner = tuning[Tune.OpenCorner].dp,
+            logo = tuning[Tune.OpenLogo].dp,
+            shadow = tuning[Tune.OpenShadow],
+        )
+    }
+}
 
 /**
  * Opening and closing an app the way iOS and One UI do. Android does not let a launcher that is not
  * built into the phone move another app's window, so Zenith draws the motion itself: a card in the
  * icon's own colour, carrying the icon, between the icon's place ([progress] 0) and the whole
- * screen ([progress] 1). The card only draws; whoever owns [progress] decides where it goes.
+ * screen ([progress] 1). Its middle travels across and down on springs of its own ([x] and [y]),
+ * which is what lets it take a curve. The card only draws; whoever owns the springs decides where
+ * it goes.
  */
 @Composable
 fun AppLaunchCard(
     card: AppExpansion,
-    /** 0 is the icon, 1 is the whole screen. Read while drawing, so every frame is smooth. */
+    /** How far it has grown: 0 is the icon, 1 is the whole screen. Read while drawing, so every frame is smooth. */
     progress: () -> Float,
+    /** How far its middle has travelled across and down, 0 to 1 the same way. */
+    x: () -> Float = progress,
+    y: () -> Float = progress,
+    look: CardLook = CardLook(),
     /** A refracting wallpaper lens instead of a card in the icon's own colour. */
     glass: Boolean,
     /** While an app is opening the card catches taps, so tapping it sends the app back. */
@@ -104,6 +134,8 @@ fun AppLaunchCard(
     var origin by remember { mutableStateOf(Offset.Zero) }
     val clip = remember { Path() }
     val lens = rememberLens(if (glass) sharp else null, backdrop)
+    val outline = remember { android.graphics.Path() }
+    val shade = remember { android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG) }
 
     Canvas(
         Modifier
@@ -113,21 +145,53 @@ fun AppLaunchCard(
                 if (catchTaps) Modifier.pointerInput(card.key) { detectTapGestures { tapped() } } else Modifier
             ),
     ) {
-        val p = progress().coerceIn(0f, 1.04f)
+        val p = progress().coerceIn(0f, 1.06f)
         if (p <= 0.002f) return@Canvas
         val from = card.from
-        val left = mix(from.left, 0f, p)
-        val top = mix(from.top, 0f, p)
-        val right = mix(from.right, size.width, p)
-        val bottom = mix(from.bottom, size.height, p)
         val wide = card.wideIcon
         // An icon's own rounding at the start, the phone's screen corners at the end. A super icon
         // starts from its own flatter rounding, so the card leaves it without a jump.
         val startRadius = from.minDimension * if (wide != null) 0.26f else 0.24f
-        val radius = mix(startRadius, 28.dp.toPx(), p.coerceIn(0f, 1f))
+        // Where it is: the same sums the preview in Settings and the tests use. The springs may
+        // carry its middle a little past either end; no further than looks like a bounce.
+        val frame = LaunchMotion.frame(
+            from.left, from.top, from.right, from.bottom,
+            size.width, size.height,
+            x().coerceIn(-0.2f, 1.2f), y().coerceIn(-0.2f, 1.2f), p,
+            look.arc.toPx(),
+            startRadius, look.corner.toPx(),
+        )
+        val left = frame.left
+        val top = frame.top
+        val right = frame.right
+        val bottom = frame.bottom
+        val radius = frame.radius
         val cardTopLeft = Offset(left, top)
         val cardSize = Size(right - left, bottom - top)
         val corners = CornerRadius(radius, radius)
+        // The card floats over the home screen on its way: a soft shadow, coming in as it leaves
+        // the icon and gone again by the time it fills the screen, where there is nothing left
+        // to cast it on.
+        val shadow = look.shadow * (p * 6f).coerceAtMost(1f) * (1f - p * p).coerceIn(0f, 1f)
+        if (shadow > 0.01f) {
+            outline.rewind()
+            outline.addRoundRect(left, top, right, bottom, radius, radius, android.graphics.Path.Direction.CW)
+            shade.color = android.graphics.Color.BLACK
+            shade.setShadowLayer(
+                (14.dp.toPx() + 26.dp.toPx() * p),
+                0f,
+                (6.dp.toPx() + 10.dp.toPx() * p),
+                Color.Black.copy(alpha = 0.55f * shadow).toArgb(),
+            )
+            drawIntoCanvas {
+                val canvas = it.nativeCanvas
+                canvas.save()
+                // Only the shadow is wanted: the card itself is drawn next.
+                canvas.clipOutPath(outline)
+                canvas.drawPath(outline, shade)
+                canvas.restore()
+            }
+        }
         if (glass) {
             val amount = p.coerceIn(0f, 1f)
             val roundRect = RoundRect(0f, 0f, cardSize.width, cardSize.height, corners)
@@ -183,7 +247,7 @@ fun AppLaunchCard(
         // The logo grows more slowly than the card, easing towards the size an app's own opening
         // screen shows it at, so the hand-over to the app is seamless.
         val startSide = if (wide != null) from.minDimension * 0.62f else from.minDimension
-        val side = mix(startSide, 96.dp.toPx(), p.coerceIn(0f, 1f))
+        val side = mix(startSide, look.logo.toPx(), p.coerceIn(0f, 1f))
         val logoAlpha = if (wide != null) ((p - 0.15f) / 0.35f).coerceIn(0f, 1f) else 1f
         if (logoAlpha <= 0f) return@Canvas
         val centreX = (left + right) / 2f
@@ -214,21 +278,92 @@ object AppLanding {
     var key by mutableStateOf<String?>(null)
         private set
 
-    private val progress = Animatable(1f)
+    /** An icon kept out of sight because a closing card is on its way to it. */
+    var held by mutableStateOf<String?>(null)
+        private set
 
-    /** Lands [key]'s icon. Must run on a scope with a frame clock, such as a composition's. */
-    suspend fun land(key: String) {
+    private val progress = Animatable(1f)
+    private var fromScale = 1.22f
+    private var fade = 0.65f
+
+    /** Hides [key]'s icon until it lands, or shows whichever was hidden again with null. */
+    fun hold(key: String?) {
+        held = key
+    }
+
+    /**
+     * Lands [key]'s icon: from [fromScale] times its size and [fade] of the way to invisible, on
+     * [spec]. Must run on a scope with a frame clock, such as a composition's.
+     */
+    suspend fun land(
+        key: String,
+        fromScale: Float = 1.22f,
+        fade: Float = 0.65f,
+        spec: AnimationSpec<Float> = spring(dampingRatio = 0.5f, stiffness = 380f),
+    ) {
+        this.fromScale = fromScale
+        this.fade = fade.coerceIn(0f, 1f)
         this.key = key
+        if (held == key) held = null
         progress.snapTo(0f)
-        progress.animateTo(1f, spring(dampingRatio = 0.5f, stiffness = 380f))
+        progress.animateTo(1f, spec)
         if (this.key == key) this.key = null
     }
 
     /** How large [itemKey]'s icon should be drawn right now. Read while drawing. */
-    fun scaleFor(itemKey: String): Float = if (itemKey != key) 1f else 1.22f - 0.22f * progress.value
+    fun scaleFor(itemKey: String): Float =
+        if (itemKey != key) 1f else fromScale - (fromScale - 1f) * progress.value
 
-    fun alphaFor(itemKey: String): Float =
-        if (itemKey != key) 1f else (0.35f + 1.04f * progress.value).coerceIn(0f, 1f)
+    /** How solid: back to full a little before it has finished settling. */
+    fun alphaFor(itemKey: String): Float = when {
+        itemKey == held -> 0f
+        itemKey != key -> 1f
+        else -> ((1f - fade) + fade * 1.6f * progress.value).coerceIn(0f, 1f)
+    }
+}
+
+/**
+ * Icons making way. While an app opens, the ones nearest its icon are pushed aside as the card
+ * grows out of it; when it closes they are knocked back as its icon lands, and swing into place
+ * again. Kept outside composition, like [AppLanding], because every item on the page reads it
+ * while drawing, and reading it there is what moves them without recomposing anything.
+ */
+object HomeRipple {
+    /** Where it spreads from, in the home screen's own coordinates. */
+    var origin by mutableStateOf(Offset.Unspecified)
+
+    /** How far away the push has fallen to a little over half, in pixels. */
+    var reach by mutableFloatStateOf(1f)
+
+    /** How far the nearest are pushed while a card grows, in pixels. Read while drawing. */
+    var push: (() -> Float)? by mutableStateOf(null)
+
+    private val wave = Animatable(0f)
+
+    /**
+     * Knocks the icons round [from] back as far as [px] and lets them swing home, on a spring of
+     * [stiffness] and [damping]. They are sent off at speed from where they stand rather than
+     * moved and let go, so there is no jump at the start of it.
+     */
+    suspend fun knock(from: Offset, px: Float, stiffness: Float, damping: Float) {
+        origin = from
+        wave.snapTo(0f)
+        wave.animateTo(
+            targetValue = 0f,
+            animationSpec = spring(dampingRatio = damping, stiffness = stiffness),
+            initialVelocity = LaunchMotion.knockVelocity(px, stiffness, damping),
+        )
+    }
+
+    /** How far the item whose middle is at [centre] is out of its place right now. Read while drawing. */
+    fun offsetFor(centre: Offset): Offset {
+        val from = origin
+        if (!from.isSpecified) return Offset.Zero
+        val amount = (push?.invoke() ?: 0f) + wave.value
+        if (amount == 0f) return Offset.Zero
+        val (dx, dy) = LaunchMotion.push(centre.x - from.x, centre.y - from.y, amount, reach)
+        return Offset(dx, dy)
+    }
 }
 
 /**

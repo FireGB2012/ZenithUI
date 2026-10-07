@@ -528,6 +528,13 @@ fun HomePage(
                             scaleY *= shrink
                             alpha *= (1f - out * out).coerceIn(0f, 1f)
                         }
+                        // Making way: pushed aside while an app opens beside it, knocked back as one
+                        // lands, and home again. Worked out from where its middle is on the screen.
+                        val aside = HomeRipple.offsetFor(
+                            Offset(cellRoot.x + cellWidthPx * item.spanX / 2f, cellRoot.y + cellHeightPx * item.spanY / 2f)
+                        )
+                        translationX += aside.x
+                        translationY += aside.y
                         val shake = jiggleStrength()
                         if (shake > 0f && !carried) {
                             rotationZ = jiggleAngle * shake *

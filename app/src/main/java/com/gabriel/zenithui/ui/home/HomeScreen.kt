@@ -80,6 +80,7 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.isSpecified
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -92,14 +93,17 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.gabriel.zenithui.ZenithViewModel
+import com.gabriel.zenithui.data.AnimationTuning
 import com.gabriel.zenithui.data.AppCell
 import com.gabriel.zenithui.data.Backup
 import com.gabriel.zenithui.data.DropPlanner
 import com.gabriel.zenithui.data.FolderCell
 import com.gabriel.zenithui.data.HomeHeader
 import com.gabriel.zenithui.data.HomeItem
+import com.gabriel.zenithui.data.LaunchMotion
 import com.gabriel.zenithui.data.LayoutBuilder
 import com.gabriel.zenithui.data.ROW_UNITS
+import com.gabriel.zenithui.data.Tune
 import com.gabriel.zenithui.data.WidgetCell
 import com.gabriel.zenithui.data.findActivity
 import com.gabriel.zenithui.ui.common.LaunchOrigin
@@ -131,8 +135,6 @@ import com.gabriel.zenithui.ui.settings.AccountActions
 private val PAGE_FLIP_EDGE = 16.dp
 
 /** How far the home screen sinks back while an app opens out of it. */
-private const val HOME_SUNK = 0.9f
-
 /** Coming home longer than this after opening an app does not shrink it back into its icon. */
 private const val CLOSE_WINDOW_MS = 30 * 60 * 1000L
 
@@ -356,6 +358,34 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
      */
     var card by remember { mutableStateOf<AppExpansion?>(null) }
     val cardProgress = remember { Animatable(0f) }
+    /**
+     * How far the card's middle has travelled across and down, while [cardProgress] is how far it
+     * has grown. Each is on a spring of its own, which is what lets the card take a curve.
+     */
+    val cardX = remember { Animatable(0f) }
+    val cardY = remember { Animatable(0f) }
+    /** Pixels to a dp, for the distances in the tuning. */
+    val pxPerDp = LocalDensity.current.density
+    /** The numbers all of it runs on: the ones chosen in Settings, or calmer ones with movement reduced. */
+    val tuning = if (motion.reduced) AnimationTuning.Reduced else settings.animation
+    val liveTuning by androidx.compose.runtime.rememberUpdatedState(tuning)
+    /** A card on show that is shrinking back into its icon after an app has closed, not one you can turn round. */
+    var closingCard by remember { mutableStateOf(false) }
+
+    /** Sends the card's three springs towards the icon (0) or the screen (1), and waits for them to settle. */
+    suspend fun flyCard(to: Float) = kotlinx.coroutines.coroutineScope {
+        val t = liveTuning
+        launch { cardX.animateTo(to, t.springOf(Tune.OpenXStiffness, Tune.OpenXDamping)) }
+        launch { cardY.animateTo(to, t.springOf(Tune.OpenYStiffness, Tune.OpenYDamping)) }
+        cardProgress.animateTo(to, t.springOf(Tune.OpenSizeStiffness, Tune.OpenSizeDamping))
+    }
+
+    /** Puts all three at [at] between two frames, with nothing seen of it. */
+    suspend fun restCard(at: Float = 0f) {
+        cardX.snapTo(at)
+        cardY.snapTo(at)
+        cardProgress.snapTo(at)
+    }
     /** When the app was asked to open, or 0 while it has not been. */
     val launchedAt = remember { LongArray(1) }
     /**
@@ -365,6 +395,8 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
     val homeSink = remember { Animatable(0f) }
     /** The app that covered Zenith when it was stopped, so its icon can land when we come back. */
     val returningKey = remember { arrayOfNulls<String>(1) }
+    /** Its card as it was opened, for the icon's place on the page and for a closing card. */
+    val returningCard = remember { arrayOfNulls<AppExpansion>(1) }
     /**
      * Holds the home screen fully sunk from the moment an app covers Zenith until it starts coming
      * forward. A plain state write, not an animation, so it is already true for the very first frame
@@ -399,22 +431,6 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         arrive()
     }
 
-    /** One UI's half of closing an app: the home screen swells back and the app's icon lands. */
-    fun comeForward() {
-        val key = returningKey[0] ?: return
-        returningKey[0] = null
-        val recent = launchedAt[0] != 0L &&
-            android.os.SystemClock.uptimeMillis() - launchedAt[0] < CLOSE_WINDOW_MS
-        launchedAt[0] = 0L
-        scope.launch {
-            // Snap to exactly where the hold leaves off before letting go of it, so the hand-over
-            // from holding to animating happens between two frames with nothing visible in it.
-            homeSink.snapTo(1f)
-            holdSunk = false
-            homeSink.animateTo(0f, homeReturnSpring())
-        }
-        if (recent) scope.launch { AppLanding.land(key) }
-    }
     /** Heading open (true) or back into the icon (false). */
     var cardOpening by remember { mutableStateOf(false) }
     val cardJob = remember { arrayOfNulls<kotlinx.coroutines.Job>(1) }
@@ -425,12 +441,84 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         cardJob[0] = scope.launch(block = block)
     }
 
+    /** The app's icon arriving back in its place, and the icons round it knocked back by it. */
+    suspend fun landIcon(key: String, at: androidx.compose.ui.geometry.Rect?) = kotlinx.coroutines.coroutineScope {
+        val t = liveTuning
+        val ripple = t[Tune.Ripple] * pxPerDp
+        if (at != null && ripple > 0f) {
+            // The ripple swings on the landing's own spring, a little slacker, so it trails it.
+            launch {
+                HomeRipple.knock(at.center, ripple, t.stiffness(Tune.LandStiffness) * 0.6f, t[Tune.LandDamping])
+            }
+        }
+        AppLanding.land(key, t[Tune.LandScale], t[Tune.LandFade], t.springOf(Tune.LandStiffness, Tune.LandDamping))
+    }
+
+    /**
+     * The half of closing an app that a launcher is allowed to draw: the home screen comes forward
+     * again and the app's icon lands in its place. With a closing card
+     * asked for, a card the app's colour shrinks back into the icon first.
+     */
+    fun comeForward() {
+        val key = returningKey[0] ?: return
+        returningKey[0] = null
+        val back = returningCard[0]
+        returningCard[0] = null
+        val recent = launchedAt[0] != 0L &&
+            android.os.SystemClock.uptimeMillis() - launchedAt[0] < CLOSE_WINDOW_MS
+        launchedAt[0] = 0L
+        val t = liveTuning
+        // Everything zooms, and ripples, about the icon the app was opened from.
+        if (back != null) HomeRipple.origin = back.from.center
+        scope.launch {
+            // Snap to exactly where the hold leaves off before letting go of it, so the hand-over
+            // from holding to animating happens between two frames with nothing visible in it.
+            homeSink.snapTo(1f)
+            holdSunk = false
+            homeSink.animateTo(0f, t.springOf(Tune.ReturnStiffness, Tune.ReturnDamping))
+        }
+        if (!recent) return
+        val from = t[Tune.CloseCard]
+        if (from <= 0.005f || back == null) {
+            scope.launch { landIcon(key, back?.from) }
+            return
+        }
+        // The icon stays out of sight until the card has shrunk onto it, then lands.
+        AppLanding.hold(key)
+        card = back
+        cardOpening = false
+        closingCard = true
+        steerCard {
+            try {
+                restCard(from)
+                val flight = launch { flyCard(0f) }
+                snapshotFlow { cardProgress.value }.first { it <= 0.03f }
+                flight.cancel()
+                card = null
+                closingCard = false
+                restCard()
+                landIcon(key, back.from)
+            } finally {
+                // Turned round or cut short: never leave an icon hidden, or a card that cannot be tapped.
+                AppLanding.hold(null)
+                closingCard = false
+            }
+        }
+    }
+
+    /** How far back the home screen is: 0 at rest, 1 behind an app. Read while drawing. */
+    fun homeDepth(): Float = when {
+        card != null && !closingCard -> cardProgress.value.coerceIn(0f, 1f)
+        holdSunk -> 1f
+        else -> homeSink.value.coerceIn(-0.12f, 1f)
+    }
+
     /** Sends the card back into its icon from wherever it is, and stops the app opening if it has not yet. */
     fun closeCard() {
         if (card == null) return
         cardOpening = false
         steerCard {
-            cardProgress.animateTo(0f, launchSpring())
+            flyCard(0f)
             card = null
             launchedAt[0] = 0L
         }
@@ -440,10 +528,14 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
     fun openCard(target: AppExpansion) {
         card = target
         cardOpening = true
+        closingCard = false
+        // The icons nearest it make way, and the home screen zooms about it.
+        HomeRipple.origin = target.from.center
         steerCard {
             // The app is asked to open partway up, so it is already on its way as the card fills.
             launch {
-                snapshotFlow { cardProgress.value }.first { it >= LAUNCH_AT }
+                val launchAt = liveTuning[Tune.OpenLaunchAt]
+                snapshotFlow { cardProgress.value }.first { it >= launchAt }
                 launchedAt[0] = android.os.SystemClock.uptimeMillis()
                 viewModel.open(
                     target.key,
@@ -453,12 +545,12 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                         .toBundle(),
                 )
             }
-            cardProgress.animateTo(1f, launchSpring())
+            flyCard(1f)
             // The app should now cover Zenith. If Zenith is still in front, it never opened: come back.
             delay(900)
             if (hostLifecycle?.currentState?.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED) == true) {
                 cardOpening = false
-                cardProgress.animateTo(0f, launchSpring())
+                flyCard(0f)
                 card = null
                 launchedAt[0] = 0L
             }
@@ -499,7 +591,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             // A different app starts from its own icon.
             if (card != null) {
                 cardJob[0]?.cancel()
-                cardProgress.snapTo(0f)
+                restCard()
             }
             launchedAt[0] = 0L
             openCard(AppExpansion(key = key, from = from, icon = icon, wideIcon = wideIcon))
@@ -524,11 +616,12 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     val moving = card
                     if (moving != null && launchedAt[0] != 0L) {
                         returningKey[0] = moving.key
+                        returningCard[0] = moving
                         cardJob[0]?.cancel()
                         holdSunk = true
                         card = null
                         cardOpening = false
-                        scope.launch { cardProgress.snapTo(0f) }
+                        scope.launch { restCard() }
                     }
                 }
 
@@ -537,7 +630,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     hostView.invalidate()
                     if (returningKey[0] == null && card != null && !cardOpening) {
                         cardJob[0]?.cancel()
-                        scope.launch { cardProgress.snapTo(0f) }
+                        scope.launch { restCard() }
                         card = null
                     }
                 }
@@ -580,6 +673,19 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
     // Parallax for the real wallpaper: tell Android how far across the pages we are, so a
     // wallpaper wider than the screen slides slowly behind them, as on any stock launcher.
     val wallpaperManager = remember(context) { android.app.WallpaperManager.getInstance(context) }
+
+    // The icons nearest an opening app make way for its card: as far as asked when it is full size.
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        HomeRipple.reach = 150f * pxPerDp
+        HomeRipple.push = {
+            if (card != null && !closingCard) {
+                liveTuning[Tune.IconPush] * pxPerDp * cardProgress.value.coerceIn(0f, 1f)
+            } else {
+                0f
+            }
+        }
+        onDispose { HomeRipple.push = null }
+    }
     LaunchedEffect(pagerState, pageCount) {
         snapshotFlow { pagerState.currentPage + pagerState.currentPageOffsetFraction }.collect { position ->
             val token = hostView.windowToken ?: return@collect
@@ -930,9 +1036,11 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             drawerProgress > 0.55f -> 20.dp
             // An open folder has the home screen out of focus behind it.
             folderUp != null -> 14.dp
-            card != null && settings.openAnimation == "glass" -> 20.dp
+            // The liquid glass opening wants more of it than the card does.
+            card != null && !closingCard && settings.openAnimation == "glass" -> (tuning[Tune.HomeBlur] + 12f).dp
             // One UI softens the home screen behind an opening app; a lighter frost for the card.
-            card != null -> 8.dp
+            // It is still out of focus while an app covers it, and clears as you come home.
+            (card != null && !closingCard) || holdSunk -> tuning[Tune.HomeBlur].dp
             else -> 0.dp
         },
         // A quick frost in and out, so opening and closing apps never feels held up by it.
@@ -1039,18 +1147,24 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     // The home screen sinks back as the card grows, on the very same spring, and
                     // swells forward again on its own spring when you come home from the app. The
                     // return may overshoot a little past full size, which is the point.
-                    val depth = when {
-                        card != null -> cardProgress.value.coerceIn(0f, 1f)
-                        holdSunk -> 1f
-                        else -> homeSink.value.coerceIn(-0.12f, 1f)
-                    }
-                    val zoom = 1f - (1f - HOME_SUNK) * depth
+                    val depth = homeDepth()
+                    val t = liveTuning
+                    // Under 1 it sinks back behind the app; over 1 it rushes towards you instead.
+                    val zoom = 1f + (t[Tune.HomeScale] - 1f) * depth
                     val scale = (1f - 0.06f * drawerProgress) * zoom
                     scaleX = scale
                     scaleY = scale
+                    // It zooms about the icon the app came from, as far as asked, so the eye is
+                    // carried into the app and out of it again at the same spot.
+                    val icon = HomeRipple.origin
+                    val towards = if (depth != 0f && icon.isSpecified) t[Tune.HomePivot] else 0f
+                    transformOrigin = androidx.compose.ui.graphics.TransformOrigin(
+                        LaunchMotion.pivot(icon.x, size.width, towards),
+                        LaunchMotion.pivot(icon.y, size.height, towards),
+                    )
                     val sunk = depth.coerceIn(0f, 1f)
                     // Settings is glass over the wallpaper; the home screen is not seen through it.
-                    alpha = (1f - 0.55f * drawerProgress) * (1f - 0.25f * sunk) * (1f - pageShown.value)
+                    alpha = (1f - 0.55f * drawerProgress) * (1f - t[Tune.HomeDim] * sunk) * (1f - pageShown.value)
                 }
                 // The blur is its own short animation rather than a per-frame effect rebuild:
                 // recreating a full screen RenderEffect on every drag frame is what made the
@@ -1439,6 +1553,9 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             AppLaunchCard(
                 card = moving,
                 progress = { cardProgress.value },
+                x = { cardX.value },
+                y = { cardY.value },
+                look = remember(tuning) { CardLook.of(tuning) },
                 glass = settings.openAnimation == "glass",
                 catchTaps = cardOpening,
                 onTap = { closeCard() },

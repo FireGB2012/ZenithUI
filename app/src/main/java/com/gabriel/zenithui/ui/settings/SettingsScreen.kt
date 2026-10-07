@@ -77,6 +77,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.gabriel.zenithui.data.AnimationPreset
 import com.gabriel.zenithui.data.AppInfo
 import com.gabriel.zenithui.data.HomeItem
 import com.gabriel.zenithui.data.IconShapes
@@ -184,6 +185,12 @@ fun SettingsScreen(
     }
 
     fun pop() {
+        // The advanced page goes back to the page it is part of, not all the way out.
+        if (page == SettingsPage.AdvancedMotion) {
+            page = SettingsPage.Motion
+            highlight = "advancedMotion"
+            return
+        }
         returned[0] = true
         page = null
         highlight = null
@@ -214,7 +221,8 @@ fun SettingsScreen(
         AnimatedContent(
             targetState = page,
             transitionSpec = {
-                val push = targetState != null
+                // Leaving the advanced page is going back, wherever it goes back to.
+                val push = targetState != null && initialState != SettingsPage.AdvancedMotion
                 val slide = spring(dampingRatio = 1f, stiffness = 420f, visibilityThreshold = IntOffset(1, 1))
                 if (reduced) {
                     // No travelling: one gives way to the other where it stands.
@@ -253,7 +261,8 @@ fun SettingsScreen(
                         null -> Root(settings, plus, actions.account, query, onQuery = { query = it }, onOpen = ::open)
                         SettingsPage.Theme -> ThemeOptions(settings, preview, actions)
                         SettingsPage.Home -> HomeOptions(settings, plus, preview, actions)
-                        SettingsPage.Motion -> MotionOptions(settings, actions)
+                        SettingsPage.Motion -> MotionOptions(settings, actions, onAdvanced = { open(SettingsPage.AdvancedMotion, null) })
+                        SettingsPage.AdvancedMotion -> AdvancedMotionOptions(settings, actions)
                         SettingsPage.Apps -> AppsOptions(settings, plus, actions)
                         SettingsPage.Backup -> BackupOptions(plus, actions, onClose = onDismiss, onAccount = { open(SettingsPage.Account, null) })
                         SettingsPage.About -> AboutOptions(actions)
@@ -452,6 +461,7 @@ private fun SettingsPage.icon(): ImageVector = when (this) {
     SettingsPage.Theme -> Icons.Rounded.Palette
     SettingsPage.Home -> Icons.Rounded.GridView
     SettingsPage.Motion -> Icons.Rounded.Animation
+    SettingsPage.AdvancedMotion -> Icons.Rounded.Animation
     SettingsPage.Apps -> Icons.Rounded.Apps
     SettingsPage.Plus -> Icons.Rounded.AutoAwesome
     SettingsPage.Aura -> Icons.Rounded.LocalFireDepartment
@@ -464,6 +474,7 @@ private fun SettingsPage.tile(): List<Color> = when (this) {
     SettingsPage.Theme -> listOf(Color(0xFF8B7CFF), Color(0xFF5B8CFF))
     SettingsPage.Home -> listOf(Color(0xFF2FC9A6), Color(0xFF1C9C8B))
     SettingsPage.Motion -> listOf(Color(0xFFFF7AB6), Color(0xFFE2559A))
+    SettingsPage.AdvancedMotion -> listOf(Color(0xFFFF7AB6), Color(0xFFE2559A))
     SettingsPage.Apps -> listOf(Color(0xFF4FB3FF), Color(0xFF2F7FE6))
     SettingsPage.Plus -> listOf(Color(0xFFFFD36B), Color(0xFFF5A623))
     SettingsPage.Aura -> listOf(Color(0xFFFF9F5A), Color(0xFFFF6A4D))
@@ -487,6 +498,7 @@ private fun summary(page: SettingsPage, settings: ZenithSettings, plus: PlusStat
         append(if (settings.motion == "reduced") "Reduced" else "Full")
         append(if (settings.haptics) ", haptics on" else ", haptics off")
     }
+    SettingsPage.AdvancedMotion -> AnimationPreset.byId(settings.animation.preset).label
     SettingsPage.Apps -> buildString {
         append(if (settings.appsView == "library") "App Library" else "App drawer")
         if (settings.hiddenApps.isNotEmpty() && plus.active) append(", ${settings.hiddenApps.size} hidden")

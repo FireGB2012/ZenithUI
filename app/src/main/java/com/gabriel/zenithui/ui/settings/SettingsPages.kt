@@ -28,6 +28,7 @@ import androidx.compose.material.icons.rounded.PrivacyTip
 import androidx.compose.material.icons.rounded.RestartAlt
 import androidx.compose.material.icons.rounded.Restore
 import androidx.compose.material.icons.rounded.Save
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -40,6 +41,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.gabriel.zenithui.data.AnimationPreset
 import com.gabriel.zenithui.data.GlassBody
 import com.gabriel.zenithui.data.GridDensity
 import com.gabriel.zenithui.data.HomeHeader
@@ -388,7 +390,7 @@ internal fun HomeOptions(settings: ZenithSettings, plus: PlusStatus, preview: Se
 }
 
 @Composable
-internal fun MotionOptions(settings: ZenithSettings, actions: SettingsActions) {
+internal fun MotionOptions(settings: ZenithSettings, actions: SettingsActions, onAdvanced: () -> Unit) {
     val change = actions.change
     Group(rise = 0) {
         Spot("animations") {
@@ -461,6 +463,18 @@ internal fun MotionOptions(settings: ZenithSettings, actions: SettingsActions) {
                 subtitle = "A small tick when you pick something up, switch it or drop it",
                 checked = settings.haptics,
             ) { value -> change { it.copy(haptics = value) } }
+        }
+    }
+    Group(rise = 4) {
+        Spot("advancedMotion") {
+            val style = AnimationPreset.byId(settings.animation.preset).label
+            ActionRow(
+                icon = Icons.Rounded.Tune,
+                title = "Advanced animation settings",
+                subtitle = (if (settings.animation.custom) "$style, with your own changes. " else "$style. ") +
+                    "How apps open and close, number by number",
+                onClick = onAdvanced,
+            )
         }
     }
 }

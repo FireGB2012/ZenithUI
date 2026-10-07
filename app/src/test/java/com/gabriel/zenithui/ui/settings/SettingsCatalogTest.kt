@@ -93,6 +93,21 @@ class SettingsCatalogTest {
     }
 
     @Test
+    fun `advanced animation settings is a page of Motion, and what is on it can be searched for`() {
+        // The way in is on the Motion page, and found by what people call it.
+        assertEquals(SettingsPage.Motion, SettingsCatalog.entries.first { it.id == "advancedMotion" }.page)
+        assertEquals("advancedMotion", found("advanced").first())
+        assertTrue("advancedMotion" in found("tuning"))
+        // What is on the page itself.
+        assertEquals("motionStyle", found("preset").first())
+        assertEquals("motionSpeed", found("animation speed").first())
+        assertEquals("motionClose", found("landing").first())
+        assertEquals("motionHome", found("zoom").first())
+        assertTrue("motionOpen" in found("stiffness") && "motionClose" in found("damping"))
+        SettingsCatalog.on(SettingsPage.AdvancedMotion).forEach { assertTrue(it.id, it.id.startsWith("motion")) }
+    }
+
+    @Test
     fun `the account and its backup are found when the build has a server`() {
         assertEquals("account", SettingsCatalog.search("sign in").first().id)
         assertTrue("account" in SettingsCatalog.search("google").map { it.id })

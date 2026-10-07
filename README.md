@@ -140,7 +140,28 @@ chosen in another app, is never replaced, and choosing one ends the following.
 
 Everything that moves is a spring, and anything that can be worked out without a screen is a plain
 function with a test: `MotionLevel` (how much moves), `PageEffects` (where a page is drawn part way
-through a swipe) and `FlyIn` (when each item arrives).
+through a swipe), `FlyIn` (when each item arrives), `LaunchMotion` (where an opening app's card is)
+and `AnimationTuning` (the numbers it all runs on).
+
+- **Opening an app.** The icon grows into a card that fills the screen, and the app appears over
+  it. The card's middle travels across and down on springs of their own while a third grows it, so
+  it takes a slight curve rather than a straight line, with a soft shadow under it on the way.
+  Behind it the home screen sinks back about the icon that was tapped, dims and goes out of focus,
+  and the icons nearest make way. Tap the card, or press home, and it turns round where it is.
+- **Closing an app.** Android does not let a launcher that is not built into the phone move another
+  app's window, so Zenith draws the half it may: the home screen comes forward again on a spring
+  that carries it a little too far, the app's icon lands in its place with a bounce, and the icons
+  round it are knocked back and swing home. A card that shrinks back into the icon can be switched
+  on as well.
+- **Advanced animation settings** (Settings → Motion & feel). Every one of those numbers can be
+  changed: stiffness and damping for each spring, the arc of the path, how far the card has grown
+  when the app starts, corners, logo and shadow, the home screen's zoom, dimming, blur and how far
+  icons are pushed, and the return, the landing and the ripple. Each has a slider and a minus and a
+  plus that move it one step, a dp or a hundredth at a time. Six styles to start from — Zenith,
+  Fluid, Bouncy, Dynamic, Sweet and Classic, the last being how it was before any of this — one
+  slider for the speed of everything, and a small screen at the top of the page that plays whatever
+  is set. Only what is changed is saved (`AnimationTuning`), and with animations reduced none of it
+  swings, bounces, curves or zooms.
 
 - **Arriving.** On a cold start and after an unlock the home screen flies in: every item starts
   out from the middle and comes in to its place, the middle of the page first, inside 600 ms.

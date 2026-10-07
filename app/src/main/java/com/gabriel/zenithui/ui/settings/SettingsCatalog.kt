@@ -5,6 +5,8 @@ enum class SettingsPage(val title: String, val opensSheet: Boolean = false) {
     Theme("Wallpaper & theme"),
     Home("Home screen"),
     Motion("Motion & feel"),
+    /** A page of Motion & feel rather than a group of its own: it is reached from there, and goes back there. */
+    AdvancedMotion("Advanced animation settings"),
     Apps("Apps"),
     Plus("Zenith Plus", opensSheet = true),
     Aura("Aura"),
@@ -57,6 +59,13 @@ object SettingsCatalog {
         SettingsEntry("openAnimation", SettingsPage.Motion, "Opening apps", "launch colour color glass card"),
         SettingsEntry("pageEffect", SettingsPage.Motion, "Page swipe", "depth slide cube stack transition effect"),
         SettingsEntry("haptics", SettingsPage.Motion, "Haptics", "vibrate vibration tick feedback buzz"),
+        SettingsEntry("advancedMotion", SettingsPage.Motion, "Advanced animation settings", "tuning tune spring stiffness damping bounce fine open close custom"),
+
+        SettingsEntry("motionStyle", SettingsPage.AdvancedMotion, "Animation style", "preset zenith fluid bouncy dynamic sweet classic"),
+        SettingsEntry("motionSpeed", SettingsPage.AdvancedMotion, "Animation speed", "fast slow quicker pace"),
+        SettingsEntry("motionOpen", SettingsPage.AdvancedMotion, "Opening an app", "launch card arc curve stiffness damping corner logo shadow spring"),
+        SettingsEntry("motionHome", SettingsPage.AdvancedMotion, "Home screen behind", "zoom dim dimming blur push pushed sink"),
+        SettingsEntry("motionClose", SettingsPage.AdvancedMotion, "Closing an app", "return landing lands bounce ripple card spring stiffness damping"),
 
         SettingsEntry("appsView", SettingsPage.Apps, "Swipe up for", "drawer library list"),
         SettingsEntry("hiddenApps", SettingsPage.Apps, "Hidden apps", "hide private pin plus lock"),

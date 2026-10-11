@@ -140,8 +140,9 @@ chosen in another app, is never replaced, and choosing one ends the following.
 
 Everything that moves is a spring, and anything that can be worked out without a screen is a plain
 function with a test: `MotionLevel` (how much moves), `PageEffects` (where a page is drawn part way
-through a swipe), `FlyIn` (when each item arrives), `LaunchMotion` (where an opening app's card is)
-and `AnimationTuning` (the numbers it all runs on).
+through a swipe), `FlyIn` (when each item arrives), `LaunchMotion` (where an opening app's card is),
+`SheetPull` (where a sheet sits under a finger, and whether letting go puts it away), `Unpack` (how
+far out of an opening folder each app is) and `AnimationTuning` (the numbers it all runs on).
 
 - **Opening an app.** The icon grows into a card that fills the screen, and the app appears over
   it. The card's middle travels across and down on springs of their own while a third grows it, so
@@ -167,46 +168,92 @@ and `AnimationTuning` (the numbers it all runs on).
   out from the middle and comes in to its place, the middle of the page first, inside 600 ms.
   Coming back from an app it is the same movement over a fifth of the distance.
 - **Pages.** Four ways to turn one — Depth, Slide, Cube, Stack — and dots whose pill stretches
-  towards the next as the page turns.
+  towards the next as the page turns. A page added grows its dot out of the end of the row, and
+  one forgotten draws it back in.
 - **Carrying.** The copy under the finger lifts and casts a shadow; everything else on the page
-  rocks, each item out of step; a tick as the landing spot changes; a ring where it lands.
-- **Folders** grow out of their own icon into a pane of glass and go back into it.
+  rocks, each item out of step; a tick as the landing spot changes; a ring where it lands. Put
+  down, the thing itself comes back to its own size from the size it was carried at. Held over
+  another icon, a plate spreads out under that one: the folder the two will make. Let go into the
+  bin, a folder or the dock, the copy shrinks away into it, and anything taken off the page,
+  however it was taken, is seen to go. The bin comes down from the top edge, tips and reddens when
+  it is ready, and goes back up.
+- **The dock.** Its icons never jump: the others close up round a gap or make room, and the one in
+  your hand settles from where it was let go, each starting from wherever it was last seen.
+- **Folders** grow out of their own icon into a pane of glass and go back into it, and their apps
+  come out one after another as it opens.
 - **Widgets** animate their own changes: rolling digits, a ring that springs to its value and
-  glints while charging, today's dot drawing itself in, toggles that change shape.
-- **The drawer and sheets.** Rows rise in each time the drawer opens; a wallpaper's preview grows
-  out of the thumbnail that was tapped.
+  glints while charging, every other gauge filling the same way as it appears, today's dot drawing
+  itself in, toggles that change shape.
+- **The drawer and sheets.** The drawer is put together just after the home screen arrives, out of
+  sight, so the first swipe up is as smooth as the tenth. Rows rise in each time it opens, its
+  title and count turn over as you search, and a wallpaper's preview grows out of the thumbnail
+  that was tapped. A sheet comes up from the edge on a spring and follows a finger: down as far as
+  it is pulled, up only a little. Let go and it settles, or, past a third of its height or with a
+  flick, goes. One sheet opened from another is seen going down as the new one comes up.
 - **Settings and the gallery.** Settings arrives in order — its title, the search box, then each
-  group in turn — and a row answers a press. The gallery's cards come in one after another, and a
-  widget's showcase grows out of the card that was tapped and goes back into it.
+  group in turn — and a row answers a press. The pill of a row of options stretches towards the
+  one that was tapped and draws itself up there; a switch's knob spreads under a finger; a number
+  rolls up or down a step; the small print under a control changes where it stands. The gallery's
+  cards come in one after another, and a widget's showcase grows out of the card that was tapped
+  and goes back into it.
 
-Movement goes through `graphicsLayer` or draw-time state, never layout, and anything that runs
-for a while runs on one clock per page, so nothing is left running once it has settled (the one
-exception is the charging glint, while there is a charger). **Animations: Reduced** in Settings,
-or the phone's own *Remove animations*, turns all of it down to quick fades: no fly-in, no
-rocking, no tilt; sheets and full-screen pages fade in where they stand, and home pages simply
-slide. Haptics go through one `Haptics` helper — a tick, a pick-up,
-a confirmation — and are silent when the switch is off.
+Movement goes through `graphicsLayer` or draw-time state rather than layout, except where glass
+has to be told where it is: a sheet, and the bars that come in from an edge, are moved by being
+placed. Anything that runs for a while runs on one clock per page, so nothing is left running once
+it has settled (the one exception is the charging glint, while there is a charger).
+**Animations: Reduced** in Settings, or the phone's own *Remove animations*, turns all of it down
+to quick fades: no fly-in, no rocking, no tilt; sheets and full-screen pages fade in where they
+stand, a sheet still follows a finger but settles without a spring, and home pages simply slide.
+Haptics go through one `Haptics` helper — a tick, a pick-up, a confirmation — and are silent when
+the switch is off.
 
 ## How the glass works
 
-`Modifier.glass()` is Zenith's Liquid Glass, modelled on Apple's own description of it, in two
-finishes: **Clear** for the dock, folders and small controls, which shows the wallpaper sharp and
-bends it most, and **Regular** for widgets, search and sheets, which frosts it so text on top stays
-readable. On Android 13+ an AGSL shader (`LiquidGlassShader`) draws each pane: the flat middle
-shows the wallpaper exactly where it is, the rounded rim bends and magnifies it inward like the
-edge of a thick lens with a faint colour split — a bigger pane is a thicker slab and bends more —
-and a crisp highlight runs round the rim where it faces the light, with a weaker one opposite, both
-moving as the phone tilts. A readable veil thickens only over parts of the wallpaper that would
-fight the text. That is **Glass panels: Clear** in Settings → Wallpaper & theme, the glass as it has
-always been and what everybody has unless they ask for more. **Frosted** is for a wallpaper as
-dark as the pane itself, or in the light as pale, where clear glass is mostly its rim: a little
-frost in the theme's colour lifts the pane a step away, there and nowhere else (`glassLift`).
-**Solid** adds a fuller veil on top of that (`GlassBody`). Every pane floats on a soft shadow, and panes you press (`interactive = true`: the
-dock, folders, widgets, search) light up from within, the glow starting under your finger.
+`Modifier.glass()` is Zenith's Liquid Glass, modelled on Apple's own description of it and on the
+pictures Apple published of it, in two finishes: **Clear** for the dock, folders and small
+controls, which only mists the wallpaper and bends it most, and **Regular** for widgets, search and
+sheets, which frosts it so text on top stays readable. On Android 13+ an AGSL shader
+(`LiquidGlassShader`) draws each pane, and does three things to the wallpaper round it:
+
+- **It bends it.** The flat middle shows the wallpaper exactly where it is; the rounded rim bends
+  and magnifies it inward like the edge of a thick lens, with a faint colour split on clear glass.
+  A bigger pane is a thicker slab and bends more.
+- **It softens it**, with a true blur. `GlassLevels` keeps the wallpaper four times over — as it
+  is, misted, frosted, and with little left but its colours, each made from the one before at half
+  its size when the wallpaper changes — and a pane shows a blend of the two either side of how soft
+  it is (`GlassLook.frost`), so any softness costs two lookups and nothing is blurred while
+  drawing. What is dark behind the glass comes through a little brighter, in its own colour.
+- **It reflects it.** The steep outer part of the rim is a mirror as much as a window and holds the
+  wallpaper just outside the pane, turned over at the edge (`GlassLook.mirror`). The light the
+  glass catches is the colour of the wallpaper round it (`GlassLook.glow`): a crisp line all the
+  way round the rim, brightest where it faces the light and bright again opposite, with a soft glow
+  just inside it. Light, bend and reflection all move as the phone tilts.
+- **It is a thing, not a picture of one** (`GlassLook.relief`). A pane is a slab with a rounded
+  shoulder and a polished edge, and the same light shows its shape: the shoulder turned to the lamp
+  is lit and the one turned from it is in the slab's own shade, light falls away gently across the
+  face, and where the polished edge mirrors the lamp there is a glint, with a fainter one opposite.
+  A bigger pane is a thicker slab. Turning **Glass** down in Settings flattens it.
+
+A readable veil thickens only over parts of the wallpaper that would fight the text. That is
+**Glass panels: Clear** in Settings → Wallpaper & theme, the glass with nothing added and what
+everybody has unless they ask for more. **Frosted** is for a wallpaper as dark as the pane itself,
+or in the light as pale, where clear glass is mostly its rim: a little frost in the theme's colour
+lifts the pane a step away, there and nowhere else (`glassLift`). **Solid** adds a fuller veil on
+top of that (`GlassBody`). Every pane casts a shadow in two parts, away from the light: a wide
+faint one that says how far off the wallpaper it floats and a close dark one under its edge that
+says it is solid, both deeper for a thicker slab (`shadowPaints`). Panes you press
+(`interactive = true`: the dock, folders, widgets, search) light up from within, the glow starting
+under your finger.
+
+A material can only be judged by looking at it, so `GlassSheetTest` paints a home screen's worth of
+panes over several wallpapers with the launcher's own drawing code and leaves the pictures in the
+app's external cache (`glass-*.png`), for Clear, Frosted and Solid and for both fallbacks.
 
 `Modifier.glassInk()` makes whatever a composable draws out of glass, for the "No glass" widgets:
-its own outline becomes the rim, so the wallpaper bends at the edges of each numeral and icon and
-the highlight runs along them. What is drawn white is clear glass; a colour becomes tinted glass.
+its own outline becomes the rim, so the wallpaper bends at the edges of each numeral and icon,
+which throw back what is beside them, and the highlight runs along them in the wallpaper's colour.
+Each stroke is a rounded bar of glass, shaded and glinting by the same light as the panes.
+What is drawn white is clear glass; a colour becomes tinted glass.
 With Glass panels on Frosted or Solid the glass also gathers more light over a dark wallpaper, so
 a glass clock stands out from it.
 
@@ -216,10 +263,11 @@ checks it is still current by the number Android gives every wallpaper (`Wallpap
 noted when the copy is made; see `WallpaperTrust`). The wallpaper's colours are only the fallback:
 Samsung phones never announce them to the app that set the wallpaper. Android 14+ shows a
 still wallpaper zoomed by a tenth to leave room for parallax, and the shader matches that. With no
-usable copy (a live wallpaper, or one set in another app) panes fall back to frosted glass with the
-same rim, rather than showing a picture that is not really behind them. Android 12 uses the cached
-blur, and "No glass" widgets draw their numbers and icons plain white below Android 13. Nothing is
-captured or blurred per frame.
+usable copy (a live wallpaper, or one set in another app) panes fall back to frosted glass with a
+rim of the same kind and the slab's form drawn in plain shading, rather than showing a picture that
+is not really behind them. Android 12
+uses the frosted copy, and "No glass" widgets draw their numbers and icons plain white below
+Android 13. Nothing is captured or blurred per frame.
 
 ## Accounts and the server
 

@@ -58,4 +58,11 @@ object PageEffects {
      * with a fraction while turning): 1 for the page in view, shared between two dots in between.
      */
     fun dotWidth(position: Float, index: Int): Float = (1f - abs(position - index)).coerceIn(0f, 1f)
+
+    /**
+     * How much of dot [index] is there while the row is growing or shrinking to [dots] of them (a
+     * count, with a fraction while a page is being added or taken away): 1 for a dot that is fully
+     * in the row, less for the last one on its way in or out, 0 for one that is not there.
+     */
+    fun dotPresence(dots: Float, index: Int): Float = (dots - index).coerceIn(0f, 1f)
 }

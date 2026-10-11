@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.gabriel.zenithui.data.GlassBody
+import com.gabriel.zenithui.data.GlassLevels
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlin.math.ceil
@@ -52,21 +53,27 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 
 /**
- * Clear floats over the wallpaper with the strongest bend: the dock, folders, small controls.
- * Regular softens what is behind it so text on top stays readable: widgets, search, sheets.
+ * Clear floats over the wallpaper with the strongest bend and only a mist over what is behind it:
+ * the dock, folders, small controls. Regular frosts what is behind it so text on top stays
+ * readable: widgets, search, sheets.
  */
 enum class GlassMaterial { Regular, Clear }
 
 /**
- * Liquid Glass, after Apple's. What is behind a pane shows through it; towards the rounded rim it
- * bends and magnifies like the edge of a thick lens, and a crisp highlight runs round the rim on
- * the side facing the light, with a fainter one opposite, both moving as the phone tilts. The pane
- * floats: a soft shadow sits under it, deeper in the dark. An [interactive] pane lights up from
- * within under your finger. Labels and icons drawn on top stay sharp.
+ * Liquid Glass, after Apple's. What is behind a pane shows through it, softened as glass softens
+ * it and a little brighter where it is dark; towards the rounded rim it bends and magnifies like
+ * the edge of a thick lens, and the rim throws back the wallpaper beside the pane. A crisp
+ * highlight runs all the way round, brightest on the side facing the light and bright again
+ * opposite, in the colour of the wallpaper round it, and it moves as the phone tilts. The pane is
+ * a solid slab and looks it: its shoulders are shaded by that light, its polished edge glints, and
+ * it casts a shadow, wide where it floats and close and dark under its edge, deeper in the dark.
+ * An [interactive] pane lights up from within under your finger. Labels and icons drawn on top
+ * stay sharp.
  *
- * On Android 13+ with a readable wallpaper this is a GPU shader over a cached copy of the
- * wallpaper (no screen capture, no per-frame blur). Android 12 gets the softened wallpaper with the
- * same rim; a wallpaper Zenith cannot read gets a frosted body of its own rather than a stale picture.
+ * On Android 13+ with a readable wallpaper this is a GPU shader over copies of the wallpaper
+ * softened ahead of time (no screen capture, no per-frame blur). Android 12 gets the frosted
+ * wallpaper with a rim of the same kind; a wallpaper Zenith cannot read gets a frosted body of its
+ * own rather than a stale picture.
  */
 @Composable
 fun Modifier.glass(
@@ -85,7 +92,7 @@ fun Modifier.glass(
 ): Modifier {
     val palette = LocalPalette.current
     val backdrop = LocalBackdrop.current
-    val sharp = LocalGlassBackdrop.current ?: backdrop
+    val levels = LocalGlassLevels.current
     val screen = LocalScreenSize.current
     val wallpaperOffset = LocalWallpaperOffset.current
     val tilt = LocalTilt.current
@@ -100,7 +107,7 @@ fun Modifier.glass(
         border = border,
         depth = LocalGlassBody.current,
     )
-    val lens = rememberLens(sharp, backdrop)
+    val lens = rememberLens(levels)
     var origin by remember { mutableStateOf(Offset.Zero) }
     val scope = rememberCoroutineScope()
     val press = if (interactive) remember { PressLight(scope) } else null
@@ -132,14 +139,14 @@ fun Modifier.glass(
                 Modifier.drawWithCache {
                     val outline = shape.createOutline(size, layoutDirection, this)
                     val path = android.graphics.Path().apply { addOutline(outline) }
-                    val paint = shadowPaint(look, material, palette.dark, density)
+                    val shadows = shadowPaints(look, material, palette.dark, density, size)
                     onDrawBehind {
                         drawIntoCanvas {
                             val canvas = it.nativeCanvas
                             canvas.save()
                             // Only the shadow is wanted: the pane itself is drawn by the glass.
                             canvas.clipOutPath(path)
-                            canvas.drawPath(path, paint)
+                            for (paint in shadows) canvas.drawPath(path, paint)
                             canvas.restore()
                         }
                     }
@@ -204,19 +211,52 @@ private class PressLight(private val scope: CoroutineScope) {
 }
 
 /**
- * Apple's glass casts a soft shadow that separates it from what is behind. It is wide and faint,
- * a little deeper in the dark, where it has to show against a dark picture, and lighter for Clear.
+ * Apple's glass casts a soft shadow that separates it from what is behind, and a slab's has two
+ * parts: a wide, faint one that says how far off the wallpaper it floats, and a close, darker one
+ * under its edge that says it is a solid thing. Both fall away from the light, down and a little
+ * to the right, and a bigger pane is a thicker slab and casts more of each. They are a little
+ * deeper in the dark, where they have to show against a dark picture, and lighter for Clear.
  */
-private fun shadowPaint(look: GlassLook, material: GlassMaterial, dark: Boolean, density: Float): android.graphics.Paint {
+internal fun shadowPaints(look: GlassLook, material: GlassMaterial, dark: Boolean, density: Float, pane: Size): List<android.graphics.Paint> {
     val clear = material == GlassMaterial.Clear
     val alpha = (if (dark) 0.34f else 0.18f) * (if (clear) 0.75f else 1f) * look.opacity
-    return android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+    val thick = slabThickness(pane, density)
+    fun layer(blur: Float, reach: Float, strength: Float) = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
         color = android.graphics.Color.BLACK
-        setShadowLayer(18f * density, 0f, 5f * density, Color.Black.copy(alpha = alpha).toArgb())
+        setShadowLayer(
+            blur * density,
+            SHADOW_FALL.x * reach * density,
+            SHADOW_FALL.y * reach * density,
+            Color.Black.copy(alpha = strength.coerceIn(0f, 1f)).toArgb(),
+        )
     }
+    return listOf(
+        layer(blur = 12f + 12f * thick, reach = 3f + 6f * thick, strength = alpha),
+        // The close one has to show even where the wallpaper is nearly black already.
+        layer(blur = 2.5f + 3f * thick, reach = 1f + 2f * thick, strength = alpha * 0.9f * (if (dark) 1.5f else 1f)),
+    )
 }
 
-private fun android.graphics.Path.addOutline(outline: Outline) {
+/**
+ * Which way shadows fall: straight away from the lamp as it hangs when the phone is held still
+ * (see the light in [drawLiquidGlass]). They do not swing with the phone as the highlights do.
+ */
+private val SHADOW_FALL = Offset(0.41f, 0.91f)
+
+/**
+ * How thick a slab a pane is, 0 to 1, by the sum the shader does for the width of its shoulder:
+ * about a quarter of the pane's shorter side, from 12 dp for a small control to 28 for a widget
+ * or a sheet, and never so much that two shoulders meet.
+ */
+internal fun slabThickness(pane: Size, density: Float): Float {
+    val shortest = min(pane.width, pane.height) / density.coerceAtLeast(0.01f)
+    return min((shortest * 0.24f).coerceIn(12f, SLAB_SHOULDER), shortest * 0.45f).coerceAtLeast(0f) / SLAB_SHOULDER
+}
+
+/** The widest a slab's shoulder gets, in dp. */
+private const val SLAB_SHOULDER = 28f
+
+internal fun android.graphics.Path.addOutline(outline: Outline) {
     when (outline) {
         is Outline.Rectangle -> addRect(
             outline.rect.left, outline.rect.top, outline.rect.right, outline.rect.bottom,
@@ -257,11 +297,11 @@ internal fun systemWallpaperOffset(launcher: Offset): Offset =
 
 /** One shader per pane, rebuilt only when the wallpaper itself changes. */
 @Composable
-internal fun rememberLens(sharp: ImageBitmap?, softened: ImageBitmap?): LiquidGlassShader? =
-    remember(sharp, softened) {
-        if (Build.VERSION.SDK_INT >= 33 && sharp != null && softened != null) {
+internal fun rememberLens(levels: GlassLevels?): LiquidGlassShader? =
+    remember(levels) {
+        if (Build.VERSION.SDK_INT >= 33 && levels != null) {
             // A GPU that cannot compile it still gets the Android 12 glass below.
-            runCatching { LiquidGlassShader(sharp, softened) }.getOrNull()
+            runCatching { LiquidGlassShader(levels) }.getOrNull()
         } else {
             null
         }
@@ -291,8 +331,12 @@ internal fun glassLook(
     }
     return GlassLook(
         refraction = (if (clear) 1f else 0.72f) * (0.35f + 0.65f * min(amount, 1f)),
-        frost = ((if (clear) 0.08f else 0.80f) + 0.20f * body).coerceIn(0f, 1f),
-        dispersion = (if (clear) 0.08f else 0.05f) * min(amount, 1f),
+        // Clear glass mists what is behind it, as any thickness of glass does; Regular frosts it,
+        // and a pane with more body, like a sheet, more still.
+        frost = ((if (clear) FROST_CLEAR else FROST_REGULAR) + 0.9f * body).coerceIn(0f, 3f),
+        // Only clear glass splits light into colour at its rim: through frost the split is lost,
+        // and it costs the shader three looks at the wallpaper where one will do.
+        dispersion = if (clear) 0.08f * min(amount, 1f) else 0f,
         // A lifted pane gets a slightly surer rim too: the edge is what is read first.
         shine = if (border) 0.32f + 0.26f * min(amount, 1.2f) + 0.06f * depth.lift else 0f,
         vibrance = if (clear) 1.14f else 1.22f,
@@ -300,8 +344,30 @@ internal fun glassLook(
         adapt = (if (clear) 0.30f else 0.34f) + 0.2f * min(body, 1f),
         opacity = opacity.coerceIn(0f, 1f),
         lift = glassLift(clear, dark, tint, body, depth.lift),
+        // A pane with no rim to catch the light has none to hold a reflection either.
+        mirror = if (border) (if (clear) MIRROR_CLEAR else MIRROR_REGULAR) * min(amount, 1f) else 0f,
+        glow = if (border) GLOW else 0f,
+        gather = if (clear) GATHER_CLEAR else GATHER_REGULAR,
+        rimmed = border,
+        // Turning the glass down flattens it: a slab at full strength, a sheet of light at none.
+        relief = if (border) min(amount, 1f) else 0f,
     )
 }
+
+/** How soft the wallpaper is through the face of a pane with no extra body: see [GlassLook.frost]. */
+internal const val FROST_CLEAR = 1.0f
+internal const val FROST_REGULAR = 1.55f
+
+/** How much of the picture beside it a pane's rim throws back at full strength: see [GlassLook.mirror]. */
+internal const val MIRROR_CLEAR = 0.7f
+internal const val MIRROR_REGULAR = 0.6f
+
+/** How far the light on the glass takes the colour of the wallpaper round it: see [GlassLook.glow]. */
+internal const val GLOW = 0.4f
+
+/** How much brighter what is dark comes through a pane: see [GlassLook.gather]. */
+internal const val GATHER_CLEAR = 0.35f
+internal const val GATHER_REGULAR = 0.28f
 
 /**
  * The frost that lifts a pane off a picture of its own tone. In the dark a pane over a dark
@@ -350,7 +416,7 @@ internal fun DrawScope.drawLiquidGlass(
 
     if (canSee && lens != null && Build.VERSION.SDK_INT >= 33) {
         drawIntoCanvas {
-            lens.draw(it.nativeCanvas, paneSize, outline, origin, screen, shown, density, look, light, dark, touch)
+            lens.draw(it.nativeCanvas, paneSize, outline, origin, screen, shown, density, look, light, dark, touch, lean)
         }
         return
     }
@@ -436,27 +502,69 @@ internal fun DrawScope.drawLiquidGlass(
     drawRim(paneSize, outline, look, light, dark)
 }
 
-/** The rim for the non-shader paths: a hairline glint facing the light and a fainter one opposite. */
+/**
+ * The rim for the non-shader paths, as near the shader's as strokes can come: a line all the way
+ * round, brightest facing the light and bright again opposite, and a soft glow just inside it.
+ * Each stroke straddles the outline and the pane's own clip keeps the inner half, so three of
+ * different widths laid over each other fade inwards.
+ *
+ * The slab's form ([GlassLook.relief]) is drawn the same way and under the rim: light falling away
+ * evenly across the pane, and the edge turned from the lamp in its own shade.
+ */
 private fun DrawScope.drawRim(paneSize: Size, outline: Outline, look: GlassLook, light: Offset, dark: Boolean) {
-    if (look.shine <= 0f) return
-    val strength = look.shine * look.opacity * (if (dark) 0.85f else 1f)
     val centre = Offset(paneSize.width / 2f, paneSize.height / 2f)
-    val reach = max(paneSize.width, paneSize.height) * 0.6f
     val length = kotlin.math.hypot(light.x, light.y).coerceAtLeast(0.001f)
     val towards = Offset(light.x / length, light.y / length)
-    drawOutline(
-        outline = outline,
-        brush = Brush.linearGradient(
-            0f to Color.White.copy(alpha = 0.75f * strength),
-            0.35f to Color.White.copy(alpha = 0.14f * strength),
-            0.65f to Color.White.copy(alpha = 0.10f * strength),
-            1f to Color.White.copy(alpha = 0.42f * strength),
-            start = centre + towards * reach,
-            end = centre - towards * reach,
-        ),
-        style = Stroke(1.dp.toPx()),
+    // Where each part of the pane stands to the light, as a line across it from its lit corner
+    // to its far one. The line is stretched to the pane's own shape, so the whole top edge of a
+    // wide bar is lit, as the shader lights it, and not just the corner nearest the lamp.
+    val across = Offset(towards.x / (paneSize.width / 2f), towards.y / (paneSize.height / 2f))
+    val span = (kotlin.math.abs(towards.x) + kotlin.math.abs(towards.y)) / (across.x * across.x + across.y * across.y)
+    val lamp = centre + across * span
+    val far = centre - across * span
+    // A small pane gets narrower strokes, or it would be all edge and no face.
+    val widest = min(paneSize.width, paneSize.height) * 0.3f
+
+    val relief = look.relief * look.opacity
+    if (relief > 0f) {
+        drawRect(
+            Brush.linearGradient(
+                0f to Color.White.copy(alpha = 0.06f * relief),
+                0.5f to Color.Transparent,
+                1f to Color.Black.copy(alpha = (if (dark) 0.26f else 0.12f) * relief),
+                start = lamp,
+                end = far,
+            ),
+            size = paneSize,
+        )
+        val depth = (if (dark) 0.16f else 0.07f) * relief
+        val shade = Brush.linearGradient(
+            0f to Color.Transparent,
+            0.5f to Color.Black.copy(alpha = 0.4f * depth),
+            1f to Color.Black.copy(alpha = depth),
+            start = lamp,
+            end = far,
+        )
+        for (width in RIM_GLOW_WIDTHS) drawOutline(outline, shade, style = Stroke(min(width.dp.toPx(), widest)))
+    }
+
+    if (look.shine <= 0f) return
+    val strength = look.shine * look.opacity * (if (dark) 0.88f else 1f)
+    fun lit(amount: Float) = Brush.linearGradient(
+        0f to Color.White.copy(alpha = (1.5f * amount).coerceAtMost(1f)),
+        0.35f to Color.White.copy(alpha = (0.5f * amount).coerceAtMost(1f)),
+        0.65f to Color.White.copy(alpha = (0.42f * amount).coerceAtMost(1f)),
+        1f to Color.White.copy(alpha = (0.95f * amount).coerceAtMost(1f)),
+        start = lamp,
+        end = far,
     )
+    val glow = lit(0.085f * strength)
+    for (width in RIM_GLOW_WIDTHS) drawOutline(outline, glow, style = Stroke(min(width.dp.toPx(), widest)))
+    drawOutline(outline, lit(strength), style = Stroke(2.5.dp.toPx()))
 }
+
+/** The strokes that make the glow inside the rim, in dp; the pane's clip shows the inner half of each. */
+private val RIM_GLOW_WIDTHS = floatArrayOf(14f, 9f, 5f)
 
 @Composable
 fun GlassPanel(

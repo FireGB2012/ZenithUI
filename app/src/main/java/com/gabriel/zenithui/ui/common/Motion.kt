@@ -1,16 +1,21 @@
 package com.gabriel.zenithui.ui.common
 
 import android.provider.Settings
+import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.FastOutLinearInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -38,6 +43,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -117,6 +123,77 @@ fun unfoldIn(reduced: Boolean): EnterTransition =
 /** The same line closing. */
 fun unfoldOut(reduced: Boolean): ExitTransition =
     if (reduced) fadeOut(tween(Motion.REDUCED_MS)) else fadeOut(tween(150)) + shrinkVertically()
+
+/**
+ * A bar arriving from an edge of the screen: down from the top, or with [fromFoot] up from the
+ * bottom, a touch past its place and back. It is moved by being placed rather than on a layer, so
+ * glass in it shows the right wallpaper all the way. With movement reduced it fades in where it
+ * stands.
+ */
+fun edgeIn(reduced: Boolean, fromFoot: Boolean = false): EnterTransition =
+    if (reduced) {
+        fadeIn(tween(Motion.REDUCED_MS))
+    } else {
+        slideInVertically(EDGE) { if (fromFoot) it else -it } + fadeIn(tween(180))
+    }
+
+/** The same bar going back to the edge it came from, quicker than it came. */
+fun edgeOut(reduced: Boolean, toFoot: Boolean = false): ExitTransition =
+    if (reduced) {
+        fadeOut(tween(Motion.REDUCED_MS))
+    } else {
+        slideOutVertically(tween(220, easing = FastOutLinearInEasing)) { if (toFoot) it else -it } + fadeOut(tween(180))
+    }
+
+private val EDGE = spring(dampingRatio = 0.72f, stiffness = 320f, visibilityThreshold = IntOffset(1, 1))
+
+/**
+ * A number, or a short line, giving way to the next: the new one comes up from under it as the old
+ * one goes off the top, or the other way about with [down], for a number that has gone down. With
+ * movement reduced one fades into the other where it stands.
+ */
+fun rollOver(reduced: Boolean, down: Boolean = false): ContentTransform {
+    val way = if (down) -1 else 1
+    return ContentTransform(
+        targetContentEnter = if (reduced) {
+            fadeIn(tween(Motion.REDUCED_MS))
+        } else {
+            slideInVertically(ROLL) { way * it / 2 } + fadeIn(tween(220))
+        },
+        initialContentExit = if (reduced) {
+            fadeOut(tween(Motion.REDUCED_MS))
+        } else {
+            slideOutVertically(tween(240)) { -way * it / 2 } + fadeOut(tween(160))
+        },
+        // Unclipped, so nothing is cut off at the edge of the line it is leaving.
+        sizeTransform = SizeTransform(clip = false),
+    )
+}
+
+private val ROLL = spring(dampingRatio = 0.48f, stiffness = 260f, visibilityThreshold = IntOffset(1, 1))
+
+/**
+ * Words changing where they stand: the old ones go, and the new come in a moment behind them. What
+ * holds them takes its new size smoothly, so a line that becomes two pushes nothing down at a jump.
+ */
+fun wordsChange(reduced: Boolean = false): ContentTransform = ContentTransform(
+    targetContentEnter = if (reduced) fadeIn(tween(Motion.REDUCED_MS)) else fadeIn(tween(220, delayMillis = 60)),
+    initialContentExit = if (reduced) fadeOut(tween(Motion.REDUCED_MS)) else fadeOut(tween(120)),
+    sizeTransform = SizeTransform(clip = false),
+)
+
+/**
+ * Places what it holds again whenever [moving] changes, where it already is. Nothing moves: it is
+ * so that glass inside a layer that is growing or sliding looks again at where it is on screen,
+ * which it only does when it is placed.
+ */
+fun Modifier.placedAgainWith(moving: () -> Float): Modifier = layout { measurable, constraints ->
+    val placeable = measurable.measure(constraints)
+    layout(placeable.width, placeable.height) {
+        moving()
+        placeable.place(0, 0)
+    }
+}
 
 /**
  * False when the phone's "Remove animations" is on. Springs and tweens already honour that on

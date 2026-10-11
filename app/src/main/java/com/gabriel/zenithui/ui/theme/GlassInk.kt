@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.offset
+import com.gabriel.zenithui.data.GlassLevels
 import kotlin.math.hypot
 import kotlin.math.max
 
@@ -35,8 +36,10 @@ import kotlin.math.max
  * it, the numerals and symbols themselves are the glass. Its own outline becomes a rounded rim, so
  * the wallpaper behind it bends and magnifies towards its edges, a crisp highlight runs along the
  * edges facing the light and moves as the phone tilts, and a soft shade round it keeps it clear of
- * the wallpaper. What is drawn white is clear glass; what is drawn in a colour is glass of that
- * colour, toned by how bright the wallpaper behind it is.
+ * the wallpaper. Each stroke is a rounded bar of glass and is lit as one: the side of it turned
+ * from the light is in its own shade, and where its round mirrors the lamp it glints. What is
+ * drawn white is clear glass; what is drawn in a colour is glass of that colour, toned by how
+ * bright the wallpaper behind it is.
  *
  * [bevel] is how far in from its edges the glass stays curved: about a third of the stroke width
  * looks right, so a big numeral gets a wider rim than a small icon.
@@ -48,16 +51,15 @@ import kotlin.math.max
 fun Modifier.glassInk(bevel: Dp = 4.dp, halo: Boolean = true): Modifier {
     if (Build.VERSION.SDK_INT < 33) return this.graphicsLayer { alpha = 0.92f }
 
-    val backdrop = LocalBackdrop.current
-    val sharp = LocalGlassBackdrop.current ?: backdrop
+    val levels = LocalGlassLevels.current
     val screen = LocalScreenSize.current
     val wallpaperOffset = LocalWallpaperOffset.current
     val tilt = LocalTilt.current
     val strength = LocalGlassStrength.current.coerceIn(0f, 1.4f)
     val lift = LocalGlassBody.current.lift
-    val ink = remember(sharp, backdrop) {
+    val ink = remember(levels) {
         // A GPU that cannot compile it still shows the shape, plainly.
-        runCatching { GlassInkShader(sharp, backdrop) }.getOrNull()
+        runCatching { GlassInkShader(levels) }.getOrNull()
     }
     var origin by remember { mutableStateOf(Offset.Zero) }
 
@@ -78,6 +80,7 @@ fun Modifier.glassInk(bevel: Dp = 4.dp, halo: Boolean = true): Modifier {
                 strength = strength,
                 halo = halo,
                 lift = lift,
+                lean = lean,
             )?.asComposeRenderEffect()
         }
         .padding(INK_BLEED)
@@ -103,18 +106,20 @@ private fun Modifier.bleed(margin: Dp): Modifier = layout { measurable, constrai
 
 /** The shader behind [glassInk]: one per element, rebuilt only when the wallpaper changes. */
 @RequiresApi(33)
-internal class GlassInkShader(sharp: ImageBitmap?, blurred: ImageBitmap?) {
-    private val sharpSize = sharp?.let { Size(it.width.toFloat(), it.height.toFloat()) }
-    private val blurSize = blurred?.let { Size(it.width.toFloat(), it.height.toFloat()) }
-    private val seeThrough = sharp != null && blurred != null
+internal class GlassInkShader(levels: GlassLevels?) {
+    private val sharpSize = levels?.sharp?.let(::sizeOf)
+    private val mistSize = levels?.mist?.let(::sizeOf)
+    private val frostSize = levels?.frost?.let(::sizeOf)
+    private val hazeSize = levels?.haze?.let(::sizeOf)
     private val shader = RuntimeShader(PROGRAM).apply {
-        if (sharp != null && blurred != null) {
-            setInputShader("wallpaper", bitmapShader(sharp))
-            setInputShader("diffused", bitmapShader(blurred))
+        if (levels != null) {
+            setInputShader("wallpaper", bitmapShader(levels.sharp))
+            setInputShader("misted", bitmapShader(levels.mist))
+            setInputShader("frosted", bitmapShader(levels.frost))
+            setInputShader("hazed", bitmapShader(levels.haze))
         } else {
             // Nothing to see through: the program takes its frosted branch and never samples these.
-            setInputShader("wallpaper", flat())
-            setInputShader("diffused", flat())
+            for (name in listOf("wallpaper", "misted", "frosted", "hazed")) setInputShader(name, flat())
         }
     }
 
@@ -130,9 +135,29 @@ internal class GlassInkShader(sharp: ImageBitmap?, blurred: ImageBitmap?) {
         halo: Boolean,
         /** How far the glass is lifted off a picture of its own tone: see GlassBody. */
         lift: Float = 0f,
-    ): RenderEffect? {
+        /** Which way the phone leans: what the edges bend and reflect slides with it. */
+        lean: Offset = Offset.Zero,
+    ): RenderEffect? =
+        // The uniforms are copied into the effect as it is made, so every change needs a new one.
+        program(size, origin, screen, wallpaperOffset, bevel, light, strength, halo, lift, lean)
+            ?.let { RenderEffect.createRuntimeShaderEffect(it, "content") }
+
+    /** The program with its numbers set for one drawing. `content`, the shape to be made of glass, is still to be given. */
+    internal fun program(
+        size: Size,
+        origin: Offset,
+        screen: IntSize,
+        wallpaperOffset: Offset,
+        bevel: Float,
+        light: Offset,
+        strength: Float,
+        halo: Boolean,
+        lift: Float = 0f,
+        lean: Offset = Offset.Zero,
+    ): RuntimeShader? {
         if (size.width <= 0f || size.height <= 0f) return null
-        val visible = seeThrough && sharpSize != null && blurSize != null && screen.width > 0 && screen.height > 0
+        val visible = sharpSize != null && mistSize != null && frostSize != null && hazeSize != null &&
+            screen.width > 0 && screen.height > 0
         if (visible) {
             // The wallpaper as Android shows it, exactly as the panes line it up.
             val scale = max(screen.width / sharpSize!!.width, screen.height / sharpSize.height) * SYSTEM_WALLPAPER_ZOOM
@@ -140,23 +165,32 @@ internal class GlassInkShader(sharp: ImageBitmap?, blurred: ImageBitmap?) {
             val cropY = (sharpSize.height * scale - screen.height) * wallpaperOffset.y.coerceIn(0f, 1f)
             shader.setFloatUniform("origin", origin.x + cropX, origin.y + cropY)
             shader.setFloatUniform("imageScale", 1f / scale)
-            shader.setFloatUniform("blurRatio", blurSize!!.width / sharpSize.width, blurSize.height / sharpSize.height)
+            shader.setFloatUniform("mistRatio", mistSize!!.width / sharpSize.width, mistSize.height / sharpSize.height)
+            shader.setFloatUniform("frostRatio", frostSize!!.width / sharpSize.width, frostSize.height / sharpSize.height)
+            shader.setFloatUniform("hazeRatio", hazeSize!!.width / sharpSize.width, hazeSize.height / sharpSize.height)
         } else {
             shader.setFloatUniform("origin", 0f, 0f)
             shader.setFloatUniform("imageScale", 1f)
-            shader.setFloatUniform("blurRatio", 1f, 1f)
+            shader.setFloatUniform("mistRatio", 1f, 1f)
+            shader.setFloatUniform("frostRatio", 1f, 1f)
+            shader.setFloatUniform("hazeRatio", 1f, 1f)
         }
         shader.setFloatUniform("seeThrough", if (visible) 1f else 0f)
         shader.setFloatUniform("bevel", bevel.coerceAtLeast(1f))
         shader.setFloatUniform("refraction", 0.55f + 0.45f * strength.coerceAtMost(1.2f))
         val length = hypot(light.x, light.y).coerceAtLeast(0.001f)
         shader.setFloatUniform("light", light.x / length, light.y / length)
+        shader.setFloatUniform("lean", lean.x.coerceIn(-1f, 1f), lean.y.coerceIn(-1f, 1f))
         val lifted = lift.coerceIn(0f, 1f)
         shader.setFloatUniform("halo", if (halo) 0.26f + 0.10f * lifted else 0f)
         shader.setFloatUniform("gather", INK_GATHER * lifted)
-        // The uniforms are copied into the effect as it is made, so every change needs a new one.
-        return RenderEffect.createRuntimeShaderEffect(shader, "content")
+        shader.setFloatUniform("mirror", MIRROR_CLEAR * strength.coerceAtMost(1f))
+        shader.setFloatUniform("glow", GLOW)
+        shader.setFloatUniform("relief", strength.coerceIn(0f, 1f))
+        return shader
     }
+
+    private fun sizeOf(image: ImageBitmap) = Size(image.width.toFloat(), image.height.toFloat())
 
     private fun bitmapShader(image: ImageBitmap) =
         BitmapShader(image.asAndroidBitmap(), Shader.TileMode.CLAMP, Shader.TileMode.CLAMP).apply {
@@ -175,26 +209,40 @@ internal class GlassInkShader(sharp: ImageBitmap?, blurred: ImageBitmap?) {
         internal const val PROGRAM = """
             uniform shader content;
             uniform shader wallpaper;
-            uniform shader diffused;
+            uniform shader misted;
+            uniform shader frosted;
+            uniform shader hazed;
             uniform float2 origin;
             uniform float imageScale;
-            uniform float2 blurRatio;
+            uniform float2 mistRatio;
+            uniform float2 frostRatio;
+            uniform float2 hazeRatio;
             uniform float seeThrough;
             uniform float bevel;
             uniform float refraction;
             uniform float2 light;
+            uniform float2 lean;
             uniform float halo;
             uniform float gather;
+            uniform float mirror;
+            uniform float glow;
+            uniform float relief;
 
-            float3 behind(float2 point, float blur) {
+            // What is behind a point, as soft as asked: 0 the picture as it is, 3 little but its
+            // colours, by blending the prepared pictures either side of that softness.
+            float3 behind(float2 point, float soft) {
                 if (seeThrough < 0.5) {
                     // No picture of the wallpaper: frosted glass, which still takes the light.
                     return float3(0.60, 0.62, 0.68);
                 }
                 float2 uv = (point + origin) * imageScale;
-                float3 sharp = wallpaper.eval(uv).rgb;
-                float3 soft = diffused.eval(uv * blurRatio).rgb;
-                return mix(sharp, soft, blur);
+                if (soft < 1.0) {
+                    return mix(wallpaper.eval(uv).rgb, misted.eval(uv * mistRatio).rgb, max(soft, 0.0));
+                }
+                if (soft < 2.0) {
+                    return mix(misted.eval(uv * mistRatio).rgb, frosted.eval(uv * frostRatio).rgb, soft - 1.0);
+                }
+                return mix(frosted.eval(uv * frostRatio).rgb, hazed.eval(uv * hazeRatio).rgb, min(soft - 2.0, 1.0));
             }
 
             half4 main(float2 p) {
@@ -241,12 +289,13 @@ internal class GlassInkShader(sharp: ImageBitmap?, blurred: ImageBitmap?) {
 
                 // Through the glass: what is behind is pulled in from further inside, magnified
                 // as through the rounded edge of a thick lens, with a whisper of colour split.
-                float2 bend = inward * curve * bevel * 1.7 * refraction;
-                float blur = max(0.18 * (1.0 - 0.5 * t), 0.4 * curve);
+                float2 bend = (inward * 1.7 * refraction + lean * 0.5) * curve * bevel;
+                // Lightly misted through its face, softer where the edge squeezes the picture.
+                float soft = max(0.45 * (1.0 - 0.5 * t), curve);
                 float3 color = float3(
-                    behind(p + bend * 0.94, blur).r,
-                    behind(p + bend, blur).g,
-                    behind(p + bend * 1.06, blur).b
+                    behind(p + bend * 0.94, soft).r,
+                    behind(p + bend, soft).g,
+                    behind(p + bend * 1.06, soft).b
                 );
                 float luma = dot(color, float3(0.2126, 0.7152, 0.0722));
                 color = mix(float3(luma), color, 1.25);
@@ -263,16 +312,44 @@ internal class GlassInkShader(sharp: ImageBitmap?, blurred: ImageBitmap?) {
                 color = mix(color, float3(1.0), 0.12 + gather * lowlight);
                 color *= 1.0 - 1.5 * gather * smoothstep(0.62, 0.95, luma);
 
-                // Light: a crisp line along the edges facing it, a weaker one where it leaves,
-                // a soft bloom on the lit curve, and the rim brighter at its grazing angle.
+                // Reflection: the steep edge of the glass holds the picture just outside the
+                // shape, turned over; and the light it catches is the colour of what is round it.
+                float3 lamp = float3(1.0);
+                if (seeThrough > 0.5) {
+                    float2 beside = p + normal * ((1.0 - t) * bevel * 2.6 + 0.5 * bevel + 2.0) + lean * bevel * 1.5;
+                    float3 thrown = frosted.eval((beside + origin) * imageScale * frostRatio).rgb;
+                    float bright = dot(thrown, float3(0.2126, 0.7152, 0.0722));
+                    thrown = clamp(mix(float3(bright), thrown, 1.3), 0.0, 1.0);
+                    color = mix(color, thrown, mirror * t * t * t);
+                    float3 air = hazed.eval((p + normal * bevel * 2.0 + origin) * imageScale * hazeRatio).rgb;
+                    float peak = max(air.r, max(air.g, air.b));
+                    float3 tone = mix(float3(1.0), air / max(peak, 0.001), smoothstep(0.04, 0.3, peak));
+                    lamp = mix(float3(1.0), tone, glow);
+                }
+
+                // Form. The glass is a rounded bar, and it is light that shows its shape: the
+                // lamp hangs up and to the left, so the side of the bar turned from it is in its
+                // own shade, and where the round of it mirrors the lamp there is a glint.
                 float facing = dot(normal, light);
                 float lit = max(facing, 0.0);
                 float away = max(-facing, 0.0);
+                float3 above = normalize(float3(light * 0.77, 0.64));
+                float3 round3 = float3(normal * t, sqrt(max(1.0 - t * t, 0.0)));
+                float form = dot(round3, above) - above.z;
+                color *= 1.0 - 0.45 * relief * clamp(-form, 0.0, 1.0);
+                float3 toLight = normalize(above + float3(0.0, 0.0, 1.0));
+                float3 toFar = normalize(float3(-above.xy, above.z + 1.0));
+                float level = pow(toLight.z, 12.0);
+                float glint = max(pow(max(dot(round3, toLight), 0.0), 12.0) - level, 0.0)
+                    + 0.35 * max(pow(max(dot(round3, toFar), 0.0), 12.0) - level, 0.0);
+                // Deep in a stroke the glass has no one way it faces, and a glint there would be a speck.
+                glint *= smoothstep(2.0, 6.0, steep);
+
+                // Light: a crisp line along the edges facing it, a weaker one where it leaves,
+                // a soft bloom on the lit curve, and the rim brighter at its grazing angle.
                 float rim = hairline * (0.12 + 0.3 * gather + 0.58 * pow(lit, 1.4) + 0.28 * pow(away, 1.8));
                 float bloom = t * t * t * (0.18 * pow(lit, 2.0) + 0.06 * pow(away, 2.4));
-                color += rim + bloom + pow(t, 4.0) * 0.04;
-                // The curve turned from the light sits in the glass's own shadow.
-                color *= 1.0 - 0.12 * t * t * away;
+                color += lamp * (rim + bloom + relief * (0.6 * glint + 0.45 * max(form, 0.0))) + pow(t, 4.0) * 0.04;
 
                 float alpha = a + shade * (1.0 - a);
                 return half4(half3(clamp(color, 0.0, 1.0) * a), half(alpha));

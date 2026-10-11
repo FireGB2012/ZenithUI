@@ -61,6 +61,7 @@ import com.gabriel.zenithui.data.CalendarRepository
 import com.gabriel.zenithui.data.findActivity
 import com.gabriel.zenithui.ui.common.GlassButton
 import com.gabriel.zenithui.ui.common.appearIn
+import com.gabriel.zenithui.ui.common.pressBounce
 import com.gabriel.zenithui.ui.common.staggerDelay
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.ZenithShapes
@@ -158,12 +159,15 @@ fun AmbientScreen(
         ) {
             Spacer(Modifier.height(40.dp))
 
+            // The time, then the day, then the greeting, each settling up into place as the
+            // room goes dark: slowly, and without a bounce, as befits a bedside.
             AnimatedContent(
                 targetState = time,
                 transitionSpec = {
                     (slideInVertically(spring(dampingRatio = 0.6f, stiffness = 170f)) { it / 3 } + fadeIn(tween(500)))
                         .togetherWith(slideOutVertically(tween(600)) { -it / 3 } + fadeOut(tween(360)))
                 },
+                modifier = Modifier.appearIn(delayMillis = 120, fromScale = 0.96f, riseFrom = 60f, gentle = true),
                 label = "ambientClock",
             ) { value ->
                 Text(
@@ -180,12 +184,14 @@ fun AmbientScreen(
                 color = Color.White.copy(alpha = 0.55f),
                 fontSize = 17.sp,
                 fontWeight = FontWeight.Light,
+                modifier = Modifier.appearIn(delayMillis = 260, fromScale = 1f, riseFrom = 40f, gentle = true),
             )
             if (userName.isNotBlank()) {
                 Text(
                     text = greeting(now.hour, userName),
                     color = Color.White.copy(alpha = 0.35f),
                     fontSize = 14.sp,
+                    modifier = Modifier.appearIn(delayMillis = 380, fromScale = 1f, riseFrom = 40f, gentle = true),
                 )
             }
 
@@ -235,6 +241,7 @@ fun AmbientScreen(
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Medium,
                         modifier = Modifier
+                            .pressBounce(0.94f)
                             .clip(RoundedCornerShape(50))
                             .clickable { onCalendarDeclined(false) }
                             .padding(horizontal = 10.dp, vertical = 8.dp),
@@ -300,6 +307,7 @@ private fun CalendarOffer(
                 color = Color.White.copy(alpha = 0.6f),
                 fontSize = 14.sp,
                 modifier = Modifier
+                    .pressBounce(0.94f)
                     .clip(RoundedCornerShape(50))
                     .clickable(onClick = onNotNow)
                     .padding(horizontal = 14.dp, vertical = 12.dp),

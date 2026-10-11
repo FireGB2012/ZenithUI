@@ -1,5 +1,7 @@
 package com.gabriel.zenithui.ui.home
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -44,7 +46,6 @@ import com.gabriel.zenithui.data.WidgetCell
 import com.gabriel.zenithui.data.WidgetSize
 import com.gabriel.zenithui.data.WidgetSizes
 import com.gabriel.zenithui.data.Widgets
-import com.gabriel.zenithui.ui.common.appearIn
 import com.gabriel.zenithui.ui.common.pressBounce
 import com.gabriel.zenithui.ui.common.rememberHaptics
 import com.gabriel.zenithui.ui.common.shake
@@ -83,7 +84,6 @@ fun ResizeBar(
     Column(
         modifier
             .fillMaxWidth()
-            .appearIn(fromScale = 0.92f, riseFrom = 24f)
             .shake(refused)
             .glass(RoundedCornerShape(28.dp), strength = 1.2f, solid = 0.45f)
             // A tap on the bar itself is not a tap on the page, which would end the resizing.
@@ -134,12 +134,22 @@ fun ResizeBar(
 @Composable
 private fun SizeChip(name: String, cells: String, selected: Boolean, onClick: () -> Unit) {
     val palette = LocalPalette.current
-    val ink = if (selected) (if (palette.dark) Color(0xFF0A0B12) else Color.White) else palette.onGlass
+    // The light moves from the size it was to the size it is, rather than one going out and another on.
+    val ink by animateColorAsState(
+        if (selected) (if (palette.dark) Color(0xFF0A0B12) else Color.White) else palette.onGlass,
+        tween(220),
+        label = "sizeInk",
+    )
+    val fill by animateColorAsState(
+        if (selected) palette.accent.copy(alpha = 0.92f) else palette.onGlass.copy(alpha = 0.09f),
+        tween(220),
+        label = "sizeFill",
+    )
     Column(
         Modifier
             .pressBounce(0.94f)
             .clip(RoundedCornerShape(16.dp))
-            .background(if (selected) palette.accent.copy(alpha = 0.92f) else palette.onGlass.copy(alpha = 0.09f))
+            .background(fill)
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,

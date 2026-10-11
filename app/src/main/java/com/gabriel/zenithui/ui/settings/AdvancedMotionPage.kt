@@ -1,7 +1,10 @@
 package com.gabriel.zenithui.ui.settings
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -29,6 +32,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -54,8 +58,11 @@ import com.gabriel.zenithui.data.LaunchMotion
 import com.gabriel.zenithui.data.Tune
 import com.gabriel.zenithui.data.TuneGroup
 import com.gabriel.zenithui.data.ZenithSettings
+import com.gabriel.zenithui.ui.common.LocalMotionLevel
 import com.gabriel.zenithui.ui.common.pressBounce
 import com.gabriel.zenithui.ui.common.rememberTick
+import com.gabriel.zenithui.ui.common.unfoldIn
+import com.gabriel.zenithui.ui.common.unfoldOut
 import com.gabriel.zenithui.ui.home.springOf
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import kotlinx.coroutines.Job
@@ -141,13 +148,24 @@ internal fun AdvancedMotionOptions(settings: ZenithSettings, actions: SettingsAc
         }
     }
 
-    if (tuning != AnimationTuning()) {
-        Group(rise = TuneGroup.entries.size + 2) {
+    // The way back is only there while there is something to go back from: it opens out under
+    // the page at the first change, and its arrow turns right round when it is taken.
+    var resets by remember { mutableIntStateOf(0) }
+    AnimatedVisibility(
+        visible = tuning != AnimationTuning(),
+        enter = unfoldIn(LocalMotionLevel.current.reduced),
+        exit = unfoldOut(LocalMotionLevel.current.reduced),
+    ) {
+        Group {
             ActionRow(
                 icon = Icons.Rounded.RestartAlt,
                 title = "Back to Zenith's own",
                 subtitle = "Undo every change on this page",
-                onClick = { set(AnimationTuning()) },
+                spin = resets,
+                onClick = {
+                    set(AnimationTuning())
+                    resets++
+                },
             )
         }
     }
@@ -164,13 +182,22 @@ private fun hundredths(value: Float): String {
 private fun StyleChip(label: String, selected: Boolean, onClick: () -> Unit) {
     val palette = LocalPalette.current
     val tick = rememberTick()
+    // The colour moves from the style that was chosen to the one that is, rather than one chip
+    // going out and another coming on.
+    val fill by animateColorAsState(if (selected) palette.accent.copy(alpha = 0.9f) else Color.Transparent, tween(220), label = "styleFill")
+    val rim by animateColorAsState(palette.onGlass.copy(alpha = if (selected) 0f else 0.18f), tween(220), label = "styleRim")
+    val ink by animateColorAsState(
+        if (selected) (if (palette.dark) Color(0xFF0A0B12) else Color.White) else palette.onGlass,
+        tween(220),
+        label = "styleInk",
+    )
     Box(
         Modifier
             .height(38.dp)
             .pressBounce(0.94f)
             .clip(RoundedCornerShape(50))
-            .background(if (selected) palette.accent.copy(alpha = 0.9f) else Color.Transparent)
-            .border(1.dp, palette.onGlass.copy(alpha = if (selected) 0f else 0.18f), RoundedCornerShape(50))
+            .background(fill)
+            .border(1.dp, rim, RoundedCornerShape(50))
             .clickable {
                 if (!selected) tick()
                 onClick()
@@ -178,12 +205,7 @@ private fun StyleChip(label: String, selected: Boolean, onClick: () -> Unit) {
             .padding(horizontal = 16.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(
-            label,
-            color = if (selected) (if (palette.dark) Color(0xFF0A0B12) else Color.White) else palette.onGlass,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Medium,
-        )
+        Text(label, color = ink, fontSize = 14.sp, fontWeight = FontWeight.Medium)
     }
 }
 

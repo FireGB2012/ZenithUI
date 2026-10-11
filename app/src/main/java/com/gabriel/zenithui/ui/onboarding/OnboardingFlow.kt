@@ -308,7 +308,7 @@ fun OnboardingFlow(
     // Android would start it again from scratch — setup included, with everything you picked lost.
     BackHandler { if (!finishing) back() }
 
-    ZenithTheme(settings = preview, backdrop = null, screenSize = screenSize) {
+    ZenithTheme(settings = preview, screenSize = screenSize) {
         val palette = LocalPalette.current
 
         // Setup owns the status bar until it is done: on a light palette the icons go dark, so

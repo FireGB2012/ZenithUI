@@ -68,6 +68,8 @@ import com.gabriel.zenithui.data.findActivity
 import com.gabriel.zenithui.data.server.Signed
 import com.gabriel.zenithui.ui.common.LocalMotionLevel
 import com.gabriel.zenithui.ui.common.Motion
+import com.gabriel.zenithui.ui.common.popIn
+import com.gabriel.zenithui.ui.common.popOut
 import com.gabriel.zenithui.ui.common.pressBounce
 import com.gabriel.zenithui.ui.common.rememberHaptics
 import com.gabriel.zenithui.ui.common.shake
@@ -345,16 +347,29 @@ private fun AccountField(
             )
         }
         if (secret) {
-            Icon(
-                if (shown) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
-                contentDescription = if (shown) "Hide password" else "Show password",
-                tint = palette.onGlassMuted,
-                modifier = Modifier
+            val reduced = LocalMotionLevel.current.reduced
+            Box(
+                Modifier
                     .size(38.dp)
+                    .pressBounce(0.86f)
                     .clip(CircleShape)
-                    .clickable { shown = !shown }
-                    .padding(9.dp),
-            )
+                    .clickable { shown = !shown },
+                contentAlignment = Alignment.Center,
+            ) {
+                // The eye shuts and opens: one gives way to the other where it stands.
+                AnimatedContent(
+                    targetState = shown,
+                    transitionSpec = { popIn(reduced, from = 0.5f).togetherWith(popOut(reduced, to = 0.5f)) },
+                    label = "passwordEye",
+                ) { open ->
+                    Icon(
+                        if (open) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
+                        contentDescription = if (open) "Hide password" else "Show password",
+                        tint = palette.onGlassMuted,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+            }
         }
     }
 }

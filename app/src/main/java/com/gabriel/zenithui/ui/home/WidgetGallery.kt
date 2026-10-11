@@ -59,7 +59,6 @@ import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInRoot
-import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
@@ -84,6 +83,7 @@ import com.gabriel.zenithui.ui.common.LocalMotionLevel
 import com.gabriel.zenithui.ui.common.Motion
 import com.gabriel.zenithui.ui.common.PAGE_GONE_MS
 import com.gabriel.zenithui.ui.common.TITLE_GONE_PX
+import com.gabriel.zenithui.ui.common.placedAgainWith
 import com.gabriel.zenithui.ui.common.pressBounce
 import com.gabriel.zenithui.ui.common.rememberHaptics
 import com.gabriel.zenithui.ui.common.shake
@@ -341,19 +341,6 @@ private fun Modifier.arriving(arrive: Boolean, turn: Int, card: Boolean = false)
             }
         }
         .placedAgainWith { progress.value }
-}
-
-/**
- * Places what it holds again whenever [moving] changes, where it already is. Nothing moves: it
- * is so that glass inside a layer that is growing or sliding looks again at where it is on
- * screen, which it only does when it is placed.
- */
-private fun Modifier.placedAgainWith(moving: () -> Float): Modifier = layout { measurable, constraints ->
-    val placeable = measurable.measure(constraints)
-    layout(placeable.width, placeable.height) {
-        moving()
-        placeable.place(0, 0)
-    }
 }
 
 /** One widget in the gallery: itself, live, on the wallpaper, with its name underneath. */

@@ -95,4 +95,16 @@ class PageEffectTest {
         assertEquals(1f, PageEffects.dotWidth(2f, 2), 0f)
         assertEquals(0f, PageEffects.dotWidth(2f, 1), 0f)
     }
+
+    @Test
+    fun `a page added grows its dot out of the end of the row`() {
+        // Two dots, part of the way to being three.
+        assertEquals(1f, PageEffects.dotPresence(2.4f, 0), 0f)
+        assertEquals(1f, PageEffects.dotPresence(2.4f, 1), 0f)
+        assertEquals(0.4f, PageEffects.dotPresence(2.4f, 2), 0.0001f)
+        assertEquals(0f, PageEffects.dotPresence(2.4f, 3), 0f)
+        // At rest every dot is wholly there, and there is no dot too many.
+        for (index in 0 until 3) assertEquals(1f, PageEffects.dotPresence(3f, index), 0f)
+        assertEquals(0f, PageEffects.dotPresence(3f, 3), 0f)
+    }
 }

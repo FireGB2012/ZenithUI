@@ -173,6 +173,7 @@ fun QuietButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier
         textAlign = TextAlign.Center,
         modifier = modifier
             .fillMaxWidth()
+            .pressBounce(0.97f)
             .clip(RoundedCornerShape(18.dp))
             .clickable(onClick = onClick)
             .padding(vertical = 14.dp),

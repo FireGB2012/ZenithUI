@@ -1,11 +1,6 @@
 package com.gabriel.zenithui.ui.home
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
@@ -28,6 +23,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.gabriel.zenithui.data.CheckIn
+import com.gabriel.zenithui.ui.common.LocalMotionLevel
+import com.gabriel.zenithui.ui.common.appearIn
+import com.gabriel.zenithui.ui.common.edgeIn
+import com.gabriel.zenithui.ui.common.edgeOut
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.ZenithShapes
 import com.gabriel.zenithui.ui.theme.glass
@@ -55,10 +54,11 @@ fun StreakStrip(state: CheckIn?, onShown: () -> Unit, modifier: Modifier = Modif
         onShown()
     }
 
+    val reduced = LocalMotionLevel.current.reduced
     AnimatedVisibility(
         visible = visible,
-        enter = slideInVertically(tween(420)) { -it } + fadeIn(tween(300)),
-        exit = slideOutVertically(tween(360)) { -it } + fadeOut(tween(260)),
+        enter = edgeIn(reduced),
+        exit = edgeOut(reduced),
         modifier = modifier,
     ) {
         val broken = state is CheckIn.Broken
@@ -74,7 +74,11 @@ fun StreakStrip(state: CheckIn?, onShown: () -> Unit, modifier: Modifier = Modif
                 imageVector = Icons.Rounded.LocalFireDepartment,
                 contentDescription = null,
                 tint = if (broken) palette.onGlassMuted else palette.accent,
-                modifier = Modifier.size(17.dp),
+                modifier = Modifier
+                    .size(17.dp)
+                    // A streak kept going: the flame catches a beat after the strip lands. One
+                    // that is lost has no flame to light.
+                    .then(if (broken) Modifier else Modifier.appearIn(delayMillis = 240, fromScale = 0.2f, riseFrom = 0f)),
             )
             Spacer(Modifier.width(9.dp))
             Text(

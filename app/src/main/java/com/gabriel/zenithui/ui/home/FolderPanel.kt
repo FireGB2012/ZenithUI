@@ -1,5 +1,6 @@
 package com.gabriel.zenithui.ui.home
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -17,7 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Text
@@ -44,6 +45,7 @@ import com.gabriel.zenithui.data.AppInfo
 import com.gabriel.zenithui.data.FolderCell
 import com.gabriel.zenithui.data.ZenithSettings
 import com.gabriel.zenithui.ui.common.launchOrigin
+import com.gabriel.zenithui.ui.common.rollOver
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.ZenithShapes
 import com.gabriel.zenithui.ui.theme.glass
@@ -133,7 +135,14 @@ internal fun FolderPanel(
                             cursorBrush = SolidColor(palette.accent),
                             modifier = Modifier.weight(1f),
                         )
-                        Text("${folder.keys.size} apps", color = palette.onGlassMuted, fontSize = 12.sp)
+                        // One taken out, and the count rolls down to what is left.
+                        AnimatedContent(
+                            targetState = folder.keys.size,
+                            transitionSpec = { rollOver(reduced = !grows, down = targetState < initialState) },
+                            label = "folderCount",
+                        ) { count ->
+                            Text("$count apps", color = palette.onGlassMuted, fontSize = 12.sp)
+                        }
                     }
                     Spacer(Modifier.height(12.dp))
                     LazyVerticalGrid(
@@ -142,9 +151,22 @@ internal fun FolderPanel(
                         verticalArrangement = Arrangement.spacedBy(16.dp),
                         modifier = Modifier.heightIn(max = 340.dp),
                     ) {
-                        items(folder.keys, key = { it }) { key ->
+                        itemsIndexed(folder.keys, key = { _, app -> app }) { index, key ->
                             Box(
                                 Modifier
+                                    // One taken out fades where it stood, and the rest close up.
+                                    .animateItem()
+                                    // They come out of the middle one after another as the pane
+                                    // opens, and go back in, last out first, as it closes.
+                                    .graphicsLayer {
+                                        if (grows) {
+                                            val out = Unpack.shown(progress(), index)
+                                            alpha = out
+                                            val size = 0.6f + 0.4f * out
+                                            scaleX = size
+                                            scaleY = size
+                                        }
+                                    }
                                     // So an app opened from here grows out of its icon here.
                                     .launchOrigin(key)
                                     .pointerInput(key) {
@@ -175,4 +197,30 @@ internal fun FolderPanel(
             }
         }
     }
+}
+
+/**
+ * A folder's apps coming out of it. They follow the pane as it opens, each a little behind the one
+ * before, so they are seen spilling out of the middle rather than all turning up at once. It is
+ * one sum of how far open the folder is, so they cost no animation of their own, and closing the
+ * folder runs it backwards for nothing.
+ */
+internal object Unpack {
+
+    /** How far open the pane is before the first app starts out. */
+    private const val FROM = 0.35f
+
+    /** How much later each starts than the one before, and how many get a turn of their own. */
+    private const val STEP = 0.035f
+    private const val TURNS = 8
+
+    /** How much of the pane's opening one app takes over coming out. */
+    private const val SPAN = 0.35f
+
+    /**
+     * How far out app [index] is with the folder [open] by this much (0 in its icon, 1 open): 0
+     * while it has not started, 1 once it is in its place.
+     */
+    fun shown(open: Float, index: Int): Float =
+        ((open - FROM - STEP * index.coerceIn(0, TURNS)) / SPAN).coerceIn(0f, 1f)
 }

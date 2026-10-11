@@ -70,8 +70,8 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
     val settings: StateFlow<ZenithSettings> = store.settings
     val layout: StateFlow<List<HomeItem>> = store.layout
     val apps: StateFlow<List<AppInfo>> = repository.apps
-    val backdrop = wallpaperSource.backdrop
-    val sharpBackdrop = wallpaperSource.sharpBackdrop
+    /** The wallpaper as the glass shows it, or null when Zenith has no copy of it. */
+    val glassLevels = wallpaperSource.levels
 
     private val director = WallpaperDirector(application, viewModelScope, store.settings, wallpaperSource) {
         store.update { it.copy(wallpaperStyle = "") }

@@ -23,15 +23,19 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.gabriel.zenithui.data.GlassBody
+import com.gabriel.zenithui.data.GlassLevels
 import com.gabriel.zenithui.data.ZenithSettings
 
 val LocalPalette = staticCompositionLocalOf { Palettes.Midnight }
 
-/** Pre-blurred wallpaper used as the backdrop of every glass surface. */
+/**
+ * The wallpaper frosted: what glass shows where there is no shader to draw it, and how anything
+ * else asks whether there is a wallpaper to show at all.
+ */
 val LocalBackdrop = staticCompositionLocalOf<ImageBitmap?> { null }
 
-/** Detailed wallpaper used by the lens at a glass surface's curved edge. */
-val LocalGlassBackdrop = staticCompositionLocalOf<ImageBitmap?> { null }
+/** The wallpaper at every softness the lens shows it: bent at a pane's rim, softened in its face, thrown back by its edge. */
+val LocalGlassLevels = staticCompositionLocalOf<GlassLevels?> { null }
 
 /** Android's current wallpaper scroll, read during drawing so paging only invalidates the material. */
 val LocalWallpaperOffset = staticCompositionLocalOf<State<Offset>> { mutableStateOf(Offset(0.5f, 0.5f)) }
@@ -57,9 +61,9 @@ private val ZenithTypography = Typography(
 @Composable
 fun ZenithTheme(
     settings: ZenithSettings,
-    backdrop: ImageBitmap? = null,
+    /** The wallpaper for the glass to show, if Zenith has a copy of it. */
+    glass: GlassLevels? = null,
     screenSize: IntSize = IntSize.Zero,
-    sharpBackdrop: ImageBitmap? = null,
     content: @Composable () -> Unit,
 ) {
     val base = Palettes.resolve(settings)
@@ -111,8 +115,8 @@ fun ZenithTheme(
     CompositionLocalProvider(
         LocalTilt provides tilt,
         LocalPalette provides palette,
-        LocalBackdrop provides backdrop,
-        LocalGlassBackdrop provides sharpBackdrop,
+        LocalBackdrop provides glass?.frost,
+        LocalGlassLevels provides glass,
         LocalScreenSize provides screenSize,
         LocalGlassStrength provides settings.glass,
         LocalGlassBody provides GlassBody.byId(settings.glassBody),

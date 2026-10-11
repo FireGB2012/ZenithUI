@@ -1,11 +1,11 @@
 package com.gabriel.zenithui.data
 
 /**
- * How much body the glass has. Clear is Zenith's liquid glass as it has always been, and what
- * everybody has unless they ask for more: the wallpaper straight through it, so over a picture as
- * dark as the pane itself, or as pale, the pane is mostly its rim. Frosted lifts every pane a step
- * away from whatever is behind it, and Solid lays a fuller veil on top of that for a busy
- * wallpaper.
+ * How much body the glass has. Clear is Zenith's liquid glass with nothing added, and what
+ * everybody has unless they ask for more: the wallpaper through it, softened and bent and lit as
+ * glass does, so over a picture as dark as the pane itself, or as pale, the pane is mostly its
+ * rim. Frosted lifts every pane a step away from whatever is behind it, and Solid lays a fuller
+ * veil on top of that for a busy wallpaper.
  */
 enum class GlassBody(
     val id: String,
@@ -17,7 +17,7 @@ enum class GlassBody(
     /** Extra veil over what is seen through every pane. */
     val solid: Float,
 ) {
-    Clear("clear", "Clear", "Liquid glass as it has always been: the wallpaper shows straight through.", 0f, 0f),
+    Clear("clear", "Clear", "Liquid glass with nothing added: the wallpaper shows through, softened, and lights the rim.", 0f, 0f),
     Frosted("frosted", "Frosted", "A light frost lifts every panel off a dark or plain wallpaper, so its edges stand out.", 1f, 0f),
     Solid("solid", "Solid", "The fullest panels: best over a busy photo, with the least of it showing through.", 1f, 0.4f);
 

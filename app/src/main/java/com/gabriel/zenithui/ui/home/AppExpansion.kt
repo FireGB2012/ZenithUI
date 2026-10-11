@@ -46,7 +46,7 @@ import com.gabriel.zenithui.ui.theme.drawLiquidGlass
 import com.gabriel.zenithui.ui.theme.glassLook
 import com.gabriel.zenithui.ui.theme.rememberLens
 import com.gabriel.zenithui.ui.theme.LocalBackdrop
-import com.gabriel.zenithui.ui.theme.LocalGlassBackdrop
+import com.gabriel.zenithui.ui.theme.LocalGlassLevels
 import com.gabriel.zenithui.ui.theme.LocalGlassStrength
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.LocalScreenSize
@@ -126,14 +126,14 @@ fun AppLaunchCard(
     val fill = remember(icon) { icon?.let(::backgroundColourOf) } ?: palette.backdrop.last()
     val tapped by rememberUpdatedState(onTap)
     val backdrop = LocalBackdrop.current
-    val sharp = LocalGlassBackdrop.current ?: backdrop
+    val levels = LocalGlassLevels.current
     val screen = LocalScreenSize.current
     val wallpaperOffset = LocalWallpaperOffset.current
     val glassStrength = LocalGlassStrength.current.coerceIn(0f, 1.4f)
     val tilt = LocalTilt.current
     var origin by remember { mutableStateOf(Offset.Zero) }
     val clip = remember { Path() }
-    val lens = rememberLens(if (glass) sharp else null, backdrop)
+    val lens = rememberLens(if (glass) levels else null)
     val outline = remember { android.graphics.Path() }
     val shade = remember { android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG) }
 

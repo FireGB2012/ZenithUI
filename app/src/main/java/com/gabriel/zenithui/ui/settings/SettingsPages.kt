@@ -232,6 +232,7 @@ internal fun ThemeOptions(settings: ZenithSettings, preview: SettingsPreview, ac
 internal fun HomeOptions(settings: ZenithSettings, plus: PlusStatus, preview: SettingsPreview, actions: SettingsActions) {
     val change = actions.change
     val context = LocalContext.current
+    val reduced = LocalMotionLevel.current.reduced
     val packs by produceState(initialValue = emptyList<IconPackInfo>()) {
         value = withContext(Dispatchers.IO) { IconPacks.installed(context) }
     }
@@ -262,15 +263,19 @@ internal fun HomeOptions(settings: ZenithSettings, plus: PlusStatus, preview: Se
                         }
                     },
                 )
-                if (custom) {
-                    Spacer(Modifier.height(10.dp))
-                    // Set straight onto the page as well as kept: the grid follows the finger
-                    // rather than the moment the screen is next measured.
-                    StepperRow("Columns", settings.columns, GridDensity.columnChoices(preview.screenWidth.value)) { n ->
-                        change { it.copy(gridColumns = n, columns = n) }
-                    }
-                    StepperRow("Rows", settings.rows, GridDensity.rowChoices(preview.screenHeight.value)) { n ->
-                        change { it.copy(gridRows = n, rows = n) }
+                // The two numbers of a grid of your own open out under the choice, and fold away
+                // again when one of Zenith's is chosen instead.
+                AnimatedVisibility(visible = custom, enter = unfoldIn(reduced), exit = unfoldOut(reduced)) {
+                    Column {
+                        Spacer(Modifier.height(10.dp))
+                        // Set straight onto the page as well as kept: the grid follows the finger
+                        // rather than the moment the screen is next measured.
+                        StepperRow("Columns", settings.columns, GridDensity.columnChoices(preview.screenWidth.value)) { n ->
+                            change { it.copy(gridColumns = n, columns = n) }
+                        }
+                        StepperRow("Rows", settings.rows, GridDensity.rowChoices(preview.screenHeight.value)) { n ->
+                            change { it.copy(gridRows = n, rows = n) }
+                        }
                     }
                 }
                 Spacer(Modifier.height(8.dp))

@@ -5,10 +5,10 @@ import android.graphics.RenderNode
 import androidx.annotation.RequiresApi
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.unit.IntSize
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.SdkSuppress
+import com.gabriel.zenithui.data.GlassLevels
 import org.junit.Assert.assertNotNull
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -24,13 +24,12 @@ import org.junit.runner.RunWith
 class GlassInkShaderTest {
 
     private val wallpaper = Bitmap.createBitmap(96, 216, Bitmap.Config.ARGB_8888).apply { eraseColor(0xFF3366CC.toInt()) }
-    private val softened = Bitmap.createBitmap(24, 54, Bitmap.Config.ARGB_8888).apply { eraseColor(0xFF6688AA.toInt()) }
 
     @Test
     fun compilesAndTakesEveryUniformWithAndWithoutAWallpaper() {
         val shaders = listOf(
-            GlassInkShader(wallpaper.asImageBitmap(), softened.asImageBitmap()),
-            GlassInkShader(null, null),
+            GlassInkShader(GlassLevels.of(wallpaper)),
+            GlassInkShader(null),
         )
         for (ink in shaders) {
             for (halo in listOf(true, false)) {
@@ -44,6 +43,7 @@ class GlassInkShaderTest {
                     light = Offset(-0.45f, -1f),
                     strength = 0.8f,
                     halo = halo,
+                    lean = Offset(0.3f, -0.2f),
                 )
                 assertNotNull(effect)
                 val node = RenderNode("ink").apply {

@@ -20,8 +20,83 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 
 /**
- * Keeps a detailed copy of the wallpaper for the glass to bend and a small pre-blurred one for its
- * frosted face. Both are prepared once when the wallpaper changes, never while a pane is drawing.
+ * The wallpaper as the glass needs it: as it is, and three times softer, each about three times as
+ * soft as the one before. A pane shows a blend of two neighbours, which is how one can be barely
+ * misted and the next fully frosted, each with a true blur, and nothing blurred while it draws.
+ */
+class GlassLevels(
+    /** The picture itself, for the bend at a pane's rim. */
+    val sharp: ImageBitmap,
+    /** Lightly softened: about what clear glass shows through its face. */
+    val mist: ImageBitmap,
+    /** Frosted: about the face of a pane with words on it. */
+    val frost: ImageBitmap,
+    /** Little left but its colours: a sheet's face, and the light the picture throws on the glass round it. */
+    val haze: ImageBitmap,
+) {
+    companion object {
+        /**
+         * The softer three, made from [sharp]. Each is made from the one before at half its size,
+         * so none costs more than the first, and each is softened by three box blurs, which
+         * between them are a Gaussian near enough. Measured in pixels of the sharp picture (about
+         * half a dp on a phone) they blur by roughly 6, 18 and 54.
+         */
+        fun of(sharp: Bitmap): GlassLevels {
+            val mist = softenedHalf(sharp, intArrayOf(2, 2, 3))
+            val frost = softenedHalf(mist, intArrayOf(4, 4, 3))
+            val haze = softenedHalf(frost, intArrayOf(6, 6, 6))
+            return GlassLevels(sharp.asImageBitmap(), mist.asImageBitmap(), frost.asImageBitmap(), haze.asImageBitmap())
+        }
+
+        private fun softenedHalf(source: Bitmap, radii: IntArray): Bitmap {
+            val w = (source.width / 2).coerceAtLeast(1)
+            val h = (source.height / 2).coerceAtLeast(1)
+            val reduced = Bitmap.createScaledBitmap(source, w, h, true)
+            val pixels = IntArray(w * h)
+            reduced.getPixels(pixels, 0, w, 0, 0, w, h)
+            // createScaledBitmap hands back its input when there is nothing to scale, and that one is still in use.
+            if (reduced !== source) reduced.recycle()
+            val temp = IntArray(w * h)
+            for (radius in radii) {
+                boxBlurPass(pixels, temp, w, h, radius)
+                boxBlurPass(temp, pixels, h, w, radius)
+            }
+            return Bitmap.createBitmap(pixels, w, h, Bitmap.Config.ARGB_8888)
+        }
+
+        /**
+         * Horizontal box blur that also transposes, so two passes blur both axes. Each average is
+         * rounded, not cut short: a level is eighteen passes from the picture by the last of them,
+         * and losing half a shade at each would leave a dark wallpaper visibly darker in the glass.
+         */
+        private fun boxBlurPass(src: IntArray, dst: IntArray, w: Int, h: Int, radius: Int) {
+            val window = radius * 2 + 1
+            for (y in 0 until h) {
+                val row = y * w
+                // Starting each sum at half the window is what rounds the division below.
+                var a = radius; var r = radius; var g = radius; var b = radius
+                for (i in -radius..radius) {
+                    val p = src[row + i.coerceIn(0, w - 1)]
+                    a += (p ushr 24) and 0xFF; r += (p ushr 16) and 0xFF
+                    g += (p ushr 8) and 0xFF; b += p and 0xFF
+                }
+                for (x in 0 until w) {
+                    dst[x * h + y] = ((a / window) shl 24) or ((r / window) shl 16) or ((g / window) shl 8) or (b / window)
+                    val outgoing = src[row + (x - radius).coerceIn(0, w - 1)]
+                    val incoming = src[row + (x + radius + 1).coerceIn(0, w - 1)]
+                    a += ((incoming ushr 24) and 0xFF) - ((outgoing ushr 24) and 0xFF)
+                    r += ((incoming ushr 16) and 0xFF) - ((outgoing ushr 16) and 0xFF)
+                    g += ((incoming ushr 8) and 0xFF) - ((outgoing ushr 8) and 0xFF)
+                    b += (incoming and 0xFF) - (outgoing and 0xFF)
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Keeps the copies of the wallpaper the glass bends, softens and reflects: see [GlassLevels]. They
+ * are prepared once when the wallpaper changes, never while a pane is drawing.
  *
  * Where it comes from: Android's own copy when this phone lets a launcher read it (most no longer
  * do), otherwise the copy Zenith kept of a wallpaper it set itself — see [GlassWallpaper]. With
@@ -31,11 +106,10 @@ class WallpaperSource(context: Context) {
 
     private val appContext = context.applicationContext
 
-    private val _backdrop = MutableStateFlow<ImageBitmap?>(null)
-    val backdrop: StateFlow<ImageBitmap?> = _backdrop.asStateFlow()
+    private val _levels = MutableStateFlow<GlassLevels?>(null)
 
-    private val _sharpBackdrop = MutableStateFlow<ImageBitmap?>(null)
-    val sharpBackdrop: StateFlow<ImageBitmap?> = _sharpBackdrop.asStateFlow()
+    /** The wallpaper for the glass, or null when there is no copy of it that may be shown. */
+    val levels: StateFlow<GlassLevels?> = _levels.asStateFlow()
 
     private val refreshMutex = Mutex()
     /** What the prepared copies were made from, so coming home again does not redo the work. */
@@ -97,7 +171,7 @@ class WallpaperSource(context: Context) {
             val onScreen = GlassWallpaper.screenKey(appContext)
             val keptKey = "kept:$onScreen:${GlassWallpaper.stamp(appContext)}"
             // Coming home is when this runs; if the wallpaper has not changed, there is nothing to do.
-            if (_backdrop.value != null && (loadedKey == "system:$onScreen" || loadedKey == keptKey)) {
+            if (_levels.value != null && (loadedKey == "system:$onScreen" || loadedKey == keptKey)) {
                 return@withContext
             }
             val system = readSystemWallpaper(manager)
@@ -135,7 +209,7 @@ class WallpaperSource(context: Context) {
         }
     }.getOrNull()
 
-    /** Makes the two copies the glass uses. An [owned] source is used up; any other is left as it was. */
+    /** Makes the copies the glass uses. An [owned] source is used up; any other is left as it was. */
     private fun prepare(source: Bitmap, owned: Boolean = true) {
         val scale = min(1f, min(SHARP_WIDTH.toFloat() / source.width, SHARP_HEIGHT.toFloat() / source.height))
         val sharp = when {
@@ -144,20 +218,12 @@ class WallpaperSource(context: Context) {
             owned -> source
             else -> source.copy(Bitmap.Config.ARGB_8888, false)
         }
-        val blurWidth = min(BLUR_WIDTH, sharp.width)
-        val blurHeight = (sharp.height * blurWidth.toFloat() / sharp.width).roundToInt().coerceAtLeast(1)
-        val reduced = Bitmap.createScaledBitmap(sharp, blurWidth, blurHeight, true)
-        // createScaledBitmap can hand back its input; the blur must never eat the sharp copy.
-        val blurSource = if (reduced === sharp) sharp.copy(Bitmap.Config.ARGB_8888, true) else reduced
-        val blurred = blur(blur(blurSource, 4), 3)
-        _sharpBackdrop.value = sharp.asImageBitmap()
-        _backdrop.value = blurred.asImageBitmap()
+        _levels.value = GlassLevels.of(sharp)
     }
 
     private fun clear() {
         // A live or unreadable wallpaper must never leave a picture of the previous wallpaper in glass.
-        _sharpBackdrop.value = null
-        _backdrop.value = null
+        _levels.value = null
         loadedKey = null
     }
 
@@ -177,46 +243,8 @@ class WallpaperSource(context: Context) {
         return false
     }
 
-    private fun blur(source: Bitmap, radius: Int): Bitmap {
-        val w = source.width
-        val h = source.height
-        val pixels = IntArray(w * h)
-        source.getPixels(pixels, 0, w, 0, 0, w, h)
-        val temp = IntArray(w * h)
-        boxBlurPass(pixels, temp, w, h, radius)
-        boxBlurPass(temp, pixels, h, w, radius)
-        val out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-        out.setPixels(pixels, 0, w, 0, 0, w, h)
-        if (source !== out) source.recycle()
-        return out
-    }
-
-    /** Horizontal box blur that also transposes, so two passes blur both axes. */
-    private fun boxBlurPass(src: IntArray, dst: IntArray, w: Int, h: Int, radius: Int) {
-        val window = radius * 2 + 1
-        for (y in 0 until h) {
-            val row = y * w
-            var a = 0; var r = 0; var g = 0; var b = 0
-            for (i in -radius..radius) {
-                val p = src[row + i.coerceIn(0, w - 1)]
-                a += (p ushr 24) and 0xFF; r += (p ushr 16) and 0xFF
-                g += (p ushr 8) and 0xFF; b += p and 0xFF
-            }
-            for (x in 0 until w) {
-                dst[x * h + y] = ((a / window) shl 24) or ((r / window) shl 16) or ((g / window) shl 8) or (b / window)
-                val outgoing = src[row + (x - radius).coerceIn(0, w - 1)]
-                val incoming = src[row + (x + radius + 1).coerceIn(0, w - 1)]
-                a += ((incoming ushr 24) and 0xFF) - ((outgoing ushr 24) and 0xFF)
-                r += ((incoming ushr 16) and 0xFF) - ((outgoing ushr 16) and 0xFF)
-                g += ((incoming ushr 8) and 0xFF) - ((outgoing ushr 8) and 0xFF)
-                b += (incoming and 0xFF) - (outgoing and 0xFF)
-            }
-        }
-    }
-
     private companion object {
         const val PRESENTED = "presented"
-        const val BLUR_WIDTH = 220
         const val SHARP_WIDTH = 960
         const val SHARP_HEIGHT = 1920
     }

@@ -6,7 +6,11 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.EnterExitState
+import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.Canvas
 import androidx.compose.ui.geometry.CornerRadius
@@ -14,6 +18,7 @@ import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -109,7 +114,10 @@ import com.gabriel.zenithui.data.findActivity
 import com.gabriel.zenithui.ui.common.LaunchOrigin
 import com.gabriel.zenithui.ui.common.Motion
 import com.gabriel.zenithui.ui.common.appearIn
+import com.gabriel.zenithui.ui.common.edgeIn
+import com.gabriel.zenithui.ui.common.edgeOut
 import com.gabriel.zenithui.ui.common.pressBounce
+import com.gabriel.zenithui.ui.common.wordsChange
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.common.LocalMotionLevel
 import com.gabriel.zenithui.ui.common.rememberHaptics
@@ -149,6 +157,13 @@ private const val REORDER_DELAY = 280L
 
 /** The space between the edge of the screen and the page, the dock and everything else on it. */
 private val PAGE_MARGIN = 12.dp
+
+/**
+ * The room left round a bar of glass that fades as it comes and goes. While it fades it is drawn
+ * through a layer of its own, which cuts off whatever reaches past its edges: the shadow the glass
+ * casts, and the bin itself when it swells.
+ */
+private val BAR_ROOM = 28.dp
 
 private sealed interface HomeSheet {
     data class Item(val id: String) : HomeSheet
@@ -281,7 +296,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
     var widgetsOpen by remember { mutableStateOf(false) }
     // The home screen fades out from under either of them.
     val pageShown = animateFloatAsState(if (settingsOpen || widgetsOpen) 1f else 0f, tween(280), label = "pageShown")
-    val sharpBackdrop by viewModel.sharpBackdrop.collectAsState()
+    val glassLevels by viewModel.glassLevels.collectAsState()
 
     var drawerHeightPx by remember { mutableFloatStateOf(0f) }
     var homeOrigin by remember { mutableStateOf(Offset.Zero) }
@@ -429,6 +444,13 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         // A cold start: once the first frame is up.
         androidx.compose.runtime.withFrameNanos { }
         arrive()
+    }
+    // The drawer is put together a moment after the home screen has arrived, out of sight, rather
+    // than under the first finger that asks for it. Built then, it cost the first swipe up its
+    // first frames, and on a slow phone the swipe itself: the drawer never came.
+    LaunchedEffect(Unit) {
+        delay(FlyIn.TOTAL_MS + 700L)
+        drawerEverOpened = true
     }
 
     /** Heading open (true) or back into the icon (false). */
@@ -929,17 +951,28 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             // Worked out here from live state, not from [overDock]: the page's drag gesture holds
             // on to the drop callback it started with, so a value captured then would be stale.
             val droppedOnDock = item is AppCell && !dockBounds.isEmpty && dockBounds.contains(drag.pointer)
+            // Where the grey copy is as it is let go. Anywhere but a spot on the page, it is the
+            // copy that is seen going: into the bin, into the folder, or into the dock under it.
+            val copyAt = drag.pointer - drag.grab
             when {
                 droppedOnDock -> {
                     // Where along the bar it was let go decides its place among the others.
                     val slots = settings.dock.size + 1
                     val index = ((drag.pointer.x - dockBounds.left) / dockBounds.width * slots).toInt()
-                    if (!viewModel.moveToDock(item.id, index)) {
+                    if (viewModel.moveToDock(item.id, index)) {
+                        drag.sent = Sent(item, copyAt, into = null)
+                    } else {
                         Toast.makeText(context, "The dock is full — drag one out first", Toast.LENGTH_SHORT).show()
                     }
                 }
-                drag.removeArmed -> viewModel.removeItem(item.id)
-                hover != null -> viewModel.combine(item.id, hover)
+                drag.removeArmed -> {
+                    drag.sent = Sent(item, copyAt, into = drag.removeZone.center, faint = true)
+                    viewModel.removeItem(item.id)
+                }
+                hover != null -> {
+                    drag.sent = Sent(item, copyAt, into = layout.firstOrNull { it.id == hover }?.let { drag.iconCentre(it) })
+                    viewModel.combine(item.id, hover)
+                }
                 else -> dropOnPage(item)
             }
             // Put down, thrown away or made into a folder: it is done, and the hand is told so.
@@ -1423,13 +1456,18 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             )
         }
 
-        if (resizingId != null) {
+        // Down from the top edge while something is being resized, and back up when it is done.
+        AnimatedVisibility(
+            visible = resizingId != null,
+            enter = edgeIn(motion.reduced),
+            exit = edgeOut(motion.reduced),
+            modifier = Modifier.align(Alignment.TopCenter),
+        ) {
             Row(
                 Modifier
-                    .align(Alignment.TopCenter)
                     .statusBarsPadding()
-                    .padding(top = 12.dp)
-                    .appearIn(fromScale = 0.85f, riseFrom = -18f)
+                    .padding(start = BAR_ROOM, top = 12.dp, end = BAR_ROOM, bottom = BAR_ROOM)
+                    .pressBounce(0.96f)
                     .glass(ZenithShapes.pill, strength = 1.2f, solid = 0.4f)
                     .clickable { resizingId = null }
                     .padding(horizontal = 20.dp, vertical = 10.dp),
@@ -1445,17 +1483,26 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         }
 
         // The same thing in taps: a widget's named sizes, and arrows that move it a cell at a time.
+        // It comes up from the foot of the screen, and on its way back down it is still the bar
+        // for whatever was last being resized.
         val reshaping = resizingId?.let { id -> layout.firstOrNull { it.id == id } }
-        if (reshaping != null) {
-            ResizeBar(
-                item = reshaping,
+        val reshaped = remember { arrayOfNulls<HomeItem>(1) }
+        if (reshaping != null) reshaped[0] = reshaping
+        AnimatedVisibility(
+            visible = reshaping != null,
+            enter = edgeIn(motion.reduced, fromFoot = true),
+            exit = edgeOut(motion.reduced, toFoot = true),
+            modifier = Modifier.align(Alignment.BottomCenter),
+        ) {
+            val item = reshaped[0]
+            if (item != null) ResizeBar(
+                item = item,
                 columns = settings.columns,
                 rows = settings.rows,
-                onSize = { size -> viewModel.resizeWidgetTo(reshaping.id, size.spanX, size.spanY) },
-                onNudge = { dCol, dRows -> viewModel.nudgeItem(reshaping.id, dCol, dRows) },
+                onSize = { size -> viewModel.resizeWidgetTo(item.id, size.spanX, size.spanY) },
+                onNudge = { dCol, dRows -> viewModel.nudgeItem(item.id, dCol, dRows) },
                 onDone = { resizingId = null },
                 modifier = Modifier
-                    .align(Alignment.BottomCenter)
                     .navigationBarsPadding()
                     .padding(horizontal = 14.dp, vertical = 10.dp),
             )
@@ -1485,13 +1532,23 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
                 }
             }
+        }
+        // The bin comes down from the top edge when something is picked up, and goes back up when
+        // it is put down: still red on its way, if what was put down went into it.
+        val binTook = remember { booleanArrayOf(false) }
+        if (drag.isDragging) binTook[0] = drag.removeArmed
+        AnimatedVisibility(
+            visible = drag.isDragging,
+            enter = edgeIn(motion.reduced),
+            exit = edgeOut(motion.reduced),
+            modifier = Modifier.align(Alignment.TopCenter),
+        ) {
             RemoveTarget(
-                armed = drag.removeArmed,
+                armed = if (drag.isDragging) drag.removeArmed else binTook[0],
                 hovering = overRemove,
                 modifier = Modifier
-                    .align(Alignment.TopCenter)
                     .statusBarsPadding()
-                    .padding(top = 12.dp)
+                    .padding(start = BAR_ROOM, top = 12.dp, end = BAR_ROOM, bottom = BAR_ROOM)
                     .onGloballyPositioned { coords ->
                         val topLeft = coords.positionInRoot()
                         drag.removeZone = androidx.compose.ui.geometry.Rect(
@@ -1503,7 +1560,11 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                         )
                     },
             )
-            DragGhost(drag = drag, settings = settings, appsByKey = appsByKey)
+        }
+        if (drag.isDragging) DragGhost(drag = drag, settings = settings, appsByKey = appsByKey)
+        // What was let go into the bin, the dock or a folder is seen going there.
+        drag.sent?.let { sent ->
+            SentGhost(sent = sent, drag = drag, settings = settings, appsByKey = appsByKey, onGone = { if (drag.sent === sent) drag.sent = null })
         }
 
         // ------------------------------------------------------------ folder
@@ -1540,7 +1601,13 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             modifier = Modifier.align(Alignment.TopCenter),
         )
 
-        if (ambient) {
+        // The bedside clock is a room going dark, not a page turning: it fades in slowly, and out
+        // a little quicker.
+        AnimatedVisibility(
+            visible = ambient,
+            enter = fadeIn(tween(if (motion.reduced) Motion.REDUCED_MS else 520)),
+            exit = fadeOut(tween(if (motion.reduced) Motion.REDUCED_MS else 300)),
+        ) {
             AmbientScreen(
                 userName = settings.userName,
                 calendarDeclined = settings.calendarDeclined,
@@ -1571,7 +1638,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             preview = SettingsPreview(
                 items = remember(layout) { layout.filter { it.page == 0 } },
                 appsByKey = appsByKey,
-                wallpaper = sharpBackdrop,
+                wallpaper = glassLevels?.sharp,
                 screenWidth = with(density) { drawerWidthPx.toDp() },
                 screenHeight = with(density) { drawerHeightPx.toDp() },
             ),
@@ -1624,164 +1691,188 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         )
 
         // ------------------------------------------------------------ sheets
-        when (val current = sheet) {
-            is HomeSheet.Item -> {
-                val item = layout.firstOrNull { it.id == current.id }
-                if (item == null) hideSheet() else ItemMenuSheet(
-                    visible = sheetVisible,
-                    item = item,
-                    appsByKey = appsByKey,
-                    onCustomize = { showSheet(HomeSheet.Customize) },
-                    onOpen = { launchApp(it) },
-                    onAppInfo = { viewModel.openAppInfo(it) },
-                    onChooseToggles = { showSheet(HomeSheet.Toggles) },
-                    onRename = { openFolder(it, null) },
-                    onResize = {
-                        resizingId = item.id
-                        hideSheet()
-                    },
-                    onRemove = { viewModel.removeItem(item.id) },
-                    onUninstall = { viewModel.uninstall(it) },
-                    onDismiss = { hideSheet() },
+        // One sheet opened from another: the old one is kept a moment, so it is seen going down
+        // as the new one comes up, rather than one being swapped for the other where it stands.
+        AnimatedContent(
+            targetState = sheet,
+            transitionSpec = {
+                ContentTransform(
+                    targetContentEnter = EnterTransition.None,
+                    // Nothing of its own: only time for the sheet inside to put itself away.
+                    initialContentExit = fadeOut(snap(delayMillis = if (motion.reduced) Motion.REDUCED_MS else SHEET_GONE_MS)),
+                    sizeTransform = null,
                 )
-            }
+            },
+            modifier = Modifier.fillMaxSize(),
+            label = "sheet",
+        ) { current ->
+            // The sheet that is being left is closed, whatever the one taking its place is.
+            val up = sheetVisible && transition.targetState != EnterExitState.PostExit
+            when (current) {
+                is HomeSheet.Item -> {
+                    // Taking the item off the page is one of the things its own menu does. The
+                    // menu keeps what it last showed, so it is seen to close and not simply gone.
+                    val found = layout.firstOrNull { it.id == current.id }
+                    val last = remember { arrayOfNulls<HomeItem>(1) }
+                    if (found != null) last[0] = found
+                    val item = found ?: last[0]
+                    if (found == null) hideSheet()
+                    if (item != null) ItemMenuSheet(
+                        visible = up,
+                        item = item,
+                        appsByKey = appsByKey,
+                        onCustomize = { showSheet(HomeSheet.Customize) },
+                        onOpen = { launchApp(it) },
+                        onAppInfo = { viewModel.openAppInfo(it) },
+                        onChooseToggles = { showSheet(HomeSheet.Toggles) },
+                        onRename = { openFolder(it, null) },
+                        onResize = {
+                            resizingId = item.id
+                            hideSheet()
+                        },
+                        onRemove = { viewModel.removeItem(item.id) },
+                        onUninstall = { viewModel.uninstall(it) },
+                        onDismiss = { hideSheet() },
+                    )
+                }
 
-            is HomeSheet.DrawerApp -> {
-                val app = appsByKey[current.key]
-                DrawerAppSheet(
-                    visible = sheetVisible,
-                    label = app?.label ?: current.key,
-                    pinned = current.key in settings.dock,
-                    onOpen = {
-                        launchApp(current.key)
-                        closeDrawer()
-                    },
-                    onAddToHome = {
-                        val page = viewModel.addAppToFirstFreeSlot(current.key)
-                        if (page == null) {
-                            Toast.makeText(context, "Every page is full", Toast.LENGTH_SHORT).show()
-                        } else {
-                            // The app may well have gone onto a page you are not looking at, so
-                            // put the drawer away and take you to it.
-                            revealPage(page)
+                is HomeSheet.DrawerApp -> {
+                    val app = appsByKey[current.key]
+                    DrawerAppSheet(
+                        visible = up,
+                        label = app?.label ?: current.key,
+                        pinned = current.key in settings.dock,
+                        onOpen = {
+                            launchApp(current.key)
                             closeDrawer()
+                        },
+                        onAddToHome = {
+                            val page = viewModel.addAppToFirstFreeSlot(current.key)
+                            if (page == null) {
+                                Toast.makeText(context, "Every page is full", Toast.LENGTH_SHORT).show()
+                            } else {
+                                // The app may well have gone onto a page you are not looking at, so
+                                // put the drawer away and take you to it.
+                                revealPage(page)
+                                closeDrawer()
+                            }
+                        },
+                        onToggleDock = {
+                        if (!viewModel.toggleDock(current.key)) {
+                            Toast.makeText(context, "The dock is full — drag one out first", Toast.LENGTH_SHORT).show()
                         }
                     },
-                    onToggleDock = {
-                    if (!viewModel.toggleDock(current.key)) {
-                        Toast.makeText(context, "The dock is full — drag one out first", Toast.LENGTH_SHORT).show()
-                    }
-                },
-                    onAppInfo = { viewModel.openAppInfo(current.key) },
-                    onUninstall = { viewModel.uninstall(current.key) },
+                        onAppInfo = { viewModel.openAppInfo(current.key) },
+                        onUninstall = { viewModel.uninstall(current.key) },
+                        onDismiss = { hideSheet() },
+                    )
+                }
+
+                HomeSheet.Customize -> CustomizeSheet(
+                    visible = up,
+                    onWallpaper = { showSheet(HomeSheet.Wallpapers) },
+                    onHelp = { showSheet(HomeSheet.Help) },
+                    onAmbient = {
+                        hideSheet()
+                        ambient = true
+                    },
+                    onWidgets = {
+                        hideSheet()
+                        widgetsOpen = true
+                    },
+                    onSettings = {
+                        hideSheet()
+                        settingsOpen = true
+                    },
+                    onDefaultLauncher = {
+                        runCatching {
+                            context.startActivity(
+                                Intent(Settings.ACTION_HOME_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            )
+                        }
+                    },
                     onDismiss = { hideSheet() },
                 )
+
+                HomeSheet.Help -> HelpSheet(
+                    visible = up,
+                    onDismiss = { hideSheet() },
+                )
+
+                HomeSheet.Wallpapers -> WallpaperSheet(
+                    visible = up,
+                    settings = settings,
+                    plusActive = plus.active,
+                    onSet = { style, pinnedPalette, lockToo, switchThemeTo ->
+                        viewModel.setWallpaper(style, pinnedPalette, lockToo, switchThemeTo)
+                    },
+                    onPhoto = {
+                        viewModel.photoWallpaperSet()
+                        // The glass is drawn from the wallpaper, so read the new one straight away.
+                        viewModel.refreshWallpaper()
+                    },
+                    onFollow = { on -> viewModel.updateSettings { it.copy(wallpaperFollow = on) } },
+                    onPlus = { showSheet(HomeSheet.Plus) },
+                    onDismiss = { hideSheet() },
+                )
+
+                HomeSheet.Plus -> PlusSheet(
+                    visible = up,
+                    status = plus,
+                    onStartTrial = {
+                        viewModel.startTrialViaPlayOrLocally(context as? android.app.Activity)
+                    },
+                    onBuyLifetime = {
+                        val activity = context as? android.app.Activity
+                        val started = activity != null && viewModel.buyLifetime(activity)
+                        if (!started) {
+                            Toast.makeText(context, "Play could not open the purchase just now", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    onSubscribe = {
+                        val activity = context as? android.app.Activity
+                        val started = activity != null && viewModel.subscribe(activity)
+                        if (!started) {
+                            Toast.makeText(context, "Play could not open the subscription just now", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    onRestore = {
+                        viewModel.refreshPurchases()
+                        Toast.makeText(context, "Checking your Play purchases…", Toast.LENGTH_SHORT).show()
+                    },
+                    onRedeem = { code ->
+                        val ok = viewModel.redeemCode(code)
+                        if (ok) Toast.makeText(context, "Zenith Plus unlocked", Toast.LENGTH_SHORT).show()
+                        ok
+                    },
+                    onDismiss = { hideSheet() },
+                )
+
+                HomeSheet.Toggles -> TogglesSheet(
+                    visible = up,
+                    selected = settings.toggles,
+                    onChange = { chosen -> viewModel.updateSettings { it.copy(toggles = chosen) } },
+                    onDismiss = { hideSheet() },
+                )
+
+                HomeSheet.ThemeMaker -> ThemeMakerSheet(
+                    visible = up,
+                    settings = settings,
+                    onChange = { transform -> viewModel.updateSettings(transform) },
+                    onDismiss = { hideSheet() },
+                )
+
+                HomeSheet.HiddenApps -> HiddenAppsSheet(
+                    visible = up,
+                    apps = apps,
+                    settings = settings,
+                    onToggle = { key -> viewModel.toggleHidden(key) },
+                    onSetPin = { pin -> viewModel.setHiddenPin(pin) },
+                    onDismiss = { hideSheet() },
+                )
+
+                null -> Unit
             }
-
-            HomeSheet.Customize -> CustomizeSheet(
-                visible = sheetVisible,
-                onWallpaper = { showSheet(HomeSheet.Wallpapers) },
-                onHelp = { showSheet(HomeSheet.Help) },
-                onAmbient = {
-                    hideSheet()
-                    ambient = true
-                },
-                onWidgets = {
-                    hideSheet()
-                    widgetsOpen = true
-                },
-                onSettings = {
-                    hideSheet()
-                    settingsOpen = true
-                },
-                onDefaultLauncher = {
-                    runCatching {
-                        context.startActivity(
-                            Intent(Settings.ACTION_HOME_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        )
-                    }
-                },
-                onDismiss = { hideSheet() },
-            )
-
-            HomeSheet.Help -> HelpSheet(
-                visible = sheetVisible,
-                onDismiss = { hideSheet() },
-            )
-
-            HomeSheet.Wallpapers -> WallpaperSheet(
-                visible = sheetVisible,
-                settings = settings,
-                plusActive = plus.active,
-                onSet = { style, pinnedPalette, lockToo, switchThemeTo ->
-                    viewModel.setWallpaper(style, pinnedPalette, lockToo, switchThemeTo)
-                },
-                onPhoto = {
-                    viewModel.photoWallpaperSet()
-                    // The glass is drawn from the wallpaper, so read the new one straight away.
-                    viewModel.refreshWallpaper()
-                },
-                onFollow = { on -> viewModel.updateSettings { it.copy(wallpaperFollow = on) } },
-                onPlus = { showSheet(HomeSheet.Plus) },
-                onDismiss = { hideSheet() },
-            )
-
-            HomeSheet.Plus -> PlusSheet(
-                visible = sheetVisible,
-                status = plus,
-                onStartTrial = {
-                    viewModel.startTrialViaPlayOrLocally(context as? android.app.Activity)
-                },
-                onBuyLifetime = {
-                    val activity = context as? android.app.Activity
-                    val started = activity != null && viewModel.buyLifetime(activity)
-                    if (!started) {
-                        Toast.makeText(context, "Play could not open the purchase just now", Toast.LENGTH_SHORT).show()
-                    }
-                },
-                onSubscribe = {
-                    val activity = context as? android.app.Activity
-                    val started = activity != null && viewModel.subscribe(activity)
-                    if (!started) {
-                        Toast.makeText(context, "Play could not open the subscription just now", Toast.LENGTH_SHORT).show()
-                    }
-                },
-                onRestore = {
-                    viewModel.refreshPurchases()
-                    Toast.makeText(context, "Checking your Play purchases…", Toast.LENGTH_SHORT).show()
-                },
-                onRedeem = { code ->
-                    val ok = viewModel.redeemCode(code)
-                    if (ok) Toast.makeText(context, "Zenith Plus unlocked", Toast.LENGTH_SHORT).show()
-                    ok
-                },
-                onDismiss = { hideSheet() },
-            )
-
-            HomeSheet.Toggles -> TogglesSheet(
-                visible = sheetVisible,
-                selected = settings.toggles,
-                onChange = { chosen -> viewModel.updateSettings { it.copy(toggles = chosen) } },
-                onDismiss = { hideSheet() },
-            )
-
-            HomeSheet.ThemeMaker -> ThemeMakerSheet(
-                visible = sheetVisible,
-                settings = settings,
-                onChange = { transform -> viewModel.updateSettings(transform) },
-                onDismiss = { hideSheet() },
-            )
-
-            HomeSheet.HiddenApps -> HiddenAppsSheet(
-                visible = sheetVisible,
-                apps = apps,
-                settings = settings,
-                onToggle = { key -> viewModel.toggleHidden(key) },
-                onSetPin = { pin -> viewModel.setHiddenPin(pin) },
-                onDismiss = { hideSheet() },
-            )
-
-            null -> Unit
         }
     }
 }
@@ -1898,14 +1989,17 @@ private fun RemoveTarget(armed: Boolean, hovering: Boolean, modifier: Modifier =
         animationSpec = tween(450),
         label = "binFill",
     )
+    val reduced = LocalMotionLevel.current.reduced
     val scale by animateFloatAsState(
         targetValue = if (armed) 1.12f else 1f,
         animationSpec = Motion.bouncy(),
         label = "binScale",
     )
+    // Ready to take what is held over it, the bin tips towards it and swells; read only where it
+    // is drawn, so it rocks into place without anything being composed again.
+    val tip = animateFloatAsState(if (armed && !reduced) 1f else 0f, Motion.bouncy(), label = "binTip")
     Row(
         modifier
-            .appearIn(fromScale = 0.85f, riseFrom = -18f)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
@@ -1915,14 +2009,32 @@ private fun RemoveTarget(armed: Boolean, hovering: Boolean, modifier: Modifier =
             .padding(horizontal = 22.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(Icons.Rounded.Delete, contentDescription = null, tint = palette.onGlass, modifier = Modifier.size(18.dp))
-        Spacer(Modifier.width(8.dp))
-        Text(
-            text = if (armed) "Release to remove" else "Hold to remove",
-            color = palette.onGlass,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Medium,
+        Icon(
+            Icons.Rounded.Delete,
+            contentDescription = null,
+            tint = palette.onGlass,
+            modifier = Modifier
+                .size(18.dp)
+                .graphicsLayer {
+                    rotationZ = -16f * tip.value
+                    val grown = 1f + 0.18f * tip.value
+                    scaleX = grown
+                    scaleY = grown
+                },
         )
+        Spacer(Modifier.width(8.dp))
+        AnimatedContent(
+            targetState = armed,
+            transitionSpec = { wordsChange(reduced) },
+            label = "binWords",
+        ) { ready ->
+            Text(
+                text = if (ready) "Release to remove" else "Hold to remove",
+                color = palette.onGlass,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+            )
+        }
     }
 }
 
@@ -1939,12 +2051,13 @@ private fun DrawerAppSheet(
     onDismiss: () -> Unit,
 ) {
     ZenithSheet(visible = visible, onDismiss = onDismiss, title = label) {
-        MenuRow(Icons.AutoMirrored.Rounded.OpenInNew, "Open") { onOpen(); onDismiss() }
-        MenuRow(Icons.Rounded.AddHome, "Add to home screen") { onAddToHome(); onDismiss() }
+        var row = 0
+        MenuRow(Icons.AutoMirrored.Rounded.OpenInNew, "Open", index = row++) { onOpen(); onDismiss() }
+        MenuRow(Icons.Rounded.AddHome, "Add to home screen", index = row++) { onAddToHome(); onDismiss() }
         // Apps go into the dock by dragging them there; the menu only offers the way back out.
-        if (pinned) MenuRow(Icons.Rounded.PushPin, "Remove from dock") { onToggleDock(); onDismiss() }
-        MenuRow(Icons.Rounded.Info, "App info") { onAppInfo(); onDismiss() }
-        MenuRow(Icons.Rounded.Delete, "Uninstall", danger = true) { onUninstall(); onDismiss() }
+        if (pinned) MenuRow(Icons.Rounded.PushPin, "Remove from dock", index = row++) { onToggleDock(); onDismiss() }
+        MenuRow(Icons.Rounded.Info, "App info", index = row++) { onAppInfo(); onDismiss() }
+        MenuRow(Icons.Rounded.Delete, "Uninstall", danger = true, index = row) { onUninstall(); onDismiss() }
     }
 }
 

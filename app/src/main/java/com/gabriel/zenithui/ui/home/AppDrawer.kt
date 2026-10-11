@@ -6,11 +6,11 @@ import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -64,6 +64,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.SolidColor
@@ -88,10 +89,13 @@ import androidx.compose.ui.unit.sp
 import com.gabriel.zenithui.data.AppInfo
 import com.gabriel.zenithui.data.ZenithSettings
 import com.gabriel.zenithui.ui.common.AppIcon
-import com.gabriel.zenithui.ui.common.Motion
+import com.gabriel.zenithui.ui.common.LocalMotionLevel
 import com.gabriel.zenithui.ui.common.appearIn
 import com.gabriel.zenithui.ui.common.launchOrigin
+import com.gabriel.zenithui.ui.common.popIn
+import com.gabriel.zenithui.ui.common.popOut
 import com.gabriel.zenithui.ui.common.pressBounce
+import com.gabriel.zenithui.ui.common.rollOver
 import com.gabriel.zenithui.ui.common.staggerDelay
 import com.gabriel.zenithui.ui.theme.GlassMaterial
 import com.gabriel.zenithui.ui.theme.LocalPalette
@@ -122,8 +126,11 @@ fun AppDrawer(
 ) {
     val palette = LocalPalette.current
     val context = LocalContext.current
+    val reduced = LocalMotionLevel.current.reduced
     var query by remember { mutableStateOf("") }
     val focusRequester = remember { FocusRequester() }
+    /** The search bar has the keyboard: its lens lights up while it does. */
+    var searching by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
     val gridState = rememberLazyGridState()
 
@@ -160,7 +167,9 @@ fun AppDrawer(
     var opening by remember { androidx.compose.runtime.mutableIntStateOf(0) }
     LaunchedEffect(closed) {
         if (!closed) opening++
-        if (closed) {
+        // Not before it has ever been open: it is put together ahead of the first swipe, and
+        // has nothing to tidy then, nor any business taking the keyboard from a note being typed.
+        if (closed && opening > 0) {
             query = ""
             openGroup = null
             runCatching { focusManager.clearFocus(force = true) }
@@ -265,23 +274,29 @@ fun AppDrawer(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(Modifier.weight(1f)) {
-                    Text(
-                        text = when {
+                    // The name of where you are turns over as that changes: into a group, back
+                    // out of it, into what a search found.
+                    AnimatedContent(
+                        targetState = when {
                             query.isNotBlank() -> "Results"
                             shownGroup != null -> shownGroup.name
                             groups != null -> "App Library"
                             else -> "All apps"
                         },
-                        color = palette.onGlass,
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.SemiBold,
-                    )
+                        transitionSpec = { rollOver(reduced) },
+                        label = "drawerTitle",
+                    ) { name ->
+                        Text(
+                            text = name,
+                            color = palette.onGlass,
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
+                    // Fewer apps than there were, and the count rolls down; more, and it rolls up.
                     AnimatedContent(
                         targetState = filtered.size,
-                        transitionSpec = {
-                            (slideInVertically(Motion.snappy()) { it / 2 } + fadeIn(tween(220)))
-                                .togetherWith(slideOutVertically(tween(240)) { -it / 2 } + fadeOut(tween(160)))
-                        },
+                        transitionSpec = { rollOver(reduced, down = targetState < initialState) },
                         label = "count",
                     ) { count ->
                         Text(
@@ -294,21 +309,32 @@ fun AppDrawer(
                 Box(
                     Modifier
                         .size(38.dp)
+                        .pressBounce(0.88f)
                         .glass(RoundedCornerShape(percent = 50), strength = 0.9f, material = GlassMaterial.Clear)
                         .clickable { if (shownGroup != null) openGroup = null else onDismiss() },
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(
-                        imageVector = if (shownGroup != null) Icons.AutoMirrored.Rounded.ArrowBack else Icons.Rounded.Close,
-                        contentDescription = if (shownGroup != null) "Back to App Library" else "Close",
-                        tint = palette.onGlass,
-                        modifier = Modifier.size(18.dp),
-                    )
+                    // A cross to close, an arrow to go back: one turns into the other where it stands.
+                    AnimatedContent(
+                        targetState = shownGroup != null,
+                        transitionSpec = { popIn(reduced, from = 0.4f, millis = 180).togetherWith(popOut(reduced, to = 0.4f)) },
+                        label = "drawerWayOut",
+                    ) { back ->
+                        Icon(
+                            imageVector = if (back) Icons.AutoMirrored.Rounded.ArrowBack else Icons.Rounded.Close,
+                            contentDescription = if (back) "Back to App Library" else "Close",
+                            tint = palette.onGlass,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
                 }
             }
 
             BoxWithConstraints(Modifier.weight(1f)) {
                 val viewportPx = constraints.maxHeight.toFloat()
+                // How many rows of apps the drawer shows at once, and one over: every one of them
+                // rises in as it opens, not only the top few.
+                val rowsOnShow = (maxHeight / DRAWER_ROW).toInt() + 2
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(if (shelves) 2 else settings.columns),
                     state = gridState,
@@ -335,7 +361,7 @@ fun AppDrawer(
                                 modifier = Modifier
                                     .animateItem()
                                     .then(
-                                        if (index < 6 && gridState.firstVisibleItemIndex == 0) {
+                                        if (index < rowsOnShow * 2 && gridState.firstVisibleItemIndex == 0) {
                                             Modifier.appearIn(delayMillis = staggerDelay(index), riseFrom = 26f, replay = opening)
                                         } else {
                                             Modifier
@@ -344,9 +370,11 @@ fun AppDrawer(
                             )
                         }
                     } else itemsIndexed(filtered, key = { _, app -> app.key }) { index, app ->
-                        // Only the first screenful is staggered in. Anything composed while you
-                        // are scrolling must land at once, or the list appears to lag behind.
-                        val stagger = index < settings.columns * 4 && gridState.firstVisibleItemIndex == 0
+                        // The whole first screenful is staggered in, a row at a time from the top
+                        // and from left to right along each. Anything composed while you are
+                        // scrolling must land at once, or the list appears to lag behind.
+                        val stagger = index < settings.columns * rowsOnShow && gridState.firstVisibleItemIndex == 0
+                        val turn = (index / settings.columns) * ROW_TURN_MS + (index % settings.columns) * ICON_TURN_MS
                         // Scroll-linked motion: an icon dissolves and shrinks as it slides past
                         // the top or bottom edge, and is left alone once it is fully in view.
                         var itemTop by remember { mutableFloatStateOf(0f) }
@@ -356,7 +384,7 @@ fun AppDrawer(
                                 .animateItem()
                                 .then(
                                     if (stagger) {
-                                        Modifier.appearIn(delayMillis = staggerDelay(index), riseFrom = 26f, replay = opening)
+                                        Modifier.appearIn(delayMillis = turn, riseFrom = 26f, replay = opening)
                                     } else {
                                         Modifier
                                     }
@@ -405,6 +433,7 @@ fun AppDrawer(
                     Column(
                         Modifier
                             .align(Alignment.TopCenter)
+                            .appearIn(fromScale = 0.97f, riseFrom = 22f, gentle = true)
                             .padding(horizontal = 20.dp, vertical = 24.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
@@ -452,10 +481,11 @@ fun AppDrawer(
                     .padding(start = 16.dp, end = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                val lens by animateColorAsState(if (searching) palette.accent else palette.onGlassMuted, tween(220), label = "drawerLens")
                 Icon(
                     Icons.Rounded.Search,
                     contentDescription = null,
-                    tint = palette.onGlassMuted,
+                    tint = lens,
                     modifier = Modifier.size(17.dp),
                 )
                 Spacer(Modifier.width(10.dp))
@@ -476,7 +506,8 @@ fun AppDrawer(
                     interactionSource = remember { MutableInteractionSource() },
                     modifier = Modifier
                         .weight(1f)
-                        .focusRequester(focusRequester),
+                        .focusRequester(focusRequester)
+                        .onFocusChanged { searching = it.isFocused },
                     decorationBox = { inner ->
                         Box(contentAlignment = Alignment.CenterStart) {
                             if (query.isEmpty()) {
@@ -491,40 +522,55 @@ fun AppDrawer(
                         }
                     },
                 )
-                if (query.isNotEmpty()) {
-                    Box(
-                        Modifier
-                            .size(26.dp)
-                            .clip(RoundedCornerShape(percent = 50))
-                            .background(palette.onGlass.copy(alpha = 0.12f))
-                            .clickable { query = "" },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(Icons.Rounded.Close, contentDescription = "Clear", tint = palette.onGlass, modifier = Modifier.size(13.dp))
-                    }
-                    Spacer(Modifier.width(6.dp))
-                    Box(
-                        Modifier
-                            .size(38.dp)
-                            .appearIn(fromScale = 0.6f, riseFrom = 0f)
-                            .pressBounce(0.88f)
-                            .clip(RoundedCornerShape(percent = 50))
-                            .background(palette.accent)
-                            .clickable { searchWeb() },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            Icons.Rounded.TravelExplore,
-                            contentDescription = "Search the web",
-                            tint = androidx.compose.ui.graphics.Color(0xFF0A0B12),
-                            modifier = Modifier.size(18.dp),
-                        )
+                // Something typed: a way to clear it and a way to take it to the web open out
+                // beside it, and close up again when the box is empty.
+                AnimatedVisibility(
+                    visible = query.isNotEmpty(),
+                    enter = popIn(reduced) + expandHorizontally(),
+                    exit = popOut(reduced) + shrinkHorizontally(),
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            Modifier
+                                .size(26.dp)
+                                .pressBounce(0.85f)
+                                .clip(RoundedCornerShape(percent = 50))
+                                .background(palette.onGlass.copy(alpha = 0.12f))
+                                .clickable { query = "" },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(Icons.Rounded.Close, contentDescription = "Clear", tint = palette.onGlass, modifier = Modifier.size(13.dp))
+                        }
+                        Spacer(Modifier.width(6.dp))
+                        Box(
+                            Modifier
+                                .size(38.dp)
+                                .pressBounce(0.88f)
+                                .clip(RoundedCornerShape(percent = 50))
+                                .background(palette.accent)
+                                .clickable { searchWeb() },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                Icons.Rounded.TravelExplore,
+                                contentDescription = "Search the web",
+                                tint = androidx.compose.ui.graphics.Color(0xFF0A0B12),
+                                modifier = Modifier.size(18.dp),
+                            )
+                        }
                     }
                 }
             }
         }
     }
 }
+
+/** The least room a row of apps takes in the drawer: an icon, its name and the gap under it. */
+private val DRAWER_ROW = 96.dp
+
+/** How long after the row above a row of apps sets off as the drawer opens, and each icon after the one beside it. */
+private const val ROW_TURN_MS = 46
+private const val ICON_TURN_MS = 14
 
 /** One folder in the App Library: a kind of app, and every app of that kind. */
 @Immutable

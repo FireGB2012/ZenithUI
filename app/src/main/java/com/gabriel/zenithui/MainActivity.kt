@@ -145,8 +145,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun ZenithApp(viewModel: ZenithViewModel) {
     val settings by viewModel.settings.collectAsState()
-    val backdrop by viewModel.backdrop.collectAsState()
-    val sharpBackdrop by viewModel.sharpBackdrop.collectAsState()
+    val glassLevels by viewModel.glassLevels.collectAsState()
     var screenSize by remember { mutableStateOf(IntSize.Zero) }
 
     // The grid is a function of the screen, not a stored number: re-derive it whenever the window
@@ -218,13 +217,13 @@ fun ZenithApp(viewModel: ZenithViewModel) {
                 modifier = Modifier.fillMaxSize(),
             ) { onboarded ->
                 if (onboarded) {
-                    ZenithTheme(settings = settings, backdrop = backdrop, screenSize = screenSize, sharpBackdrop = sharpBackdrop) {
+                    ZenithTheme(settings = settings, glass = glassLevels, screenSize = screenSize) {
                         HomeScreen(viewModel)
                     }
                 } else {
                     OnboardingFlow(
                         viewModel = viewModel,
-                        backdrop = backdrop,
+                        backdrop = glassLevels?.frost,
                         screenSize = screenSize,
                         onFinished = { },
                     )

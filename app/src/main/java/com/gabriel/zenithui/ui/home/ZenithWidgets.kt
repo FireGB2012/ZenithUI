@@ -10,6 +10,7 @@ import android.provider.Settings
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloat
@@ -26,6 +27,8 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -78,13 +81,12 @@ import androidx.compose.material.icons.rounded.Nfc
 import androidx.compose.material.icons.rounded.SignalCellularAlt
 import androidx.compose.material.icons.rounded.WifiTethering
 import androidx.compose.material3.LocalTextStyle
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -113,6 +115,7 @@ import androidx.compose.ui.graphics.isSpecified
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -130,6 +133,9 @@ import androidx.compose.ui.unit.sp
 import com.gabriel.zenithui.data.ToggleNames
 import com.gabriel.zenithui.data.Widgets
 import com.gabriel.zenithui.ui.common.pressBounce
+import com.gabriel.zenithui.ui.common.rememberTick
+import com.gabriel.zenithui.ui.common.shake
+import com.gabriel.zenithui.ui.settings.Toggle as OnOffSwitch
 import com.gabriel.zenithui.ui.theme.GlassMaterial
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.ZenithShapes
@@ -142,6 +148,7 @@ import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import java.util.Locale
 import kotlin.math.cos
+import kotlin.math.roundToInt
 import kotlin.math.sin
 
 /**
@@ -436,7 +443,7 @@ private fun ClockWidget(form: WidgetForm, userName: String, width: Dp, height: D
     when (form) {
         // Just the time, as large as it will go.
         WidgetForm.Mini -> Box(Modifier.fillMaxSize().padding(6.dp), contentAlignment = Alignment.Center) {
-            Figure(time, fit(width * 0.22f, height * 0.34f))
+            Figure(time, fit(width * 0.22f, height * 0.34f), animated = true)
         }
 
         // A line: time, then the day beside it.
@@ -444,7 +451,7 @@ private fun ClockWidget(form: WidgetForm, userName: String, width: Dp, height: D
             Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Figure(time, fit(height * 0.4f, width * 0.13f))
+            Figure(time, fit(height * 0.4f, width * 0.13f), animated = true)
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Caps(shortDay)
@@ -510,7 +517,7 @@ private fun ClockWidget(form: WidgetForm, userName: String, width: Dp, height: D
                 Caps(weekday)
             }
             AnalogFace(now, Modifier.fillMaxWidth(0.78f).aspectRatio(1f))
-            Figure(time, fit(width * 0.15f, 24.dp), FontWeight.Medium, accent = false)
+            Figure(time, fit(width * 0.15f, 24.dp), FontWeight.Medium, accent = false, animated = true)
             Text(date, color = quiet(), fontSize = 12.sp, maxLines = 1)
         }
 
@@ -528,7 +535,7 @@ private fun ClockWidget(form: WidgetForm, userName: String, width: Dp, height: D
                     Caps(weekday, 12.sp)
                     Text(date, color = palette.onGlass, fontSize = 16.sp, fontWeight = FontWeight.Medium)
                 }
-                Figure(time, 22.sp, FontWeight.Medium)
+                Figure(time, 22.sp, FontWeight.Medium, animated = true)
             }
             Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                 AnalogFace(now, Modifier.fillMaxHeight(0.8f).aspectRatio(1f, matchHeightConstraintsFirst = true))
@@ -668,7 +675,7 @@ private fun BatteryWidget(form: WidgetForm, width: Dp, height: Dp) {
         // A thin ring with the number inside.
         WidgetForm.Mini -> Box(Modifier.fillMaxSize().padding(6.dp), contentAlignment = Alignment.Center) {
             Ring(battery.fraction, 4.dp, Modifier.fillMaxSize(), charging = battery.charging)
-            Figure("${battery.level.coerceAtLeast(0)}", fit(width * 0.21f, height * 0.21f), FontWeight.Medium, accent = false)
+            Figure("${battery.level.coerceAtLeast(0)}", fit(width * 0.21f, height * 0.21f), FontWeight.Medium, accent = false, animated = true)
         }
 
         // A charge bar with the percentage at the end.
@@ -691,7 +698,7 @@ private fun BatteryWidget(form: WidgetForm, width: Dp, height: Dp) {
                     Symbol(symbol, 22.dp)
                     Spacer(Modifier.height(4.dp))
                 }
-                Figure(battery.percent, fit(width * 0.15f, 24.dp), FontWeight.Medium, accent = false)
+                Figure(battery.percent, fit(width * 0.15f, 24.dp), FontWeight.Medium, accent = false, animated = true)
                 Spacer(Modifier.height(4.dp))
                 Text(battery.status, color = quiet(), fontSize = 12.sp)
             }
@@ -709,7 +716,7 @@ private fun BatteryWidget(form: WidgetForm, width: Dp, height: Dp) {
             Spacer(Modifier.width(16.dp))
             Column(Modifier.weight(1f)) {
                 Caps("Battery")
-                Figure(battery.percent, fit(height * 0.2f, 28.dp))
+                Figure(battery.percent, fit(height * 0.2f, 28.dp), animated = true)
                 Spacer(Modifier.height(6.dp))
                 Text(battery.status, color = quiet(), fontSize = 13.sp)
                 Spacer(Modifier.height(10.dp))
@@ -730,6 +737,8 @@ private fun BatteryWidget(form: WidgetForm, width: Dp, height: Dp) {
                 Caps("Battery")
             }
             Spacer(Modifier.height(10.dp))
+            // It fills from the bottom as it appears, the way the ring runs round.
+            val level = rememberFilled(battery.fraction)
             if (bare) {
                 // The liquid is glass; the number moves out below it, where it can be read.
                 Box(
@@ -743,13 +752,13 @@ private fun BatteryWidget(form: WidgetForm, width: Dp, height: Dp) {
                         Modifier
                             .align(Alignment.BottomCenter)
                             .fillMaxWidth()
-                            .fillMaxHeight(battery.fraction.coerceAtLeast(0.04f))
+                            .heightShare { level.value.coerceAtLeast(0.04f) }
                             .glassInk(bevel = 6.dp)
                             .background(Color.White, RoundedCornerShape(percent = 30)),
                     )
                 }
                 Spacer(Modifier.height(8.dp))
-                Figure(battery.percent, fit(width * 0.12f, 22.dp), accent = false)
+                Figure(battery.percent, fit(width * 0.12f, 22.dp), accent = false, animated = true)
             } else {
                 Box(
                     Modifier
@@ -763,7 +772,7 @@ private fun BatteryWidget(form: WidgetForm, width: Dp, height: Dp) {
                         Modifier
                             .align(Alignment.BottomCenter)
                             .fillMaxWidth()
-                            .fillMaxHeight(battery.fraction.coerceAtLeast(0.04f))
+                            .heightShare { level.value.coerceAtLeast(0.04f) }
                             .background(Brush.verticalGradient(listOf(palette.accentAlt, palette.accent))),
                     )
                     Text(battery.percent, style = tight(fit(width * 0.11f, 20.dp), FontWeight.SemiBold).copy(color = palette.onGlass))
@@ -785,7 +794,7 @@ private fun BatteryWidget(form: WidgetForm, width: Dp, height: Dp) {
             }
             Box(Modifier.weight(1f).fillMaxWidth().padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
                 Ring(battery.fraction, if (bare) 13.dp else 10.dp, Modifier.fillMaxSize(0.8f), charging = battery.charging)
-                Figure(battery.percent, fit(width * 0.1f, height * 0.085f))
+                Figure(battery.percent, fit(width * 0.1f, height * 0.085f), animated = true)
             }
             Segments(battery.fraction, Modifier.fillMaxWidth())
         }
@@ -801,12 +810,7 @@ private fun Ring(fraction: Float, stroke: Dp, modifier: Modifier, charging: Bool
     val palette = LocalPalette.current
     val bare = LocalBare.current
     val reduced = LocalMotionLevel.current.reduced
-    // The ring springs to its value: up from empty when it first appears, and from wherever it
-    // was whenever the charge changes.
-    val filled = remember { Animatable(if (reduced) fraction else 0f) }
-    LaunchedEffect(fraction, reduced) {
-        if (reduced) filled.snapTo(fraction) else filled.animateTo(fraction, spring(dampingRatio = 0.62f, stiffness = 90f))
-    }
+    val filled = rememberFilled(fraction)
     // While it is charging a glint runs up the filled part of the ring, over and over. It is the
     // one thing on the home screen that keeps moving by itself, and only while there is a charger.
     val glint = if (charging && !reduced) {
@@ -863,16 +867,46 @@ private fun Ring(fraction: Float, stroke: Dp, modifier: Modifier, charging: Bool
 /** How much of the ring the charging glint covers, in degrees. */
 private const val GLINT = 26f
 
+/**
+ * How full a gauge is drawn on its way to [fraction]. It springs there: up from empty when it
+ * first appears, and from wherever it was whenever the charge changes. Every shape the charge is
+ * shown as runs on this, so they all fill the same way. With movement reduced it is simply there.
+ */
+@Composable
+private fun rememberFilled(fraction: Float): Animatable<Float, AnimationVector1D> {
+    val reduced = LocalMotionLevel.current.reduced
+    val filled = remember { Animatable(if (reduced) fraction else 0f) }
+    LaunchedEffect(fraction, reduced) {
+        if (reduced) filled.snapTo(fraction) else filled.animateTo(fraction, spring(dampingRatio = 0.62f, stiffness = 90f))
+    }
+    return filled
+}
+
+/** As wide as [share] of the room it is given. Read while it is measured, so filling up composes nothing again. */
+private fun Modifier.widthShare(share: () -> Float): Modifier = layout { measurable, constraints ->
+    val width = (constraints.maxWidth * share().coerceIn(0f, 1f)).roundToInt()
+    val placeable = measurable.measure(constraints.copy(minWidth = width, maxWidth = width))
+    layout(placeable.width, placeable.height) { placeable.place(0, 0) }
+}
+
+/** The same, upwards. */
+private fun Modifier.heightShare(share: () -> Float): Modifier = layout { measurable, constraints ->
+    val height = (constraints.maxHeight * share().coerceIn(0f, 1f)).roundToInt()
+    val placeable = measurable.measure(constraints.copy(minHeight = height, maxHeight = height))
+    layout(placeable.width, placeable.height) { placeable.place(0, 0) }
+}
+
 @Composable
 private fun Capsule(fraction: Float, modifier: Modifier) {
     val palette = LocalPalette.current
     val bare = LocalBare.current
     val track = palette.onGlass.copy(alpha = if (bare) 0.16f else 0.12f)
+    val filled = rememberFilled(fraction)
     Box(modifier.clip(RoundedCornerShape(percent = 50)).background(track)) {
         Box(
             Modifier
                 .fillMaxHeight()
-                .fillMaxWidth(fraction.coerceAtLeast(0.03f))
+                .widthShare { filled.value.coerceAtLeast(0.03f) }
                 .then(
                     if (bare) {
                         Modifier.glassInk(bevel = 3.dp).background(Color.White, RoundedCornerShape(percent = 50))
@@ -890,15 +924,21 @@ private fun Capsule(fraction: Float, modifier: Modifier) {
 private fun Segments(fraction: Float, modifier: Modifier) {
     val palette = LocalPalette.current
     val bare = LocalBare.current
-    val lit = (fraction * 10).toInt()
+    // They light one after another as the gauge runs up, never one more than the charge is worth.
+    val filled = rememberFilled(fraction)
+    val lit by remember(fraction) { derivedStateOf { (minOf(filled.value, fraction) * 10f + 0.001f).toInt() } }
     Box(modifier) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             repeat(10) { index ->
-                val colour = when {
-                    bare -> palette.onGlass.copy(alpha = 0.16f)
-                    index < lit -> palette.accent
-                    else -> palette.onGlass.copy(alpha = 0.12f)
-                }
+                val colour by animateColorAsState(
+                    targetValue = when {
+                        bare -> palette.onGlass.copy(alpha = 0.16f)
+                        index < lit -> palette.accent
+                        else -> palette.onGlass.copy(alpha = 0.12f)
+                    },
+                    animationSpec = tween(200),
+                    label = "segment",
+                )
                 Box(Modifier.weight(1f).height(8.dp).clip(RoundedCornerShape(percent = 50)).background(colour))
             }
         }
@@ -1549,40 +1589,76 @@ fun TogglesSheet(
         Column(Modifier.verticalScroll(rememberScrollState())) {
             TOGGLE_OPTIONS.forEach { option ->
                 val on = option.id in selected
-                fun flip() {
+                ToggleChoice(option, on) {
                     val next = if (on) selected - option.id else selected + option.id
                     // Always at least one control, and always in the catalogue's order.
                     if (next.isNotEmpty()) onChange(TOGGLE_OPTIONS.map { it.id }.filter { it in next })
-                }
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .clickable { flip() }
-                        .padding(vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Box(
-                        Modifier
-                            .size(38.dp)
-                            .clip(RoundedCornerShape(percent = 50))
-                            .background(if (on) palette.accent.copy(alpha = 0.9f) else palette.onGlass.copy(alpha = 0.10f)),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(option.icon, contentDescription = null, tint = if (on) Color(0xFF0A0B12) else palette.onGlass, modifier = Modifier.size(18.dp))
-                    }
-                    Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(option.label, color = palette.onGlass, fontSize = 15.sp)
-                        Text(option.detail, color = palette.onGlassMuted, fontSize = 12.sp)
-                    }
-                    Switch(
-                        checked = on,
-                        onCheckedChange = { flip() },
-                        colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = palette.accent),
-                    )
+                    next.isNotEmpty()
                 }
             }
         }
+    }
+}
+
+/**
+ * One control the widget could show. Chosen, its disc takes the accent, and gives a small bounce
+ * as it does; the switch beside it is the one Settings has, worked by the whole row. [onFlip]
+ * answers whether it was flipped: the last one left cannot be taken away, and shakes its head.
+ */
+@Composable
+private fun ToggleChoice(option: ToggleOption, on: Boolean, onFlip: () -> Boolean) {
+    val palette = LocalPalette.current
+    val tick = rememberTick()
+    val reduced = LocalMotionLevel.current.reduced
+    val touch = remember { MutableInteractionSource() }
+    val pressed by touch.collectIsPressedAsState()
+    var refused by remember { mutableIntStateOf(0) }
+    val disc by animateColorAsState(
+        targetValue = if (on) palette.accent.copy(alpha = 0.9f) else palette.onGlass.copy(alpha = 0.10f),
+        animationSpec = tween(260),
+        label = "choiceDisc",
+    )
+    val ink by animateColorAsState(if (on) Color(0xFF0A0B12) else palette.onGlass, tween(260), label = "choiceInk")
+    // Not as the list arrives: only when this one is chosen or let go while it is on show.
+    val bounce = remember { Animatable(1f) }
+    val shownAs = remember { booleanArrayOf(on) }
+    LaunchedEffect(on) {
+        if (shownAs[0] == on) return@LaunchedEffect
+        shownAs[0] = on
+        if (reduced) return@LaunchedEffect
+        bounce.snapTo(0.8f)
+        bounce.animateTo(1f, spring(dampingRatio = 0.45f, stiffness = 420f))
+    }
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .shake(refused)
+            .clickable(interactionSource = touch, indication = null) {
+                if (onFlip()) tick() else refused++
+            }
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            Modifier
+                .size(38.dp)
+                .graphicsLayer {
+                    scaleX = bounce.value
+                    scaleY = bounce.value
+                }
+                .clip(RoundedCornerShape(percent = 50))
+                .background(disc),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(option.icon, contentDescription = null, tint = ink, modifier = Modifier.size(18.dp))
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(option.label, color = palette.onGlass, fontSize = 15.sp)
+            Text(option.detail, color = palette.onGlassMuted, fontSize = 12.sp)
+        }
+        Spacer(Modifier.width(12.dp))
+        OnOffSwitch(on, pressed)
     }
 }
 

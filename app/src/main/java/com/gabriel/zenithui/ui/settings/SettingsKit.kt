@@ -19,6 +19,8 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -54,6 +56,7 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
@@ -61,10 +64,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -83,6 +89,8 @@ import com.gabriel.zenithui.ui.common.Motion
 import com.gabriel.zenithui.ui.common.appearIn
 import com.gabriel.zenithui.ui.common.pressBounce
 import com.gabriel.zenithui.ui.common.rememberTick
+import com.gabriel.zenithui.ui.common.rollOver
+import com.gabriel.zenithui.ui.common.wordsChange
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.ZenithPalette
 import com.gabriel.zenithui.ui.theme.ZenithShapes
@@ -175,15 +183,22 @@ internal fun Caption(text: String, modifier: Modifier = Modifier) {
     )
 }
 
-/** A line of small print under a control: what the choice just made means. */
+/**
+ * A line of small print under a control: what the choice just made means. Make another choice and
+ * the words change where they stand, the page taking up the difference smoothly if there are now
+ * more or fewer lines of them.
+ */
 @Composable
 internal fun Note(text: String, modifier: Modifier = Modifier) {
-    Text(
-        text,
-        color = LocalPalette.current.onGlassMuted,
-        fontSize = 12.sp,
+    val reduced = LocalMotionLevel.current.reduced
+    AnimatedContent(
+        targetState = text,
+        transitionSpec = { wordsChange(reduced) },
         modifier = modifier.padding(horizontal = 4.dp),
-    )
+        label = "note",
+    ) { words ->
+        Text(words, color = LocalPalette.current.onGlassMuted, fontSize = 12.sp)
+    }
 }
 
 /**
@@ -323,18 +338,22 @@ internal fun ActionRow(
     }
 }
 
-/** A setting that is on or off. The whole row is the switch, not just the little pill. */
+/**
+ * A setting that is on or off. The whole row is the switch, not just the little pill: a finger
+ * anywhere on it is felt by the knob, and when what the switch means changes with it, the line
+ * saying so changes where it stands.
+ */
 @Composable
 internal fun ToggleRow(title: String, subtitle: String?, checked: Boolean, onChange: (Boolean) -> Unit) {
     val palette = LocalPalette.current
     val tick = rememberTick()
+    val reduced = LocalMotionLevel.current.reduced
+    val touch = remember { MutableInteractionSource() }
+    val pressed by touch.collectIsPressedAsState()
     Row(
         Modifier
             .fillMaxWidth()
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-            ) {
+            .clickable(interactionSource = touch, indication = null) {
                 tick()
                 onChange(!checked)
             }
@@ -343,22 +362,35 @@ internal fun ToggleRow(title: String, subtitle: String?, checked: Boolean, onCha
     ) {
         Column(Modifier.weight(1f)) {
             Text(title, color = palette.onGlass, fontSize = 16.sp, fontWeight = FontWeight.Medium)
-            if (subtitle != null) Text(subtitle, color = palette.onGlassMuted, fontSize = 13.sp)
+            if (subtitle != null) {
+                AnimatedContent(
+                    targetState = subtitle,
+                    transitionSpec = { wordsChange(reduced) },
+                    label = "toggleSubtitle",
+                ) { line ->
+                    Text(line, color = palette.onGlassMuted, fontSize = 13.sp)
+                }
+            }
         }
         Spacer(Modifier.width(12.dp))
-        Toggle(checked)
+        Toggle(checked, pressed)
     }
 }
 
-/** The switch itself: the knob springs across and the track fills with the accent. */
+/**
+ * The switch itself: the knob springs across and the track fills with the accent. While it is
+ * [pressed] the knob spreads out towards the side it is about to go to, as something soft does
+ * under a finger, and draws itself up again as it gets there.
+ */
 @Composable
-internal fun Toggle(checked: Boolean) {
+internal fun Toggle(checked: Boolean, pressed: Boolean = false) {
     val palette = LocalPalette.current
     val progress by animateFloatAsState(
         if (checked) 1f else 0f,
         spring(dampingRatio = 0.72f, stiffness = 520f),
         label = "toggle",
     )
+    val spread by animateFloatAsState(if (pressed) 1f else 0f, spring(dampingRatio = 0.7f, stiffness = 600f), label = "toggleSpread")
     val track = lerp(palette.onGlass.copy(alpha = 0.16f), palette.accent, progress.coerceIn(0f, 1f))
     Box(
         Modifier
@@ -367,10 +399,12 @@ internal fun Toggle(checked: Boolean) {
             .background(track)
             .padding(3.dp),
     ) {
+        val wide = 24.dp + 6.dp * spread
         Box(
             Modifier
-                .offset(x = 20.dp * progress)
-                .size(24.dp)
+                // Its outer edge stays where it is and it spreads inwards, so it never leaves the track.
+                .offset(x = (44.dp - wide) * progress)
+                .size(width = wide, height = 24.dp)
                 .shadow(2.dp, CircleShape)
                 .clip(CircleShape)
                 .background(Color.White)
@@ -399,8 +433,12 @@ internal fun PillSlider(
     val span = range.endInclusive - range.start
     val fraction = ((value - range.start) / span).coerceIn(0f, 1f)
     // A tap glides the fill to where you touched; a drag is followed almost exactly.
-    val shown by animateFloatAsState(fraction, spring(dampingRatio = 1f, stiffness = 1400f), label = "slider")
+    val shown = animateFloatAsState(fraction, spring(dampingRatio = 1f, stiffness = 1400f), label = "slider")
     var step by remember { mutableIntStateOf((fraction * 10).roundToInt()) }
+    // In your hand the bar swells a touch and its fill brightens, and the number it is being set
+    // to stands out; let go and it all settles back. Read only where it is drawn.
+    var held by remember { mutableStateOf(false) }
+    val grip = animateFloatAsState(if (held) 1f else 0f, Motion.press(), label = "sliderGrip")
 
     fun setFrom(x: Float) {
         val at = (x / width).coerceIn(0f, 1f)
@@ -416,9 +454,36 @@ internal fun PillSlider(
         modifier
             .fillMaxWidth()
             .height(52.dp)
+            .graphicsLayer {
+                val grown = 1f + 0.012f * grip.value
+                scaleX = grown
+                scaleY = grown
+            }
             .clip(RoundedCornerShape(16.dp))
             .background(palette.onGlass.copy(alpha = 0.08f))
+            // The fill is drawn, not laid out, so following a finger composes nothing again.
+            .drawBehind {
+                drawRect(
+                    color = palette.accent,
+                    size = Size(size.width * shown.value.coerceIn(0f, 1f), size.height),
+                    alpha = 0.45f + 0.17f * grip.value.coerceIn(0f, 1f),
+                )
+            }
             .onSizeChanged { width = it.width.toFloat().coerceAtLeast(1f) }
+            // Only watches, for as long as a finger is down: the tap and the drag are below.
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false)
+                    held = true
+                    try {
+                        do {
+                            val event = awaitPointerEvent()
+                        } while (event.changes.any { it.pressed })
+                    } finally {
+                        held = false
+                    }
+                }
+            }
             .pointerInput(range) { detectTapGestures { setFrom(it.x) } }
             .pointerInput(range) {
                 detectHorizontalDragGestures(onDragStart = { setFrom(it.x) }) { change, _ ->
@@ -427,12 +492,6 @@ internal fun PillSlider(
                 }
             },
     ) {
-        Box(
-            Modifier
-                .fillMaxHeight()
-                .fillMaxWidth(shown.coerceIn(0f, 1f))
-                .background(palette.accent.copy(alpha = 0.45f))
-        )
         Row(
             Modifier
                 .fillMaxWidth()
@@ -441,7 +500,18 @@ internal fun PillSlider(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(label, color = palette.onGlass, fontSize = 15.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
-            Text(display, color = palette.onGlass.copy(alpha = 0.8f), fontSize = 14.sp)
+            Text(
+                display,
+                color = palette.onGlass.copy(alpha = 0.8f),
+                fontSize = 14.sp,
+                modifier = Modifier.graphicsLayer {
+                    val grown = 1f + 0.12f * grip.value
+                    scaleX = grown
+                    scaleY = grown
+                    // From its own end of the bar, so it grows inwards and is never cut off.
+                    transformOrigin = TransformOrigin(1f, 0.5f)
+                },
+            )
         }
     }
 }
@@ -454,6 +524,7 @@ internal fun PillSlider(
 internal fun StepperRow(title: String, value: Int, range: IntRange, onChange: (Int) -> Unit) {
     val palette = LocalPalette.current
     val tick = rememberTick()
+    val reduced = LocalMotionLevel.current.reduced
     Row(
         Modifier
             .fillMaxWidth()
@@ -465,14 +536,23 @@ internal fun StepperRow(title: String, value: Int, range: IntRange, onChange: (I
             val next = value + step
             val can = next in range
             if (step == 1) {
-                Text(
-                    "$value",
-                    color = palette.onGlass,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    textAlign = TextAlign.Center,
+                // One more and the number rolls up; one fewer and it rolls down.
+                AnimatedContent(
+                    targetState = value,
+                    transitionSpec = { rollOver(reduced, down = targetState < initialState) },
+                    contentAlignment = Alignment.Center,
                     modifier = Modifier.width(44.dp),
-                )
+                    label = "stepperNumber",
+                ) { number ->
+                    Text(
+                        "$number",
+                        color = palette.onGlass,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.width(44.dp),
+                    )
+                }
             }
             Box(
                 Modifier
@@ -511,6 +591,7 @@ internal fun ChoiceRow(label: String, selected: Boolean, onClick: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
+            .pressBounce(0.98f)
             .clickable {
                 if (!selected) tick()
                 onClick()

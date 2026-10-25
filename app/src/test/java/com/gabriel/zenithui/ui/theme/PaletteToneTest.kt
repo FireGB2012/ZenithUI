@@ -1,5 +1,7 @@
 package com.gabriel.zenithui.ui.theme
 
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import com.gabriel.zenithui.data.ZenithSettings
@@ -56,6 +58,30 @@ class PaletteToneTest {
     fun `a wallpaper pinned to the palette you made is painted in it`() {
         val made = ZenithSettings(paletteId = "midnight", wallpaperPalette = Palettes.CUSTOM, customAccent = 0xFF112233)
         assertEquals(Palettes.custom(made).accent, Palettes.forWallpaper(made, dark = true).accent)
+    }
+
+    @Test
+    fun `second lines stand well clear of every backdrop, light and dark`() {
+        // Small print needs four and a half to one. Testers still found the subtitles in Settings
+        // hard to pick out, so the muted ink is held to six: on the backdrop itself, and on the
+        // faint fill of a settings group laid over it.
+        for (palette in every) {
+            for (dark in listOf(false, true)) {
+                val toned = palette.toned(dark)
+                for (behind in toned.backdrop) {
+                    for (ground in listOf(behind, toned.onGlass.copy(alpha = 0.07f).compositeOver(behind))) {
+                        val ratio = contrast(toned.onGlassMuted.compositeOver(ground), ground)
+                        assertTrue("${palette.name}, ${if (dark) "dark" else "light"}: $ratio to 1", ratio >= 6f)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun contrast(a: Color, b: Color): Float {
+        val lighter = maxOf(a.luminance(), b.luminance())
+        val darker = minOf(a.luminance(), b.luminance())
+        return (lighter + 0.05f) / (darker + 0.05f)
     }
 
     @Test

@@ -88,6 +88,7 @@ import com.gabriel.zenithui.ui.common.LargeTitle
 import com.gabriel.zenithui.ui.common.LocalMotionLevel
 import com.gabriel.zenithui.ui.common.Motion
 import com.gabriel.zenithui.ui.common.PAGE_GONE_MS
+import com.gabriel.zenithui.ui.common.SectionLabel
 import com.gabriel.zenithui.ui.common.TITLE_GONE_PX
 import com.gabriel.zenithui.ui.common.appearIn
 import com.gabriel.zenithui.ui.common.popIn
@@ -334,23 +335,34 @@ private fun Root(
 private fun Groups(settings: ZenithSettings, plus: PlusStatus, account: AccountActions?, onOpen: (SettingsPage, String?) -> Unit) {
     val context = LocalContext.current
     val isHome = remember { context.getSystemService(RoleManager::class.java)?.isRoleHeld(RoleManager.ROLE_HOME) == true }
-    // Looks and feel; what you own; the phone itself.
+    // Looks and feel; what you own; the phone itself. Each block is headed with what it holds and
+    // stands further from the next than its rows do from each other, so the page reads as three
+    // and the eye can go straight to one. A heading rises in with its block.
     listOf(
-        listOf(SettingsPage.Theme, SettingsPage.Home, SettingsPage.Motion, SettingsPage.Apps),
+        "Look and feel" to listOf(SettingsPage.Theme, SettingsPage.Home, SettingsPage.Motion, SettingsPage.Apps),
         // The account is only there in a build with a server to keep it on.
-        listOfNotNull(SettingsPage.Plus, SettingsPage.Aura, SettingsPage.Account.takeIf { account != null }),
-        listOf(SettingsPage.Backup, SettingsPage.About),
-    ).forEachIndexed { block, pages ->
-        Group(rise = block + 1) {
-            pages.forEachIndexed { index, page ->
-                if (index > 0) GroupDivider()
-                NavRow(
-                    icon = page.icon(),
-                    tile = page.tile(),
-                    title = page.title,
-                    summary = summary(page, settings, plus, isHome, account?.signed),
-                    onClick = { onOpen(page, null) },
-                )
+        (if (account != null) "Plus, Aura and account" else "Plus and Aura") to
+            listOfNotNull(SettingsPage.Plus, SettingsPage.Aura, SettingsPage.Account.takeIf { account != null }),
+        "Backup and help" to listOf(SettingsPage.Backup, SettingsPage.About),
+    ).forEachIndexed { block, (heading, pages) ->
+        Column(
+            Modifier
+                .riseIn(block + 1)
+                .padding(top = if (block == 0) 2.dp else 10.dp),
+        ) {
+            // Over the tiles of its rows, not over the edge of the group.
+            SectionLabel(heading, Modifier.padding(start = 14.dp, bottom = 8.dp))
+            Group {
+                pages.forEachIndexed { index, page ->
+                    if (index > 0) GroupDivider()
+                    NavRow(
+                        icon = page.icon(),
+                        tile = page.tile(),
+                        title = page.title,
+                        summary = summary(page, settings, plus, isHome, account?.signed),
+                        onClick = { onOpen(page, null) },
+                    )
+                }
             }
         }
     }

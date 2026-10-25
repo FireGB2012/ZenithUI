@@ -234,13 +234,14 @@ fun GlassButton(
     }
 }
 
+/** The heading over a block of a page: small capitals, spaced out, in the muted ink. */
 @Composable
 fun SectionLabel(text: String, modifier: Modifier = Modifier) {
     val palette = LocalPalette.current
     Text(
         text = text.uppercase(),
         color = palette.onGlassMuted,
-        fontSize = 11.sp,
+        fontSize = 12.sp,
         fontWeight = FontWeight.SemiBold,
         letterSpacing = 1.4.sp,
         modifier = modifier,

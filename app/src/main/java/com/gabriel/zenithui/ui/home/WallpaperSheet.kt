@@ -47,6 +47,7 @@ import androidx.compose.material.icons.rounded.Wallpaper
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -69,6 +70,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntSize
@@ -84,13 +86,17 @@ import com.gabriel.zenithui.data.findActivity
 import com.gabriel.zenithui.ui.common.LocalMotionLevel
 import com.gabriel.zenithui.ui.common.Motion
 import com.gabriel.zenithui.ui.common.pressBounce
+import com.gabriel.zenithui.ui.onboarding.PhonePreview
 import com.gabriel.zenithui.ui.onboarding.PrimaryButton
 import com.gabriel.zenithui.ui.onboarding.Segmented
 import com.gabriel.zenithui.ui.settings.ActionRow
 import com.gabriel.zenithui.ui.settings.Caption
 import com.gabriel.zenithui.ui.settings.Group
 import com.gabriel.zenithui.ui.settings.SettingsHeader
+import com.gabriel.zenithui.ui.settings.SettingsPreview
 import com.gabriel.zenithui.ui.settings.ToggleRow
+import com.gabriel.zenithui.ui.theme.LocalBackdrop
+import com.gabriel.zenithui.ui.theme.LocalGlassLevels
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.Palettes
 import com.gabriel.zenithui.ui.theme.ZenithPalette
@@ -104,14 +110,16 @@ import kotlinx.coroutines.withContext
  * A gallery of wallpapers Zenith paints itself, in every theme's colours and in light and dark.
  * It opens on the ones made for the theme you are using; the chips along the top sort the designs
  * onto shelves and show them in any other theme. Tapping one shows it large, as it will be by day
- * and by night. Once set, a design is kept in step with the theme: change the palette, or go from
- * light to dark, and the wallpaper is painted again to match. Your own photos are one row away at
- * the bottom.
+ * and by night, with your own home screen on it. Once set, a design is kept in step with the
+ * theme: change the palette, or go from light to dark, and the wallpaper is painted again to
+ * match. Your own photos are one row away at the bottom.
  */
 @Composable
 fun WallpaperSheet(
     visible: Boolean,
     settings: ZenithSettings,
+    /** Page one of the home screen, for a design's preview to show on it. */
+    home: SettingsPreview,
     /** Whether the designs made for Zenith Plus may be set. */
     plusActive: Boolean,
     /**
@@ -234,6 +242,8 @@ fun WallpaperSheet(
                 Preview(
                     style = selection.first,
                     palette = selection.second,
+                    settings = settings,
+                    home = home,
                     dark = dark,
                     isCurrentTheme = selection.second.id == current.id,
                     following = settings.wallpaperFollow,
@@ -363,6 +373,8 @@ private fun Browse(
 private fun Preview(
     style: WallStyle,
     palette: ZenithPalette,
+    settings: ZenithSettings,
+    home: SettingsPreview,
     dark: Boolean,
     isCurrentTheme: Boolean,
     following: Boolean,
@@ -376,27 +388,57 @@ private fun Preview(
     var match by remember { mutableStateOf(true) }
     // In another theme's colours and Zenith not changing to it: the wallpaper keeps those colours.
     val pinned = !isCurrentTheme && !match
+    // The colours the home screen on it will be in: the design's, if Zenith is changing to them.
+    val homeIn = if (isCurrentTheme || match) palette else ui
+    val configuration = LocalConfiguration.current
+    val screenWidth = home.screenWidth.takeIf { it > 0.dp } ?: configuration.screenWidthDp.dp
+    val screenHeight = home.screenHeight.takeIf { it > 0.dp } ?: configuration.screenHeightDp.dp
+    val tall = 292.dp
+    // The phone's own corner, at the size it is drawn.
+    val corner = 46.dp * (tall / screenHeight)
 
     Column(Modifier.verticalScroll(rememberScrollState())) {
-        // By day and by night, side by side: one design is two pictures.
+        // By day and by night, side by side: one design is two pictures. On each is your own home
+        // screen, its words in the ink they take in that light, so what living with it is like is
+        // seen before it is set. Its glass is frosted, as over any wallpaper Zenith cannot see: the
+        // real thing will bend this one, which is not behind it yet.
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
             listOf(false, true).forEach { night ->
                 val now = night == dark
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    WallpaperImage(
-                        style = style,
-                        palette = remember(palette, night) { palette.toned(night) },
-                        widthPx = 360,
-                        modifier = Modifier
-                            .height(292.dp)
-                            .aspectRatio(0.46f)
-                            .clip(RoundedCornerShape(24.dp))
-                            .border(
-                                if (now) 2.dp else 1.dp,
-                                if (now) ui.accent else ui.onGlass.copy(alpha = 0.16f),
-                                RoundedCornerShape(24.dp),
-                            ),
-                    )
+                    val art = rememberWallpaperArt(style, remember(palette, night) { palette.toned(night) }, widthPx = 360)
+                    val appear by animateFloatAsState(if (art != null) 1f else 0f, tween(260), label = "previewFade")
+                    val ring by animateColorAsState(if (now) ui.accent else Color.Transparent, tween(220), label = "previewRing")
+                    Box(
+                        Modifier
+                            .border(2.dp, ring, RoundedCornerShape(corner + RING_GAP))
+                            .padding(RING_GAP)
+                            .size(tall * (screenWidth / screenHeight), tall),
+                    ) {
+                        if (art == null) {
+                            Box(Modifier.matchParentSize().clip(RoundedCornerShape(corner)).background(ui.onGlass.copy(alpha = 0.06f)))
+                        } else {
+                            CompositionLocalProvider(
+                                LocalPalette provides remember(homeIn, night) { homeIn.toned(night) },
+                                LocalGlassLevels provides null,
+                                LocalBackdrop provides null,
+                            ) {
+                                PhonePreview(
+                                    items = home.items,
+                                    dock = settings.dock,
+                                    appsByKey = home.appsByKey,
+                                    settings = settings,
+                                    wallpaper = art,
+                                    screenWidth = screenWidth,
+                                    screenHeight = screenHeight,
+                                    shown = Int.MAX_VALUE,
+                                    modifier = Modifier
+                                        .matchParentSize()
+                                        .graphicsLayer { alpha = appear },
+                                )
+                            }
+                        }
+                    }
                     Spacer(Modifier.height(6.dp))
                     Text(
                         (if (night) "Dark" else "Light") + if (now) ", as now" else "",
@@ -542,13 +584,15 @@ private fun Thumb(
     }
 }
 
+/** Between a preview and the ring round the one that is as Zenith is now. */
+private val RING_GAP = 4.dp
+
 /**
  * One painted wallpaper, drawn off the main thread and kept, so scrolling back past it is
- * instant. It fades in once ready rather than popping.
+ * instant: null until it is ready.
  */
 @Composable
-private fun WallpaperImage(style: WallStyle, palette: ZenithPalette, widthPx: Int, modifier: Modifier) {
-    val ui = LocalPalette.current
+private fun rememberWallpaperArt(style: WallStyle, palette: ZenithPalette, widthPx: Int): ImageBitmap? {
     val heightPx = (widthPx / 0.46f).toInt()
     val colors = palette.wallColors()
     val key = "${style.name}|$colors|$widthPx"
@@ -557,6 +601,14 @@ private fun WallpaperImage(style: WallStyle, palette: ZenithPalette, widthPx: In
             WallpaperArt.render(style, colors, widthPx, heightPx).asImageBitmap()
         }.also { thumbCache.put(key, it) }
     }
+    return image
+}
+
+/** A painted wallpaper as a picture. It fades in once ready rather than popping. */
+@Composable
+private fun WallpaperImage(style: WallStyle, palette: ZenithPalette, widthPx: Int, modifier: Modifier) {
+    val ui = LocalPalette.current
+    val image = rememberWallpaperArt(style, palette, widthPx)
     val shown by animateFloatAsState(if (image != null) 1f else 0f, tween(260), label = "wallpaperFade")
     Box(modifier.background(ui.onGlass.copy(alpha = 0.06f))) {
         image?.let {

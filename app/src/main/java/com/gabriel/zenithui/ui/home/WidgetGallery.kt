@@ -3,13 +3,17 @@ package com.gabriel.zenithui.ui.home
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.EnterExitState
+import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
@@ -38,6 +42,9 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Layers
+import androidx.compose.material.icons.rounded.LayersClear
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -51,8 +58,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.TransformOrigin
@@ -64,14 +74,18 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.gabriel.zenithui.data.HomeGeometry
+import com.gabriel.zenithui.data.WidgetLayouts
 import com.gabriel.zenithui.data.WidgetSize
 import com.gabriel.zenithui.data.WidgetSizes
 import com.gabriel.zenithui.data.WidgetSpec
@@ -89,6 +103,7 @@ import com.gabriel.zenithui.ui.common.rememberHaptics
 import com.gabriel.zenithui.ui.common.shake
 import com.gabriel.zenithui.ui.common.unfoldIn
 import com.gabriel.zenithui.ui.common.unfoldOut
+import com.gabriel.zenithui.ui.common.wordsChange
 import com.gabriel.zenithui.ui.onboarding.PrimaryButton
 import com.gabriel.zenithui.ui.onboarding.Segmented
 import com.gabriel.zenithui.ui.theme.GlassMaterial
@@ -239,17 +254,17 @@ private fun Gallery(
         Text(
             "Each one is live. Tap it to see its sizes and add it.",
             color = palette.onGlassMuted,
-            fontSize = 14.sp,
+            fontSize = 15.sp,
+            lineHeight = 21.sp,
             modifier = Modifier
                 .padding(horizontal = 4.dp)
                 .arriving(arrive, 0),
         )
-        Box(Modifier.arriving(arrive, 1)) {
-            Segmented(
-                options = listOf("glass" to "Glass", "bare" to "No glass"),
-                selected = if (bare) "bare" else "glass",
-                onSelect = { onBare(it == "bare") },
-            )
+        // What the switch does is said under it, where the eye is when it is used.
+        Column(Modifier.arriving(arrive, 1)) {
+            StyleSwitch(bare, onBare)
+            Spacer(Modifier.height(8.dp))
+            StyleNote(bare, Modifier.padding(horizontal = 4.dp))
         }
         square.chunked(2).forEachIndexed { row, pair ->
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -287,23 +302,45 @@ private fun Gallery(
                 .arriving(arrive, 2 + square.size, card = true),
             onPick = onPick,
         )
-        AnimatedContent(
-            targetState = bare,
-            transitionSpec = { fadeIn(tween(220, delayMillis = 60)).togetherWith(fadeOut(tween(120))) },
-            label = "styleNote",
-        ) { noGlass ->
-            Text(
-                text = if (noGlass) {
-                    "No pane round them: the numbers and icons are the glass, like the clock on an iPhone's Lock Screen."
-                } else {
-                    "On a pane of glass that bends your wallpaper."
-                },
-                color = palette.onGlassMuted,
-                fontSize = 12.sp,
-                modifier = Modifier.padding(horizontal = 4.dp),
-            )
-        }
         Spacer(Modifier.height(28.dp))
+    }
+}
+
+/**
+ * Glass or no glass: the one choice that changes every widget on the page at once, so each side
+ * of it says so in a symbol as well as a word, a pane and a pane struck through.
+ */
+@Composable
+private fun StyleSwitch(bare: Boolean, onBare: (Boolean) -> Unit) {
+    Segmented(
+        options = listOf("glass" to "Glass", "bare" to "No glass"),
+        selected = if (bare) "bare" else "glass",
+        onSelect = { onBare(it == "bare") },
+        icons = listOf(Icons.Rounded.Layers, Icons.Rounded.LayersClear),
+    )
+}
+
+/** What the style chosen means, changing where it stands when the other is chosen. */
+@Composable
+private fun StyleNote(bare: Boolean, modifier: Modifier = Modifier) {
+    val palette = LocalPalette.current
+    val reduced = LocalMotionLevel.current.reduced
+    AnimatedContent(
+        targetState = bare,
+        transitionSpec = { wordsChange(reduced) },
+        modifier = modifier,
+        label = "styleNote",
+    ) { noGlass ->
+        Text(
+            text = if (noGlass) {
+                "No pane round them: the numbers and icons are the glass, like the clock on an iPhone's Lock Screen."
+            } else {
+                "On a pane of glass that bends your wallpaper."
+            },
+            color = palette.onGlassMuted,
+            fontSize = 13.sp,
+            lineHeight = 18.sp,
+        )
     }
 }
 
@@ -391,13 +428,13 @@ private fun WidgetCard(
             modifier = Modifier.padding(horizontal = 4.dp),
             label = "widgetCardName",
         ) { name ->
-            Text(name, color = palette.onGlass, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(name, color = palette.onGlass, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         Text(
-            "$sizes sizes",
+            if (sizes == 1) "1 size" else "$sizes sizes",
             color = palette.onGlassMuted,
-            fontSize = 12.sp,
-            modifier = Modifier.padding(start = 4.dp, end = 4.dp, bottom = 2.dp),
+            fontSize = 13.sp,
+            modifier = Modifier.padding(start = 4.dp, end = 4.dp, top = 1.dp, bottom = 2.dp),
         )
     }
 }
@@ -407,8 +444,9 @@ private fun WidgetCard(
 /**
  * One widget, large. Its sizes stand in a row on the wallpaper, all to one scale so they can be
  * told apart, the one in the middle bright and the ones beside it standing back; a flick or a tap
- * brings another to the middle. Under them: what the size is called, the switch between glass and
- * no glass, and the button that puts it on the home screen.
+ * brings another to the middle. Under them: the sizes by name, each over the room it takes on the
+ * page; what the size in the middle is called and what it shows; the switch between glass and no
+ * glass; and the button that puts it on the home screen.
  *
  * It grows out of the card that was tapped ([growFrom], as a share of the page) and, when it is
  * [leaving], goes back into it.
@@ -486,6 +524,18 @@ private fun Showcase(
             if (seen[0] != -1) haptics.tick()
             seen[0] = current
         }
+        // A size tapped, on the stage or in the row of names under it, comes to the middle.
+        val scope = rememberCoroutineScope()
+        val goTo: (Int) -> Unit = { index ->
+            scope.launch {
+                if (reduced) strip.scrollToItem(index, toMiddle(index)) else strip.animateScrollToItem(index, toMiddle(index))
+            }
+        }
+        // What each size shows: every one is a design of its own, and says which.
+        val kind = Widgets.baseType(spec.type)
+        val notes = remember(real, kind, settings.toggles.size) {
+            real.map { WidgetLayouts.note(kind, it.width.value, it.height.value, settings.toggles.size) }
+        }
 
         Column(
             Modifier
@@ -500,44 +550,67 @@ private fun Showcase(
                 scale = scale,
                 width = stageWidth,
                 strip = strip,
-                toMiddle = toMiddle,
                 names = sizes.map { "${it.name}, ${it.spanX} by ${it.rows}" },
                 bare = bare,
                 settings = settings,
+                onPick = goTo,
             )
-            Spacer(Modifier.height(16.dp))
-            AnimatedContent(
-                targetState = sizes[current],
-                transitionSpec = { fadeIn(tween(180, delayMillis = 40)).togetherWith(fadeOut(tween(100))) },
-                label = "sizeName",
-            ) { size ->
-                Text(
-                    "${size.name}  \u00B7  ${size.spanX} \u00D7 ${size.rows}",
-                    color = palette.onGlass,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.SemiBold,
+            if (sizes.size > 1) {
+                Spacer(Modifier.height(12.dp))
+                SizePicker(
+                    sizes = sizes,
+                    columns = settings.columns,
+                    current = current,
+                    position = { stripPosition(strip, start) },
+                    onPick = goTo,
+                    modifier = Modifier.padding(horizontal = STAGE_INSET),
                 )
             }
-            Spacer(Modifier.height(10.dp))
-            PagerDots(sizes.size, position = { stripPosition(strip, start) })
-            Spacer(Modifier.height(18.dp))
+            Spacer(Modifier.height(14.dp))
+            AnimatedContent(
+                targetState = current,
+                transitionSpec = { sizeChange(reduced, forwards = targetState > initialState) },
+                label = "sizeName",
+            ) { index ->
+                val size = sizes[index]
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = STAGE_INSET + 8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(
+                        "${size.name}  \u00B7  ${size.spanX} \u00D7 ${size.rows}",
+                        color = palette.onGlass,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    notes[index]?.let { note ->
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            note,
+                            color = palette.onGlassMuted,
+                            fontSize = 14.sp,
+                            lineHeight = 20.sp,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.height(20.dp))
             Column(Modifier.padding(horizontal = STAGE_INSET), horizontalAlignment = Alignment.CenterHorizontally) {
-                Segmented(
-                    options = listOf("glass" to "Glass", "bare" to "No glass"),
-                    selected = if (bare) "bare" else "glass",
-                    onSelect = { onBare(it == "bare") },
-                )
+                StyleSwitch(bare, onBare)
                 Spacer(Modifier.height(14.dp))
                 AnimatedContent(
                     targetState = (if (bare) bareOf(spec) else spec).description,
-                    transitionSpec = { fadeIn(tween(200, delayMillis = 60)).togetherWith(fadeOut(tween(110))) },
+                    transitionSpec = { wordsChange(reduced) },
                     label = "widgetAbout",
                 ) { words ->
                     Text(
                         words,
                         color = palette.onGlassMuted,
-                        fontSize = 14.sp,
-                        lineHeight = 20.sp,
+                        fontSize = 15.sp,
+                        lineHeight = 22.sp,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth(),
                     )
@@ -565,7 +638,8 @@ private fun Showcase(
                     Text(
                         "No page has room for it at this size. Try a smaller one, or free up some space.",
                         color = palette.onGlass,
-                        fontSize = 13.sp,
+                        fontSize = 14.sp,
+                        lineHeight = 20.sp,
                         textAlign = TextAlign.Center,
                         modifier = Modifier
                             .fillMaxWidth()
@@ -576,7 +650,7 @@ private fun Showcase(
                 Text(
                     "Once it is on the page you can pull it to any size you like.",
                     color = palette.onGlassMuted,
-                    fontSize = 12.sp,
+                    fontSize = 13.sp,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -595,15 +669,14 @@ private fun Stage(
     scale: Float,
     width: Dp,
     strip: LazyListState,
-    /** How far along the row has to be for a size to stand in the middle of it. */
-    toMiddle: (Int) -> Int,
     /** What each size is called, for a screen reader. */
     names: List<String>,
     bare: Boolean,
     settings: ZenithSettings,
+    /** A size was tapped: bring it to the middle. */
+    onPick: (Int) -> Unit,
 ) {
     val reduced = LocalMotionLevel.current.reduced
-    val scope = rememberCoroutineScope()
     LazyRow(
         state = strip,
         modifier = Modifier
@@ -640,15 +713,111 @@ private fun Stage(
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
-                    ) {
-                        scope.launch {
-                            if (reduced) strip.scrollToItem(index, toMiddle(index)) else strip.animateScrollToItem(index, toMiddle(index))
-                        }
-                    },
+                    ) { onPick(index) },
             )
         }
     }
 }
+
+/**
+ * The sizes by name, each over the room it takes on the page ([SizeShape]), so they can be told
+ * apart before any of them is looked at. A pill lies under the size in the middle of the stage and
+ * goes with the stage as it is pulled, stretching towards the next size on the way and drawing
+ * itself up there, as the pill of a row of options does; that size's shape lights up in the
+ * accent. A tap on a name brings its size to the middle. All of it is drawn from [position], so
+ * following a finger composes nothing again.
+ */
+@Composable
+private fun SizePicker(
+    sizes: List<WidgetSize>,
+    columns: Int,
+    /** The size in the middle, for a screen reader. */
+    current: Int,
+    /** Where the row of sizes stands: see [stripPosition]. */
+    position: () -> Float,
+    onPick: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val palette = LocalPalette.current
+    val pill = palette.onGlass.copy(alpha = 0.1f)
+    val tallest = sizes.maxOf { it.rows }
+    Row(
+        modifier
+            .fillMaxWidth()
+            .drawBehind {
+                val each = size.width / sizes.size
+                val (from, to) = PageEffects.pillSpan(position(), sizes.size)
+                drawRoundRect(
+                    color = pill,
+                    topLeft = Offset(from * each, 0f),
+                    size = Size((to - from) * each, size.height),
+                    cornerRadius = CornerRadius(16.dp.toPx()),
+                )
+            },
+    ) {
+        sizes.forEachIndexed { index, size ->
+            val near = { (1f - abs(position() - index)).coerceIn(0f, 1f) }
+            Column(
+                Modifier
+                    .weight(1f)
+                    .pressBounce(0.92f)
+                    .clip(RoundedCornerShape(16.dp))
+                    .clickable(onClickLabel = "Show this size") { onPick(index) }
+                    .semantics {
+                        contentDescription = "${size.name}, ${size.spanX} by ${size.rows}"
+                        selected = index == current
+                    }
+                    .padding(vertical = 10.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                SizeShape(
+                    spanX = size.spanX,
+                    rows = size.rows,
+                    columns = columns,
+                    maxRows = tallest,
+                    modifier = Modifier.size(width = 42.dp, height = 28.dp),
+                    lit = near,
+                )
+                Spacer(Modifier.height(7.dp))
+                Text(
+                    size.name,
+                    color = palette.onGlass,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    modifier = Modifier
+                        .graphicsLayer { alpha = 0.66f + 0.34f * near() }
+                        // Said already, with its cells, by the size it names.
+                        .clearAndSetSemantics { },
+                )
+            }
+        }
+    }
+}
+
+/**
+ * The name of a size giving way to the next one's as the row of sizes turns: it slides a little
+ * the way the row went. With movement reduced one fades into the other where it stands.
+ */
+private fun sizeChange(reduced: Boolean, forwards: Boolean): ContentTransform {
+    val way = if (forwards) 1 else -1
+    return ContentTransform(
+        targetContentEnter = if (reduced) {
+            fadeIn(tween(Motion.REDUCED_MS))
+        } else {
+            slideInHorizontally(SIZE_NAME_SLIDE) { way * it / 8 } + fadeIn(tween(200, delayMillis = 40))
+        },
+        initialContentExit = if (reduced) {
+            fadeOut(tween(Motion.REDUCED_MS))
+        } else {
+            slideOutHorizontally(tween(160)) { -way * it / 8 } + fadeOut(tween(110))
+        },
+        // A size whose line runs onto a second takes the room smoothly, and nothing is cut off.
+        sizeTransform = SizeTransform(clip = false),
+    )
+}
+
+private val SIZE_NAME_SLIDE = spring(dampingRatio = 0.8f, stiffness = 380f, visibilityThreshold = IntOffset(1, 1))
 
 /**
  * Where a size comes to rest: the middle of the stage. The library's own Center is the middle of

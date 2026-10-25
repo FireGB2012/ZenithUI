@@ -109,6 +109,7 @@ import com.gabriel.zenithui.data.LaunchMotion
 import com.gabriel.zenithui.data.LayoutBuilder
 import com.gabriel.zenithui.data.ROW_UNITS
 import com.gabriel.zenithui.data.Tune
+import com.gabriel.zenithui.data.WallStyle
 import com.gabriel.zenithui.data.WidgetCell
 import com.gabriel.zenithui.data.findActivity
 import com.gabriel.zenithui.ui.common.LaunchOrigin
@@ -1630,18 +1631,20 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         }
 
         // ------------------------------------------------------------ settings
+        // Page one, small: on Settings' Theme and Home pages, and on a wallpaper's preview.
+        val homePreview = SettingsPreview(
+            items = remember(layout) { layout.filter { it.page == 0 } },
+            appsByKey = appsByKey,
+            wallpaper = glassLevels?.sharp,
+            screenWidth = with(density) { drawerWidthPx.toDp() },
+            screenHeight = with(density) { drawerHeightPx.toDp() },
+        )
         SettingsScreen(
             visible = settingsOpen,
             covered = sheetVisible,
             settings = settings,
             plus = plus,
-            preview = SettingsPreview(
-                items = remember(layout) { layout.filter { it.page == 0 } },
-                appsByKey = appsByKey,
-                wallpaper = glassLevels?.sharp,
-                screenWidth = with(density) { drawerWidthPx.toDp() },
-                screenHeight = with(density) { drawerHeightPx.toDp() },
-            ),
+            preview = homePreview,
             actions = SettingsActions(
                 change = { transform -> viewModel.updateSettings(transform) },
                 wallpaper = { showSheet(HomeSheet.Wallpapers) },
@@ -1770,6 +1773,8 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
 
                 HomeSheet.Customize -> CustomizeSheet(
                     visible = up,
+                    wallpaper = glassLevels?.sharp,
+                    wallpaperName = WallStyle.byName(settings.wallpaperStyle)?.label,
                     onWallpaper = { showSheet(HomeSheet.Wallpapers) },
                     onHelp = { showSheet(HomeSheet.Help) },
                     onAmbient = {
@@ -1802,6 +1807,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 HomeSheet.Wallpapers -> WallpaperSheet(
                     visible = up,
                     settings = settings,
+                    home = homePreview,
                     plusActive = plus.active,
                     onSet = { style, pinnedPalette, lockToo, switchThemeTo ->
                         viewModel.setWallpaper(style, pinnedPalette, lockToo, switchThemeTo)

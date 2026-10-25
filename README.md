@@ -73,7 +73,16 @@ at the size it is there, on a window onto your wallpaper, so what you see is wha
 page. Tap one and it grows into a showcase: its sizes in a row, all to one scale — Small, Medium,
 Wide, Tall and Large, each fitted to the widget and to your grid (`WidgetSizes`), and each a
 different design — with a switch between Glass and No glass and one button that adds the size in
-the middle.
+the middle. Under the row the sizes are named, each over the room it takes on the page: a little
+grid as wide as your page, its cells filled in (`SizeShape`), so Wide is plainly the width of the
+page and Tall a row more. A tap on a name brings that size to the middle, and under it a line says
+what that size shows ("Hours over minutes, like a Lock Screen"). The lines come from
+`WidgetLayouts`, which reads the same rules the widgets lay themselves out by (`WidgetForm`, and
+`ToggleGrid` for the toggles), so they cannot say a size shows what it does not. The bar that
+comes up for **Resize and move** shows the same little grid on each of its sizes.
+
+The switch between Glass and No glass carries a symbol on each side, a pane and a pane struck
+through, and what the side chosen means is said right under it.
 
 **No glass** — the other side of that switch: the same widgets with no pane round
 them, like the clock on an iPhone's Lock Screen: the big numbers, rings and icons are made of glass
@@ -88,14 +97,20 @@ widget is smaller than 11sp at its ordinary size, and the accent is taken part o
 the pane's own ink when it is used for letters. The names under the Quick Toggles are the size of
 the label under an app; one too long for its cell ("Do Not Disturb" in a two by two) goes onto a
 second line, and every name takes the same number of lines so the buttons stay level
-(`ToggleNames.fit`).
+(`ToggleNames.fit`). Their symbols fill a little over half of their button, as Android's own quick
+settings do. Everywhere else, second lines and small print (the subtitles in Settings, the words
+under a choice) are 74% of the ink, which stands six to one or better against every
+theme's backdrop, light and dark (`PaletteToneTest`).
 
 ## Customisation
 
 Long-press an empty spot → **Customise** → **Settings**. Settings is a page of its own, the full
 height of the screen (`ui/settings/`): a search box and eight groups, each saying how it is set
 now — Wallpaper & theme, Home screen, Motion & feel, Apps, Zenith Plus, Aura, Backup & reset, About
-& help — and a ninth, Account, in a build that has a server. A group pushes in from the side; back, the arrow or a swipe from the left edge pops it.
+& help — and a ninth, Account, in a build that has a server. They stand in three blocks, each
+headed with what it holds (Look and feel; Plus and Aura, or Plus, Aura and account; Backup and
+help) and set further from
+the next than its rows are from each other. A group pushes in from the side; back, the arrow or a swipe from the left edge pops it.
 Search finds any option by its name or by other words for it ("dark", "vibrate", "battery"), opens
 its page and pulses the row. The Theme and Home pages start with a small live copy of your own home
 screen, drawn by the same code as the real one, so a change is seen as it is made.
@@ -116,14 +131,19 @@ re-flows the existing layout instead of dropping items, and **Tidy up** puts any
 back in its place.
 
 Every choice says what it does: the four tiles of Customise each carry a line, and under each
-control in Settings a line of small print describes the option that is selected.
+control in Settings a line of small print describes the option that is selected. The Wallpaper
+tile shows the wallpaper you have, and says which of Zenith's designs it is; the rows under the
+tiles sit in a group of their own, a line between each.
 
 ## Wallpapers
 
 Zenith paints its own wallpapers on the phone (`WallpaperArt`, `WallDesigns`): thirty-three designs
 on four shelves — Soft, Lines, Shapes and Scenes — seven of them for Zenith Plus. Every design is
 drawn from a theme's five colours and has a light picture and a dark one, each made so labels and
-the status bar stay readable over it.
+the status bar stay readable over it. Tap one and both pictures are shown side by side, each with
+your own home screen on it, drawn by the code that draws the real one in the ink it takes in that
+light. Its glass is frosted there, as over any wallpaper Zenith cannot see: the real glass will
+bend the new wallpaper, which is not behind it yet.
 
 A design, once set, **follows the theme**. Change the palette, or go from light to dark (by hand
 or with the phone, on Auto), and `WallpaperDirector` paints the same design again in the new
@@ -195,7 +215,10 @@ far out of an opening folder each app is) and `AnimationTuning` (the numbers it 
   one that was tapped and draws itself up there; a switch's knob spreads under a finger; a number
   rolls up or down a step; the small print under a control changes where it stands. The gallery's
   cards come in one after another, and a widget's showcase grows out of the card that was tapped
-  and goes back into it.
+  and goes back into it. In the showcase the pill under the names of the sizes goes with the row
+  of sizes as it is pulled, stretching towards the next on the way and drawing itself up there
+  (`PageEffects.pillSpan`); that size's little grid lights up in the accent, and its name below
+  slides in the way the row went.
 
 Movement goes through `graphicsLayer` or draw-time state rather than layout, except where glass
 has to be told where it is: a sheet, and the bars that come in from an edge, are moved by being

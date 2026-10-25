@@ -10,6 +10,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
@@ -62,12 +63,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -378,6 +382,10 @@ fun ItemMenuSheet(
 @Composable
 fun CustomizeSheet(
     visible: Boolean,
+    /** The wallpaper as it is now, for its tile to show; null when Zenith has no copy of it. */
+    wallpaper: ImageBitmap?,
+    /** What the wallpaper is called, when it is one of Zenith's own designs. */
+    wallpaperName: String?,
     onWallpaper: () -> Unit,
     onHelp: () -> Unit,
     onAmbient: () -> Unit,
@@ -391,55 +399,124 @@ fun CustomizeSheet(
         context.getSystemService(android.app.role.RoleManager::class.java)
             ?.isRoleHeld(android.app.role.RoleManager.ROLE_HOME) == true
     }
+    val palette = LocalPalette.current
     ZenithSheet(visible = visible, onDismiss = onDismiss, title = "Customise") {
-        // The four things people come here for, as big targets; the rest underneath.
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        // The four things people come here for, as big targets with room between them; the rest
+        // underneath, in a group of their own with a line between each.
+        Row(horizontalArrangement = Arrangement.spacedBy(TILE_GAP)) {
             QuickTile(Icons.Rounded.Dashboard, "Widgets", "Add a clock, calendar, note, battery or toggles", index = 0, modifier = Modifier.weight(1f)) { onWidgets() }
-            QuickTile(Icons.Rounded.Image, "Wallpaper", "Zenith's own designs, or a photo of yours", index = 1, modifier = Modifier.weight(1f)) { onWallpaper() }
+            QuickTile(
+                icon = Icons.Rounded.Image,
+                label = "Wallpaper",
+                detail = when {
+                    wallpaperName != null -> "$wallpaperName, one of Zenith's own"
+                    wallpaper != null -> "A photo of yours"
+                    else -> "Zenith's own designs, or a photo of yours"
+                },
+                picture = wallpaper,
+                index = 1,
+                modifier = Modifier.weight(1f),
+            ) { onWallpaper() }
         }
-        Spacer(Modifier.height(10.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Spacer(Modifier.height(TILE_GAP))
+        Row(horizontalArrangement = Arrangement.spacedBy(TILE_GAP)) {
             QuickTile(Icons.Rounded.Tune, "Settings", "Colours, grid, glass, motion and backup", index = 2, modifier = Modifier.weight(1f)) { onSettings() }
             QuickTile(Icons.Rounded.Bedtime, "Bedside clock", "A dim full-screen clock for the night", index = 3, modifier = Modifier.weight(1f)) { onAmbient() }
         }
-        Spacer(Modifier.height(8.dp))
-        if (!isHome) {
-            MenuRow(Icons.Rounded.Home, "Make Zenith your home screen", "So the home button always comes back here", index = 4) { onDefaultLauncher(); onDismiss() }
+        Spacer(Modifier.height(18.dp))
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(22.dp))
+                .background(palette.onGlass.copy(alpha = 0.07f))
+                .padding(horizontal = 6.dp, vertical = 2.dp),
+        ) {
+            if (!isHome) {
+                MenuRow(Icons.Rounded.Home, "Make Zenith your home screen", "So the home button always comes back here", index = 4) { onDefaultLauncher(); onDismiss() }
+                // Under the words, not under the icon, as between the rows of Settings.
+                Box(
+                    Modifier
+                        .padding(start = 58.dp, end = 8.dp)
+                        .fillMaxWidth()
+                        .height(1.dp)
+                        .background(palette.onGlass.copy(alpha = 0.08f))
+                )
+            }
+            MenuRow(Icons.Rounded.HelpOutline, "How it works", "Every gesture in one page", index = 5) { onHelp() }
         }
-        MenuRow(Icons.Rounded.HelpOutline, "How it works", "Every gesture in one page", index = 5) { onHelp() }
     }
 }
 
+/** Between the tiles of Customise, either way. */
+private val TILE_GAP = 12.dp
+
 /**
  * A big square-ish button: the icon in the corner, the name underneath with a line saying what is
- * behind it, lit with the accent.
+ * behind it, lit with the accent. Given a [picture] it shows that behind it, under a wash of the
+ * theme's own ground that thickens towards the foot so the words read on any picture: the
+ * Wallpaper tile shows the wallpaper you have.
  */
 @Composable
-private fun QuickTile(icon: ImageVector, label: String, detail: String, index: Int, modifier: Modifier = Modifier, onClick: () -> Unit) {
+private fun QuickTile(
+    icon: ImageVector,
+    label: String,
+    detail: String,
+    index: Int,
+    modifier: Modifier = Modifier,
+    picture: ImageBitmap? = null,
+    onClick: () -> Unit,
+) {
     val palette = LocalPalette.current
-    Column(
+    val ground = palette.backdrop.first()
+    Box(
         modifier
             .height(128.dp)
             .appearIn(delayMillis = staggerDelay(index), riseFrom = 18f)
             .pressBounce(0.95f)
             .clip(RoundedCornerShape(22.dp))
             .background(palette.onGlass.copy(alpha = 0.07f))
-            .clickable(onClick = onClick)
-            .padding(14.dp),
-        verticalArrangement = Arrangement.SpaceBetween,
+            .clickable(onClick = onClick),
     ) {
-        Box(
-            Modifier
-                .size(36.dp)
-                .clip(RoundedCornerShape(11.dp))
-                .background(palette.accent.copy(alpha = 0.18f)),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(icon, contentDescription = null, tint = palette.accent, modifier = Modifier.size(20.dp))
+        if (picture != null) {
+            Image(
+                bitmap = picture,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.matchParentSize(),
+            )
+            Box(
+                Modifier
+                    .matchParentSize()
+                    .background(
+                        Brush.verticalGradient(
+                            0f to ground.copy(alpha = 0.08f),
+                            0.45f to ground.copy(alpha = 0.4f),
+                            1f to ground.copy(alpha = 0.92f),
+                        )
+                    )
+            )
         }
-        Column {
-            Text(label, color = palette.onGlass, fontSize = 15.sp, fontWeight = FontWeight.Medium)
-            Text(detail, color = palette.onGlassMuted, fontSize = 12.sp, lineHeight = 16.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        Column(
+            Modifier
+                .matchParentSize()
+                .padding(14.dp),
+            verticalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Box(
+                Modifier
+                    .size(36.dp)
+                    .clip(RoundedCornerShape(11.dp))
+                    // On a picture the plate is the theme's ground, so the icon stands off it.
+                    .background(if (picture != null) ground.copy(alpha = 0.72f) else palette.accent.copy(alpha = 0.18f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(icon, contentDescription = null, tint = palette.accent, modifier = Modifier.size(20.dp))
+            }
+            Column {
+                Text(label, color = palette.onGlass, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                Spacer(Modifier.height(2.dp))
+                Text(detail, color = palette.onGlassMuted, fontSize = 12.sp, lineHeight = 16.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
         }
     }
 }

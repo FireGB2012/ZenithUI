@@ -19,7 +19,13 @@ data class ZenithPalette(
     val dark: Boolean = true,
 ) {
     val onGlass: Color get() = if (dark) Color.White else Color(0xFF10131A)
-    val onGlassMuted: Color get() = onGlass.copy(alpha = 0.62f)
+
+    /**
+     * Second lines, small print, the names of options not chosen. It was 62% of the ink, which on
+     * a pale backdrop came out barely above what small print needs; testers found the subtitles
+     * in Settings hard to pick out from the dark. At 74% it holds six to one on every backdrop.
+     */
+    val onGlassMuted: Color get() = onGlass.copy(alpha = 0.74f)
 }
 
 /**

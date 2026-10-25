@@ -130,7 +130,9 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.gabriel.zenithui.data.ToggleGrid
 import com.gabriel.zenithui.data.ToggleNames
+import com.gabriel.zenithui.data.WidgetForm
 import com.gabriel.zenithui.data.Widgets
 import com.gabriel.zenithui.ui.common.pressBounce
 import com.gabriel.zenithui.ui.common.rememberTick
@@ -151,38 +153,8 @@ import kotlin.math.cos
 import kotlin.math.roundToInt
 import kotlin.math.sin
 
-/**
- * The shape a widget has been given. Every widget has a layout of its own for each one, so a
- * widget is designed for the space it is in rather than the same design stretched or squashed.
- */
-private enum class WidgetForm {
-    /** About one icon: the single most useful thing, and nothing else. */
-    Mini,
-
-    /** Short and wide, about one row tall: a line of information. */
-    Strip,
-
-    /** Roughly square: the classic small widget. */
-    Square,
-
-    /** Clearly wider than tall. */
-    Wide,
-
-    /** Clearly taller than wide. */
-    Tall,
-
-    /** Large both ways. */
-    Big,
-}
-
-private fun formOf(width: Dp, height: Dp): WidgetForm = when {
-    height < 100.dp && width >= 130.dp -> WidgetForm.Strip
-    width < 130.dp || height < 100.dp -> WidgetForm.Mini
-    width >= 260.dp && height >= 230.dp -> WidgetForm.Big
-    width >= height * 1.55f -> WidgetForm.Wide
-    height >= width * 1.45f -> WidgetForm.Tall
-    else -> WidgetForm.Square
-}
+/** The shape a widget has been given: see [WidgetForm], where the lines between them are drawn. */
+private fun formOf(width: Dp, height: Dp): WidgetForm = WidgetForm.of(width.value, height.value)
 
 /**
  * True inside a "No glass" widget. There is no pane: the widget sits straight on the wallpaper,
@@ -1368,15 +1340,18 @@ private fun NoteField(
 
 // ---------------------------------------------------------------------- toggles
 
-/** Below this each control would be too small to press reliably. */
-private val MIN_TOGGLE_CELL = 30.dp
-
 /** The largest a named tile gets, however much room the widget has. */
 private val MAX_TILE_WIDTH = 168.dp
 private val MAX_TILE_HEIGHT = 118.dp
 
-/** The height of cell from which a tile has room for a second line under its name. */
-private val TILE_DETAIL_FROM = 92.dp
+/**
+ * How much of a round toggle its symbol fills. Testers found the symbols hard to tell apart at
+ * a glance at 46%; 54% is about what Android's own quick settings give theirs.
+ */
+private const val TOGGLE_SYMBOL = 0.54f
+
+/** The same for a "No glass" toggle, where the symbol is the whole button. */
+private const val BARE_TOGGLE_SYMBOL = 0.8f
 
 /** The name under a round toggle: the size of the label under an app, and a little heavier. */
 private val TOGGLE_NAME = 12.sp
@@ -1463,34 +1438,18 @@ private fun TogglesWidget(form: WidgetForm, chosen: List<String>, width: Dp, hei
         .mapNotNull { id -> TOGGLE_OPTIONS.firstOrNull { it.id == id } }
         .ifEmpty { TOGGLE_OPTIONS.take(1) }
 
-    // Lay the chosen controls out on whichever grid gives each of them the most room at this size.
+    // Lay the chosen controls out on whichever grid gives each of them the most room at this size,
+    // as many as can still be pressed: see ToggleGrid, which the widget showcase reads as well.
+    val grid = remember(width, height, options.size) { ToggleGrid.of(width.value, height.value, options.size) }
     val pad = if (form == WidgetForm.Mini) 6.dp else 12.dp
-    val innerWidth = width - pad * 2
-    val innerHeight = height - pad * 2
-    fun bestColumns(count: Int) = (1..count).maxByOrNull { cols ->
-        val rows = (count + cols - 1) / cols
-        minOf(innerWidth / cols, innerHeight / rows).value
-    } ?: 1
-    fun roomFor(count: Int): Dp {
-        val cols = bestColumns(count)
-        val rows = (count + cols - 1) / cols
-        return minOf(innerWidth / cols, innerHeight / rows)
-    }
-    // A widget too small for everything chosen shows the first few that still fit at a size you
-    // can press, rather than shrinking them all to specks.
-    val count = (options.size downTo 1).firstOrNull { roomFor(it) >= MIN_TOGGLE_CELL } ?: 1
-    val toggles = options.take(count)
+    val toggles = options.take(grid.shown)
         .map { option -> Toggle(option, option.id == "torch" && torchOn, actionFor(option.id)) }
-    val columns = bestColumns(count)
-    val rows = (count + columns - 1) / columns
-    val cellWidth = innerWidth / columns
-    val cellHeight = innerHeight / rows
-
-    // Big cells become named tiles; a single column of wide cells becomes a list; otherwise round
-    // buttons, named underneath when there is room. Buttons never grow past a comfortable size.
-    val tiles = cellWidth >= 120.dp && cellHeight >= 80.dp
-    val list = !tiles && columns == 1 && cellWidth >= 110.dp
-    val named = !tiles && !list && cellHeight >= 66.dp && cellWidth >= 58.dp
+    val columns = grid.columns
+    val cellWidth = grid.cellWidth.dp
+    val cellHeight = grid.cellHeight.dp
+    val tiles = grid.style == ToggleGrid.Style.Tiles
+    val list = grid.style == ToggleGrid.Style.List
+    val named = grid.style == ToggleGrid.Style.Named
 
     // A name under a button is set like the label under an app. The longest decides for them all,
     // so every button in the widget stays level: see ToggleNames for the rule.
@@ -1514,6 +1473,7 @@ private fun TogglesWidget(form: WidgetForm, chosen: List<String>, width: Dp, hei
         lineHeight = TOGGLE_NAME_LINE * names.scale,
         color = palette.onGlass,
     )
+    // Buttons never grow past a comfortable size.
     val button = when {
         list -> minOf(cellHeight * 0.72f, 42.dp)
         named -> minOf(cellWidth * 0.6f, (cellHeight - TOGGLE_NAME_GAP - nameLine * names.scale * names.lines) * 0.9f, 46.dp)
@@ -1537,7 +1497,7 @@ private fun TogglesWidget(form: WidgetForm, chosen: List<String>, width: Dp, hei
                                     .padding(4.dp),
                                 // A short tile has room for the name only: its second line would
                                 // be cut through the middle.
-                                detail = cellHeight >= TILE_DETAIL_FROM,
+                                detail = grid.detail,
                             )
                             list -> Row(verticalAlignment = Alignment.CenterVertically) {
                                 ToggleButton(toggle, button)
@@ -1650,7 +1610,7 @@ private fun ToggleChoice(option: ToggleOption, on: Boolean, onFlip: () -> Boolea
                 .background(disc),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(option.icon, contentDescription = null, tint = ink, modifier = Modifier.size(18.dp))
+            Icon(option.icon, contentDescription = null, tint = ink, modifier = Modifier.size(21.dp))
         }
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
@@ -1687,7 +1647,7 @@ private fun ToggleButton(toggle: Toggle, size: Dp) {
                 .clickable(onClick = toggle.onClick),
             contentAlignment = Alignment.Center,
         ) {
-            Symbol(toggle.icon, size * 0.72f, tint = ink)
+            Symbol(toggle.icon, size * BARE_TOGGLE_SYMBOL, tint = ink)
         }
         return
     }
@@ -1716,7 +1676,7 @@ private fun ToggleButton(toggle: Toggle, size: Dp) {
             .clickable(onClick = toggle.onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(toggle.icon, contentDescription = toggle.label, tint = tint, modifier = Modifier.size(size * 0.46f))
+        Icon(toggle.icon, contentDescription = toggle.label, tint = tint, modifier = Modifier.size(size * TOGGLE_SYMBOL))
     }
 }
 
@@ -1757,7 +1717,7 @@ private fun ToggleTile(toggle: Toggle, modifier: Modifier, detail: Boolean) {
             .padding(12.dp),
         verticalArrangement = Arrangement.SpaceBetween,
     ) {
-        Icon(toggle.icon, contentDescription = null, tint = ink, modifier = Modifier.size(22.dp))
+        Icon(toggle.icon, contentDescription = null, tint = ink, modifier = Modifier.size(26.dp))
         TileText(toggle, ink, detail)
     }
 }

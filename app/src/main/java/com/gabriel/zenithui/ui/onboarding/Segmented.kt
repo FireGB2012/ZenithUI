@@ -9,12 +9,16 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -28,6 +32,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -46,10 +51,20 @@ import kotlin.math.abs
  * facing the way it is going sets off at once and fast, and the edge behind follows on a softer
  * spring, so it stretches out towards the option you tapped and draws itself up when it gets
  * there, the way a drop of something thick moves. With movement reduced it is simply there.
+ *
+ * Given [icons], one for each option, the row is a little taller and each option's symbol stands
+ * before a larger name: for a choice that changes how everything else on the page looks, which
+ * should be seen at a glance.
  */
 @Composable
-fun Segmented(options: List<Pair<String, String>>, selected: String, onSelect: (String) -> Unit) {
+fun Segmented(
+    options: List<Pair<String, String>>,
+    selected: String,
+    onSelect: (String) -> Unit,
+    icons: List<ImageVector>? = null,
+) {
     val palette = LocalPalette.current
+    val large = icons != null
     val index = options.indexOfFirst { it.first == selected }.coerceAtLeast(0)
     val tick = rememberTick()
     val reduced = LocalMotionLevel.current.reduced
@@ -64,7 +79,7 @@ fun Segmented(options: List<Pair<String, String>>, selected: String, onSelect: (
     Box(
         Modifier
             .fillMaxWidth()
-            .height(46.dp)
+            .height(if (large) 52.dp else 46.dp)
             .glass(ZenithShapes.pill, strength = 0.8f, material = GlassMaterial.Clear)
             .padding(4.dp),
     ) {
@@ -120,12 +135,19 @@ fun Segmented(options: List<Pair<String, String>>, selected: String, onSelect: (
                             },
                         contentAlignment = Alignment.Center,
                     ) {
-                        Text(
-                            text = label,
-                            color = textColour,
-                            fontSize = 13.sp,
-                            fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium,
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            icons?.getOrNull(position)?.let { icon ->
+                                Icon(icon, contentDescription = null, tint = textColour, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(7.dp))
+                            }
+                            Text(
+                                text = label,
+                                color = textColour,
+                                fontSize = if (large) 15.sp else 13.sp,
+                                fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium,
+                                maxLines = 1,
+                            )
+                        }
                     }
                 }
             }

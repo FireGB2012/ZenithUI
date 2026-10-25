@@ -97,6 +97,26 @@ class PageEffectTest {
     }
 
     @Test
+    fun `the pill under a row of options stretches across two on its way and draws itself up`() {
+        fun span(position: Float) = PageEffects.pillSpan(position, count = 5)
+        // At rest it lies under one option exactly.
+        assertEquals(1f to 2f, span(1f))
+        assertEquals(4f to 5f, span(4f))
+        // The leading edge is there by half way; the trailing one follows.
+        assertEquals(1f to 2.5f, span(1.25f))
+        assertEquals(1f to 3f, span(1.5f))
+        assertEquals(1.5f to 3f, span(1.75f))
+        // And it is where it came to rest the moment it gets there, with no jump.
+        val nearly = span(1.9999f)
+        assertEquals(2f, nearly.first, 0.001f)
+        assertEquals(3f, nearly.second, 0.001f)
+        // Never past either end of the row.
+        assertEquals(0f to 1f, span(-0.6f))
+        assertEquals(4f to 5f, span(7f))
+        assertEquals(0f to 1f, PageEffects.pillSpan(0f, count = 1))
+    }
+
+    @Test
     fun `a page added grows its dot out of the end of the row`() {
         // Two dots, part of the way to being three.
         assertEquals(1f, PageEffects.dotPresence(2.4f, 0), 0f)

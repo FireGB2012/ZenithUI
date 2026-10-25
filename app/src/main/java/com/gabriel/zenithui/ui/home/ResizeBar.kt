@@ -92,14 +92,16 @@ fun ResizeBar(
     ) {
         // A widget with only one size it can be has nothing to choose between.
         if (sizes.size > 1) {
+            val tallest = sizes.maxOf { it.rows }
             Row(
                 Modifier.horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 sizes.forEach { size ->
                     SizeChip(
-                        name = size.name,
-                        cells = "${size.spanX} × ${size.rows}",
+                        size = size,
+                        columns = columns,
+                        tallest = tallest,
                         selected = item.spanX == size.spanX && item.spanY == size.spanY,
                     ) { answer(onSize(size)) }
                 }
@@ -130,9 +132,12 @@ fun ResizeBar(
     }
 }
 
-/** One of a widget's sizes: its name over how many cells that is, lit when it is the size in use. */
+/**
+ * One of a widget's sizes: the room it takes on the page ([SizeShape]), beside its name over how
+ * many cells that is, lit when it is the size in use.
+ */
 @Composable
-private fun SizeChip(name: String, cells: String, selected: Boolean, onClick: () -> Unit) {
+private fun SizeChip(size: WidgetSize, columns: Int, tallest: Int, selected: Boolean, onClick: () -> Unit) {
     val palette = LocalPalette.current
     // The light moves from the size it was to the size it is, rather than one going out and another on.
     val ink by animateColorAsState(
@@ -145,17 +150,28 @@ private fun SizeChip(name: String, cells: String, selected: Boolean, onClick: ()
         tween(220),
         label = "sizeFill",
     )
-    Column(
+    Row(
         Modifier
             .pressBounce(0.94f)
             .clip(RoundedCornerShape(16.dp))
             .background(fill)
             .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 8.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
+            .padding(start = 10.dp, end = 14.dp, top = 8.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(name, color = ink, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
-        Text(cells, color = ink.copy(alpha = 0.72f), fontSize = 12.sp, maxLines = 1)
+        SizeShape(
+            spanX = size.spanX,
+            rows = size.rows,
+            columns = columns,
+            maxRows = tallest,
+            ink = ink,
+            modifier = Modifier.size(width = 30.dp, height = 22.dp),
+        )
+        Spacer(Modifier.width(8.dp))
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(size.name, color = ink, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+            Text("${size.spanX} × ${size.rows}", color = ink.copy(alpha = 0.72f), fontSize = 12.sp, maxLines = 1)
+        }
     }
 }
 

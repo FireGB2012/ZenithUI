@@ -65,4 +65,19 @@ object PageEffects {
      * in the row, less for the last one on its way in or out, 0 for one that is not there.
      */
     fun dotPresence(dots: Float, index: Int): Float = (dots - index).coerceIn(0f, 1f)
+
+    /**
+     * Where the pill under a row of [count] options of equal width lies, from its left edge to its
+     * right, in option widths, while what it follows is at [position] (an option's number, with a
+     * fraction while between two). It does not slide across as a block: the edge going first
+     * reaches the next option by half way, and the edge behind catches up over the second half,
+     * so for a moment it lies under both, and then draws itself up.
+     */
+    fun pillSpan(position: Float, count: Int): Pair<Float, Float> {
+        val last = (count - 1).coerceAtLeast(0)
+        val at = position.coerceIn(0f, last.toFloat())
+        val from = at.toInt().coerceAtMost(last)
+        val along = at - from
+        return (from + (2f * along - 1f).coerceIn(0f, 1f)) to (from + 1f + (2f * along).coerceIn(0f, 1f))
+    }
 }

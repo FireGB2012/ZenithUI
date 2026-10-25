@@ -103,6 +103,19 @@ New: a Zenith account, if you want one.
 Without an account Zenith works as before, and nothing leaves your phone.
 ```
 
+For 3.7 (105), from what testers asked for:
+
+```
+Easier to read, and easier to find your way round.
+- Clearer words in Settings and the widget gallery
+- Every widget size shows the room it takes and what it shows
+- Glass and No glass are easier to tell apart
+- Bigger symbols on Quick Toggles
+- Customise shows your wallpaper, with more room between options
+- A wallpaper's preview shows your own home screen on it
+- Settings is set out in three headed blocks
+```
+
 ## Graphics
 
 | Asset | File | Requirement |

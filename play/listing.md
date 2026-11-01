@@ -116,6 +116,20 @@ Easier to read, and easier to find your way round.
 - Settings is set out in three headed blocks
 ```
 
+For the next update, the one that makes everything yours (check it is under 500 characters):
+
+```
+Make every part of it yours.
+- Your own name and icon for any app; shortcuts; notification dots
+- Your other apps' widgets, and widget stacks; seven new widgets
+- Gestures you choose, and a page overview
+- Looks: save your whole home screen, switch, schedule, share a code
+- Fonts, a palette from your wallpaper, and a Glass studio
+- Eight page turns, new press and arrival styles, Undo
+- Dock, folder and page dot styles, a clock on top, Lock layout
+- Island: your camera, stretched, over every app
+```
+
 ## Graphics
 
 | Asset | File | Requirement |
@@ -185,16 +199,18 @@ this file's history.)
   server itself serves).
 
 Data types, each **collected, not shared, optional** (only if the person makes an account, and for
-the last three only if they also send a backup), purpose **App functionality** (and **Account
-management** for the first two):
+the last three only if they also send a backup or share a Look), purpose **App functionality** (and
+**Account management** for the first two). A shared Look is opened only by people the sharer gives
+its code to, which they expect, so it is not "shared" in the form's sense; the Featured list holds
+only Looks the developer picked:
 
 | Data type | What it is here | Notes |
 | --- | --- | --- |
 | Personal info → User IDs | The username, or Google's number for the Google account | |
 | Personal info → Email address | Inside Google's sign-in token, with Continue with Google | Tick "processed ephemerally": the server checks the token and keeps only the number |
 | Personal info → Name | The name typed during setup, inside a backup | Only in a backup. Google's token also carries a name, read and not kept |
-| App activity → Installed apps | The apps placed on the home screen and the apps hidden, inside a backup | Never the whole list of installed apps |
-| App activity → Other user-generated content | The Quick Note widget's text, inside a backup | |
+| App activity → Installed apps | The apps placed on the home screen and the apps hidden, inside a backup; the apps placed on the home screen, inside a shared Look | Never the whole list of installed apps |
+| App activity → Other user-generated content | The Quick Note widget's text, inside a backup; the name given to a shared Look | |
 
 Not collected: location, contacts, photos, files, messages, device IDs, diagnostics, and anything
 financial. The Zenith Plus purchase is handled entirely by Google Play; the server is told nothing

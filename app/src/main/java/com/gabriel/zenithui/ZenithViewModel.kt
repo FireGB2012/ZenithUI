@@ -5,8 +5,19 @@ import android.os.SystemClock
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.gabriel.zenithui.data.AppCell
+import com.gabriel.zenithui.data.AppEdit
+import com.gabriel.zenithui.data.AppEdits
 import com.gabriel.zenithui.data.AppInfo
 import com.gabriel.zenithui.data.AppRepository
+import com.gabriel.zenithui.data.AppShortcut
+import com.gabriel.zenithui.data.IconSource
+import com.gabriel.zenithui.data.HostedWidgetCell
+import com.gabriel.zenithui.data.StackCell
+import com.gabriel.zenithui.data.StackMember
+import com.gabriel.zenithui.data.StackRules
+import com.gabriel.zenithui.data.ShortcutCell
+import kotlinx.coroutines.flow.receiveAsFlow
+import com.gabriel.zenithui.data.ShortcutKeys
 import com.gabriel.zenithui.data.Aura
 import com.gabriel.zenithui.data.AuraThemes
 import com.gabriel.zenithui.data.CheckIn
@@ -16,6 +27,7 @@ import com.gabriel.zenithui.data.DropPlanner
 import com.gabriel.zenithui.data.FolderCell
 import com.gabriel.zenithui.data.GridDensity
 import com.gabriel.zenithui.data.HomeItem
+import com.gabriel.zenithui.data.withId
 import com.gabriel.zenithui.data.IconLoader
 import com.gabriel.zenithui.data.LayoutBuilder
 import com.gabriel.zenithui.data.LayoutTidy
@@ -47,6 +59,8 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -54,11 +68,24 @@ import kotlinx.coroutines.sync.withLock
 
 class ZenithViewModel(application: Application) : AndroidViewModel(application) {
 
-    val store = SettingsStore(application)
+    val store = SettingsStore.get(application)
     val repository = AppRepository(application)
     val icons = IconLoader(application, repository)
     private val wallpaperSource = WallpaperSource(application)
     val billing = BillingRepository(application)
+
+    /** Where other apps' widgets are drawn from. Here, before init, which tidies it. */
+    val widgetHost = com.gabriel.zenithui.data.ZenithWidgetHost.get(application)
+
+    // Declared before init, which tidies widget numbers and must know what Undo still holds.
+    private val _removed = MutableStateFlow<List<HomeItem>>(emptyList())
+
+    /** What was just taken off the home screen, while it can still be put back: see [undoRemove]. */
+    val removed: StateFlow<List<HomeItem>> = _removed.asStateFlow()
+
+    /** Lets go, once Undo's time is up, of what the last removal held. */
+    private var letGo: kotlinx.coroutines.Job? = null
+    private val widgetManager = android.appwidget.AppWidgetManager.getInstance(application)
 
     /** Zenith's server, if this build has one; a test build may reach one on the test PC. */
     private val server = ZenithServer(ServerConfig.url, allowPlainHttp = BuildConfig.DEBUG)
@@ -69,7 +96,13 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
 
     val settings: StateFlow<ZenithSettings> = store.settings
     val layout: StateFlow<List<HomeItem>> = store.layout
-    val apps: StateFlow<List<AppInfo>> = repository.apps
+
+    /** Every app, with the names you gave any of them, in order by those names. */
+    val apps: StateFlow<List<AppInfo>> = combine(
+        repository.apps,
+        store.settings.map { it.appEdits }.distinctUntilChanged(),
+    ) { list, edits -> AppEdits.relabel(list, edits) }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, AppEdits.relabel(repository.apps.value, store.settings.value.appEdits))
     /** The wallpaper as the glass shows it, or null when Zenith has no copy of it. */
     val glassLevels = wallpaperSource.levels
 
@@ -118,10 +151,16 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
 
     private val _homePressed = MutableStateFlow(0)
 
-    /** Incremented every time the home button is pressed while Zenith is already showing. */
+    /** Incremented every time the home button is pressed, from an app or from Zenith itself. */
     val homePressed: StateFlow<Int> = _homePressed.asStateFlow()
 
-    fun onHomePressed() {
+    private val _homeAgain = MutableStateFlow(0)
+
+    /** Incremented, with [homePressed], only when home is pressed while Zenith was already in front. */
+    val homeAgain: StateFlow<Int> = _homeAgain.asStateFlow()
+
+    fun onHomePressed(alreadyHome: Boolean) {
+        if (alreadyHome) _homeAgain.value += 1
         _homePressed.value += 1
     }
 
@@ -140,12 +179,20 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
     init {
         upgradeLayout()
         icons.prime(settings.value.iconPack, settings.value.iconShape)
+        icons.setChosen(AppEdits.icons(settings.value.appEdits))
+        viewModelScope.launch {
+            settings.map { AppEdits.icons(it.appEdits) }.distinctUntilChanged().collect { icons.setChosen(it) }
+        }
         viewModelScope.launch { repository.refresh() }
+        viewModelScope.launch { repository.refreshWork() }
         viewModelScope.launch { wallpaperSource.refresh() }
         wallpaperSource.watch {
             viewModelScope.launch { wallpaperSource.refresh() }
             director.wallpaperChanged()
+            // With no copy of it to read, Android's reading of the new wallpaper's colours.
+            if (wallpaperSource.levels.value == null) readWallpaperPalette(null)
         }
+        viewModelScope.launch { wallpaperSource.levels.collect { readWallpaperPalette(it) } }
         director.start()
         viewModelScope.launch {
             val current = settings.value
@@ -155,7 +202,13 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             repository.apps.collect { icons.invalidate() }
         }
-        repository.observePackages { viewModelScope.launch { repository.refresh() } }
+        repository.observePackages {
+            viewModelScope.launch { repository.refresh() }
+            viewModelScope.launch { repository.refreshWork() }
+        }
+        tidyWidgetIds()
+        // Photos left over from a home screen another Look was put on over, kept by nothing now.
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) { icons.tidyPhotos(photosInUse()) }
         // A purchase is written down the first time Play mentions it, and never unwritten.
         viewModelScope.launch {
             billing.permanent.collect { bought ->
@@ -342,7 +395,7 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
 
     fun setHiddenPin(pin: String) = store.update { it.copy(hiddenPin = pin.filter { c -> c.isDigit() }.take(6)) }
 
-    fun backupText(): String = Backup.encode(settings.value, layout.value)
+    fun backupText(): String = Backup.encode(settings.value, layout.value, store.looks.value)
 
     /**
      * Puts a backup back. The trial and the purchase are deliberately taken from the phone you
@@ -352,17 +405,32 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
      */
     fun restoreBackup(text: String, fromAccount: Boolean = false): Boolean {
         val (restored, items) = Backup.decode(text) ?: return false
+        finishRemoval()
         val current = settings.value
+        // The backup's Looks join the ones saved here; one in both is the backup's.
+        val incoming = Backup.looks(text)
+        if (incoming.isNotEmpty()) {
+            val ids = incoming.map { it.id }.toSet()
+            store.setLooks((incoming + store.looks.value.filterNot { it.id in ids }).take(com.gabriel.zenithui.data.Looks.MOST))
+        }
         store.restore(
             settings = restored.copy(
                 plusTrialStart = current.plusTrialStart,
                 plusPurchased = current.plusPurchased,
                 hiddenPin = if (fromAccount) current.hiddenPin else restored.hiddenPin,
+                // A photo chosen as an icon on another phone is not on this one: that app has its own again.
+                appEdits = restored.appEdits
+                    .mapValues { (_, edit) ->
+                        val lost = IconSource.parse(edit.icon) is IconSource.Photo && !icons.hasPhoto(edit.icon)
+                        if (lost) edit.copy(icon = "") else edit
+                    }
+                    .filterValues { !it.isEmpty },
                 onboarded = true,
             ),
             items = items,
         )
         upgradeLayout()
+        tidyWidgetIds()
         viewModelScope.launch { icons.configure(restored.iconPack, restored.iconShape) }
         return true
     }
@@ -484,7 +552,7 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
      */
     suspend fun backUpToAccount(): String? = seenThrough {
         val signed = accounts.signed.value ?: return@seenThrough SIGN_IN_FIRST
-        when (val reply = server.saveBackup(signed.token, Backup.encode(AccountRules.forAccount(settings.value), layout.value))) {
+        when (val reply = server.saveBackup(signed.token, Backup.encode(AccountRules.forAccount(settings.value), layout.value, store.looks.value))) {
             is Reply.Ok -> {
                 accounts.update(signed.account.copy(backupAt = reply.value))
                 null
@@ -539,13 +607,270 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
         return reply.problem()
     }
 
+    // ---------------------------------------------------------------- Looks
+
+    /** The Looks saved on this phone, newest first. */
+    val looks: StateFlow<List<com.gabriel.zenithui.data.Look>> = store.looks
+
+    private val _lookPut = kotlinx.coroutines.channels.Channel<Unit>(kotlinx.coroutines.channels.Channel.CONFLATED)
+
+    /** A Look has just been put on: the home screen arrives again, as after an unlock. */
+    val lookPut = _lookPut.receiveAsFlow()
+
+    private val _lookDue = MutableStateFlow<com.gabriel.zenithui.data.Look?>(null)
+
+    /** A Look the schedule wants on, waiting for a moment when nothing is under your finger. */
+    val lookDue: StateFlow<com.gabriel.zenithui.data.Look?> = _lookDue.asStateFlow()
+
+    /** Saves the home screen as it is now as a Look called [name], first in the list. */
+    fun saveLook(name: String): com.gabriel.zenithui.data.Look {
+        val look = com.gabriel.zenithui.data.Looks.capture(settings.value, layout.value, name, LayoutBuilder.newId(), System.currentTimeMillis())
+        store.setLooks((listOf(look) + looks.value).take(com.gabriel.zenithui.data.Looks.MOST))
+        store.update { it.copy(activeLook = look.id) }
+        return look
+    }
+
+    /** Saves the home screen as it is now over the Look [id], keeping its name, its place and its code. */
+    fun updateLook(id: String) {
+        store.setLooks(looks.value.map { old ->
+            if (old.id != id) old
+            else com.gabriel.zenithui.data.Looks.capture(settings.value, layout.value, old.name, old.id, System.currentTimeMillis())
+                .copy(shared = old.shared, sharedAt = old.sharedAt)
+        })
+        store.update { it.copy(activeLook = id) }
+    }
+
+    fun renameLook(id: String, name: String) =
+        store.setLooks(looks.value.map { if (it.id == id && name.isNotBlank()) it.copy(name = name.trim().take(30)) else it })
+
+    fun deleteLook(id: String) {
+        // A shared one stops being shared as well. Offline, its code works on until the account goes.
+        val gone = looks.value.firstOrNull { it.id == id }
+        val signed = accounts.signed.value
+        if (gone != null && gone.shared.isNotEmpty() && signed != null) viewModelScope.launch { server.deleteLook(signed.token, gone.shared) }
+        store.setLooks(looks.value.filterNot { it.id == id })
+        store.update { it.copy(lookRules = it.lookRules.filterNot { rule -> rule.lookId == id }, activeLook = if (it.activeLook == id) "" else it.activeLook) }
+        // What only that Look held goes with it: other apps' widgets, and photos chosen as icons.
+        tidyWidgetIds()
+        icons.tidyPhotos(photosInUse())
+    }
+
+    /** The last size the grid was worked out for, so a Look made on another screen is fitted to this one. */
+    private var screenDp: Pair<Float, Float>? = null
+
+    /**
+     * Puts [look] on: what it keeps put into the settings, its layout on the page, its wallpaper
+     * design painted again in its colours, and the home screen arriving afresh. A Look somebody
+     * else made ([fromElsewhere]) is fitted to this phone first: apps not installed here are left
+     * out, and a Plus wallpaper without Plus keeps the wallpaper there is.
+     */
+    fun applyLook(look: com.gabriel.zenithui.data.Look, fromElsewhere: Boolean = false) {
+        finishRemoval()
+        val current = settings.value
+        var (next, items) = com.gabriel.zenithui.data.Looks.apply(current, look)
+        if (fromElsewhere) {
+            val installed = repository.apps.value.map { it.key }.toSet()
+            val fitted = com.gabriel.zenithui.data.Looks.keepInstalled(next, items, installed)
+            next = fitted.first
+            items = fitted.second
+        }
+        val design = WallStyle.byName(next.wallpaperStyle)
+        if (design != null && design.plus && !plus.value.active) {
+            next = next.copy(wallpaperStyle = current.wallpaperStyle, wallpaperPalette = current.wallpaperPalette)
+        }
+        next = next.copy(
+            activeLook = if (fromElsewhere) "" else look.id,
+            onboarded = true,
+            paletteOccasion = "",
+            // A photo chosen as an icon that is not on this phone: that app has its own again.
+            appEdits = next.appEdits
+                .mapValues { (_, edit) -> if (IconSource.parse(edit.icon) is IconSource.Photo && !icons.hasPhoto(edit.icon)) edit.copy(icon = "") else edit }
+                .filterValues { !it.isEmpty },
+        )
+        _lookDue.value = null
+        store.restore(next, items)
+        upgradeLayout()
+        screenDp?.let { (w, h) -> resolveGrid(w, h) }
+        tidyWidgetIds()
+        viewModelScope.launch { icons.configure(next.iconPack, next.iconShape) }
+        if (next.wallpaperStyle.isNotEmpty()) director.request()
+        _lookPut.trySend(Unit)
+    }
+
+    /** The schedule's time for a Look has come: it goes on now if it is not on already. */
+    private fun checkSchedule(now: Boolean) {
+        if (!plus.value.active) return
+        val clock = java.time.LocalDateTime.now()
+        checkLooks(clock, now)
+        // The palette for this part of the day, as the part begins: with the theme's own fade.
+        val s = settings.value
+        com.gabriel.zenithui.data.DayParts.due(s.dayPalettes, clock, s.paletteOccasion)?.let { (palette, occasion) ->
+            store.update { it.copy(paletteId = palette, paletteOccasion = occasion) }
+        }
+    }
+
+    private fun checkLooks(clock: java.time.LocalDateTime, now: Boolean) {
+        val s = settings.value
+        if (s.lookRules.isEmpty()) return
+        val (rule, occasion) = com.gabriel.zenithui.data.LookSchedule.due(s.lookRules, clock, s.lookOccasion) ?: return
+        val look = looks.value.firstOrNull { it.id == rule.lookId } ?: return
+        store.update { it.copy(lookOccasion = occasion) }
+        if (s.activeLook == look.id) return
+        if (now) applyLook(look) else _lookDue.value = look
+    }
+
+    private var scheduleJob: kotlinx.coroutines.Job? = null
+
+    private fun followSchedule(showing: Boolean) {
+        scheduleJob?.cancel()
+        if (!showing) return
+        // Coming home is a moment with nothing under the finger yet: what is due goes on at once.
+        checkSchedule(now = true)
+        scheduleJob = viewModelScope.launch {
+            while (true) {
+                kotlinx.coroutines.delay(30_000)
+                checkSchedule(now = false)
+            }
+        }
+    }
+
+    /** The home screen is idle: whatever the schedule was waiting to put on goes on. */
+    fun applyDueLook() {
+        _lookDue.value?.let { applyLook(it) }
+    }
+
+    fun setLookRules(rules: List<com.gabriel.zenithui.data.LookRule>) = store.update { it.copy(lookRules = rules, lookOccasion = "") }
+
+    // ---------------------------------------------------------------- the theme and glass studio
+
+    /** A palette for each part of the day, or none: the part it is now takes its palette at once. */
+    fun setDayPalettes(chosen: Map<String, String>) {
+        store.update { it.copy(dayPalettes = chosen, paletteOccasion = "") }
+        checkSchedule(now = true)
+    }
+
+    fun setGlassTuning(tuning: com.gabriel.zenithui.data.GlassTuning) = store.update { it.copy(glassTuning = tuning) }
+
+    /** One of Zenith's widgets, or a folder, in a colour of its own, as ARGB, or as it was again with 0. */
+    fun setItemColour(id: String, colour: Long) = store.setLayout(
+        layout.value.map {
+            when {
+                it.id != id -> it
+                it is WidgetCell -> it.copy(accent = colour)
+                it is FolderCell -> it.copy(colour = colour)
+                else -> it
+            }
+        }
+    )
+
+    /**
+     * Works out the palette in the wallpaper: from Zenith's copy of it, or, without one, from the
+     * colours Android reads in it. Never for one of Zenith's own designs: those are painted in the
+     * palette, and a palette taken from them would only chase its own tail.
+     */
+    private fun readWallpaperPalette(levels: com.gabriel.zenithui.data.GlassLevels?) {
+        if (settings.value.wallpaperStyle.isNotEmpty()) return
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.Default) {
+            val fromCopy = levels?.let { copy ->
+                runCatching {
+                    val image = copy.frost
+                    val pixels = IntArray(image.width * image.height)
+                    image.readPixels(pixels)
+                    com.gabriel.zenithui.data.WallpaperPalette.fromPixels(pixels)
+                }.getOrNull()
+            }
+            val picked = fromCopy ?: runCatching {
+                val colours = android.app.WallpaperManager.getInstance(getApplication<Application>())
+                    .getWallpaperColors(android.app.WallpaperManager.FLAG_SYSTEM) ?: return@runCatching null
+                com.gabriel.zenithui.data.WallpaperPalette.pick(
+                    listOfNotNull(
+                        colours.primaryColor.toArgb() to 0.6f,
+                        colours.secondaryColor?.let { it.toArgb() to 0.25f },
+                        colours.tertiaryColor?.let { it.toArgb() to 0.15f },
+                    )
+                )
+            }.getOrNull() ?: return@launch
+            fun long(argb: Int) = argb.toLong() and 0xFFFFFFFFL
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                val s = settings.value
+                if (s.wallpaperStyle.isNotEmpty()) return@withContext
+                if (s.wallAccent == long(picked.accent) && s.wallAccentAlt == long(picked.accentAlt) &&
+                    s.wallBackdrop == long(picked.backdrop) && s.wallDark == picked.dark
+                ) return@withContext
+                store.update {
+                    it.copy(wallAccent = long(picked.accent), wallAccentAlt = long(picked.accentAlt), wallBackdrop = long(picked.backdrop), wallDark = picked.dark)
+                }
+            }
+        }
+    }
+
+    /**
+     * Shares the Look [id] from the account, without what is personal in it. Answers with its
+     * code, or why not. One shared already answers with the code it has; [again] takes that code
+     * back and shares the Look as it is now under a new one.
+     */
+    suspend fun shareLook(id: String, again: Boolean = false): Pair<String?, String?> = seenThrough {
+        val look = looks.value.firstOrNull { it.id == id } ?: return@seenThrough null to "That Look is not here any more."
+        if (look.shared.isNotEmpty() && !again) return@seenThrough look.shared to null
+        val signed = accounts.signed.value ?: return@seenThrough null to SIGN_IN_FIRST
+        val sending = com.gabriel.zenithui.data.Looks.forSharing(look).toJson().toString()
+        when (val reply = server.shareLook(signed.token, sending)) {
+            is Reply.Ok -> {
+                // The new code is out before the old one is taken back: a share never ends with none.
+                if (look.shared.isNotEmpty()) server.deleteLook(signed.token, look.shared)
+                store.setLooks(store.looks.value.map { if (it.id == id) it.copy(shared = reply.value, sharedAt = System.currentTimeMillis()) else it })
+                reply.value to null
+            }
+            else -> null to lost(reply)
+        }
+    }
+
+    /** Takes back the code the Look [id] was shared under: it opens nothing any more. Answers with why not, or null. */
+    suspend fun stopSharingLook(id: String): String? = seenThrough {
+        val look = looks.value.firstOrNull { it.id == id } ?: return@seenThrough null
+        if (look.shared.isEmpty()) return@seenThrough null
+        val signed = accounts.signed.value ?: return@seenThrough SIGN_IN_FIRST
+        val reply = server.deleteLook(signed.token, look.shared)
+        // Gone from the server already is as good as taken back.
+        if (reply is Reply.Ok || (reply is Reply.Refused && reply.error == "no_look")) {
+            store.setLooks(store.looks.value.map { if (it.id == id) it.copy(shared = "", sharedAt = 0L) else it })
+            null
+        } else {
+            lost(reply)
+        }
+    }
+
+    /** Opens a Look somebody shared, by its code, and puts it on. Needs no account. Answers with why not, or null. */
+    suspend fun openLookCode(code: String): String? = seenThrough {
+        val cleaned = code.uppercase().filter { it.isLetterOrDigit() }.removePrefix("LOOK")
+        if (cleaned.length != 6) return@seenThrough "A Look's code is LOOK- and six letters and numbers."
+        when (val reply = server.openLook(cleaned)) {
+            is Reply.Ok -> {
+                val look = runCatching { com.gabriel.zenithui.data.Look.fromJson(org.json.JSONObject(reply.value)) }.getOrNull()
+                    ?: return@seenThrough "That code is for something that is not a Look."
+                applyLook(look, fromElsewhere = true)
+                null
+            }
+            else -> reply.problem()
+        }
+    }
+
+    /** The Looks the server's keeper chose to show, or none when there is no server or no answer. */
+    suspend fun featuredLooks(): List<com.gabriel.zenithui.data.server.SharedLook> =
+        (server.featuredLooks() as? Reply.Ok)?.value.orEmpty()
+
     private companion object {
         const val ACCOUNT_LOOK_EVERY_MS = 10 * 60 * 1000L
         const val ACCOUNT_LOOK_AGAIN_MS = 60 * 1000L
         const val SIGN_IN_FIRST = "Sign in to your Zenith account first."
+
+        /** As many photos as the frame holds, and the longest side each is kept at. */
+        const val FRAME_MOST = 12
+        const val FRAME_SIDE = 1440
     }
 
     override fun onCleared() {
+        finishRemoval()
         wallpaperSource.stopWatching()
         director.stop()
         repository.stopObserving()
@@ -577,9 +902,86 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
     /** Whether the home screen is on show, which is when a new wallpaper can be faded in. */
     fun homeShowing(showing: Boolean) {
         director.homeShowing = showing
+        if (showing) {
+            _visits.value += 1
+            refreshWeather()
+        }
+        followSchedule(showing)
     }
 
-    fun refreshApps() = viewModelScope.launch { repository.refresh() }
+    // ---------------------------------------------------------------- widgets' own things
+
+    private val _visits = MutableStateFlow(0)
+
+    /** How many times the home screen has been come back to: the photo frame moves on with it. */
+    val visits: StateFlow<Int> = _visits.asStateFlow()
+
+    private val weather = com.gabriel.zenithui.data.WeatherRepository(application)
+
+    /** The Weather widget's forecast, for the place chosen, once there is one. */
+    val forecast = weather.forecast
+
+    /** Fetches the forecast if a place has been chosen and the last one is old. Sends nothing otherwise. */
+    fun refreshWeather(force: Boolean = false) {
+        val s = settings.value
+        if (s.weatherPlace.isBlank()) return
+        viewModelScope.launch { weather.refresh(s.weatherPlace, s.weatherLat, s.weatherLon, s.weatherUnits, force) }
+    }
+
+    suspend fun searchPlaces(query: String): List<com.gabriel.zenithui.data.Place> = weather.search(query)
+
+    /** The Weather widget's place, and its units; a place of null stops the widget asking for any. */
+    fun setWeather(place: com.gabriel.zenithui.data.Place?, units: String) {
+        store.update {
+            it.copy(
+                weatherPlace = place?.name.orEmpty(),
+                weatherLat = place?.lat ?: 0.0,
+                weatherLon = place?.lon ?: 0.0,
+                weatherUnits = units,
+            )
+        }
+        refreshWeather(force = true)
+    }
+
+    /** Where the Photo frame's pictures are kept. */
+    val frameDir = java.io.File(application.filesDir, "frame").apply { mkdirs() }
+
+    /**
+     * Keeps the photos at [uris] for the Photo frame, each no bigger than a screen, in place of
+     * those it had. False when none of them could be read.
+     */
+    suspend fun keepFramePhotos(uris: List<android.net.Uri>): Boolean {
+        val kept = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            uris.take(FRAME_MOST).mapIndexedNotNull { index, uri ->
+                runCatching {
+                    val source = android.graphics.ImageDecoder.createSource(getApplication<Application>().contentResolver, uri)
+                    val picture = android.graphics.ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
+                        decoder.allocator = android.graphics.ImageDecoder.ALLOCATOR_SOFTWARE
+                        val longest = maxOf(info.size.width, info.size.height)
+                        if (longest > FRAME_SIDE) decoder.setTargetSampleSize(longest / FRAME_SIDE)
+                    }
+                    val name = "frame-${System.currentTimeMillis()}-$index.jpg"
+                    java.io.File(frameDir, name).outputStream().use { picture.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, it) }
+                    name
+                }.getOrNull()
+            }
+        }
+        if (kept.isEmpty()) return false
+        val before = settings.value.framePhotos
+        store.update { it.copy(framePhotos = kept) }
+        before.filterNot { it in kept }.forEach { runCatching { java.io.File(frameDir, it).delete() } }
+        return true
+    }
+
+    /** What the Countdown counts down to; a [day] of 0 clears it. */
+    fun setCountdown(title: String, day: Long) = store.update {
+        it.copy(countdownTitle = title.trim(), countdownDay = day, countdownFrom = java.time.LocalDate.now().toEpochDay())
+    }
+
+    fun refreshApps() = viewModelScope.launch {
+        repository.refresh()
+        repository.refreshWork()
+    }
 
     /**
      * Puts the layout back in line: anything overlapping, off the grid or between rows is moved
@@ -655,8 +1057,47 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun resetEverything() {
+        // Nothing taken off can come back onto a home screen that is starting again.
+        letGo?.cancel()
+        letGo = null
+        _removed.value = emptyList()
         store.reset()
+        // Every other app's widget goes with the layout it was on.
+        runCatching { widgetHost.deleteHost() }
         viewModelScope.launch { icons.configure("", "squircle") }
+    }
+
+    /**
+     * Gives back the number of every other app's widget that nothing on the page holds any more —
+     * left by a restored backup, or by an add that never finished — so Android stops keeping it up
+     * to date. Never while a widget is on its way in.
+     */
+    private fun tidyWidgetIds() {
+        if (pending != null) return
+        val held = heldWidgetIds(includeLooks = true)
+        runCatching { widgetHost.appWidgetIds }.getOrNull()?.forEach { id ->
+            if (id !in held) runCatching { widgetHost.deleteAppWidgetId(id) }
+        }
+    }
+
+    /**
+     * The numbers of other apps' widgets on the page and, with [includeLooks], in the Looks saved
+     * on this phone: a widget a Look holds must still be there when that Look is put on again.
+     */
+    private fun heldWidgetIds(includeLooks: Boolean): Set<Int> {
+        fun of(items: List<HomeItem>) = items.flatMap { item ->
+            when (item) {
+                is HostedWidgetCell -> listOf(item.appWidgetId)
+                is StackCell -> item.members.filter { it.hosted }.map { it.appWidgetId }
+                else -> emptyList()
+            }
+        }
+        // Read from the store, which is there from the first line: this runs while init does.
+        val inLooks = if (!includeLooks) emptyList() else store.looks.value.flatMap { look ->
+            of(com.gabriel.zenithui.data.Looks.apply(ZenithSettings(), look).second)
+        }
+        // What Undo can still put back holds its widgets too.
+        return (of(layout.value + _removed.value) + inLooks).toSet()
     }
 
     // ---------------------------------------------------------------- settings
@@ -684,6 +1125,7 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
      * instead of stretching to fill whatever glass they are on.
      */
     fun resolveGrid(widthDp: Float, heightDp: Float) {
+        screenDp = widthDp to heightDp
         val current = settings.value
         val (columns, rows) = GridDensity.resolve(current.gridDensity, current.gridColumns, current.gridRows, widthDp, heightDp)
         if (columns == current.columns && rows == current.rows) return
@@ -694,17 +1136,280 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
 
     // ---------------------------------------------------------------- launching
 
-    /** Opens an app. [sourceBounds] and [options] let its window grow out of the icon that was touched. */
-    fun open(key: String, sourceBounds: android.graphics.Rect? = null, options: android.os.Bundle? = null) {
+    /**
+     * Opens an app, or runs a shortcut when [key] is one. [sourceBounds] and [options] let its
+     * window grow out of the icon that was touched. False when it could not be opened.
+     */
+    fun open(key: String, sourceBounds: android.graphics.Rect? = null, options: android.os.Bundle? = null): Boolean {
+        if (ShortcutKeys.isShortcut(key)) return repository.startShortcut(key, sourceBounds, options)
+        if (com.gabriel.zenithui.data.WorkKeys.isWork(key)) return repository.launchWork(key, sourceBounds, options)
         if (!repository.launch(key, sourceBounds, options)) {
             refreshApps()
-            return
+            return false
         }
-        // Remembered for the library's Suggestions. Kept short: only the latest dozen matter.
-        store.update { it.copy(recentLaunches = (listOf(key) + (it.recentLaunches - key)).take(12)) }
+        // Remembered for the library's Suggestions, kept short: only the latest dozen matter. And
+        // counted, for the drawer's Most used.
+        store.update {
+            it.copy(
+                recentLaunches = (listOf(key) + (it.recentLaunches - key)).take(12),
+                launchCounts = com.gabriel.zenithui.data.DrawerSort.counted(it.launchCounts, key),
+            )
+        }
+        return true
     }
 
-    fun openAppInfo(key: String) = repository.openAppInfo(key)
+    // ---------------------------------------------------------------- one app's own name and icon
+
+    /** Changes what is shown for one app: its name, its picture, whether its name shows. */
+    fun editApp(key: String, transform: (AppEdit) -> AppEdit) {
+        val before = settings.value.appEdits[key] ?: AppEdit()
+        val after = transform(before)
+        store.update { it.copy(appEdits = AppEdits.with(it.appEdits, key, after)) }
+        // A photo nobody uses any more is not kept; a saved Look that still shows it is somebody.
+        if (before.icon != after.icon && before.icon !in photosInUse()) icons.forgetPhoto(before.icon)
+    }
+
+    /** Every photo chosen as an icon that the home screen, or a Look saved on this phone, shows. */
+    private fun photosInUse(): Set<String> =
+        (listOf(settings.value.appEdits) + store.looks.value.map { com.gabriel.zenithui.data.Looks.apply(ZenithSettings(), it).first.appEdits })
+            .flatMap { AppEdits.icons(it).values }
+            .filter { IconSource.parse(it) is IconSource.Photo }
+            .toSet()
+
+    /** Takes the photo at [uri] as [key]'s icon. False when it could not be read. */
+    suspend fun choosePhotoIcon(key: String, uri: android.net.Uri): Boolean {
+        val kept = icons.keepPhoto(uri) ?: return false
+        editApp(key) { it.copy(icon = IconSource.photo(kept)) }
+        return true
+    }
+
+    /** An app's own name, as it came, whatever you have called it. */
+    fun originalLabel(key: String): String = repository.byKey(key)?.label ?: key.substringBefore('/').substringAfterLast('.')
+
+    // ---------------------------------------------------------------- other apps' widgets
+
+    /** What Android has to be asked, by the activity, while a widget is being added. */
+    sealed interface WidgetAsk {
+        /** Its permission to put this widget on the home screen. */
+        data class Bind(val id: Int, val info: android.appwidget.AppWidgetProviderInfo) : WidgetAsk
+        /** The widget's own set-up screen. */
+        data class Configure(val id: Int) : WidgetAsk
+    }
+
+    private val _widgetAsks = kotlinx.coroutines.channels.Channel<WidgetAsk>(kotlinx.coroutines.channels.Channel.BUFFERED)
+    val widgetAsks = _widgetAsks.receiveAsFlow()
+
+    private val _widgetPlaced = kotlinx.coroutines.channels.Channel<Int>(kotlinx.coroutines.channels.Channel.CONFLATED)
+
+    /** The page a widget has just gone onto, for the home screen to turn to. */
+    val widgetPlaced = _widgetPlaced.receiveAsFlow()
+
+    /** One widget on its way in: its number, what it is, its size, and where it is going. */
+    private data class PendingWidget(
+        val id: Int,
+        val info: android.appwidget.AppWidgetProviderInfo,
+        val spanX: Int,
+        val spanY: Int,
+        /** A widget or stack it is to be stacked on, rather than a spot of its own. */
+        val stackOnto: String? = null,
+        /** A widget whose place it takes, after a restore on another phone. */
+        val replacing: String? = null,
+    )
+
+    private var pending: PendingWidget? = null
+
+    /** One cell's width and one whole row's height on the page, in dp, as the grid was last drawn. */
+    private var cellDp = 80f
+    private var rowDp = 100f
+
+    fun noteCellSize(cellWidthDp: Float, rowHeightDp: Float) {
+        if (cellWidthDp > 0f) cellDp = cellWidthDp
+        if (rowHeightDp > 0f) rowDp = rowHeightDp
+    }
+
+    /**
+     * Starts putting another app's widget on the home screen: on a spot of its own, onto a widget
+     * or stack ([stackOnto]), or in place of one that did not come through a restore ([replacing]).
+     * Android may want to be asked first, and the widget may have a set-up screen; each of those
+     * comes to the activity through [widgetAsks], and its answer back through [widgetBound] and
+     * [widgetConfigured].
+     */
+    fun addHostedWidget(info: android.appwidget.AppWidgetProviderInfo, stackOnto: String? = null, replacing: String? = null) {
+        cancelPendingWidget()
+        val s = settings.value
+        val target = layout.value.firstOrNull { it.id == (stackOnto ?: replacing) }
+        val (spanX, spanY) = if (target != null) {
+            target.spanX to target.spanY
+        } else {
+            val targetX = if (android.os.Build.VERSION.SDK_INT >= 31) info.targetCellWidth else 0
+            val targetY = if (android.os.Build.VERSION.SDK_INT >= 31) info.targetCellHeight else 0
+            com.gabriel.zenithui.data.HostedSizes.spanFor(info.minWidth, info.minHeight, targetX, targetY, cellDp, rowDp, s.columns, s.rows)
+        }
+        val id = runCatching { widgetHost.allocateAppWidgetId() }.getOrNull() ?: return
+        pending = PendingWidget(id, info, spanX, spanY, stackOnto, replacing)
+        val bound = runCatching { widgetManager.bindAppWidgetIdIfAllowed(id, info.profile, info.provider, null) }.getOrDefault(false)
+        if (bound) afterBind() else _widgetAsks.trySend(WidgetAsk.Bind(id, info))
+    }
+
+    /** Android's answer to whether the widget may be put on the home screen. */
+    fun widgetBound(ok: Boolean) {
+        if (ok) afterBind() else cancelPendingWidget()
+    }
+
+    /** The widget's set-up screen is done: [ok] when it was finished rather than backed out of. */
+    fun widgetConfigured(ok: Boolean) {
+        if (ok) placePendingWidget() else cancelPendingWidget()
+    }
+
+    private fun afterBind() {
+        val waiting = pending ?: return
+        // From Android 12 a widget can say its set-up is only a choice, to be made later.
+        val optional = android.os.Build.VERSION.SDK_INT >= 31 &&
+            waiting.info.widgetFeatures and android.appwidget.AppWidgetProviderInfo.WIDGET_FEATURE_CONFIGURATION_OPTIONAL != 0
+        if (waiting.info.configure != null && !optional) _widgetAsks.trySend(WidgetAsk.Configure(waiting.id)) else placePendingWidget()
+    }
+
+    private fun placePendingWidget() {
+        val waiting = pending ?: return
+        pending = null
+        val provider = waiting.info.provider.flattenToString()
+        val member = StackMember(LayoutBuilder.newId(), appWidgetId = waiting.id, provider = provider)
+        val items = layout.value
+        val onto = waiting.stackOnto?.let { id -> items.firstOrNull { it.id == id } }
+        val replaced = waiting.replacing?.let { id -> items.firstOrNull { it.id == id } }
+        when {
+            onto != null -> {
+                val stacked = StackRules.stack(onto, member, LayoutBuilder.newId())
+                if (stacked == null) {
+                    runCatching { widgetHost.deleteAppWidgetId(waiting.id) }
+                    return
+                }
+                store.mutateLayout { all -> all.map { if (it.id == onto.id) stacked else it } }
+                _widgetPlaced.trySend(onto.page)
+            }
+            replaced is HostedWidgetCell -> {
+                store.mutateLayout { all -> all.map { if (it.id == replaced.id) replaced.copy(appWidgetId = waiting.id, provider = provider) else it } }
+                _widgetPlaced.trySend(replaced.page)
+            }
+            replaced is StackCell -> {
+                // A stack keeps its place; the one member that did not come through is put back.
+                val lost = replaced.members.indexOfFirst { it.hosted && it.provider == provider && widgetManager.getAppWidgetInfo(it.appWidgetId) == null }
+                val members = replaced.members.mapIndexed { i, m -> if (i == lost) m.copy(appWidgetId = waiting.id) else m }
+                store.mutateLayout { all -> all.map { if (it.id == replaced.id) replaced.copy(members = members) else it } }
+                _widgetPlaced.trySend(replaced.page)
+            }
+            else -> {
+                val slot = firstFreeSlot(waiting.spanX, waiting.spanY, rowStep())
+                if (slot == null) {
+                    runCatching { widgetHost.deleteAppWidgetId(waiting.id) }
+                    return
+                }
+                store.mutateLayout { all ->
+                    all + HostedWidgetCell(member.id, slot.first, slot.second, slot.third, waiting.spanX, waiting.spanY, waiting.id, provider)
+                }
+                _widgetPlaced.trySend(slot.first)
+            }
+        }
+    }
+
+    private fun cancelPendingWidget() {
+        val waiting = pending ?: return
+        pending = null
+        runCatching { widgetHost.deleteAppWidgetId(waiting.id) }
+    }
+
+    /** Puts one of Zenith's own widgets onto the widget or stack [ontoId]. False when it cannot take more. */
+    fun stackWidget(type: String, ontoId: String): Boolean {
+        val onto = layout.value.firstOrNull { it.id == ontoId } ?: return false
+        val stacked = StackRules.stack(onto, StackMember(LayoutBuilder.newId(), type = type), LayoutBuilder.newId()) ?: return false
+        store.mutateLayout { all -> all.map { if (it.id == ontoId) stacked else it } }
+        return true
+    }
+
+    /**
+     * Takes the member at [index] out of stack [stackId] onto a spot of its own on the same page,
+     * the nearest there is. False when the page has no room for it.
+     */
+    fun unstack(stackId: String, index: Int): Boolean {
+        val stack = layout.value.firstOrNull { it.id == stackId } as? StackCell ?: return false
+        val member = stack.members.getOrNull(index) ?: return false
+        val rest = StackRules.without(stack, index) ?: return false
+        val s = settings.value
+        val grid = PageGrid(s.columns, s.rows * ROW_UNITS)
+        (layout.value.filter { it.page == stack.page && it.id != stackId } + rest).forEach { grid.occupyItem(it) }
+        val slot = grid.findSlot(stack.spanX, stack.spanY, rowStep()) ?: return false
+        val alone = StackRules.alone(stack, member).moved(stack.page, slot.first, slot.second)
+        store.mutateLayout { all -> all.map { if (it.id == stackId) rest else it } + alone }
+        return true
+    }
+
+    /** Turns stack [stackId] so the member at [index] is the one shown first. */
+    fun bringToTop(stackId: String, index: Int) = store.mutateLayout { all ->
+        all.map { if (it.id == stackId && it is StackCell) StackRules.bringToTop(it, index) else it }
+    }
+
+    /** A pane of glass behind another app's widget, or none. */
+    fun setHostedGlass(id: String, glass: Boolean) = store.mutateLayout { all ->
+        all.map { if (it.id == id && it is HostedWidgetCell) it.copy(glass = glass) else it }
+    }
+
+    /**
+     * Resizes another app's widget, or a stack, where it stands: never smaller than its widget
+     * says it can be, and only into room that is free.
+     */
+    fun resizeHosted(id: String, spanX: Int, spanY: Int): Boolean {
+        val item = layout.value.firstOrNull { it.id == id } ?: return false
+        val s = settings.value
+        val (minX, minY) = when (item) {
+            is HostedWidgetCell -> widgetManager.getAppWidgetInfo(item.appWidgetId)?.let { info ->
+                com.gabriel.zenithui.data.HostedSizes.minSpan(
+                    info.minResizeWidth.takeIf { it > 0 } ?: info.minWidth,
+                    info.minResizeHeight.takeIf { it > 0 } ?: info.minHeight,
+                    cellDp, rowDp, s.columns, s.rows,
+                )
+            } ?: (1 to ROW_UNITS)
+            else -> 1 to ROW_UNITS
+        }
+        val free = s.freeform && plus.value.active
+        val targetX = spanX.coerceIn(minX, s.columns)
+        val targetY = (if (free) spanY else LayoutBuilder.wholeRows(spanY)).coerceIn(minY, s.rows * ROW_UNITS)
+        if (targetX == item.spanX && targetY == item.spanY) return false
+        if (!isSlotFree(item.page, item.col, item.row, targetX, targetY, id)) return false
+        store.mutateLayout { all ->
+            all.map {
+                when {
+                    it.id != id -> it
+                    it is HostedWidgetCell -> it.copy(spanX = targetX, spanY = targetY)
+                    it is StackCell -> it.copy(spanX = targetX, spanY = targetY)
+                    else -> it
+                }
+            }
+        }
+        return true
+    }
+
+    // ---------------------------------------------------------------- shortcuts
+
+    suspend fun shortcuts(packageName: String): List<AppShortcut> = repository.shortcuts(packageName)
+
+    /** Puts one of an app's shortcuts on the first free spot and keeps it pinned. Returns the page. */
+    fun addShortcut(shortcut: AppShortcut): Int? {
+        val slot = firstFreeSlot(1, ROW_UNITS, rowStep()) ?: return null
+        repository.pinShortcut(shortcut.key, pinned = true)
+        store.mutateLayout { items ->
+            items + ShortcutCell(LayoutBuilder.newId(), slot.first, slot.second, slot.third, shortcut.packageName, shortcut.id, shortcut.label)
+        }
+        return slot.first
+    }
+
+    fun openAppInfo(key: String) =
+        if (com.gabriel.zenithui.data.WorkKeys.isWork(key)) repository.openWorkAppInfo(key) else repository.openAppInfo(key)
+
+    /** The work profile's apps, for the drawer's Work tab. */
+    val workApps = repository.workApps
+
+    /** Every app's shortcuts, for the drawer's search to look through. Asked once each time it opens. */
+    suspend fun allShortcuts(): List<AppShortcut> = repository.allShortcuts()
 
     fun uninstall(key: String) = repository.uninstall(key)
 
@@ -740,7 +1445,103 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
         items.map { if (it.id == id) it.moved(page, col, row) else it }
     }
 
-    fun removeItem(id: String) = store.mutateLayout { items -> items.filterNot { it.id == id } }
+    /**
+     * Takes [id] off the home screen. For [UNDO_MS] it can be put back with [undoRemove], so what
+     * it holds — another app's widget's number, a shortcut's pin — is kept until then.
+     */
+    fun removeItem(id: String) = removeItems(listOf(id))
+
+    /** Takes [ids] off the home screen together: one Undo puts them all back. */
+    fun removeItems(ids: List<String>) {
+        val gone = layout.value.filter { it.id in ids }
+        if (gone.isEmpty()) return
+        // What was taken off before is past putting back now.
+        finishRemoval()
+        store.mutateLayout { items -> items.filterNot { it.id in ids } }
+        _removed.value = gone
+        letGo = viewModelScope.launch {
+            kotlinx.coroutines.delay(com.gabriel.zenithui.data.UNDO_MS)
+            finishRemoval()
+        }
+    }
+
+    /**
+     * Puts back what was just taken off: where it was, if that spot is still free, or else in the
+     * first opening. It comes back under a new id, so the page sees it arrive and springs it out
+     * of its spot. Answers with where it went, or null when there was nothing to put back.
+     */
+    fun undoRemove(): List<HomeItem> {
+        val items = _removed.value
+        if (items.isEmpty()) return emptyList()
+        letGo?.cancel()
+        letGo = null
+        _removed.value = emptyList()
+        val s = settings.value
+        val back = ArrayList<HomeItem>()
+        for (item in items) {
+            // Each put back counts as taken for the next, so two never land on one spot.
+            val placed = LayoutBuilder.putBack(layout.value + back, item, s.columns, s.rows, rowStep()) ?: continue
+            back += placed.withId(LayoutBuilder.newId())
+        }
+        store.mutateLayout { it + back }
+        return back
+    }
+
+    // ---------------------------------------------------------------- the page overview
+
+    /** Page [from] moved to [to], everything on it going with it. */
+    fun movePage(from: Int, to: Int) {
+        finishRemoval()
+        store.setLayout(com.gabriel.zenithui.data.PageOrder.move(layout.value, from, to))
+    }
+
+    /** Page [page] taken away, and all that is on it; the pages after it close up. */
+    fun removePage(page: Int) {
+        finishRemoval()
+        val s = settings.value
+        val count = maxOf((layout.value.maxOfOrNull { it.page } ?: 0) + 1, s.pages)
+        if (count <= 1) return
+        val (kept, gone) = com.gabriel.zenithui.data.PageOrder.remove(layout.value, page)
+        store.setLayout(kept)
+        store.update { it.copy(pages = (count - 1).coerceAtLeast(1)) }
+        // What only that page held is let go: shortcuts' pins, and other apps' widgets.
+        gone.filterIsInstance<ShortcutCell>().filter { g -> kept.none { it is ShortcutCell && it.key == g.key } }
+            .forEach { repository.pinShortcut(it.key, pinned = false) }
+        tidyWidgetIds()
+    }
+
+    /** What the last removal held is given back now: it is past putting back. */
+    private fun finishRemoval() {
+        letGo?.cancel()
+        letGo = null
+        val goneAll = _removed.value
+        if (goneAll.isEmpty()) return
+        _removed.value = emptyList()
+        // Another app's widget gives its number back, so Android stops keeping it up to date —
+        // unless a saved Look still holds it.
+        val stillHeld = heldWidgetIds(includeLooks = true)
+        for (gone in goneAll) {
+            // A shortcut no page holds any more is let go, so the app may tidy it away.
+            if (gone is ShortcutCell && layout.value.none { it is ShortcutCell && it.key == gone.key }) {
+                repository.pinShortcut(gone.key, pinned = false)
+            }
+            when (gone) {
+                is HostedWidgetCell -> if (gone.appWidgetId !in stillHeld) runCatching { widgetHost.deleteAppWidgetId(gone.appWidgetId) }
+                is StackCell -> gone.members.filter { it.hosted && it.appWidgetId !in stillHeld }.forEach { runCatching { widgetHost.deleteAppWidgetId(it.appWidgetId) } }
+                else -> Unit
+            }
+        }
+    }
+
+    /**
+     * The icons gathered while [mainId] was carried, put down round where it landed: each in the
+     * free spot nearest it on its page, in the order they were gathered. One with no room left on
+     * that page stays where it was.
+     */
+    fun landBeside(mainId: String, gathered: List<String>) {
+        val s = settings.value
+        store.mutateLayout { items -> LayoutBuilder.landBeside(items, mainId, gathered, s.columns, s.rows, rowStep()) }
+    }
 
     /** Puts an app in the first opening anywhere, and says which page that turned out to be. */
     fun addAppToFirstFreeSlot(key: String): Int? {
@@ -900,14 +1701,7 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
      */
     fun firstFreeSlot(spanX: Int, spanY: Int, rowStep: Int = 1): Triple<Int, Int, Int>? {
         val s = settings.value
-        val items = layout.value
-        for (page in LayoutBuilder.pagesToTry(items.maxOfOrNull { it.page } ?: 0)) {
-            val grid = PageGrid(s.columns, s.rows * ROW_UNITS)
-            items.filter { it.page == page }.forEach { grid.occupyItem(it) }
-            val slot = grid.findSlot(spanX, spanY, rowStep)
-            if (slot != null) return Triple(page, slot.first, slot.second)
-        }
-        return null
+        return LayoutBuilder.firstFreeSlot(layout.value, s.columns, s.rows, spanX, spanY, rowStep)
     }
 
     fun isSlotFree(page: Int, col: Int, row: Int, spanX: Int, spanY: Int, ignoreId: String?): Boolean {

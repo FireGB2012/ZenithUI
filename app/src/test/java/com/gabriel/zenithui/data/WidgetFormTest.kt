@@ -63,7 +63,7 @@ class WidgetFormTest {
 
     @Test
     fun `every widget says what it shows in every shape, and no two shapes alike`() {
-        for (kind in listOf("clock", "battery", "calendar", "notes")) {
+        for (kind in listOf("clock", "battery", "calendar", "notes", "media", "world", "countdown", "photo", "todo", "aura", "weather")) {
             val notes = spaces.values.map { (width, height) -> WidgetLayouts.note(kind, width, height) }
             notes.forEach { assertNotNull(kind, it) }
             assertEquals("$kind: $notes", notes.size, notes.toSet().size)

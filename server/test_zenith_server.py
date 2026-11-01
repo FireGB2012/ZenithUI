@@ -7,7 +7,9 @@ over HTTP, the way the app does. Google's part is tried with keys made for the p
 """
 
 import base64
+import contextlib
 import hashlib
+import io
 import json
 import os
 import shutil
@@ -16,6 +18,8 @@ import tempfile
 import threading
 import time
 import unittest
+import unittest.mock
+import urllib.parse
 import urllib.request
 
 import test_keys as keys
@@ -468,6 +472,95 @@ class ApiTest(unittest.TestCase):
         self.call("DELETE", "/v1/account", {"password": "password-1"}, token=owner)
         self.assertEqual(409, self.call("POST", "/v1/aura/redeem", {"code": "BCDFGH"}, token=friend)[0])
         self.assertTrue(self.call("GET", "/v1/me", token=friend)[1]["account"]["redeemed"])
+
+    # ---- Looks
+
+    LOOK = b'{"format":"zenith-look","version":1,"name":"Night \\u2728","settings":{"paletteId":"aurora"},"layout":[]}'
+
+    def share(self, token_, raw=None):
+        status, said = self.call("POST", "/v1/looks", token=token_, raw=raw or self.LOOK)
+        self.assertEqual(201, status, said)
+        return said["code"]
+
+    def keeper(self, *arguments):
+        """The server's command line, run against this test's database, quietly."""
+        with unittest.mock.patch.dict(os.environ, {"ZENITH_DB": os.path.join(self.folder, "test.db")}), \
+                contextlib.redirect_stdout(io.StringIO()):
+            return zenith.main(list(arguments))
+
+    def test_a_look_is_opened_by_anybody_with_its_code_exactly_as_it_was_shared(self):
+        token_, _ = self.account()
+        code = self.share(token_)
+        self.assertRegex(code, "^[%s]{6}$" % zenith.CODE_ALPHABET)
+        for typed in (code, code.lower(), "LOOK-" + code, " look %s " % code[:3] + code[3:]):
+            with urllib.request.urlopen(self.base + "/v1/look?code=" + urllib.parse.quote(typed)) as page:
+                self.assertEqual(self.LOOK, page.read(), typed)
+        self.assertEqual((404, "no_look"), (lambda s, b: (s, b["error"]))(*self.call("GET", "/v1/look?code=BCDFGH")))
+        for bad in ("", "AEIOU1", "BCDFGHJ", "%00"):
+            self.assertEqual(400, self.call("GET", "/v1/look?code=" + bad)[0], bad)
+        self.assertEqual(400, self.call("GET", "/v1/look")[0])
+
+    def test_only_a_look_of_a_sensible_size_is_shared_and_only_from_an_account(self):
+        token_, _ = self.account()
+        for bad, error in ((b"not json", "bad_json"), (b"[1,2]", "not_look"), (b'{"format":"zenith-ui-backup"}', "not_look"), (b"\xff\xfe", "bad_json")):
+            status, said = self.call("POST", "/v1/looks", token=token_, raw=bad)
+            self.assertEqual((400, error), (status, said["error"]), bad)
+        huge = b'{"format":"zenith-look","pad":"' + b"x" * zenith.MAX_LOOK_BODY + b'"}'
+        self.assertEqual(413, self.call("POST", "/v1/looks", token=token_, raw=huge)[0])
+        self.assertEqual(401, self.call("POST", "/v1/looks", raw=self.LOOK)[0])
+        self.assertEqual(0, self.database().execute("SELECT COUNT(*) FROM looks").fetchone()[0])
+
+    def test_a_look_s_name_is_kept_short_and_never_empty(self):
+        token_, _ = self.account()
+        nameless = self.share(token_, b'{"format":"zenith-look","name":"   "}')
+        long = self.share(token_, json.dumps({"format": "zenith-look", "name": "x" * 100}).encode())
+        names = dict(self.database().execute("SELECT code, name FROM looks").fetchall())
+        self.assertEqual(("A Look", "x" * 40), (names[nameless], names[long]))
+
+    def test_only_the_account_that_shared_a_look_can_take_it_back(self):
+        mine, _ = self.account("mine")
+        theirs, _ = self.account("theirs")
+        code = self.share(mine)
+        self.assertEqual((404, "no_look"), (lambda s, b: (s, b["error"]))(*self.call("DELETE", "/v1/look?code=" + code, token=theirs)))
+        self.assertEqual(401, self.call("DELETE", "/v1/look?code=" + code)[0])
+        self.assertEqual(200, self.call("GET", "/v1/look?code=" + code)[0])
+        self.assertEqual(204, self.call("DELETE", "/v1/look?code=look-" + code.lower(), token=mine)[0])
+        self.assertEqual(404, self.call("GET", "/v1/look?code=" + code)[0])
+
+    def test_an_account_keeps_its_newest_looks_and_every_featured_one(self):
+        self.unlimited()
+        token_, _ = self.account()
+        first = self.share(token_)
+        second = self.share(token_)
+        self.assertEqual(0, self.keeper("--feature", "LOOK-" + first))
+        codes = [self.share(token_) for _ in range(zenith.MAX_LOOKS_PER_ACCOUNT)]
+        kept = {row[0] for row in self.database().execute("SELECT code FROM looks")}
+        self.assertEqual(set(codes) | {first}, kept)
+        self.assertNotIn(second, kept)
+        # Every one just shared opens, however quickly they came.
+        self.assertEqual(200, self.call("GET", "/v1/look?code=" + codes[-1])[0])
+
+    def test_featured_looks_are_only_the_ones_the_keeper_chose(self):
+        token_, _ = self.account()
+        chosen = self.share(token_)
+        self.share(token_)
+        self.assertEqual((200, {"looks": []}), self.call("GET", "/v1/looks/featured"))
+        self.assertEqual(0, self.keeper("--feature", chosen.lower()))
+        self.assertEqual({"looks": [{"code": chosen, "name": "Night ✨"}]}, self.call("GET", "/v1/looks/featured")[1])
+        self.assertEqual(0, self.keeper("--unfeature", chosen))
+        self.assertEqual({"looks": []}, self.call("GET", "/v1/looks/featured")[1])
+        self.assertEqual(1, self.keeper("--feature", "ZZZZZZ"))
+
+    def test_an_account_s_looks_go_with_it(self):
+        token_, _ = self.account()
+        code = self.share(token_)
+        self.assertEqual(204, self.call("DELETE", "/v1/account", {"password": "password-1"}, token=token_)[0])
+        self.assertEqual(404, self.call("GET", "/v1/look?code=" + code)[0])
+        self.assertEqual(0, self.database().execute("SELECT COUNT(*) FROM looks").fetchone()[0])
+
+    def test_looks_cannot_be_guessed_by_asking_over_and_over(self):
+        answers = [self.call("GET", "/v1/look?code=BCDFGH")[0] for _ in range(61)]
+        self.assertEqual([404] * 60 + [429], answers)
 
     # ---- the edges
 

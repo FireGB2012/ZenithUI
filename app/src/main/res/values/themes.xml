@@ -9,6 +9,15 @@
         <item name="android:windowAnimationStyle">@null</item>
     </style>
 
+    <!-- A card over whatever app asked to put something on the home screen. -->
+    <style name="Theme.ZenithUI.Pin" parent="Theme.ZenithUI">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowContentOverlay">@null</item>
+        <item name="android:backgroundDimEnabled">false</item>
+    </style>
+
     <!-- The home screen sits directly on top of the live wallpaper. -->
     <style name="Theme.ZenithUI.Home" parent="Theme.ZenithUI">
         <item name="android:windowShowWallpaper">true</item>

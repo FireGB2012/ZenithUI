@@ -64,6 +64,27 @@ class ZenithServer(
     suspend fun redeem(token: String, code: String): Reply<Account> =
         call("POST", "/v1/aura/redeem", token, body = JSONObject().put("code", code)).json { Account.fromJson(it.getJSONObject("account")) }
 
+    /** Shares [look], a Look as JSON with nothing personal in it, from the account. Answers with its code. */
+    suspend fun shareLook(token: String, look: String): Reply<String> =
+        call("POST", "/v1/looks", token, text = look).json { it.getString("code") }
+
+    /** A Look somebody shared, by its code, as JSON. Needs no account. */
+    suspend fun openLook(code: String): Reply<String> =
+        when (val answer = call("GET", "/v1/look?code=" + java.net.URLEncoder.encode(code, "UTF-8"))) {
+            is Answer.Got -> if (answer.status == 200) Reply.Ok(answer.text) else answer.refusal()
+            is Answer.Lost -> Reply.Unreachable(answer.message)
+        }
+
+    /** Takes back a Look this account shared: its code opens nothing any more. */
+    suspend fun deleteLook(token: String, code: String): Reply<Unit> =
+        call("DELETE", "/v1/look?code=" + java.net.URLEncoder.encode(code, "UTF-8"), token).unit()
+
+    /** The Looks the server's keeper chose to show everybody. */
+    suspend fun featuredLooks(): Reply<List<SharedLook>> = call("GET", "/v1/looks/featured").json { o ->
+        val list = o.getJSONArray("looks")
+        (0 until list.length()).map { i -> list.getJSONObject(i).let { SharedLook(it.getString("code"), it.optString("name", "A Look")) } }
+    }
+
     // ------------------------------------------------------------------------- plumbing
 
     private fun signedIn(o: JSONObject) = SignedIn(o.getString("token"), Account.fromJson(o.getJSONObject("account")), o.optBoolean("created", false))

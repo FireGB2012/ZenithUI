@@ -55,6 +55,7 @@ fun Modifier.glassInk(bevel: Dp = 4.dp, halo: Boolean = true): Modifier {
     val screen = LocalScreenSize.current
     val wallpaperOffset = LocalWallpaperOffset.current
     val tilt = LocalTilt.current
+    val tuning = LocalGlassTuning.current
     val strength = LocalGlassStrength.current.coerceIn(0f, 1.4f)
     val lift = LocalGlassBody.current.lift
     val ink = remember(levels) {
@@ -69,14 +70,14 @@ fun Modifier.glassInk(bevel: Dp = 4.dp, halo: Boolean = true): Modifier {
         .onGloballyPositioned { origin = it.positionInWindow() }
         .graphicsLayer {
             // Read here, not in composition: moving, paging and tilting only rebuild the effect.
-            val lean = tilt.value
+            val lean = if (tuning.lightTilt) tilt.value else Offset.Zero
             renderEffect = ink?.effect(
                 size = size,
                 origin = origin,
                 screen = screen,
                 wallpaperOffset = systemWallpaperOffset(wallpaperOffset.value),
                 bevel = bevel.toPx(),
-                light = Offset(-0.45f - 1.6f * lean.x, -1f - 1.2f * lean.y),
+                light = lightFrom(lean, tuning),
                 strength = strength,
                 halo = halo,
                 lift = lift,

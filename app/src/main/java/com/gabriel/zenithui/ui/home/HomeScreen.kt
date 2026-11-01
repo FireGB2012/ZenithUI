@@ -97,10 +97,36 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import com.gabriel.zenithui.ZenithViewModel
 import com.gabriel.zenithui.data.AnimationTuning
 import com.gabriel.zenithui.data.AppCell
+import com.gabriel.zenithui.data.AppEdit
+import com.gabriel.zenithui.data.AppShortcut
 import com.gabriel.zenithui.data.Backup
+import com.gabriel.zenithui.data.Badges
+import com.gabriel.zenithui.data.NotificationDots
+import com.gabriel.zenithui.data.ShortcutKeys
+import com.gabriel.zenithui.ui.common.BadgeState
+import com.gabriel.zenithui.ui.common.LocalBadges
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.foundation.layout.offset
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.unit.IntOffset
+import com.gabriel.zenithui.data.GestureActions
+import com.gabriel.zenithui.data.Gestures
+import com.gabriel.zenithui.data.HostedWidgetCell
+import com.gabriel.zenithui.data.StackCell
+import com.gabriel.zenithui.data.LockService
+import com.gabriel.zenithui.data.SystemPanels
+import com.gabriel.zenithui.data.Torch
+import com.gabriel.zenithui.ui.common.GlassButton
+import com.gabriel.zenithui.ui.common.staggerDelay
+import kotlinx.coroutines.flow.map
 import com.gabriel.zenithui.data.DropPlanner
 import com.gabriel.zenithui.data.FolderCell
 import com.gabriel.zenithui.data.HomeHeader
@@ -122,6 +148,7 @@ import com.gabriel.zenithui.ui.common.wordsChange
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.common.LocalMotionLevel
 import com.gabriel.zenithui.ui.common.rememberHaptics
+import com.gabriel.zenithui.ui.settings.LookActions
 import com.gabriel.zenithui.ui.settings.SettingsActions
 import com.gabriel.zenithui.ui.settings.SettingsPreview
 import com.gabriel.zenithui.ui.settings.SettingsScreen
@@ -166,9 +193,44 @@ private val PAGE_MARGIN = 12.dp
  */
 private val BAR_ROOM = 28.dp
 
+/** How long the home screen must be left alone before a scheduled Look goes on. */
+private const val LOOK_DUE_WAIT_MS = 1500L
+
 private sealed interface HomeSheet {
     data class Item(val id: String) : HomeSheet
     data class DrawerApp(val key: String) : HomeSheet
+    /** One app's name, icon and whether its name shows. */
+    data class EditApp(val key: String) : HomeSheet
+    /** Where that app's icon comes from. */
+    data class PickIcon(val key: String) : HomeSheet
+    /** What the lock helper is, before Android's page for it opens. */
+    data object LockHelper : HomeSheet
+    /** What one gesture could do, from Settings → Gestures. */
+    data class GestureAction(val gesture: String) : HomeSheet
+    /** The World clock's cities. */
+    data object WorldCities : HomeSheet
+    /** What the Countdown counts down to. */
+    data object CountdownDate : HomeSheet
+    /** Where the Weather widget's forecast is for. */
+    data object WeatherPlace : HomeSheet
+    /** A drawer tab to make (-1) or change (its place along the top). */
+    data class DrawerTabEdit(val index: Int) : HomeSheet
+    /** A name for the home screen as a new Look (null), or a new name for the Look [renaming]. */
+    data class LookName(val renaming: String?) : HomeSheet
+    /** What can be done with one saved Look. */
+    data class LookMenu(val id: String) : HomeSheet
+    /** A time for a Look to come on by itself. */
+    data object LookTime : HomeSheet
+    /** A Look somebody shared, by its code; a Featured one comes with its code filled in. */
+    data class LookCode(val code: String) : HomeSheet
+    /** The glass made your own. */
+    data object GlassStudio : HomeSheet
+    /** A palette for each part of the day. */
+    data object DayPalettes : HomeSheet
+    /** One of Zenith's widgets in a colour of its own. */
+    data class WidgetColour(val id: String) : HomeSheet
+    /** The fonts Zenith carries, and their licence. */
+    data object FontLicences : HomeSheet
     data object Customize : HomeSheet
     data object Help : HomeSheet
     data object Plus : HomeSheet
@@ -181,7 +243,16 @@ private sealed interface HomeSheet {
 @Composable
 fun HomeScreen(viewModel: ZenithViewModel) {
     val wallpaperOffset = remember { mutableStateOf(Offset(0.5f, 0.5f)) }
-    CompositionLocalProvider(LocalWallpaperOffset provides wallpaperOffset) {
+    // What every app has waiting. Only what draws a dot reads it, so a notification arriving
+    // redraws dots and nothing else.
+    val counts by NotificationDots.counts.collectAsState()
+    val badgeStyle by remember { viewModel.settings.map { Badges.of(it.badges) } }.collectAsState(Badges.of(viewModel.settings.value.badges))
+    val badges = remember(counts, badgeStyle) { BadgeState(counts, badgeStyle) }
+    CompositionLocalProvider(
+        LocalWallpaperOffset provides wallpaperOffset,
+        LocalBadges provides badges,
+        LocalWidgetHost provides viewModel.widgetHost,
+    ) {
         HomeContent(viewModel, wallpaperOffset)
     }
 }
@@ -193,6 +264,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
 
     val settings by viewModel.settings.collectAsState()
     val layout by viewModel.layout.collectAsState()
+    val looks by viewModel.looks.collectAsState()
     val apps by viewModel.apps.collectAsState()
     val appsByKey = remember(apps) { apps.associateBy { it.key } }
     val plus by viewModel.plus.collectAsState()
@@ -278,6 +350,20 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
 
     val drag = remember { HomeDragState() }
     val scope = rememberCoroutineScope()
+
+    // A photo chosen as an app's icon: Android's own picker, which needs no permission. Which app
+    // it is for is held here while the picker is up.
+    val photoFor = remember { arrayOfNulls<String>(1) }
+    val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        val key = photoFor[0] ?: return@rememberLauncherForActivityResult
+        photoFor[0] = null
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            if (!viewModel.choosePhotoIcon(key, uri)) {
+                Toast.makeText(context, "That picture could not be read", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
     val drawer = remember { Animatable(0f) }
     // While a finger is down the progress is written straight from the drag, with no coroutine
     // in between, so the sheet sits exactly under the thumb.
@@ -289,12 +375,17 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
     val motion = LocalMotionLevel.current
     var resizingId by remember { mutableStateOf<String?>(null) }
     var ambient by remember { mutableStateOf(false) }
+    // Every page small on a tray, to go to, move, add or take away.
+    var overview by remember { mutableStateOf(false) }
     var sheet by remember { mutableStateOf<HomeSheet?>(null) }
     var sheetVisible by remember { mutableStateOf(false) }
     // Settings is a page of its own, under the sheets: one opened from it closes back onto it.
     var settingsOpen by remember { mutableStateOf(false) }
     // So is the widget gallery.
     var widgetsOpen by remember { mutableStateOf(false) }
+    // The widget the gallery is choosing another to stack onto, while it is.
+    var stackOnto by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(widgetsOpen) { if (!widgetsOpen) stackOnto = null }
     // The home screen fades out from under either of them.
     val pageShown = animateFloatAsState(if (settingsOpen || widgetsOpen) 1f else 0f, tween(280), label = "pageShown")
     val glassLevels by viewModel.glassLevels.collectAsState()
@@ -446,6 +537,31 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         androidx.compose.runtime.withFrameNanos { }
         arrive()
     }
+    // A Look put on: Settings and any sheet go, the first page comes round, and the home screen
+    // arrives in its new colours the way it does after an unlock.
+    LaunchedEffect(Unit) {
+        viewModel.lookPut.collect {
+            settingsOpen = false
+            hideSheet()
+            pagerState.scrollToPage(0)
+            if (!liveMotion.reduced) {
+                arrivalDepth.floatValue = FlyIn.FULL
+                arrivalPending[0] = true
+                arrive()
+            }
+        }
+    }
+    // A Look the schedule has due waits for a moment with nothing under the finger and nothing
+    // open over the home screen, and then goes on as one put on by hand does.
+    val lookDue by viewModel.lookDue.collectAsState()
+    val idle = !dragging && drag.item == null && !sheetVisible && !settingsOpen && !widgetsOpen &&
+        drawerProgress < 0.002f && folderUp == null && card == null && resizingId == null && !ambient && !overview
+    LaunchedEffect(lookDue, idle) {
+        if (lookDue != null && idle) {
+            delay(LOOK_DUE_WAIT_MS)
+            viewModel.applyDueLook()
+        }
+    }
     // The drawer is put together a moment after the home screen has arrived, out of sight, rather
     // than under the first finger that asks for it. Built then, it cost the first swipe up its
     // first frames, and on a slow phone the swipe itself: the drawer never came.
@@ -593,7 +709,9 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         }
         val from = LaunchOrigin.boundsFor(key)
         if (from == null) {
-            viewModel.open(key)
+            if (!viewModel.open(key) && ShortcutKeys.isShortcut(key)) {
+                Toast.makeText(context, "The app does not offer that shortcut any more", Toast.LENGTH_SHORT).show()
+            }
             return
         }
         if (preparingLaunch) return
@@ -741,6 +859,41 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         }
     }
 
+    /**
+     * Does what a gesture was set to do. Anything that needs something Zenith does not have yet —
+     * the lock helper, a torch — says so rather than doing nothing.
+     */
+    fun runGesture(action: String) {
+        when (action) {
+            GestureActions.NONE -> Unit
+            GestureActions.NOTIFICATIONS -> if (!SystemPanels.notifications(context)) {
+                Toast.makeText(context, "This phone does not let Zenith pull the notifications down", Toast.LENGTH_SHORT).show()
+            }
+            GestureActions.QUICK_SETTINGS -> if (!SystemPanels.quickSettings(context)) {
+                Toast.makeText(context, "This phone does not let Zenith pull the quick settings down", Toast.LENGTH_SHORT).show()
+            }
+            GestureActions.LOCK -> if (!LockService.lock()) showSheet(HomeSheet.LockHelper)
+            GestureActions.DRAWER -> openDrawer()
+            GestureActions.SEARCH -> openDrawer(search = true)
+            GestureActions.TORCH -> if (!Torch.toggle(context)) {
+                Toast.makeText(context, "There is no torch Zenith can use on this phone", Toast.LENGTH_SHORT).show()
+            }
+            GestureActions.AMBIENT -> ambient = true
+            GestureActions.CUSTOMISE -> showSheet(HomeSheet.Customize)
+            GestureActions.SETTINGS -> settingsOpen = true
+            GestureActions.WIDGETS -> widgetsOpen = true
+            GestureActions.FIRST_PAGE -> scope.launch { if (pagerState.currentPage != 0) pagerState.animateScrollToPage(0) }
+            GestureActions.OVERVIEW -> overview = true
+            else -> {
+                val app = GestureActions.appKey(action)
+                when {
+                    app != null -> launchApp(app)
+                    GestureActions.isShortcut(action) -> launchApp(action)
+                }
+            }
+        }
+    }
+
     /** Drag in pixels; positive is downward, which closes the drawer. */
     fun dragDrawer(delta: Float) {
         val span = if (libraryMode) drawerWidthPx else drawerHeightPx
@@ -774,6 +927,66 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 initialVelocity = velocity / span,
             )
             if (target == 0f) focusSearch = false
+        }
+    }
+
+    // A drag on the page is told apart by how it starts. Up is the drawer, as it always was. Down,
+    // with the drawer shut, is the swipe-down gesture: the page comes a little way after the finger,
+    // on a band that gives less the further it is pulled, a hint at the top says what letting go
+    // will do and lights up once it will, and the page springs home when it is let go.
+    val swipeDownAction by androidx.compose.runtime.rememberUpdatedState(Gestures.actionFor(Gestures.SWIPE_DOWN, settings.gestures))
+    var dragKind by remember { mutableIntStateOf(DRAG_UNDECIDED) }
+    var pullDown by remember { mutableFloatStateOf(0f) }
+    var pulling by remember { mutableStateOf(false) }
+    val pullBack = remember { Animatable(0f) }
+    /** Set by the watcher over the whole screen while a second finger is down: it is a two-finger gesture, not a drag. */
+    var twoFingers by remember { mutableStateOf(false) }
+    val pullFirePx = with(LocalDensity.current) { PULL_FIRE.toPx() }
+
+    /** How far down the swipe-down gesture has the page: under the finger, or springing home. */
+    fun pulled(): Float = if (pulling) pullDown else pullBack.value
+
+    fun pageDrag(delta: Float) {
+        if (twoFingers) return
+        if (dragKind == DRAG_UNDECIDED) {
+            dragKind = if (delta > 0f && drawer.value <= 0.001f && !dragging && swipeDownAction != GestureActions.NONE) DRAG_PULL else DRAG_DRAWER
+        }
+        if (dragKind == DRAG_PULL) {
+            pulling = true
+            pullDown = (pullDown + delta).coerceAtLeast(0f)
+        } else if (!libraryMode) {
+            dragDrawer(delta)
+        }
+    }
+
+    fun pageDragStopped(velocity: Float) {
+        val kind = dragKind
+        dragKind = DRAG_UNDECIDED
+        if (kind == DRAG_PULL) {
+            val from = pullDown
+            // Far enough, or flicked: it happens. A flick still has to mean it.
+            val armed = from >= pullFirePx || (velocity > 1400f && from > pullFirePx * 0.35f)
+            scope.launch {
+                pullBack.snapTo(from)
+                pulling = false
+                pullDown = 0f
+                pullBack.animateTo(0f, Motion.drop())
+            }
+            if (armed && !twoFingers) runGesture(swipeDownAction)
+        } else if (!libraryMode) {
+            settleDrawer(-velocity)
+        }
+    }
+
+    // A double tap sends a ring out from under the finger, as the thing it was set to do happens.
+    var tapRing by remember { mutableStateOf<Offset?>(null) }
+    val tapRingOut = remember { Animatable(1f) }
+    fun ringAt(at: Offset) {
+        if (motion.reduced) return
+        tapRing = at
+        scope.launch {
+            tapRingOut.snapTo(0f)
+            tapRingOut.animateTo(1f, tween(560, easing = androidx.compose.animation.core.LinearOutSlowInEasing))
         }
     }
 
@@ -937,6 +1150,17 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         }
     }
 
+    // Another app's widget has gone onto the home screen, after whatever Android asked: turn to it.
+    LaunchedEffect(Unit) {
+        viewModel.widgetPlaced.collect { page -> revealPage(page) }
+    }
+    // How big a cell is, in dp, so another app's widget is given the cells its own size needs.
+    val pageGeometry = drag.geometry
+    LaunchedEffect(pageGeometry) {
+        val g = pageGeometry ?: return@LaunchedEffect
+        viewModel.noteCellSize(g.cellWidth / density.density, g.unitHeight * ROW_UNITS / density.density)
+    }
+
     // A landing plays the moment the item is let go; after that it would only replay by mistake.
     LaunchedEffect(drag.landing) {
         if (drag.landing != null) {
@@ -955,6 +1179,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             // Where the grey copy is as it is let go. Anywhere but a spot on the page, it is the
             // copy that is seen going: into the bin, into the folder, or into the dock under it.
             val copyAt = drag.pointer - drag.grab
+            val gathered = drag.gathered.map { it.first.id }
             when {
                 droppedOnDock -> {
                     // Where along the bar it was let go decides its place among the others.
@@ -968,13 +1193,18 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 }
                 drag.removeArmed -> {
                     drag.sent = Sent(item, copyAt, into = drag.removeZone.center, faint = true)
-                    viewModel.removeItem(item.id)
+                    // What was gathered goes with it, and comes back with it on Undo.
+                    viewModel.removeItems(listOf(item.id) + gathered)
                 }
                 hover != null -> {
                     drag.sent = Sent(item, copyAt, into = layout.firstOrNull { it.id == hover }?.let { drag.iconCentre(it) })
                     viewModel.combine(item.id, hover)
                 }
-                else -> dropOnPage(item)
+                else -> {
+                    dropOnPage(item)
+                    // Gathered icons land round it, side by side, from where you let go.
+                    if (gathered.isNotEmpty()) viewModel.landBeside(item.id, gathered)
+                }
             }
             // Put down, thrown away or made into a folder: it is done, and the hand is told so.
             haptic.confirm()
@@ -1090,8 +1320,16 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         }
     }
     val isDefaultLauncher = remember(homePressed, environmentTick) { isDefaultLauncher(context) }
+    val seenAgain = remember { intArrayOf(viewModel.homeAgain.value) }
     LaunchedEffect(homePressed) {
         if (homePressed > 0) {
+            // Pressed with Zenith already in front, and nothing open on it: the home button
+            // gesture, whatever that has been set to. Anything else folds everything back.
+            val again = viewModel.homeAgain.value != seenAgain[0]
+            seenAgain[0] = viewModel.homeAgain.value
+            val busy = (card != null && cardOpening) || sheetVisible || settingsOpen || widgetsOpen ||
+                folderUp != null || drawer.value > 0.02f || resizingId != null || ambient
+            val action = Gestures.actionFor(Gestures.HOME, viewModel.settings.value.gestures)
             // Home while an app is still opening sends it straight back into its icon.
             if (card != null && cardOpening) closeCard()
             hideSheet()
@@ -1099,11 +1337,19 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             widgetsOpen = false
             closeFolder()
             closeDrawer()
-            if (pagerState.currentPage != 0) pagerState.animateScrollToPage(0)
+            if (again && !busy && action != GestureActions.FIRST_PAGE) {
+                runGesture(action)
+            } else if (pagerState.currentPage != 0) {
+                pagerState.animateScrollToPage(0)
+            }
         }
     }
 
-    BackHandler(enabled = (card != null && cardOpening) || drawerProgress > 0.002f || sheetVisible || resizingId != null || ambient || folderUp != null) {
+    BackHandler(enabled = overview || (card != null && cardOpening) || drawerProgress > 0.002f || sheetVisible || resizingId != null || ambient || folderUp != null) {
+        if (overview) {
+            overview = false
+            return@BackHandler
+        }
         when {
             card != null && cardOpening -> closeCard()
             ambient -> ambient = false
@@ -1114,6 +1360,38 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         }
     }
 
+    // What a widget asks for that only the home screen can show: a picker, a sheet, Android's page.
+    val pickFrame = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(12)) { uris ->
+        if (uris.isNotEmpty()) scope.launch {
+            if (!viewModel.keepFramePhotos(uris)) {
+                Toast.makeText(context, "Those pictures could not be read", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+    fun setUpWidget(kind: String) {
+        when (kind) {
+            "world" -> showSheet(HomeSheet.WorldCities)
+            "countdown" -> showSheet(HomeSheet.CountdownDate)
+            "weather" -> showSheet(HomeSheet.WeatherPlace)
+            "photo" -> pickFrame.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+            "media" -> NotificationDots.ask(context)
+            "todo" -> viewModel.updateSettings { it.copy(todos = com.gabriel.zenithui.data.Todos.clearDone(it.todos)) }
+        }
+    }
+    val forecast by viewModel.forecast.collectAsState()
+    val visits by viewModel.visits.collectAsState()
+    val widgetWorld = remember(settings, forecast, visits) {
+        WidgetWorld(
+            settings = settings,
+            change = { transform -> viewModel.updateSettings(transform) },
+            forecast = forecast,
+            visits = visits,
+            setUp = { kind -> setUpWidget(kind) },
+            frameDir = viewModel.frameDir,
+        )
+    }
+
+    CompositionLocalProvider(LocalWidgetWorld provides widgetWorld) {
     Box(
         Modifier
             .fillMaxSize()
@@ -1122,12 +1400,17 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 drawerWidthPx = it.width.toFloat()
             }
             .onGloballyPositioned { homeOrigin = it.positionInRoot() }
-            // Pinching in anywhere on the home screen opens Customise, the way it does on Samsung
-            // and Pixel phones. It only watches; the page still gets every touch.
+            // Two fingers on the home screen: pinching in (Customise, as on Samsung and Pixel
+            // phones), pinching out, or swiping up or down together. What each does is chosen
+            // under Settings → Gestures. It only watches; the page still gets every touch.
             .pointerInput(Unit) {
                 awaitEachGesture {
                     awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                    // Cleared as each new touch begins, not as the last one ends: the drag on the
+                    // page hears it has stopped after this does, and must still know it was two.
+                    twoFingers = false
                     var startSpan = 0f
+                    var startCentre = Offset.Zero
                     var fired = false
                     while (true) {
                         val event = awaitPointerEvent(PointerEventPass.Initial)
@@ -1137,21 +1420,36 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                             startSpan = 0f
                             continue
                         }
-                        val span = (fingers[0].position - fingers[1].position).getDistance()
+                        twoFingers = true
+                        val a = fingers[0].position
+                        val b = fingers[1].position
+                        val span = (a - b).getDistance()
+                        val centre = (a + b) / 2f
                         if (startSpan == 0f) {
                             startSpan = span
-                        } else if (
-                            !fired && !drag.isDragging && !settingsOpen && !widgetsOpen &&
-                            // Only on the home screen itself. Through the drawer, a folder, a sheet
-                            // or an app on its way open, Customise would open with those still up
-                            // underneath it, and Back would go to them first.
-                            !sheetVisible && folderUp == null && card == null && !dragging && drawer.value < 0.02f &&
-                            span < startSpan * 0.72f
-                        ) {
-                            fired = true
-                            haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
-                            showSheet(HomeSheet.Customize)
+                            startCentre = centre
+                            continue
                         }
+                        // Only on the home screen itself. Through the drawer, a folder, a sheet or
+                        // an app on its way open, what it opens would be under those, and Back
+                        // would go to them first.
+                        val idle = !fired && !drag.isDragging && !settingsOpen && !widgetsOpen &&
+                            !sheetVisible && folderUp == null && card == null && !dragging && drawer.value < 0.02f
+                        if (!idle) continue
+                        val travel = centre - startCentre
+                        val gesture = when {
+                            span < startSpan * 0.72f -> Gestures.PINCH_IN
+                            span > startSpan * 1.38f -> Gestures.PINCH_OUT
+                            // Both fingers the same way, not spreading: a swipe, not a pinch.
+                            abs(travel.y) > TWO_FINGER_SWIPE.toPx() && abs(travel.y) > abs(travel.x) * 1.5f &&
+                                abs(span / startSpan - 1f) < 0.25f -> if (travel.y > 0f) Gestures.TWO_DOWN else Gestures.TWO_UP
+                            else -> null
+                        } ?: continue
+                        val action = Gestures.actionFor(gesture, viewModel.settings.value.gestures)
+                        if (action == GestureActions.NONE) continue
+                        fired = true
+                        haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                        runGesture(action)
                     }
                 }
             }
@@ -1199,6 +1497,8 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     val sunk = depth.coerceIn(0f, 1f)
                     // Settings is glass over the wallpaper; the home screen is not seen through it.
                     alpha = (1f - 0.55f * drawerProgress) * (1f - t[Tune.HomeDim] * sunk) * (1f - pageShown.value)
+                    // Pulled down for the swipe-down gesture: after the finger, but less and less.
+                    if (!motion.reduced) translationY = band(pulled(), PULL_REACH.toPx())
                 }
                 // The blur is its own short animation rather than a per-frame effect rebuild:
                 // recreating a full screen RenderEffect on every drag frame is what made the
@@ -1227,12 +1527,27 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     14.dp
                 }
                 val header = HomeHeader.text(settings.header, settings.userName, hour)
-                if (header != null) {
+                if (HomeHeader.isLive(settings.header)) {
+                    LiveHeader(
+                        style = settings.header,
+                        modifier = Modifier
+                            .statusBarsPadding()
+                            .arriving({ arrivalClock.value }, { arrivalDepth.floatValue }, distance = 1f, from = (-28).dp, style = settings.arrival)
+                            .pointerInput(Unit) {
+                                detectTapGestures(onLongPress = {
+                                    haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                                    showSheet(HomeSheet.Customize)
+                                })
+                            }
+                            .padding(horizontal = PAGE_MARGIN)
+                            .padding(start = leftLine, end = rightLine, top = 8.dp, bottom = 10.dp),
+                    )
+                } else if (header != null) {
                     Greeting(
                         text = header,
                         modifier = Modifier
                             .statusBarsPadding()
-                            .arriving({ arrivalClock.value }, { arrivalDepth.floatValue }, distance = 1f, from = (-28).dp)
+                            .arriving({ arrivalClock.value }, { arrivalDepth.floatValue }, distance = 1f, from = (-28).dp, style = settings.arrival)
                             // Holding it opens Customise too — always reachable, however full
                             // the page underneath is.
                             .pointerInput(Unit) {
@@ -1248,19 +1563,32 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     Spacer(Modifier.statusBarsPadding().height(8.dp))
                 }
 
+                val doubleTap = Gestures.actionFor(Gestures.DOUBLE_TAP, settings.gestures)
+                val doubleTapNow by androidx.compose.runtime.rememberUpdatedState(doubleTap)
+                var pageOrigin by remember { mutableStateOf(Offset.Zero) }
                 Box(
                     Modifier
                         .weight(1f)
+                        .onGloballyPositioned { pageOrigin = it.positionInRoot() }
                         .draggable(
                             orientation = Orientation.Vertical,
-                            // With the library on the side, swiping up is left alone.
-                            enabled = !libraryMode,
-                            state = rememberDraggableState { delta -> dragDrawer(delta) },
-                            onDragStopped = { velocity -> settleDrawer(-velocity) },
+                            // With the library on the side, swiping up is left alone; swiping
+                            // down is still the swipe-down gesture.
+                            state = rememberDraggableState { delta -> pageDrag(delta) },
+                            onDragStarted = { dragKind = DRAG_UNDECIDED },
+                            onDragStopped = { velocity -> pageDragStopped(velocity) },
                         )
-                        .pointerInput(resizingId) {
+                        // A double tap waits for the second tap before a single one counts, so it
+                        // is only listened for when it has been given something to do.
+                        .pointerInput(resizingId, doubleTap != GestureActions.NONE) {
                             detectTapGestures(
                                 onTap = { if (resizingId != null) resizingId = null },
+                                onDoubleTap = if (doubleTap == GestureActions.NONE) null else { at ->
+                                    if (resizingId == null) {
+                                        ringAt(pageOrigin + at)
+                                        runGesture(doubleTapNow)
+                                    }
+                                },
                                 onLongPress = { if (resizingId == null) showSheet(HomeSheet.Customize) },
                             )
                         },
@@ -1285,8 +1613,10 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                         beyondViewportPageCount = if (drag.isDragging) LayoutBuilder.MAX_PAGES else 1,
                     ) { page ->
                         val offset = (pagerState.currentPage - page) + pagerState.currentPageOffsetFraction
+                        // The page the swipe started on, whichever way it goes: the one Stack sinks.
+                        val leaving = page == pagerState.settledPage
                         // With movement reduced a page simply slides.
-                        val turn = PageEffects.transform(if (motion.reduced) "slide" else settings.pageEffect, offset)
+                        val turn = PageEffects.transform(if (motion.reduced) "slide" else settings.pageEffect, offset, leaving)
                         HomePage(
                             page = page,
                             active = page == pagerState.currentPage,
@@ -1299,10 +1629,13 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                                 when (item) {
                                     is WidgetCell -> viewModel.resizeWidget(item.id, spanX, spanY)
                                     is AppCell -> viewModel.resizeApp(item.id, spanX, rows = spanY / ROW_UNITS)
+                                    is HostedWidgetCell, is StackCell -> viewModel.resizeHosted(item.id, spanX, spanY)
                                     else -> false
                                 }
                             },
+                            onRestoreWidget = { item, info -> viewModel.addHostedWidget(info, replacing = item.id) },
                             onResizeDone = { resizingId = null },
+                            onGathered = { haptic.tick() },
                             onOpenApp = { launchApp(it) },
                             onOpenFolder = { folder, icon -> openFolder(folder.id, icon) },
                             onItemMenu = { showSheet(HomeSheet.Item(it.id)) },
@@ -1320,12 +1653,16 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                             jiggleStrength = { jiggleStrength.value },
                             modifier = Modifier
                                 .fillMaxSize()
+                                // The page coming in is drawn over the one being left, going back
+                                // as well as going on: the pager alone draws them left to right.
+                                .zIndex(PageEffects.over(leaving))
                                 .graphicsLayer {
                                     alpha = turn.alpha
-                                    scaleX = turn.scale
+                                    scaleX = turn.scale * turn.squash
                                     scaleY = turn.scale
                                     rotationY = turn.rotationY
-                                    transformOrigin = TransformOrigin(turn.pivotX, 0.5f)
+                                    rotationZ = turn.rotationZ
+                                    transformOrigin = TransformOrigin(turn.pivotX, turn.pivotY)
                                     translationX = turn.shiftX * size.width
                                     // Further back than the default, so a turning page keeps its
                                     // shape instead of flaring out towards the eye.
@@ -1369,13 +1706,14 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 }
 
                 PageDots(
+                    style = settings.indicator,
                     count = pageCount,
                     position = { pagerState.currentPage + pagerState.currentPageOffsetFraction },
                     canAdd = pageCount < LayoutBuilder.MAX_PAGES,
                     onAddPage = { revealPage(viewModel.addPage()) },
                     modifier = Modifier
                         .align(Alignment.CenterHorizontally)
-                        .arriving({ arrivalClock.value }, { arrivalDepth.floatValue }, distance = 0.7f, from = 30.dp)
+                        .arriving({ arrivalClock.value }, { arrivalDepth.floatValue }, distance = 0.7f, from = 30.dp, style = settings.arrival)
                         .padding(vertical = 10.dp),
                 )
 
@@ -1384,7 +1722,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     HomeSearchBar(
                         onSearch = { openDrawer(search = true) },
                         modifier = Modifier
-                            .arriving({ arrivalClock.value }, { arrivalDepth.floatValue }, distance = 0.85f, from = 40.dp)
+                            .arriving({ arrivalClock.value }, { arrivalDepth.floatValue }, distance = 0.85f, from = 40.dp, style = settings.arrival)
                             .padding(horizontal = PAGE_MARGIN)
                             .padding(start = leftLine, end = rightLine, bottom = 10.dp),
                     )
@@ -1425,7 +1763,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     },
                     onBounds = { dockBounds = it },
                     modifier = Modifier
-                        .arriving({ arrivalClock.value }, { arrivalDepth.floatValue }, distance = 1f, from = 56.dp)
+                        .arriving({ arrivalClock.value }, { arrivalDepth.floatValue }, distance = 1f, from = 56.dp, style = settings.arrival)
                         .padding(horizontal = PAGE_MARGIN)
                         .navigationBarsPadding()
                         .padding(bottom = 10.dp),
@@ -1438,9 +1776,73 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         }
 
         // ------------------------------------------------------------ drawer
+        // ------------------------------------------------------------ page overview
+        PageOverview(
+            visible = overview,
+            pageCount = pageCount,
+            current = pagerState.currentPage,
+            layout = layout,
+            appsByKey = appsByKey,
+            settings = settings,
+            wallpaper = glassLevels?.sharp,
+            screenWidth = with(density) { drawerWidthPx.toDp() },
+            screenHeight = with(density) { drawerHeightPx.toDp() },
+            onGo = { page ->
+                overview = false
+                scope.launch { pagerState.animateScrollToPage(page) }
+            },
+            onMove = { from, to ->
+                val here = com.gabriel.zenithui.data.PageOrder.newIndex(pagerState.currentPage, from, to)
+                viewModel.movePage(from, to)
+                scope.launch { pagerState.scrollToPage(here) }
+            },
+            onRemove = { page ->
+                val here = pagerState.currentPage.let { if (it > page) it - 1 else it }.coerceAtMost(pageCount - 2).coerceAtLeast(0)
+                viewModel.removePage(page)
+                scope.launch { pagerState.scrollToPage(here) }
+            },
+            onAdd = { viewModel.addPage() },
+            onDismiss = { overview = false },
+        )
+
+        // ------------------------------------------------------------ undo
+        // Over the dock, under the drawer, Settings and every sheet.
+        val removed by viewModel.removed.collectAsState()
+        val removedWhat = when (removed.size) {
+            0 -> null
+            1 -> "${removedName(removed.first(), appsByKey)} removed"
+            else -> "${removed.size} things removed"
+        }
+        val undoLift = with(density) {
+            if (!dockBounds.isEmpty && drawerHeightPx > 0f) (drawerHeightPx - dockBounds.top).coerceAtLeast(0f).toDp() + 12.dp else 96.dp
+        }
+        UndoPill(
+            what = removedWhat,
+            key = removed.firstOrNull()?.id,
+            millis = com.gabriel.zenithui.data.UNDO_MS,
+            onUndo = { viewModel.undoRemove().firstOrNull()?.let { back -> revealPage(back.page) } },
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = undoLift)
+                .padding(horizontal = 16.dp),
+        )
+
         if (drawerProgress > 0.002f || drawerEverOpened) {
+            // In the order chosen in Settings. By colour needs every icon's colour, worked out once.
+            val colours by produceState(emptyMap<String, com.gabriel.zenithui.data.IconColour>(), drawerApps, settings.drawerSort) {
+                if (settings.drawerSort == com.gabriel.zenithui.data.DrawerSort.COLOUR) value = viewModel.icons.colours(drawerApps.map { it.key })
+            }
+            val sortedApps = remember(drawerApps, settings.drawerSort, settings.launchCounts, colours) {
+                com.gabriel.zenithui.data.DrawerSort.sort(drawerApps, settings.drawerSort, settings.launchCounts, viewModel.repository::installedAt, colours)
+            }
+            val workApps by viewModel.workApps.collectAsState()
+            // Every app's shortcuts, asked for once each time the drawer opens, for its search.
+            val opened = drawerProgress > 0.5f
+            val allShortcuts by produceState(emptyList<AppShortcut>(), opened) {
+                if (opened) value = viewModel.allShortcuts()
+            }
             AppDrawer(
-                apps = drawerApps,
+                apps = sortedApps,
                 groups = libraryGroups,
                 horizontal = libraryMode,
                 settings = settings,
@@ -1454,6 +1856,34 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 },
                 onLongPress = { showSheet(HomeSheet.DrawerApp(it.key)) },
                 onDismiss = { closeDrawer() },
+                columns = settings.drawerColumns.takeIf { it > 0 } ?: settings.columns,
+                alphabetical = com.gabriel.zenithui.data.DrawerSort.of(settings.drawerSort) == com.gabriel.zenithui.data.DrawerSort.AZ,
+                tabs = settings.drawerTabs,
+                workApps = workApps,
+                onNewTab = { showSheet(HomeSheet.DrawerTabEdit(-1)) },
+                onEditTab = { index -> showSheet(HomeSheet.DrawerTabEdit(index)) },
+                shortcuts = allShortcuts,
+                onShortcut = {
+                    launchApp(it.key)
+                    closeDrawer()
+                },
+                onSetting = { link ->
+                    closeDrawer()
+                    if (link.action == com.gabriel.zenithui.data.SettingsLinks.ZENITH) {
+                        settingsOpen = true
+                    } else {
+                        val opened = runCatching {
+                            context.startActivity(Intent(link.action).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                        }.isSuccess
+                        if (!opened) runCatching { context.startActivity(Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                    }
+                },
+                onCopy = { text ->
+                    val clipboard = context.getSystemService(android.content.ClipboardManager::class.java)
+                    clipboard?.setPrimaryClip(android.content.ClipData.newPlainText("Zenith", text))
+                    // Android 13 and later say so themselves.
+                    if (android.os.Build.VERSION.SDK_INT < 33) Toast.makeText(context, "Copied $text", Toast.LENGTH_SHORT).show()
+                },
             )
         }
 
@@ -1602,6 +2032,32 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             modifier = Modifier.align(Alignment.TopCenter),
         )
 
+        // What letting go of a swipe down will do, coming down from the top as the page is pulled.
+        PullHint(
+            progress = { (pulled() / pullFirePx).coerceIn(0f, 1.4f) },
+            armed = pulling && pullDown >= pullFirePx,
+            label = GestureActions.label(swipeDownAction) { key -> appsByKey[key]?.label },
+            modifier = Modifier.align(Alignment.TopCenter),
+        )
+
+        // The ring a double tap sends out from under the finger.
+        Box(
+            Modifier
+                .fillMaxSize()
+                .drawBehind {
+                    val at = tapRing ?: return@drawBehind
+                    val out = tapRingOut.value
+                    if (out >= 1f) return@drawBehind
+                    drawCircle(
+                        color = palette.accent,
+                        radius = 14.dp.toPx() + 74.dp.toPx() * out,
+                        center = at,
+                        alpha = 0.6f * (1f - out),
+                        style = Stroke(3.dp.toPx() * (1f - out) + 0.5.dp.toPx()),
+                    )
+                }
+        )
+
         // The bedside clock is a room going dark, not a page turning: it fades in slowly, and out
         // a little quicker.
         AnimatedVisibility(
@@ -1663,6 +2119,26 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 help = { showSheet(HomeSheet.Help) },
                 reset = { viewModel.resetEverything() },
                 tidy = { viewModel.tidyUp() },
+                gesture = { id -> showSheet(HomeSheet.GestureAction(id)) },
+                lockHelper = {
+                    if (LockService.enabled(context)) LockService.openSettings(context) else showSheet(HomeSheet.LockHelper)
+                },
+                // Saving, switching, scheduling and sharing are Plus; opening a code and
+                // deleting a Look of your own never are.
+                looks = LookActions(
+                    server = ServerConfig.enabled,
+                    save = { withPlus { showSheet(HomeSheet.LookName(null)) } },
+                    put = { look -> withPlus { viewModel.applyLook(look) } },
+                    menu = { look -> showSheet(HomeSheet.LookMenu(look.id)) },
+                    addRule = { withPlus { showSheet(if (looks.isEmpty()) HomeSheet.LookName(null) else HomeSheet.LookTime) } },
+                    removeRule = { index -> viewModel.setLookRules(settings.lookRules.filterIndexed { i, _ -> i != index }) },
+                    openCode = { showSheet(HomeSheet.LookCode("")) },
+                    featured = viewModel::featuredLooks,
+                    openFeatured = { shared -> showSheet(HomeSheet.LookCode(shared.shown)) },
+                ),
+                glassStudio = { withPlus { showSheet(HomeSheet.GlassStudio) } },
+                dayPalettes = { withPlus { showSheet(HomeSheet.DayPalettes) } },
+                fontLicences = { showSheet(HomeSheet.FontLicences) },
                 // A build with no server has no account, and nothing of one is shown.
                 account = if (!ServerConfig.enabled) null else AccountActions(
                     signed = signed,
@@ -1678,6 +2154,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 ),
             ),
             onDismiss = { settingsOpen = false },
+            looks = looks,
         )
 
         // ------------------------------------------------------------ widgets
@@ -1686,10 +2163,19 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             settings = settings,
             geometry = drag.geometry,
             onAdd = { type, spanX, spanY ->
-                val page = viewModel.addWidget(type, spanX, spanY)
-                revealPage(page)
-                page != null
+                val onto = stackOnto
+                if (onto != null) {
+                    val stacked = viewModel.stackWidget(type, onto)
+                    if (!stacked) Toast.makeText(context, "That stack is full", Toast.LENGTH_SHORT).show()
+                    stacked
+                } else {
+                    val page = viewModel.addWidget(type, spanX, spanY)
+                    revealPage(page)
+                    page != null
+                }
             },
+            onAddHosted = { info -> viewModel.addHostedWidget(info, stackOnto = stackOnto) },
+            stacking = stackOnto != null,
             onDismiss = { widgetsOpen = false },
         )
 
@@ -1720,10 +2206,36 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     if (found != null) last[0] = found
                     val item = found ?: last[0]
                     if (found == null) hideSheet()
+                    val shortcuts by produceState(emptyList<AppShortcut>(), current.id) {
+                        val app = item as? AppCell ?: return@produceState
+                        value = viewModel.shortcuts(app.packageName)
+                    }
                     if (item != null) ItemMenuSheet(
                         visible = up,
                         item = item,
                         appsByKey = appsByKey,
+                        shortcuts = shortcuts,
+                        onShortcut = { launchApp(it.key) },
+                        onAddShortcut = { shortcut ->
+                            val page = viewModel.addShortcut(shortcut)
+                            if (page == null) Toast.makeText(context, "Every page is full", Toast.LENGTH_SHORT).show() else revealPage(page)
+                        },
+                        onEdit = { showSheet(HomeSheet.EditApp(it)) },
+                        onStack = {
+                            stackOnto = item.id
+                            hideSheet()
+                            widgetsOpen = true
+                        },
+                        onGlassBehind = { viewModel.setHostedGlass(item.id, it) },
+                        onSetUp = { kind -> setUpWidget(kind) },
+                        onColour = { showSheet(HomeSheet.WidgetColour(item.id)) },
+                        locked = settings.lockLayout,
+                        onUnlock = { viewModel.updateSettings { it.copy(lockLayout = false) } },
+                        onUnstack = { index ->
+                            if (!viewModel.unstack(item.id, index)) {
+                                Toast.makeText(context, "No room for it on this page", Toast.LENGTH_SHORT).show()
+                            }
+                        },
                         onCustomize = { showSheet(HomeSheet.Customize) },
                         onOpen = { launchApp(it) },
                         onAppInfo = { viewModel.openAppInfo(it) },
@@ -1740,11 +2252,32 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 }
 
                 is HomeSheet.DrawerApp -> {
-                    val app = appsByKey[current.key]
+                    val work = com.gabriel.zenithui.data.WorkKeys.isWork(current.key)
+                    val workList by viewModel.workApps.collectAsState()
+                    val app = appsByKey[current.key] ?: workList.firstOrNull { it.key == current.key }
+                    val shortcuts by produceState(emptyList<AppShortcut>(), current.key) {
+                        if (!work) value = viewModel.shortcuts(current.key.substringBefore('/'))
+                    }
                     DrawerAppSheet(
                         visible = up,
+                        work = work,
                         label = app?.label ?: current.key,
                         pinned = current.key in settings.dock,
+                        shortcuts = shortcuts,
+                        onShortcut = {
+                            launchApp(it.key)
+                            closeDrawer()
+                        },
+                        onAddShortcut = { shortcut ->
+                            val page = viewModel.addShortcut(shortcut)
+                            if (page == null) {
+                                Toast.makeText(context, "Every page is full", Toast.LENGTH_SHORT).show()
+                            } else {
+                                revealPage(page)
+                                closeDrawer()
+                            }
+                        },
+                        onEdit = { showSheet(HomeSheet.EditApp(current.key)) },
                         onOpen = {
                             launchApp(current.key)
                             closeDrawer()
@@ -1770,6 +2303,40 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                         onDismiss = { hideSheet() },
                     )
                 }
+
+                is HomeSheet.EditApp -> {
+                    val edit = settings.appEdits[current.key] ?: AppEdit()
+                    EditAppSheet(
+                        visible = up,
+                        appKey = current.key,
+                        original = remember(current.key, apps) { viewModel.originalLabel(current.key) },
+                        edit = edit,
+                        shape = ZenithShapes.forIconShape(settings.iconShape),
+                        onLabel = { name -> viewModel.editApp(current.key) { it.copy(label = name) } },
+                        onChooseIcon = { showSheet(HomeSheet.PickIcon(current.key)) },
+                        onHideLabel = { hide -> viewModel.editApp(current.key) { it.copy(hideLabel = hide) } },
+                        onReset = { viewModel.editApp(current.key) { AppEdit() } },
+                        onDismiss = { hideSheet() },
+                    )
+                }
+
+                is HomeSheet.PickIcon -> IconPickerSheet(
+                    visible = up,
+                    appKey = current.key,
+                    current = settings.appEdits[current.key]?.icon.orEmpty(),
+                    shape = ZenithShapes.forIconShape(settings.iconShape),
+                    onPick = { source ->
+                        viewModel.editApp(current.key) { it.copy(icon = source) }
+                        // Back to the app, to see it with its new face.
+                        showSheet(HomeSheet.EditApp(current.key))
+                    },
+                    onPhoto = {
+                        photoFor[0] = current.key
+                        pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                        showSheet(HomeSheet.EditApp(current.key))
+                    },
+                    onDismiss = { hideSheet() },
+                )
 
                 HomeSheet.Customize -> CustomizeSheet(
                     visible = up,
@@ -1803,6 +2370,34 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     visible = up,
                     onDismiss = { hideSheet() },
                 )
+
+                HomeSheet.LockHelper -> LockHelperSheet(
+                    visible = up,
+                    onOpen = { LockService.openSettings(context) },
+                    onDismiss = { hideSheet() },
+                )
+
+                is HomeSheet.GestureAction -> {
+                    val helperOn by LockService.on.collectAsState()
+                    GestureActionSheet(
+                        visible = up,
+                        gesture = current.gesture,
+                        current = Gestures.actionFor(current.gesture, settings.gestures),
+                        apps = apps,
+                        helperOn = helperOn,
+                        shortcutsOf = { pkg -> viewModel.shortcuts(pkg) },
+                        onPick = { action ->
+                            viewModel.updateSettings { it.copy(gestures = Gestures.with(it.gestures, current.gesture, action)) }
+                            // Locking needs the helper: say so now, rather than when the gesture is first used.
+                            if (GestureActions.needsHelper(action) && !LockService.enabled(context)) {
+                                showSheet(HomeSheet.LockHelper)
+                            } else {
+                                hideSheet()
+                            }
+                        },
+                        onDismiss = { hideSheet() },
+                    )
+                }
 
                 HomeSheet.Wallpapers -> WallpaperSheet(
                     visible = up,
@@ -1877,9 +2472,178 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     onDismiss = { hideSheet() },
                 )
 
+                is HomeSheet.DrawerTabEdit -> {
+                    val index = current.index
+                    val existing = settings.drawerTabs.getOrNull(index)
+                    DrawerTabSheet(
+                        visible = up,
+                        tab = existing,
+                        apps = drawerApps,
+                        onSave = { tab ->
+                            viewModel.updateSettings {
+                                val tabs = it.drawerTabs.toMutableList()
+                                if (existing != null && index in tabs.indices) tabs[index] = tab else tabs += tab
+                                it.copy(drawerTabs = tabs.take(com.gabriel.zenithui.data.DrawerTab.MOST))
+                            }
+                            hideSheet()
+                        },
+                        onDelete = if (existing == null) null else ({
+                            viewModel.updateSettings { it.copy(drawerTabs = it.drawerTabs.filterIndexed { i, _ -> i != index }) }
+                            hideSheet()
+                        }),
+                        onDismiss = { hideSheet() },
+                    )
+                }
+
+                HomeSheet.WorldCities -> WorldCitiesSheet(
+                    visible = up,
+                    chosen = settings.worldClocks,
+                    onChange = { cities -> viewModel.updateSettings { it.copy(worldClocks = cities.distinct().take(com.gabriel.zenithui.data.WorldClocks.MOST)) } },
+                    onDismiss = { hideSheet() },
+                )
+
+                HomeSheet.CountdownDate -> CountdownSheet(
+                    visible = up,
+                    title = settings.countdownTitle,
+                    day = settings.countdownDay,
+                    onSet = { title, day ->
+                        viewModel.setCountdown(title, day)
+                        hideSheet()
+                    },
+                    onClear = {
+                        viewModel.setCountdown("", 0L)
+                        hideSheet()
+                    },
+                    onDismiss = { hideSheet() },
+                )
+
+                HomeSheet.WeatherPlace -> WeatherPlaceSheet(
+                    visible = up,
+                    place = settings.weatherPlace,
+                    units = settings.weatherUnits,
+                    search = { query -> viewModel.searchPlaces(query) },
+                    onPick = { place, units ->
+                        viewModel.setWeather(place, units)
+                        hideSheet()
+                    },
+                    onUnits = { units ->
+                        viewModel.updateSettings { it.copy(weatherUnits = units) }
+                        viewModel.refreshWeather(force = true)
+                    },
+                    onClear = {
+                        viewModel.setWeather(null, settings.weatherUnits)
+                        hideSheet()
+                    },
+                    onDismiss = { hideSheet() },
+                )
+
+                is HomeSheet.LookName -> {
+                    val renaming = current.renaming?.let { id -> looks.firstOrNull { it.id == id } }
+                    LookNameSheet(
+                        visible = up,
+                        title = if (renaming == null) "Save this look" else "Rename",
+                        initial = renaming?.name.orEmpty(),
+                        action = if (renaming == null) "Save" else "Rename",
+                        onSave = { name ->
+                            if (renaming == null) viewModel.saveLook(name) else viewModel.renameLook(renaming.id, name)
+                            hideSheet()
+                        },
+                        onDismiss = { hideSheet() },
+                    )
+                }
+
+                is HomeSheet.LookMenu -> {
+                    val look = looks.firstOrNull { it.id == current.id }
+                    if (look != null) {
+                        LookMenuSheet(
+                            visible = up,
+                            look = look,
+                            canShare = ServerConfig.enabled,
+                            onPut = { withPlus { viewModel.applyLook(look) } },
+                            onUpdate = { withPlus { viewModel.updateLook(look.id) } },
+                            onRename = { showSheet(HomeSheet.LookName(look.id)) },
+                            onShare = { again ->
+                                if (plus.active) viewModel.shareLook(look.id, again) else {
+                                    showSheet(HomeSheet.Plus)
+                                    null to null
+                                }
+                            },
+                            // Taking a code back is never Plus: what you shared is yours to unshare.
+                            onStopSharing = { viewModel.stopSharingLook(look.id) },
+                            onDelete = { viewModel.deleteLook(look.id) },
+                            onDismiss = { hideSheet() },
+                        )
+                    }
+                }
+
+                HomeSheet.LookTime -> LookRuleSheet(
+                    visible = up,
+                    looks = looks,
+                    onAdd = { rule ->
+                        viewModel.setLookRules(settings.lookRules + rule)
+                        hideSheet()
+                    },
+                    onDismiss = { hideSheet() },
+                )
+
+                is HomeSheet.LookCode -> LookCodeSheet(
+                    visible = up,
+                    initial = current.code,
+                    open = viewModel::openLookCode,
+                    onDismiss = { hideSheet() },
+                )
+
+                HomeSheet.GlassStudio -> GlassStudioSheet(
+                    visible = up,
+                    tuning = settings.glassTuning,
+                    onChange = viewModel::setGlassTuning,
+                    onDismiss = { hideSheet() },
+                )
+
+                HomeSheet.DayPalettes -> {
+                    // The palettes this phone can use, as on the Theme page, and yours once you have made it.
+                    val options = remember(settings.unlockedThemes, settings.customAccent, settings.customAccentAlt, settings.customBackdrop, settings.wallAccent) {
+                        buildList {
+                            addAll(com.gabriel.zenithui.ui.theme.Palettes.all)
+                            addAll(com.gabriel.zenithui.ui.theme.Palettes.aura.filter { it.id in settings.unlockedThemes })
+                            if (settings.customAccent != com.gabriel.zenithui.data.ZenithSettings().customAccent || settings.paletteId == com.gabriel.zenithui.ui.theme.Palettes.CUSTOM) {
+                                add(com.gabriel.zenithui.ui.theme.Palettes.custom(settings))
+                            }
+                            add(com.gabriel.zenithui.ui.theme.Palettes.fromWallpaper(settings))
+                        }
+                    }
+                    DayPaletteSheet(
+                        visible = up,
+                        options = options,
+                        chosen = settings.dayPalettes,
+                        onChange = viewModel::setDayPalettes,
+                        onDismiss = { hideSheet() },
+                    )
+                }
+
+                is HomeSheet.WidgetColour -> {
+                    val target = layout.firstOrNull { it.id == current.id }
+                    val colour = when (target) {
+                        is WidgetCell -> target.accent
+                        is FolderCell -> target.colour
+                        else -> null
+                    }
+                    if (target != null && colour != null) {
+                        WidgetColourSheet(
+                            visible = up,
+                            current = colour,
+                            onPick = { picked -> viewModel.setItemColour(target.id, picked) },
+                            onDismiss = { hideSheet() },
+                        )
+                    }
+                }
+
+                HomeSheet.FontLicences -> FontLicenceSheet(visible = up, onDismiss = { hideSheet() })
+
                 null -> Unit
             }
         }
+    }
     }
 }
 
@@ -1946,8 +2710,40 @@ private fun Greeting(text: String, modifier: Modifier = Modifier) {
     }
 }
 
+/**
+ * The top of the page as a clock, the date, or the date at a glance with the weather: set in the
+ * font numbers are set in, the digits rolling over as the minutes change.
+ */
+@Composable
+private fun LiveHeader(style: String, modifier: Modifier = Modifier) {
+    val palette = LocalPalette.current
+    val now = rememberNow()
+    val date = remember(now.dayOfYear) { HomeHeader.dateLine(now.toLocalDate()) }
+    val forecast = LocalWidgetWorld.current?.forecast
+    Column(modifier.fillMaxWidth()) {
+        when (style) {
+            HomeHeader.CLOCK -> {
+                val time = remember(now.hour, now.minute) { "%02d:%02d".format(now.hour, now.minute) }
+                Figure(time, 58.sp, animated = true)
+                Spacer(Modifier.height(6.dp))
+                Text(date, color = quiet(), fontSize = 14.sp, fontWeight = FontWeight.Medium)
+            }
+            HomeHeader.DATE -> Text(date, color = palette.onGlass, fontSize = 26.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            else -> {
+                Text(date, color = palette.onGlass, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                val weather = forecast?.let { HomeHeader.weatherLine(it.temperature, com.gabriel.zenithui.data.WeatherCodes.words(it.code, it.day)) }
+                androidx.compose.animation.AnimatedVisibility(visible = weather != null, enter = com.gabriel.zenithui.ui.common.unfoldIn(LocalMotionLevel.current.reduced)) {
+                    Text(weather.orEmpty() + (forecast?.place?.let { " in $it" } ?: ""), color = quiet(), fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun PageDots(
+    /** How the page in view is shown: see [PageIndicator]. */
+    style: String,
     count: Int,
     /** Where the pager is: a page number, with a fraction while a page is turning. */
     position: () -> Float,
@@ -1956,8 +2752,10 @@ private fun PageDots(
     modifier: Modifier = Modifier,
 ) {
     val palette = LocalPalette.current
+    // With no indicator there is no add button either: the page overview adds pages.
+    if (style == "none") return
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-        PagerDots(count, position)
+        PageIndicator(style, count, position)
 
         // The one control that makes another page. It sits where the next dot would appear, so
         // it reads as "one more of these" rather than as a button bolted on.
@@ -2047,8 +2845,14 @@ private fun RemoveTarget(armed: Boolean, hovering: Boolean, modifier: Modifier =
 @Composable
 private fun DrawerAppSheet(
     visible: Boolean,
+    /** A work app: it opens, and has its app info, but stays in the drawer's Work tab. */
+    work: Boolean = false,
     label: String,
     pinned: Boolean,
+    shortcuts: List<AppShortcut>,
+    onShortcut: (AppShortcut) -> Unit,
+    onAddShortcut: (AppShortcut) -> Unit,
+    onEdit: () -> Unit,
     onOpen: () -> Unit,
     onAddToHome: () -> Unit,
     onToggleDock: () -> Unit,
@@ -2058,14 +2862,127 @@ private fun DrawerAppSheet(
 ) {
     ZenithSheet(visible = visible, onDismiss = onDismiss, title = label) {
         var row = 0
-        MenuRow(Icons.AutoMirrored.Rounded.OpenInNew, "Open", index = row++) { onOpen(); onDismiss() }
-        MenuRow(Icons.Rounded.AddHome, "Add to home screen", index = row++) { onAddToHome(); onDismiss() }
-        // Apps go into the dock by dragging them there; the menu only offers the way back out.
-        if (pinned) MenuRow(Icons.Rounded.PushPin, "Remove from dock", index = row++) { onToggleDock(); onDismiss() }
-        MenuRow(Icons.Rounded.Info, "App info", index = row++) { onAppInfo(); onDismiss() }
-        MenuRow(Icons.Rounded.Delete, "Uninstall", danger = true, index = row) { onUninstall(); onDismiss() }
+        ShortcutRows(shortcuts, onRun = { onShortcut(it); onDismiss() }, onAdd = { onAddShortcut(it); onDismiss() })
+        MenuRow(Icons.AutoMirrored.Rounded.OpenInNew, "Open", if (work) "In your work profile" else null, index = row++) { onOpen(); onDismiss() }
+        if (work) {
+            MenuRow(Icons.Rounded.Info, "App info", index = row) { onAppInfo(); onDismiss() }
+        } else {
+            MenuRow(Icons.Rounded.AddHome, "Add to home screen", index = row++) { onAddToHome(); onDismiss() }
+            MenuRow(Icons.Rounded.Edit, "Edit", "Its name, its icon, or no name at all", index = row++) { onEdit() }
+            // Apps go into the dock by dragging them there; the menu only offers the way back out.
+            if (pinned) MenuRow(Icons.Rounded.PushPin, "Remove from dock", index = row++) { onToggleDock(); onDismiss() }
+            MenuRow(Icons.Rounded.Info, "App info", index = row++) { onAppInfo(); onDismiss() }
+            MenuRow(Icons.Rounded.Delete, "Uninstall", danger = true, index = row) { onUninstall(); onDismiss() }
+        }
     }
 }
+
+/**
+ * What a swipe down will do, on a pill of glass that comes down from under the status bar as the
+ * page is pulled, and goes back up as the page springs home. It fills with the accent, with a
+ * tick, from the moment letting go would do it. Moved by being placed, so its glass keeps up.
+ */
+@Composable
+private fun PullHint(progress: () -> Float, armed: Boolean, label: String, modifier: Modifier = Modifier) {
+    val palette = LocalPalette.current
+    val haptic = rememberHaptics()
+    LaunchedEffect(armed) { if (armed) haptic.tick() }
+    val shown by remember { derivedStateOf { progress() > 0.001f } }
+    if (!shown) return
+    val fill by animateColorAsState(if (armed) palette.accent.copy(alpha = 0.88f) else Color.Transparent, tween(160), label = "pullFill")
+    val ink by animateColorAsState(if (armed) Color(0xFF0A0B12) else palette.onGlass, tween(160), label = "pullInk")
+    Row(
+        modifier
+            .statusBarsPadding()
+            .padding(top = 10.dp)
+            .offset { IntOffset(0, (-28.dp.toPx() * (1f - progress().coerceIn(0f, 1f))).roundToInt()) }
+            .graphicsLayer {
+                val p = progress().coerceIn(0f, 1f)
+                alpha = p
+                val s = 0.86f + 0.14f * p + 0.04f * (progress() - 1f).coerceIn(0f, 0.4f)
+                scaleX = s
+                scaleY = s
+            }
+            .glass(ZenithShapes.pill, strength = 1.1f, solid = 0.35f)
+            .background(fill, ZenithShapes.pill)
+            .padding(horizontal = 16.dp, vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            Icons.Rounded.KeyboardArrowDown,
+            contentDescription = null,
+            tint = ink,
+            modifier = Modifier
+                .size(18.dp)
+                // The arrow leans further down the nearer it is to happening.
+                .graphicsLayer { translationY = 3.dp.toPx() * progress().coerceIn(0f, 1f) },
+        )
+        Spacer(Modifier.width(6.dp))
+        Text(label, color = ink, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+    }
+}
+
+/**
+ * Before Android's accessibility page opens: what the lock helper is, and that it is the only way
+ * Android leaves a home app to lock the phone. It is asked for here, once, in words, because
+ * Android's own page only says that an app wants control.
+ */
+@Composable
+private fun LockHelperSheet(visible: Boolean, onOpen: () -> Unit, onDismiss: () -> Unit) {
+    val palette = LocalPalette.current
+    ZenithSheet(visible = visible, onDismiss = onDismiss, title = "Lock with a gesture") {
+        Text(
+            "Android only lets a home app lock the phone through an accessibility service. Zenith's lock helper " +
+                "is one that does nothing else: it presses lock when you use the gesture, asks for no events and " +
+                "cannot see the screen. Nothing on it is read, kept or sent.",
+            color = palette.onGlass,
+            fontSize = 15.sp,
+            lineHeight = 21.sp,
+            modifier = Modifier.appearIn(delayMillis = staggerDelay(0), riseFrom = 18f),
+        )
+        Spacer(Modifier.height(12.dp))
+        Text(
+            "In the list that opens, choose Zenith lock helper and turn it on. Android asks you to confirm.",
+            color = palette.onGlassMuted,
+            fontSize = 13.sp,
+            modifier = Modifier.appearIn(delayMillis = staggerDelay(1), riseFrom = 18f),
+        )
+        Spacer(Modifier.height(18.dp))
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.appearIn(delayMillis = staggerDelay(2), riseFrom = 18f),
+        ) {
+            GlassButton(text = "Not now", onClick = onDismiss, modifier = Modifier.weight(1f))
+            GlassButton(
+                text = "Open settings",
+                filled = true,
+                onClick = {
+                    onOpen()
+                    onDismiss()
+                },
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
+}
+
+/** How far the page shows a pull of [pulled] pixels: all of it at first, less and less after, never past [reach]. */
+private fun band(pulled: Float, reach: Float): Float =
+    if (pulled <= 0f || reach <= 0f) 0f else reach * (1f - 1f / (pulled / reach * 0.55f + 1f))
+
+/** A drag on the page not yet told apart, the drawer's, or the swipe-down gesture's. */
+private const val DRAG_UNDECIDED = 0
+private const val DRAG_DRAWER = 1
+private const val DRAG_PULL = 2
+
+/** How far a swipe down has to be pulled before letting go does it. */
+private val PULL_FIRE = 76.dp
+
+/** The most the page comes down with it, however far it is pulled. */
+private val PULL_REACH = 64.dp
+
+/** How far two fingers have to travel together to be a swipe. */
+private val TWO_FINGER_SWIPE = 70.dp
 
 /** Android's view configuration with a shorter long press, for picking things up on the home screen. */
 private class QuickHold(base: androidx.compose.ui.platform.ViewConfiguration) :

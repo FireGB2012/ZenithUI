@@ -11,6 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.geometry.Offset
@@ -24,7 +25,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.gabriel.zenithui.data.GlassBody
 import com.gabriel.zenithui.data.GlassLevels
+import com.gabriel.zenithui.data.GlassTuning
+import com.gabriel.zenithui.data.IconStyles
+import com.gabriel.zenithui.data.LabelSizes
 import com.gabriel.zenithui.data.ZenithSettings
+import com.gabriel.zenithui.ui.common.LabelStyle
+import com.gabriel.zenithui.ui.common.LocalIconStyle
+import com.gabriel.zenithui.ui.common.LocalLabelStyle
+import com.gabriel.zenithui.ui.common.LocalPressStyle
 
 val LocalPalette = staticCompositionLocalOf { Palettes.Midnight }
 
@@ -58,12 +66,40 @@ private val ZenithTypography = Typography(
     labelSmall = TextStyle(fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.Medium, fontSize = 11.sp, letterSpacing = 0.2.sp),
 )
 
+/**
+ * Every style the theme has, set in [family]: Zenith's own sizes and weights where it has them,
+ * Material's for the rest, so no text anywhere is left in a font that was not chosen.
+ */
+private fun typographyIn(family: FontFamily): Typography {
+    val base = ZenithTypography
+    fun TextStyle.inFamily() = copy(fontFamily = family)
+    return Typography(
+        displayLarge = base.displayLarge.inFamily(),
+        displayMedium = base.displayMedium.inFamily(),
+        displaySmall = base.displaySmall.inFamily(),
+        headlineLarge = base.headlineLarge.inFamily(),
+        headlineMedium = base.headlineMedium.inFamily(),
+        headlineSmall = base.headlineSmall.inFamily(),
+        titleLarge = base.titleLarge.inFamily(),
+        titleMedium = base.titleMedium.inFamily(),
+        titleSmall = base.titleSmall.inFamily(),
+        bodyLarge = base.bodyLarge.inFamily(),
+        bodyMedium = base.bodyMedium.inFamily(),
+        bodySmall = base.bodySmall.inFamily(),
+        labelLarge = base.labelLarge.inFamily(),
+        labelMedium = base.labelMedium.inFamily(),
+        labelSmall = base.labelSmall.inFamily(),
+    )
+}
+
 @Composable
 fun ZenithTheme(
     settings: ZenithSettings,
     /** The wallpaper for the glass to show, if Zenith has a copy of it. */
     glass: GlassLevels? = null,
     screenSize: IntSize = IntSize.Zero,
+    /** The Glass studio's tuning; Zenith's own glass when it is not in effect. */
+    glassTuning: GlassTuning = GlassTuning(),
     content: @Composable () -> Unit,
 ) {
     val base = Palettes.resolve(settings)
@@ -109,6 +145,10 @@ fun ZenithTheme(
         )
     }
 
+    val font = ZenithFonts.byId(settings.font)
+    val typography = remember(font) { typographyIn(font.family) }
+    val numbers = remember(font, settings.numberFont) { ZenithFonts.numbers(settings.numberFont, font) }
+
     // One sensor for the whole launcher, read by every glass surface.
     val tilt = rememberTilt(settings.glassShine)
 
@@ -120,10 +160,16 @@ fun ZenithTheme(
         LocalScreenSize provides screenSize,
         LocalGlassStrength provides settings.glass,
         LocalGlassBody provides GlassBody.byId(settings.glassBody),
+        LocalIconStyle provides IconStyles.of(settings.iconStyle),
+        LocalLabelStyle provides LabelStyle(LabelSizes.sp(settings.labelSize).sp, settings.labelShadow),
+        LocalZenithFont provides font.family,
+        LocalNumberFont provides numbers,
+        LocalGlassTuning provides glassTuning,
+        LocalPressStyle provides settings.press,
     ) {
         MaterialTheme(
             colorScheme = scheme,
-            typography = ZenithTypography,
+            typography = typography,
             shapes = MaterialTheme.shapes.copy(
                 extraLarge = androidx.compose.foundation.shape.RoundedCornerShape(34.dp),
             ),

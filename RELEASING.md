@@ -80,6 +80,13 @@ Verify a build before uploading:
 - [ ] Note: the moment `zenith_plus_monthly` has its free-trial offer, Play runs the seven days
       instead of the app. No new build needed — see `play/listing.md`.
 - [ ] Declare in-app purchases on the store listing (the Ads answer stays "No").
+- [ ] App content → **Accessibility API**: since the lock helper (`data/LockService.kt`), Play asks
+  for a declaration. Zenith is *not* an accessibility tool; the use is "lock the screen with a
+  gesture the user chose". The in-app disclosure is the "Lock with a gesture" sheet, shown before
+  Android's page opens. Play also wants a short video of that flow: set Double tap to Lock the
+  phone, double tap, read the sheet, turn the helper on, double tap again.
+- [ ] Permissions note for the reviewer: notification access (`NotificationDots`) only counts
+  what each app has showing, for dots; nothing in a notification is read, kept or sent.
 - [ ] Keep Play App Signing enabled (default) so Google holds the release key.
 
 ## Turning the server on

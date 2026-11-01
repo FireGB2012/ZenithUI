@@ -60,12 +60,43 @@ class IconPack(context: Context, val packageName: String) {
 
     fun drawableFor(component: ComponentName): Drawable? {
         val res = resources ?: return null
-        val name = mapping["${component.packageName}/${component.className}"]
-            ?: mapping[component.packageName]
-            ?: return null
+        val name = suggested(component) ?: return null
         val id = runCatching { res.getIdentifier(name, "drawable", packageName) }.getOrDefault(0)
         if (id == 0) return null
         return runCatching { ResourcesCompat.getDrawable(res, id, null) }.getOrNull()
+    }
+
+    /** The picture the pack itself draws [component] with, by name, if it has one. */
+    fun suggested(component: ComponentName): String? =
+        mapping["${component.packageName}/${component.className}"] ?: mapping[component.packageName]
+
+    /**
+     * Every picture in the pack, by name, for choosing one by hand. Packs list them in their
+     * `drawable.xml`; one that has none is read for the pictures its own mapping uses.
+     */
+    fun allDrawables(): List<String> {
+        val res = resources ?: return emptyList()
+        val listed = LinkedHashSet<String>()
+        val parser = runCatching { Xml.newPullParser().apply { setInput(res.assets.open("drawable.xml"), null) } }.getOrNull()
+            ?: runCatching {
+                val id = res.getIdentifier("drawable", "xml", packageName)
+                if (id == 0) null else res.getXml(id)
+            }.getOrNull()
+        if (parser != null) {
+            runCatching {
+                var event = parser.eventType
+                while (event != XmlPullParser.END_DOCUMENT) {
+                    if (event == XmlPullParser.START_TAG && parser.name == "item") {
+                        parser.getAttributeValue(null, "drawable")?.takeIf { it.isNotEmpty() }?.let { listed += it }
+                    }
+                    event = parser.next()
+                }
+            }
+            (parser as? XmlResourceParser)?.close()
+        }
+        if (listed.isEmpty()) listed += mapping.values.sorted()
+        // Only what the pack really has: a list can name pictures that were never put in.
+        return listed.filter { name -> runCatching { res.getIdentifier(name, "drawable", packageName) != 0 }.getOrDefault(false) }
     }
 
     private fun parseAppFilter(res: Resources) {

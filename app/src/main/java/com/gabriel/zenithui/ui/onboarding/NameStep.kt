@@ -36,6 +36,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.gabriel.zenithui.ui.theme.LocalPalette
+import com.gabriel.zenithui.ui.theme.LocalZenithFont
 import com.gabriel.zenithui.ui.theme.ZenithShapes
 import com.gabriel.zenithui.ui.theme.glass
 import kotlinx.coroutines.delay
@@ -89,6 +90,7 @@ fun NameStep(
             onValueChange = { if (it.length <= 24) onNameChange(it.replace("\n", "")) },
             singleLine = true,
             textStyle = TextStyle(
+                fontFamily = LocalZenithFont.current,
                 color = palette.onGlass,
                 fontSize = 26.sp,
                 fontWeight = FontWeight.Medium,

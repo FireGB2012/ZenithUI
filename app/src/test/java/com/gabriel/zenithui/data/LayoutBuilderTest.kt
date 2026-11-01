@@ -90,7 +90,9 @@ class LayoutBuilderTest {
         val grid = PageGrid(4, 20)
         assertEquals(0 to 0, grid.place(2, 8, rowStep = ROW_UNITS))
         assertEquals(2 to 0, grid.place(1, ROW_UNITS, rowStep = ROW_UNITS))
-        assertEquals(listOf(Widgets.Clock, Widgets.Battery, Widgets.Calendar, Widgets.Notes, Widgets.Toggles), Widgets.placeable)
+        // The first five as they always were, and the search bar never among them.
+        assertEquals(listOf(Widgets.Clock, Widgets.Battery, Widgets.Calendar, Widgets.Notes, Widgets.Toggles), Widgets.placeable.take(5))
+        assertTrue(Widgets.Search !in Widgets.placeable)
         assertTrue(Widgets.placeable.all { it.minSpanY % ROW_UNITS == 0 })
     }
 

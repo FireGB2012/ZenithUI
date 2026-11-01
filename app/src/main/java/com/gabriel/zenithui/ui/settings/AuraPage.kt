@@ -87,6 +87,7 @@ import com.gabriel.zenithui.ui.common.unfoldIn
 import com.gabriel.zenithui.ui.common.unfoldOut
 import com.gabriel.zenithui.ui.onboarding.PrimaryButton
 import com.gabriel.zenithui.ui.theme.LocalPalette
+import com.gabriel.zenithui.ui.theme.LocalZenithFont
 import com.gabriel.zenithui.ui.theme.Palettes
 import com.gabriel.zenithui.ui.theme.ZenithPalette
 import com.gabriel.zenithui.ui.theme.ZenithShapes
@@ -812,6 +813,7 @@ private fun AuraCodeField(value: String, onChange: (String) -> Unit, modifier: M
         onValueChange = onChange,
         singleLine = true,
         textStyle = TextStyle(
+            fontFamily = LocalZenithFont.current,
             color = palette.onGlass,
             fontSize = 20.sp,
             textAlign = TextAlign.Center,

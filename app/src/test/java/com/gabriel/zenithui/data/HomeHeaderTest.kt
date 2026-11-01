@@ -31,4 +31,26 @@ class HomeHeaderTest {
         assertNull(HomeHeader.text(HomeHeader.OFF, "Gabriel", hour = 8))
         assertEquals("Gabriel", HomeHeader.text("something else", "Gabriel", hour = 8))
     }
+
+    @Test
+    fun `the live kinds are drawn, not written`() {
+        for (style in listOf(HomeHeader.CLOCK, HomeHeader.DATE, HomeHeader.GLANCE)) {
+            assertNull(HomeHeader.text(style, "Gabriel", hour = 9))
+            org.junit.Assert.assertTrue(HomeHeader.isLive(style))
+        }
+        org.junit.Assert.assertFalse(HomeHeader.isLive(HomeHeader.NAME))
+    }
+
+    @Test
+    fun `the date is said the way people say it`() {
+        java.util.Locale.setDefault(java.util.Locale.UK)
+        assertEquals("Saturday 31 October", HomeHeader.dateLine(java.time.LocalDate.of(2026, 10, 31)))
+    }
+
+    @Test
+    fun `the weather at a glance is the temperature and a few words`() {
+        assertEquals("12° and cloudy", HomeHeader.weatherLine(11.6, "Cloudy"))
+        assertEquals("-3°", HomeHeader.weatherLine(-3.2, null))
+        assertNull(HomeHeader.weatherLine(null, "Sunny"))
+    }
 }

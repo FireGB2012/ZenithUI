@@ -92,6 +92,13 @@ import com.gabriel.zenithui.ui.common.AppIcon
 import com.gabriel.zenithui.ui.common.LocalMotionLevel
 import com.gabriel.zenithui.ui.common.appearIn
 import com.gabriel.zenithui.ui.common.launchOrigin
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.runtime.rememberCoroutineScope
+import com.gabriel.zenithui.data.AppShortcut
+import com.gabriel.zenithui.data.DrawerTab
+import com.gabriel.zenithui.data.SettingsLinks
+import com.gabriel.zenithui.ui.theme.LocalZenithFont
+import kotlinx.coroutines.launch
 import com.gabriel.zenithui.ui.common.popIn
 import com.gabriel.zenithui.ui.common.popOut
 import com.gabriel.zenithui.ui.common.pressBounce
@@ -123,6 +130,19 @@ fun AppDrawer(
     onOpen: (String) -> Unit,
     onLongPress: (AppInfo) -> Unit,
     onDismiss: () -> Unit,
+    /** How many apps across. */
+    columns: Int = settings.columns,
+    /** Listed A to Z, so the index down the side means something. */
+    alphabetical: Boolean = true,
+    tabs: List<DrawerTab> = emptyList(),
+    workApps: List<AppInfo> = emptyList(),
+    onNewTab: () -> Unit = {},
+    onEditTab: (Int) -> Unit = {},
+    /** Every app's shortcuts, for the search to find among. */
+    shortcuts: List<AppShortcut> = emptyList(),
+    onShortcut: (AppShortcut) -> Unit = {},
+    onSetting: (SettingsLinks.Link) -> Unit = {},
+    onCopy: (String) -> Unit = {},
 ) {
     val palette = LocalPalette.current
     val context = LocalContext.current
@@ -133,18 +153,31 @@ fun AppDrawer(
     var searching by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
     val gridState = rememberLazyGridState()
+    val scope = rememberCoroutineScope()
 
     // In the library, the group whose small stack you tapped. Searching always spans every app.
     var openGroup by remember { mutableStateOf<String?>(null) }
     val shownGroup = if (query.isBlank()) groups?.firstOrNull { it.name == openGroup } else null
     val shelves = groups != null && query.isBlank() && shownGroup == null
+    // The tab chosen along the top; a tab that has gone is All again.
+    var tab by remember { mutableStateOf<TabChoice>(TabChoice.All) }
+    if (tab is TabChoice.Made && (tab as TabChoice.Made).index !in tabs.indices) tab = TabChoice.All
+    if (tab == TabChoice.Work && workApps.isEmpty()) tab = TabChoice.All
 
-    val filtered = remember(query, apps, shownGroup) {
+    val filtered = remember(query, apps, shownGroup, tab, tabs, workApps) {
         when {
             shownGroup != null -> shownGroup.apps
-            query.isBlank() -> apps
-            else -> apps.filter { it.label.contains(query.trim(), ignoreCase = true) }
+            // A search looks everywhere, work apps too.
+            query.isNotBlank() -> (apps + workApps).filter { it.label.contains(query.trim(), ignoreCase = true) }
+            tab == TabChoice.Work -> workApps
+            tab is TabChoice.Made -> tabs[(tab as TabChoice.Made).index].keys.toSet().let { keys -> apps.filter { it.key in keys } }
+            else -> apps
         }
+    }
+    // The index down the side: each letter and where its first app is.
+    val sections = remember(filtered, alphabetical, query, shelves) {
+        if (!alphabetical || query.isNotBlank() || shelves || filtered.size < 24) emptyList()
+        else filtered.withIndex().distinctBy { indexLetter(it.value.label) }.map { indexLetter(it.value.label) to it.index }
     }
 
     // Composed after the launcher's own handler, so back steps out of a group before closing.
@@ -163,6 +196,8 @@ fun AppDrawer(
 
     // The drawer stays composed between openings, so tidy it up once it is fully closed.
     val closed = progress < 0.01f
+    // Rise slides it up from the foot; Grow and Glass bring it in where it is, as it opens.
+    val inPlace = !horizontal && settings.drawerArrival != "rise" && !LocalMotionLevel.current.reduced
     // Counts the openings, so the first screenful rises in each time and not only the first.
     var opening by remember { androidx.compose.runtime.mutableIntStateOf(0) }
     LaunchedEffect(closed) {
@@ -221,13 +256,34 @@ fun AppDrawer(
                 val placeable = measurable.measure(constraints)
                 layout(placeable.width, placeable.height) {
                     val hidden = 1f - progress.coerceIn(0f, 1f)
-                    if (horizontal) {
-                        placeable.place((hidden * placeable.width).roundToInt(), 0)
-                    } else {
-                        placeable.place(0, (hidden * placeable.height).roundToInt())
+                    when {
+                        horizontal -> placeable.place((hidden * placeable.width).roundToInt(), 0)
+                        // Growing or clearing where it is; once shut it goes out of the way of fingers.
+                        inPlace -> placeable.place(0, if (closed) placeable.height else 0)
+                        else -> placeable.place(0, (hidden * placeable.height).roundToInt())
                     }
                 }
             }
+            .then(
+                if (!inPlace) {
+                    Modifier
+                } else {
+                    Modifier.graphicsLayer {
+                        val shown = progress.coerceIn(0f, 1f)
+                        alpha = shown
+                        if (settings.drawerArrival == "grow") {
+                            // Up out of the foot of the screen, where the swipe begins.
+                            val grown = 0.86f + 0.14f * shown
+                            scaleX = grown
+                            scaleY = grown
+                            transformOrigin = TransformOrigin(0.5f, 1f)
+                        } else {
+                            // A pane clearing where it is, lifting a little as it does.
+                            translationY = 24.dp.toPx() * (1f - shown)
+                        }
+                    }
+                }
+            )
             .draggable(
                 orientation = if (horizontal) Orientation.Horizontal else Orientation.Vertical,
                 state = rememberDraggableState { delta -> onDrag(delta) },
@@ -330,13 +386,33 @@ fun AppDrawer(
                 }
             }
 
+            // The tabs, in the drawer rather than the library, and put away while searching.
+            AnimatedVisibility(
+                visible = groups == null && query.isBlank(),
+                enter = com.gabriel.zenithui.ui.common.unfoldIn(reduced),
+                exit = com.gabriel.zenithui.ui.common.unfoldOut(reduced),
+            ) {
+                DrawerTabs(
+                    tabs = tabs,
+                    hasWork = workApps.isNotEmpty(),
+                    chosen = tab,
+                    onChoose = {
+                        tab = it
+                        scope.launch { gridState.scrollToItem(0) }
+                    },
+                    onNew = onNewTab,
+                    onEdit = onEditTab,
+                    modifier = Modifier.padding(bottom = 8.dp),
+                )
+            }
+
             BoxWithConstraints(Modifier.weight(1f)) {
                 val viewportPx = constraints.maxHeight.toFloat()
                 // How many rows of apps the drawer shows at once, and one over: every one of them
                 // rises in as it opens, not only the top few.
                 val rowsOnShow = (maxHeight / DRAWER_ROW).toInt() + 2
                 LazyVerticalGrid(
-                    columns = GridCells.Fixed(if (shelves) 2 else settings.columns),
+                    columns = GridCells.Fixed(if (shelves) 2 else columns),
                     state = gridState,
                     modifier = Modifier
                         .fillMaxSize()
@@ -369,12 +445,19 @@ fun AppDrawer(
                                     ),
                             )
                         }
-                    } else itemsIndexed(filtered, key = { _, app -> app.key }) { index, app ->
+                    } else {
+                    // What a search finds that is not an app, above the apps it finds.
+                    if (query.isNotBlank()) {
+                        item(key = "answers", span = { GridItemSpan(maxLineSpan) }) {
+                            SearchAnswers(query = query, shortcuts = shortcuts, onCopy = onCopy, onSetting = onSetting, onShortcut = onShortcut)
+                        }
+                    }
+                    itemsIndexed(filtered, key = { _, app -> app.key }) { index, app ->
                         // The whole first screenful is staggered in, a row at a time from the top
                         // and from left to right along each. Anything composed while you are
                         // scrolling must land at once, or the list appears to lag behind.
-                        val stagger = index < settings.columns * rowsOnShow && gridState.firstVisibleItemIndex == 0
-                        val turn = (index / settings.columns) * ROW_TURN_MS + (index % settings.columns) * ICON_TURN_MS
+                        val stagger = index < columns * rowsOnShow && gridState.firstVisibleItemIndex == 0
+                        val turn = (index / columns) * ROW_TURN_MS + (index % columns) * ICON_TURN_MS
                         // Scroll-linked motion: an icon dissolves and shrinks as it slides past
                         // the top or bottom edge, and is left alone once it is fully in view.
                         var itemTop by remember { mutableFloatStateOf(0f) }
@@ -424,10 +507,21 @@ fun AppDrawer(
                                 iconSize = STANDARD_ICON_SIZE,
                                 showLabel = true,
                                 shape = ZenithShapes.forIconShape(settings.iconShape),
+                                badge = true,
+                                onGlass = true,
                             )
                         }
                     }
+                    }
                 }
+
+                FastScroller(
+                    sections = sections,
+                    onJump = { index -> scope.launch { gridState.scrollToItem(index) } },
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .padding(vertical = 12.dp),
+                )
 
                 if (filtered.isEmpty() && query.isNotBlank()) {
                     Column(
@@ -494,7 +588,7 @@ fun AppDrawer(
                     onValueChange = { query = it.replace("\n", "") },
                     singleLine = true,
                     maxLines = 1,
-                    textStyle = TextStyle(color = palette.onGlass, fontSize = 15.sp),
+                    textStyle = TextStyle(fontFamily = LocalZenithFont.current, color = palette.onGlass, fontSize = 15.sp),
                     cursorBrush = SolidColor(palette.accent),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
                     keyboardActions = KeyboardActions(
@@ -618,6 +712,8 @@ private fun LibraryCard(
                                         label = app.label,
                                         size = cell * 0.9f,
                                         shape = shape,
+                                        badge = true,
+                                        onGlass = true,
                                         modifier = Modifier
                                             .pressBounce()
                                             .launchOrigin(app.key)
@@ -675,7 +771,7 @@ private fun MiniStack(
                     for (c in 0 until 2) {
                         val app = apps.getOrNull(r * 2 + c)
                         if (app != null) {
-                            AppIcon(key = app.key, label = app.label, size = small, shape = shape)
+                            AppIcon(key = app.key, label = app.label, size = small, shape = shape, onGlass = true)
                         } else {
                             Spacer(Modifier.size(small))
                         }

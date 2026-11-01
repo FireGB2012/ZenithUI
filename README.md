@@ -46,6 +46,18 @@ built entirely in Jetpack Compose.
   screen blurs and scales behind it in step with the drag. The single-line search field sits at the
   *bottom*, next to your thumb; it searches installed apps and falls through to Google: enter opens
   the first match or, when nothing matches, the web search.
+- **The drawer, your way** (Settings → Apps): A to Z, Most used (counted on the phone as apps are
+  opened), Newest, or By colour (each icon's main colour, round the wheel, greys last:
+  `DrawerSort`, `IconColour`); as many columns as the home screen or three to six. Along the top,
+  tabs you make — **+** for a new one, a name and the apps ticked into it, a hold to change it —
+  and **Work** on a phone with a work profile, whose apps open there. A to Z, a long list gets an
+  index down its right edge: drag along it and a lens of glass beside the thumb shows the letter,
+  the letters near it swell out like a Mac's dock, the list jumps with a tick at each.
+- **Search that answers** — above the apps it finds: a sum (`2+2*3`, `15% of 80`, `80 + 15%`:
+  `Calculator`), a conversion (`5 km in miles`, `30 c to f`, `2 cups in ml`: `Units`), each a pane
+  that turns over as you type and copies at a tap; Android's settings by name ("blue" finds
+  Bluetooth: `SettingsLinks`); and any app's shortcuts by their names. A search spans the work
+  apps too.
 - **Every menu is a bottom sheet** — item menus, Customise, wallpapers. Nothing needs a second
   hand. Settings and the widget gallery are pages of their own, the full height of the screen, on
   one shell (`ui/common/FullPage.kt`): a bar with a way back and a way out, pulled down to close.
@@ -53,6 +65,67 @@ built entirely in Jetpack Compose.
   app for each column of the page, and never fewer than four, and they share the bar out equally:
   a full dock has each app under the icons above it, and a smaller one spreads across the bar
   (`HomeGeometry.dockIconLeft`). Pin from any app's long-press menu.
+- **Edit an app** — long-press it on a page, in the dock or in the drawer → **Edit**: a name of
+  your own, an icon from any installed icon pack (a grid of the pack's pictures, the one it draws
+  this app with first, with a box to find one by name) or one of your photos (Android's own
+  picker, no permission), and **Hide name** for that one icon. It is kept per app (`AppEdit`), so
+  the drawer, the dock, folders and search all agree, and a renamed app is found under its new
+  name. A photo stays in Zenith's files; a backup taken to another phone gives that app its own
+  icon back.
+- **App shortcuts** — the top of an app's long-press menu lists what it offers from its icon (a
+  route home, one chat), as Android's own launcher does. A tap runs one; the button beside it puts
+  it on the page as an icon of its own (`ShortcutCell`), the shortcut's picture with the app's
+  small in its corner, pinned for as long as it is there. Another app's "Add to home screen" —
+  Chrome's, say — comes up as a card of glass over that app (`PinItemActivity`), and lands on the
+  first free spot.
+- **Notification dots** — a bead of glass in the accent at an icon's top corner while its app has
+  something to read, on the page, in the dock and in the drawer; a folder's is the sum of its apps'.
+  Off, Dot or Count, under Settings → Home screen, which also asks Android for notification access
+  the first time. `NotificationDots` only counts: nothing ongoing (music, a download), nothing an
+  app asked not to badge, and nothing of what they say is kept or sent. A dot springs in with the
+  first notification and shrinks away with the last.
+- **Icon style** — **Original**, **Tinted** (each app's one-colour symbol in the accent on a tile
+  of the theme's tint, as Android 13 does) or **Glass** (the symbol on a tile of clear glass, the
+  way iOS draws clear icons). The symbol is the adaptive icon's monochrome layer where the app has
+  one, its foreground where that is a logo on its own, and otherwise what stands out of the icon
+  from its own tile (`IconLoader.loadGlyph`). An icon you chose yourself stays as you chose it.
+- **Shapes and names** — eight icon shapes (Squircle, Circle, Rounded, Square, Pebble, Teardrop,
+  Hexagon, Clover), one path each in `IconShapes` for the pictures and the tiles alike; names in
+  three sizes inside the same strip, so nothing on the page moves, and an optional shadow under
+  them for a busy wallpaper.
+
+## Gestures
+
+Settings → **Gestures** has a row for each gesture on the home screen and what it does now; a
+row opens the list of what it could do instead (`GestureActionSheet`): nothing, the notifications,
+the quick settings, lock the phone, all apps, search, the torch, the bedside clock, Customise,
+Settings, Widgets, the first page, the page overview, or any app — and under an app, its shortcuts.
+
+| Gesture | Unless changed |
+| --- | --- |
+| Swipe down | Notifications |
+| Two-finger swipe down | Quick settings |
+| Two-finger swipe up | Nothing |
+| Double tap | Nothing |
+| Pinch in | Customise |
+| Pinch out | Page overview |
+| Home button, when already home | First page |
+
+Only what is changed is kept (`Gestures.with`), so a gesture nobody touched follows Zenith's own
+choice. Swipe up is always the apps and holding an empty spot always Customise, so Settings can
+always be reached. A swipe down pulls the page after the finger on a band that gives less the
+further it goes, while a pill comes down from the status bar saying what letting go will do and
+lights up, with a tick, once it will; a double tap sends a ring out from under the finger. The
+home button counts as the gesture only when Zenith was already in front with nothing open on it,
+as Android's own launcher tells the two apart; on the way back from an app it folds everything
+back to page one, as before.
+
+Locking needs the **lock helper** (`LockService`), an accessibility service that does nothing else:
+it asks for no events and cannot see the screen. A sheet says so before Android's page opens. The
+shade and quick settings are pulled down the way Android's own launchers do it
+(`SystemPanels`), with the helper as the way round a phone that refuses. The torch is one `Torch`
+for the gesture and the Quick Toggles widget alike, which now knows when the torch was turned on
+anywhere else.
 
 ## Built-in widgets
 
@@ -63,6 +136,21 @@ built entirely in Jetpack Compose.
 | Calendar | 2×2 | Real month grid, today highlighted, days left in the month |
 | Quick Note | 2×2 | Scratchpad persisted with your settings |
 | Quick Toggles | 2×2 | Small tile, 2×2 buttons: working torch (Camera2) plus Wi-Fi / Bluetooth / DND |
+| Now playing | 4×2 | The album's picture, the song, play / pause / skip and how far in, from Android's media sessions (`NowPlaying`, through the dots' notification access); the picture crosses over as the song changes |
+| World clock | 2×2 | Up to four cities, chosen from every time zone, each with its time, a sun or a moon and how far it is from yours ("+9 h, tomorrow"), clock faces in the bigger sizes |
+| Countdown | 2×2 | The days to a date you name, as rolling digits in a ring that fills as the day comes; "today" on the day, and the days since after |
+| Photo frame | 2×2 | Up to twelve of your photos, picked with Android's own picker and kept small in Zenith's files; a different one each time you come home, crossing over, and the next at a tap |
+| To-do | 2×2 | A short list: what is left first, a tick that fills and draws itself, the ticked ones sliding below the rest, a line to add one |
+| Aura | 2×2 | Your streak in rolling digits under a flame, the week behind it as dots that fill one after another, your aura, and in the large size how near the next theme is |
+| Weather | 2×2 | Now, today's high and low, and the next five hours with their skies, for a place you choose (`WeatherRepository`, Open-Meteo) |
+
+Each of them has a No glass version and a design for every shape of space, like the first five,
+and says in the gallery what each size shows. What they need is set from their own menu: cities,
+a date, photos, a place. **Weather is the one thing in Zenith that sends anything without an
+account:** nothing until a place is searched for; then what was typed, to Open-Meteo's place
+search, and from then on the chosen place's latitude and longitude, to its forecast, at most every
+half hour while the home screen is shown. Nothing else goes with it, and the sheet says so before
+anything is sent.
 
 The **search bar** is not a widget: switch it on under Zenith settings → Home screen and it sits
 above the dock, as wide as the icons above it. Tap to search apps, or hit the button for Google.
@@ -102,12 +190,38 @@ settings do. Everywhere else, second lines and small print (the subtitles in Set
 under a choice) are 74% of the ink, which stands six to one or better against every
 theme's backdrop, light and dark (`PaletteToneTest`).
 
+## Other apps' widgets
+
+The gallery's **From your apps** lists every app on the phone that has widgets, A to Z; an app
+opens out to its widgets in a row, each its picture, its name and the cells it takes on this grid
+(`HostedWidgetPicker`). A tap puts it on the first page with room, at the size it asks for —
+Android 12's own cells where it gives them, otherwise its size in dp turned into cells and whole
+rows (`HostedSizes`). Android asks once whether Zenith may show widgets, and a widget with a set-up
+screen opens it; backing out of either puts nothing on the page. An app's own "add this widget"
+comes up as a card of glass over that app, the same one shortcuts use.
+
+On the page it is the app's own view in Zenith's frame (`HostedWidgetCell`, through one
+`AppWidgetHost`, kept up to date while the home screen is on show), told its size in dp, with an
+optional pane of glass behind it from its menu, off unless asked for since most widgets bring a
+background of their own. It keeps its taps and scrolls: a hold that does not move is watched from
+above without taking anything (`holdToCarry`), and only then is it picked up, carried, resized
+with the same corner and bar, and taken away like any widget, giving its number back to Android.
+Only one view may draw a widget at a time, so the grey copy under a finger and the small home
+screen in Settings show its picture. A backup brings widgets onto another phone as a pane saying
+"Tap to put Spotify back", which does, in the same place and size.
+
+**Stacks** — any widget's menu has **Stack another widget here**, which opens the gallery to choose
+one, Zenith's or another app's, to go on top at the same size (`StackCell`, `StackRules`). A swipe
+up or down on a stack brings the next, the one leaving shrinking back under it; small dots at its
+edge come up while it is swiped and fade after. Its menu takes any widget out onto a spot of its
+own, and one left alone stands as a widget again. Eight at most.
+
 ## Customisation
 
 Long-press an empty spot → **Customise** → **Settings**. Settings is a page of its own, the full
-height of the screen (`ui/settings/`): a search box and eight groups, each saying how it is set
-now — Wallpaper & theme, Home screen, Motion & feel, Apps, Zenith Plus, Aura, Backup & reset, About
-& help — and a ninth, Account, in a build that has a server. They stand in three blocks, each
+height of the screen (`ui/settings/`): a search box and ten groups, each saying how it is set
+now — Wallpaper & theme, Home screen, Motion & feel, Gestures, Apps, Zenith Plus, Looks, Aura,
+Backup & reset, About & help — and an eleventh, Account, in a build that has a server. They stand in three blocks, each
 headed with what it holds (Look and feel; Plus and Aura, or Plus, Aura and account; Backup and
 help) and set further from
 the next than its rows are from each other. A group pushes in from the side; back, the arrow or a swipe from the left edge pops it.
@@ -155,6 +269,74 @@ Settings → Look.
 
 Zenith only ever repaints a wallpaper it set and that is still on screen. A photo, or anything
 chosen in another app, is never replaced, and choosing one ends the following.
+
+## Looks
+
+A **Look** is the whole home screen saved under a name (`data/Looks.kt`, Settings → Looks): the
+palette and light or dark, the glass, the wallpaper design, the icon shape, pack and style, names
+and badges, the grid, the dock, the layout, the motion and the gestures. Nothing of yours goes in
+one: not your name, your note or lists, the countdown, your hidden apps, Aura or Plus. A Look is
+kept as the very JSON the settings and layout are saved as, so one made today still puts on when
+settings have grown; one from a newer Zenith puts on all this one knows. Putting one on cannot
+change anything a Look does not keep (`Looks.KEYS`), so a Look written by hand cannot give anybody
+Plus or Aura.
+
+Tap a Look and Settings goes, the first page comes round, and the home screen flies in wearing it,
+the way it arrives after an unlock; its wallpaper design is painted again in its colours. A Look
+row shows its colours as three dots and which one is on now; its menu puts it on, saves the home
+screen over it, renames, shares or deletes it. Twelve are kept, and they go in backups (an older
+Zenith reads past them); restoring adds the backup's Looks to the phone's.
+
+**The schedule** puts a Look on by itself: a Look, from when until when, on which days. A slot that
+ends before it starts runs past midnight and belongs to the day it began. A Look comes on as its
+slot begins — waiting, if you are using the home screen, until nothing has been touched for a
+moment — or as you come home during it, and only once a slot: one you choose by hand in the middle
+of a slot is left alone until the next (`LookSchedule`).
+
+**Sharing** needs an account: a Look goes to the server without anything that only works on this
+phone — other apps' widgets, shortcuts, photos chosen as icons — and without the names you gave
+apps, and comes back as a code, `LOOK-` and six letters, to copy or send. Anybody can open a code,
+with no account and no Plus; a Look from another phone leaves out the apps this one has not got.
+A shared Look keeps its code, which gives it as it was when shared; **Stop sharing** takes the
+code back, and deleting the Look or the account does too. The few Looks under **Featured** are
+the ones the server's keeper chose (`zenith_server.py --feature CODE`): nothing anybody shares is
+shown to anybody else unless somebody chose it. The list, like a code, is asked for only when you
+tap: with no account, nothing goes to the server unless you ask.
+
+Saving, switching, scheduling and sharing are Zenith Plus; opening a code, renaming, stopping a
+share and deleting are not. Photos chosen as icons are kept while the home screen or any saved
+Look shows them, and let go of when nothing does.
+
+## Fonts, palettes and the Glass studio
+
+**Font** (Wallpaper & theme): System, Inter, Condensed, Serif, Mono, Typewriter, Casual, Hand or
+Small caps, for everything; **Numbers** sets the clocks, the battery, the countdown and the weather
+in the same font, in Thin, or in any other (`ui/theme/Fonts.kt`). Inter and JetBrains Mono are
+carried in the app, unchanged, under the SIL Open Font Licence (About & help → Fonts shows it in
+full); the rest are the phone's own fonts asked for by name, and a phone without one shows its
+usual font. Every style Zenith sets text in takes the font — the theme's, and the ones built by
+hand for names, fields and widgets — so nothing is left in a font that was not chosen.
+
+**Wallpaper** is a palette like the others, taken from the wallpaper (`WallpaperPalette`): its
+liveliest colour that is more than a speck, for the glow; a second of another hue, for gradients;
+its main colour, kept deep or pale, behind the glass; and light or dark from the picture's own
+lightness. It is read from Zenith's copy of the wallpaper, or from Android's reading of it where
+Zenith has no copy, and changes when the wallpaper does — but never from one of Zenith's own
+designs, which are painted in the palette and would only chase their own tail.
+
+**By time of day** (Plus) gives dawn, day, dusk and night each a palette (`DayParts`): as a part
+begins its palette fades in; one chosen by hand mid-part stays until the next.
+
+**Glass studio** (Plus, `GlassTuning`): bend, frost, rim light, rainbow edge, how much of the theme
+is in the veil, and where the light comes from — Zenith's own, up and to the left, or anywhere on a
+dial — and whether it swings as the phone tips. Every change shows at once on the sheet's three
+panes, on the sheet and on the home screen behind it; Reset puts Zenith's glass back. The defaults
+change nothing (`GlassTuningTest`), and without Plus the glass is Zenith's own again, the tuning
+kept.
+
+**Each Zenith widget** can have a colour of its own (its menu → Colour): twelve, or the theme's.
+The widget eases into it and back out to the theme's; with none it changes with the theme to the
+frame.
 
 ## Motion
 
@@ -229,6 +411,84 @@ to quick fades: no fly-in, no rocking, no tilt; sheets and full-screen pages fad
 stand, a sheet still follows a finger but settles without a spring, and home pages simply slide.
 Haptics go through one `Haptics` helper — a tick, a pick-up, a confirmation — and are silent when
 the switch is off.
+
+## More motion
+
+- **Page swipe** has eight turns (`PageEffects`): Depth, Slide, Cube and Stack, and Carousel (pages
+  on a turntable), Wheel (round a great wheel under the screen), Flip (a card turned over where it
+  stands) and Fold (folding in at the crease). Each is a tile in Motion & feel with two little
+  pages caught part way through it, drawn by the same transform, and plays through once when tapped.
+- **Coming home**: from the middle (as before), from below, or in a cascade a column at a time
+  (`FlyIn.start`). **Opening the drawer**: Rise, Grow, or Glass, clearing where it is.
+  **Pressing**: Bounce, Squish (soft, and it wobbles back), or Ripple, a ring of light from the
+  finger that falls only on what was pressed. All of it gives way to plain fades with movement
+  reduced.
+- **Page overview** (pinch out, or any gesture set to it): every page small on a tray. Tap one to
+  go there; hold and slide one to move it, the others stepping aside; flick one up to take it away
+  (an empty one goes at once, one with things on it asks); the last tile adds a page (`PageOrder`).
+- **Carry many**: holding one icon, tap others with another finger; each flies into a stack under
+  your finger with a count on it, and they are put down round where you let go, side by side
+  (`LayoutBuilder.landBeside`). Into the bin, they all go.
+- **Undo**: anything taken off the home screen leaves a pill of glass for five seconds, a ring
+  running down round Undo. Undo puts it back where it was, or in the first opening, springing out
+  of its spot; until then other apps' widgets keep their numbers and shortcuts their pins
+  (`LayoutBuilder.putBack`).
+
+## Home screen details
+
+- **Dock**: a glass bar, **Floating** (a pill that hugs its icons and grows or shrinks round them),
+  or icons only.
+- **Which page you are on**: dots, a line with a bar gliding along it, the page's number rolling
+  over, or nothing.
+- **Top of the page**: your name, a greeting, a large **Clock** in the numbers' font, the **Date**,
+  or **At a glance** — the date and the weather where the Weather widget is set — or nothing.
+- **Folders**: Grid, Stack (the first three fanned) or Cover (the first app large), and a colour
+  of its own from a folder's menu.
+- **Lock layout**: a hold only opens an item's menu, the dock's icons stay put, and every menu
+  offers to unlock. **Hide the status bar**: it comes in for a moment from the very top.
+
+## The island
+
+**Island** (Zenith Plus, Settings → Island) is the camera, stretched: black round the camera hole,
+drawn over every app (`island/`). At rest it is exactly the camera and nothing more. When
+something happens it grows out of the camera on a spring, with what it shows in its two rounded
+ends, either side of the lens, and nothing over it:
+
+- **Music**: the cover, and bars in the cover's own colour. Tap for the song, how far through it
+  is, and back, play and next.
+- **Calls and timers**: any app's ongoing notification with a running clock, a call's time in
+  green and a timer's or stopwatch's in orange. Tap to open the app.
+- **Notifications**: the app's icon and who it is from, for five seconds. Tap to read the message
+  in a card; tap the card to open it. Only what Android itself would alert you to: not silent or
+  minimised notifications, not what Do Not Disturb is holding back, not "running" notices,
+  downloads or updates that do not alert again. For a chat, the newest message and its sender.
+- **Charger** and **ring or silent**: for a moment, as they change.
+
+A moment outranks a running clock, which outranks music (`IslandRules`); what else is going on
+splits off into a small bubble beside it. An opened card drops below the status bar, joined to the
+island by a short neck so the two read as one shape of black, and folds back into the camera at a
+tap anywhere else.
+
+All of it is measured from the phone: the camera's size and place from the display cutout, and the
+status bar's height from the window insets (`IslandGeometry`). Its height is the camera's and a
+hair, the icons sit in the middle of its rounded ends, and it grows to at most 46% of the screen's
+width, which keeps it clear of the clock and the status icons. Its words are in the phone's own
+sans, like the status bar beside it, whatever font the home screen is in.
+
+Its page has a live preview, the top of this very phone at its own size with the same island on
+it, and buttons to try music, a call, a notification, silent and the charger; then what it shows,
+**Always show it** (a small pill even with nothing going on), and keeping out of the way in full
+screen and sideways. It needs Android's "Display over other apps", and notification access for
+music, calls and notifications; the page asks for each.
+
+`IslandService` keeps one small window round the camera while the island is on, Plus is active and
+Android allows it, which also keeps it running, and a second one while a card is open. Three
+things Android decides: a window over other apps that takes no touches is drawn at most 80% solid,
+so the island's window takes touches whenever it is in sight; the status bar sits above every
+app's window and keeps the touches inside it (on the Galaxy A55 a tap on the island itself went to
+the status bar), so the island also takes taps on a strip just under it; and Android's own
+Settings hides every app's window over it. It reads only what the phone's notifications and music
+already show, keeps nothing and sends nothing.
 
 ## How the glass works
 
@@ -308,6 +568,8 @@ and sends nothing. With an address:
   pays you 150 and its owner 150, for the owner's first ten friends. The owner's phone is paid the
   next time it asks how the account stands: on the Account or Backup page, and at most every ten
   minutes on the way back to the home screen.
+- **Looks** (see [Looks](#looks)): a Look is shared from the account under a code, which anybody
+  can open; an account keeps its twenty newest, and they go when it does.
 
 `data/server/` is the app's side: `ZenithServer` (every route, over `HttpURLConnection` and
 `org.json`; it answers yes, a no the app can act on, or "out of reach", and never throws),
@@ -368,9 +630,8 @@ before.
 
 ## Known limits
 
-- Third-party `AppWidgetHost` widgets are not hosted yet — the widgets above are Zenith's own.
 - Reading the wallpaper for the glass backdrop requires Zenith to be the default home app. Entering
   the launcher raises the system "Set Zenith UI as your default home app?" dialog (`RoleManager`,
   `ROLE_HOME`, falling back to the home settings screen); it is asked at most three times, and a
-  one-tap hint stays above the dock until it is granted.
-- Legacy (non-adaptive) app icons are drawn as-is rather than masked to the chosen icon shape.
+  one-tap hint stays above the dock until it is granted. App shortcuts need the same: Android only
+  hands them to the home app.

@@ -17,6 +17,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithCache
@@ -45,6 +46,10 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.gabriel.zenithui.data.GlassBody
 import com.gabriel.zenithui.data.GlassLevels
+import com.gabriel.zenithui.data.GlassTuning
+import kotlin.math.cos
+import kotlin.math.hypot
+import kotlin.math.sin
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlin.math.ceil
@@ -96,6 +101,7 @@ fun Modifier.glass(
     val screen = LocalScreenSize.current
     val wallpaperOffset = LocalWallpaperOffset.current
     val tilt = LocalTilt.current
+    val tuning = LocalGlassTuning.current
     val amount = (LocalGlassStrength.current * strength).coerceIn(0f, 1.4f)
     val look = glassLook(
         material = material,
@@ -106,7 +112,7 @@ fun Modifier.glass(
         tint = if (tint.isSpecified) tint else palette.glassTint,
         border = border,
         depth = LocalGlassBody.current,
-    )
+    ).tuned(tuning, if (tint.isSpecified) tint else palette.glassTint)
     val lens = rememberLens(levels)
     var origin by remember { mutableStateOf(Offset.Zero) }
     val scope = rememberCoroutineScope()
@@ -173,6 +179,7 @@ fun Modifier.glass(
                     lean = tilt.value,
                     dark = palette.dark,
                     touch = press?.touch(size) ?: GlassTouch.None,
+                    tuning = tuning,
                 )
             }
         }
@@ -354,6 +361,42 @@ internal fun glassLook(
     )
 }
 
+/** The Glass studio's tuning, for every pane: Zenith's own glass with the defaults, and without Plus. */
+val LocalGlassTuning = staticCompositionLocalOf { GlassTuning() }
+
+/** This pane as the Glass studio has it; with the defaults, exactly as it was. */
+internal fun GlassLook.tuned(tuning: GlassTuning, tint: Color): GlassLook {
+    if (tuning.isDefault) return this
+    return copy(
+        refraction = refraction * tuning.bend,
+        frost = (frost + tuning.frost).coerceIn(0f, 3f),
+        dispersion = dispersion * tuning.rainbow,
+        shine = shine * tuning.rim,
+        mirror = (mirror * tuning.rim).coerceIn(0f, 1f),
+        // More of the theme in the veil, as thick as it was: readable as before, just more coloured.
+        wash = if (tuning.tint <= 0f) wash else lerp(wash, tint.copy(alpha = wash.alpha), tuning.tint),
+    )
+}
+
+/** How far Zenith's own light is set from a pane: up and to the left, the length of (-0.45, -1). */
+private val ZENITH_LIGHT_REACH = hypot(0.45f, 1f)
+
+/**
+ * Where the light falls on a pane from, the phone leaning by [lean]: up and to the left, or from
+ * where the Glass studio put it, and swinging the other way as the phone tips unless it is stilled.
+ */
+internal fun lightFrom(lean: Offset, tuning: GlassTuning): Offset {
+    val swing = if (tuning.lightTilt) lean else Offset.Zero
+    val angle = tuning.lightAngle
+    val base = if (angle == null) {
+        Offset(-0.45f, -1f)
+    } else {
+        val radians = Math.toRadians(angle.toDouble())
+        Offset((cos(radians) * ZENITH_LIGHT_REACH).toFloat(), (sin(radians) * ZENITH_LIGHT_REACH).toFloat())
+    }
+    return Offset(base.x - 1.6f * swing.x, base.y - 1.2f * swing.y)
+}
+
 /** How soft the wallpaper is through the face of a pane with no extra body: see [GlassLook.frost]. */
 internal const val FROST_CLEAR = 1.0f
 internal const val FROST_REGULAR = 1.55f
@@ -407,16 +450,19 @@ internal fun DrawScope.drawLiquidGlass(
     lean: Offset,
     dark: Boolean,
     touch: GlassTouch = GlassTouch.None,
+    /** Where the light is, if the Glass studio has moved it or stilled it. */
+    tuning: GlassTuning = GlassTuning(),
 ) {
     if (paneSize.width <= 0f || paneSize.height <= 0f || look.opacity <= 0f) return
     // The light sits up and to the left, and swings the other way as the phone tips.
-    val light = Offset(-0.45f - 1.6f * lean.x, -1f - 1.2f * lean.y)
+    val light = lightFrom(lean, tuning)
+    val leaning = if (tuning.lightTilt) lean else Offset.Zero
     val canSee = softened != null && screen.width > 0 && screen.height > 0
     val shown = systemWallpaperOffset(wallpaperOffset)
 
     if (canSee && lens != null && Build.VERSION.SDK_INT >= 33) {
         drawIntoCanvas {
-            lens.draw(it.nativeCanvas, paneSize, outline, origin, screen, shown, density, look, light, dark, touch, lean)
+            lens.draw(it.nativeCanvas, paneSize, outline, origin, screen, shown, density, look, light, dark, touch, leaning)
         }
         return
     }

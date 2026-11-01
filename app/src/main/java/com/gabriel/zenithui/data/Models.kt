@@ -18,8 +18,10 @@ data class AppInfo(
     val className: String,
     val label: String,
     val system: Boolean = false,
+    /** In the work profile: kept apart from the rest, and opened there. See [WorkKeys]. */
+    val work: Boolean = false,
 ) {
-    val key: String get() = "$packageName/$className"
+    val key: String get() = if (work) WorkKeys.of("$packageName/$className") else "$packageName/$className"
 
     companion object {
         fun keyOf(packageName: String, className: String) = "$packageName/$className"
@@ -95,6 +97,8 @@ data class FolderCell(
     val keys: List<String>,
     override val dx: Float = 0f,
     override val dy: Float = 0f,
+    /** Its own colour, as ARGB; 0 for the glass as it is. */
+    val colour: Long = 0L,
 ) : HomeItem {
     override val spanX: Int get() = 1
     override val spanY: Int get() = ROW_UNITS
@@ -109,7 +113,69 @@ data class FolderCell(
         if (dx != 0f || dy != 0f) { put("dx", dx.toDouble()); put("dy", dy.toDouble()) }
         put("title", title)
         put("keys", JSONArray(keys))
+        if (colour != 0L) put("col", colour)
     }
+}
+
+/**
+ * One of an app's shortcuts put on the page as an icon of its own: a route home, one chat. Its
+ * picture is the shortcut's own icon with the app's in the corner, and Android keeps the shortcut
+ * pinned for as long as it is on a page.
+ */
+@Immutable
+data class ShortcutCell(
+    override val id: String,
+    override val page: Int,
+    override val col: Int,
+    override val row: Int,
+    val packageName: String,
+    val shortcutId: String,
+    /** The shortcut's name when it was put here, for when the app cannot be asked. */
+    val label: String,
+    override val dx: Float = 0f,
+    override val dy: Float = 0f,
+) : HomeItem {
+    override val spanX: Int get() = 1
+    override val spanY: Int get() = ROW_UNITS
+
+    /** What it is known by when it is drawn, opened and landed back into: see [ShortcutKeys]. */
+    val key: String get() = ShortcutKeys.of(packageName, shortcutId)
+
+    override fun moved(page: Int, col: Int, row: Int) = copy(page = page, col = col, row = row, dx = 0f, dy = 0f)
+
+    override fun nudged(dx: Float, dy: Float) = copy(dx = dx, dy = dy)
+
+    override fun toJson(): JSONObject = JSONObject().apply {
+        put("t", "shortcut")
+        put("id", id); put("p", page); put("c", col); put("r", row)
+        if (dx != 0f || dy != 0f) { put("dx", dx.toDouble()); put("dy", dy.toDouble()) }
+        put("pkg", packageName); put("sid", shortcutId); put("label", label)
+    }
+}
+
+/**
+ * A shortcut is known by a key of its own, `shortcut:<package>/<id>`, which is never mistaken for
+ * an app's: icons, the card an app opens through and the landing all go by it.
+ */
+object ShortcutKeys {
+    const val PREFIX = "shortcut:"
+
+    fun of(packageName: String, shortcutId: String): String = "$PREFIX$packageName/$shortcutId"
+
+    fun isShortcut(key: String): Boolean = key.startsWith(PREFIX)
+
+    /** The package and the shortcut's id. An id can hold a slash; a package name never does. */
+    fun parse(key: String): Pair<String, String>? {
+        if (!isShortcut(key)) return null
+        val parts = key.removePrefix(PREFIX).split('/', limit = 2)
+        return if (parts.size == 2 && parts[0].isNotEmpty() && parts[1].isNotEmpty()) parts[0] to parts[1] else null
+    }
+}
+
+/** One of an app's shortcuts, as its long-press menu lists it. */
+@Immutable
+data class AppShortcut(val packageName: String, val id: String, val label: String) {
+    val key: String get() = ShortcutKeys.of(packageName, id)
 }
 
 @Immutable
@@ -123,6 +189,8 @@ data class WidgetCell(
     override val spanY: Int,
     override val dx: Float = 0f,
     override val dy: Float = 0f,
+    /** Its own accent, as ARGB; 0 for the theme's. */
+    val accent: Long = 0L,
 ) : HomeItem {
     override fun moved(page: Int, col: Int, row: Int) = copy(page = page, col = col, row = row, dx = 0f, dy = 0f)
 
@@ -133,6 +201,105 @@ data class WidgetCell(
         put("id", id); put("p", page); put("c", col); put("r", row)
         if (dx != 0f || dy != 0f) { put("dx", dx.toDouble()); put("dy", dy.toDouble()) }
         put("type", type); put("sx", spanX); put("sy", spanY)
+        if (accent != 0L) put("acc", accent)
+    }
+}
+
+/**
+ * Another app's widget on the page — Spotify's, Gmail's, Google's — drawn by that app through
+ * Android's widget host, in a frame on Zenith's grid like any widget of its own.
+ */
+@Immutable
+data class HostedWidgetCell(
+    override val id: String,
+    override val page: Int,
+    override val col: Int,
+    override val row: Int,
+    override val spanX: Int,
+    override val spanY: Int,
+    /** Android's number for this one widget: what the host draws it by. Only good on this phone. */
+    val appWidgetId: Int,
+    /** Which widget it is, as a flattened component name: how it is found again after a restore. */
+    val provider: String,
+    /** A pane of glass behind it. Off by default: most widgets bring a background of their own. */
+    val glass: Boolean = false,
+    override val dx: Float = 0f,
+    override val dy: Float = 0f,
+) : HomeItem {
+    override fun moved(page: Int, col: Int, row: Int) = copy(page = page, col = col, row = row, dx = 0f, dy = 0f)
+
+    override fun nudged(dx: Float, dy: Float) = copy(dx = dx, dy = dy)
+
+    override fun toJson(): JSONObject = JSONObject().apply {
+        put("t", "hosted")
+        put("id", id); put("p", page); put("c", col); put("r", row)
+        if (dx != 0f || dy != 0f) { put("dx", dx.toDouble()); put("dy", dy.toDouble()) }
+        put("sx", spanX); put("sy", spanY)
+        put("wid", appWidgetId); put("prov", provider)
+        if (glass) put("glass", true)
+    }
+}
+
+/**
+ * One widget of a stack: one of Zenith's by its type, or another app's by its host number. It
+ * keeps the id it had as a widget of its own, so whatever was set for it stays with it.
+ */
+@Immutable
+data class StackMember(
+    val id: String,
+    val type: String = "",
+    val appWidgetId: Int = 0,
+    val provider: String = "",
+) {
+    val hosted: Boolean get() = appWidgetId != 0
+
+    fun toJson(): JSONObject = JSONObject().apply {
+        put("id", id)
+        if (hosted) { put("wid", appWidgetId); put("prov", provider) } else put("type", type)
+    }
+
+    companion object {
+        fun fromJson(o: JSONObject): StackMember? {
+            val id = o.optString("id")
+            val wid = o.optInt("wid", 0)
+            val type = o.optString("type")
+            return when {
+                id.isEmpty() -> null
+                wid != 0 -> StackMember(id, appWidgetId = wid, provider = o.optString("prov"))
+                type.isNotEmpty() -> StackMember(id, type = type)
+                else -> null
+            }
+        }
+    }
+}
+
+/**
+ * Several widgets in one spot, one over another: a swipe up or down brings the next, as with the
+ * Smart Stacks on an iPhone. Made from a widget's menu, and taken apart from it too.
+ */
+@Immutable
+data class StackCell(
+    override val id: String,
+    override val page: Int,
+    override val col: Int,
+    override val row: Int,
+    override val spanX: Int,
+    override val spanY: Int,
+    /** What it holds, the one on top first. Never fewer than two: one alone is a widget again. */
+    val members: List<StackMember>,
+    override val dx: Float = 0f,
+    override val dy: Float = 0f,
+) : HomeItem {
+    override fun moved(page: Int, col: Int, row: Int) = copy(page = page, col = col, row = row, dx = 0f, dy = 0f)
+
+    override fun nudged(dx: Float, dy: Float) = copy(dx = dx, dy = dy)
+
+    override fun toJson(): JSONObject = JSONObject().apply {
+        put("t", "stack")
+        put("id", id); put("p", page); put("c", col); put("r", row)
+        if (dx != 0f || dy != 0f) { put("dx", dx.toDouble()); put("dy", dy.toDouble()) }
+        put("sx", spanX); put("sy", spanY)
+        put("members", JSONArray().apply { members.forEach { put(it.toJson()) } })
     }
 }
 
@@ -188,6 +355,41 @@ object Widgets {
         "Torch, Wi-Fi, Bluetooth and Do Not Disturb.",
         spanX = 2, spanY = 2 * ROW_UNITS, minSpanX = 2, minSpanY = ROW_UNITS,
     )
+    val Media = WidgetSpec(
+        "media", "Now playing",
+        "What is playing, with play, pause and skip.",
+        spanX = 4, spanY = 2 * ROW_UNITS, minSpanX = 2, minSpanY = ROW_UNITS,
+    )
+    val WorldClock = WidgetSpec(
+        "world", "World clock",
+        "The time in the cities you choose, and whether it is day there.",
+        spanX = 2, spanY = 2 * ROW_UNITS, minSpanX = 2, minSpanY = ROW_UNITS,
+    )
+    val Countdown = WidgetSpec(
+        "countdown", "Countdown",
+        "The days to a date you name, on a ring that fills as it comes.",
+        spanX = 2, spanY = 2 * ROW_UNITS, minSpanX = 1, minSpanY = ROW_UNITS,
+    )
+    val Photos = WidgetSpec(
+        "photo", "Photo frame",
+        "Your photos, a different one each time you come home.",
+        spanX = 2, spanY = 2 * ROW_UNITS, minSpanX = 1, minSpanY = ROW_UNITS,
+    )
+    val Todo = WidgetSpec(
+        "todo", "To-do",
+        "A short list, ticked off as you go.",
+        spanX = 2, spanY = 2 * ROW_UNITS, minSpanX = 2, minSpanY = ROW_UNITS,
+    )
+    val Streak = WidgetSpec(
+        "aura", "Aura",
+        "Your streak, the week behind it and your aura.",
+        spanX = 2, spanY = 2 * ROW_UNITS, minSpanX = 1, minSpanY = ROW_UNITS,
+    )
+    val Weather = WidgetSpec(
+        "weather", "Weather",
+        "Now, today's high and low, and the hours ahead.",
+        spanX = 2, spanY = 2 * ROW_UNITS, minSpanX = 2, minSpanY = ROW_UNITS,
+    )
 
     // No longer placed on a page: the search bar is the bar above the dock, switched on in
     // settings. The type stays so that layouts saved with one can be read and converted.
@@ -199,10 +401,10 @@ object Widgets {
         fullWidth = true,
     )
 
-    val all = listOf(Clock, Battery, Calendar, Notes, Toggles, Search)
+    val all = listOf(Clock, Battery, Calendar, Notes, Toggles, Media, WorldClock, Countdown, Photos, Todo, Streak, Weather, Search)
 
     /** The widgets that can be put on a page. */
-    val placeable = listOf(Clock, Battery, Calendar, Notes, Toggles)
+    val placeable = listOf(Clock, Battery, Calendar, Notes, Toggles, Media, WorldClock, Countdown, Photos, Todo, Streak, Weather)
 
     /**
      * The "No glass" section: the same widgets with no pane round them. Their numbers, rings and
@@ -214,6 +416,13 @@ object Widgets {
         Calendar.copy(type = BARE_PREFIX + Calendar.type, title = "Glass Calendar", description = "Today's date in glass, with the month around it."),
         Notes.copy(type = BARE_PREFIX + Notes.type, title = "Glass Note", description = "Your note written on the wallpaper, under a glass pencil."),
         Toggles.copy(type = BARE_PREFIX + Toggles.type, title = "Glass Toggles", description = "Your quick controls as glass icons, lit in colour when on."),
+        Media.copy(type = BARE_PREFIX + Media.type, title = "Glass Now playing", description = "The album's picture on the wallpaper, under glass controls."),
+        WorldClock.copy(type = BARE_PREFIX + WorldClock.type, title = "Glass World clock", description = "The cities' times in glass, a sun or a moon by each."),
+        Countdown.copy(type = BARE_PREFIX + Countdown.type, title = "Glass Countdown", description = "The days left as a big glass number."),
+        Photos.copy(type = BARE_PREFIX + Photos.type, title = "Glass Photo frame", description = "Your photo straight on the wallpaper, with no frame round it."),
+        Todo.copy(type = BARE_PREFIX + Todo.type, title = "Glass To-do", description = "Your list written on the wallpaper, under glass ticks."),
+        Streak.copy(type = BARE_PREFIX + Streak.type, title = "Glass Aura", description = "Your streak in glass, under a glass flame."),
+        Weather.copy(type = BARE_PREFIX + Weather.type, title = "Glass Weather", description = "The temperature in glass, under a glass sky."),
     )
 
     fun byType(type: String): WidgetSpec? = all.firstOrNull { it.type == type } ?: noGlass.firstOrNull { it.type == type }
@@ -254,12 +463,48 @@ private fun baseItemFromJson(o: JSONObject): HomeItem? = when (o.optString("t"))
         id = o.optString("id"), page = o.optInt("p"), col = o.optInt("c"), row = o.optInt("r"),
         title = o.optString("title", "Folder"),
         keys = o.optJSONArray("keys").toStringList(),
+        colour = o.optLong("col", 0L),
     )
 
     "widget" -> WidgetCell(
         id = o.optString("id"), page = o.optInt("p"), col = o.optInt("c"), row = o.optInt("r"),
         type = o.optString("type"), spanX = o.optInt("sx", 2).coerceAtLeast(1), spanY = o.optInt("sy", 2).coerceAtLeast(1),
+        accent = o.optLong("acc", 0L),
     )
+
+    "shortcut" -> {
+        val pkg = o.optString("pkg")
+        val sid = o.optString("sid")
+        if (pkg.isEmpty() || sid.isEmpty()) null else ShortcutCell(
+            id = o.optString("id"), page = o.optInt("p"), col = o.optInt("c"), row = o.optInt("r"),
+            packageName = pkg, shortcutId = sid, label = o.optString("label"),
+        )
+    }
+
+    "hosted" -> {
+        val provider = o.optString("prov")
+        if (provider.isEmpty()) null else HostedWidgetCell(
+            id = o.optString("id"), page = o.optInt("p"), col = o.optInt("c"), row = o.optInt("r"),
+            spanX = o.optInt("sx", 2).coerceAtLeast(1), spanY = o.optInt("sy", 2 * ROW_UNITS).coerceAtLeast(1),
+            appWidgetId = o.optInt("wid", 0), provider = provider, glass = o.optBoolean("glass", false),
+        )
+    }
+
+    "stack" -> {
+        val array = o.optJSONArray("members") ?: JSONArray()
+        val members = (0 until array.length()).mapNotNull { array.optJSONObject(it)?.let(StackMember::fromJson) }
+        val stack = StackCell(
+            id = o.optString("id"), page = o.optInt("p"), col = o.optInt("c"), row = o.optInt("r"),
+            spanX = o.optInt("sx", 2).coerceAtLeast(1), spanY = o.optInt("sy", 2 * ROW_UNITS).coerceAtLeast(1),
+            members = members,
+        )
+        // A stack written with one widget left in it is that widget; with none, nothing.
+        when (members.size) {
+            0 -> null
+            1 -> StackRules.alone(stack, members.first())
+            else -> stack
+        }
+    }
 
     else -> null
 }
@@ -267,4 +512,17 @@ private fun baseItemFromJson(o: JSONObject): HomeItem? = when (o.optString("t"))
 fun JSONArray?.toStringList(): List<String> {
     if (this == null) return emptyList()
     return (0 until length()).mapNotNull { optString(it).takeIf { s -> s.isNotEmpty() } }
+}
+
+/** How long something taken off the home screen can be put back. */
+const val UNDO_MS = 5000L
+
+/** [this], the same thing in the same place, under the id [id]. */
+fun HomeItem.withId(id: String): HomeItem = when (this) {
+    is AppCell -> copy(id = id)
+    is FolderCell -> copy(id = id)
+    is WidgetCell -> copy(id = id)
+    is ShortcutCell -> copy(id = id)
+    is HostedWidgetCell -> copy(id = id)
+    is StackCell -> copy(id = id)
 }

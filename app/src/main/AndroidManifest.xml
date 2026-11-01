@@ -6,10 +6,15 @@
     <uses-permission android:name="com.android.vending.BILLING" />
     <uses-permission android:name="android.permission.SET_WALLPAPER" />
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- A swipe down on the home screen pulls the notification shade down, as on any phone's own launcher. -->
+    <uses-permission android:name="android.permission.EXPAND_STATUS_BAR" />
     <!-- Only used once you make a Zenith account: to sign in, to count Aura codes, to keep a backup. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Optional: only requested when you open the bedside clock and ask it to show your day. -->
     <uses-permission android:name="android.permission.READ_CALENDAR" />
+    <!-- Only for the island (Plus), and only once you allow it in Android's settings: the pill
+         round the camera is drawn over the app you are in. -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
     <!-- The torch tile uses the flash when there is one; the launcher works without it. -->
     <uses-feature android:name="android.hardware.camera.flash" android:required="false" />
@@ -59,6 +64,53 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Another app's "Add to home screen": Android hands it to the home app to confirm. -->
+        <activity
+            android:name=".PinItemActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:autoRemoveFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@style/Theme.ZenithUI.Pin">
+            <intent-filter>
+                <action android:name="android.content.pm.action.CONFIRM_PIN_SHORTCUT" />
+                <action android:name="android.content.pm.action.CONFIRM_PIN_APPWIDGET" />
+            </intent-filter>
+        </activity>
+
+        <!-- The lock helper: an accessibility service that only presses lock, for a gesture that
+             asks for it. Off until switched on in Android's settings; reads nothing. -->
+        <service
+            android:name=".data.LockService"
+            android:exported="true"
+            android:label="@string/lock_service"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/lock_service" />
+        </service>
+
+        <!-- Notification dots, and what is playing for the Now playing widget. Only counts what
+             each app has showing; nothing is kept or sent. Off until notification access is given. -->
+        <service
+            android:name=".data.NotificationDots"
+            android:exported="true"
+            android:label="@string/notification_dots"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
+        <!-- The island over other apps (Plus): started by Zenith while the island is on and allowed,
+             stopped when it is not. Draws one small window round the camera; sends nothing. -->
+        <service
+            android:name=".island.IslandService"
+            android:exported="false" />
     </application>
 
 </manifest>

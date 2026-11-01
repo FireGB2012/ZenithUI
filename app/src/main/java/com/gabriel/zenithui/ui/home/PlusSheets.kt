@@ -91,6 +91,7 @@ import com.gabriel.zenithui.ui.common.unfoldOut
 import com.gabriel.zenithui.ui.common.wordsChange
 import com.gabriel.zenithui.ui.settings.Toggle
 import com.gabriel.zenithui.ui.theme.LocalPalette
+import com.gabriel.zenithui.ui.theme.LocalZenithFont
 import com.gabriel.zenithui.ui.theme.Palettes
 import com.gabriel.zenithui.ui.theme.ZenithShapes
 import com.gabriel.zenithui.ui.theme.glass
@@ -853,7 +854,7 @@ private fun PinField(value: String, onChange: (String) -> Unit, digitsOnly: Bool
         keyboardOptions = KeyboardOptions(
             keyboardType = if (digitsOnly) KeyboardType.NumberPassword else KeyboardType.Ascii,
         ),
-        textStyle = TextStyle(color = palette.onGlass, fontSize = 20.sp, textAlign = TextAlign.Center),
+        textStyle = TextStyle(fontFamily = LocalZenithFont.current, color = palette.onGlass, fontSize = 20.sp, textAlign = TextAlign.Center),
         cursorBrush = Brush.linearGradient(listOf(palette.accent, palette.accent)),
         decorationBox = { inner ->
             Box(

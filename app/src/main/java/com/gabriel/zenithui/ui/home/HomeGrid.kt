@@ -1,5 +1,6 @@
 package com.gabriel.zenithui.ui.home
 
+import androidx.compose.runtime.CompositionLocalProvider
 import com.gabriel.zenithui.ui.common.WideAppIcon
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
@@ -104,10 +105,16 @@ import com.gabriel.zenithui.data.HomeGeometry
 import com.gabriel.zenithui.data.HomeItem
 import com.gabriel.zenithui.data.PxRect
 import com.gabriel.zenithui.data.ROW_UNITS
+import com.gabriel.zenithui.data.HostedWidgetCell
+import com.gabriel.zenithui.data.ShortcutCell
+import com.gabriel.zenithui.data.StackCell
 import com.gabriel.zenithui.data.WidgetCell
 import com.gabriel.zenithui.data.Widgets
 import com.gabriel.zenithui.data.ZenithSettings
 import com.gabriel.zenithui.ui.common.AppIcon
+import com.gabriel.zenithui.ui.common.IconBadge
+import com.gabriel.zenithui.ui.common.IconLabel
+import com.gabriel.zenithui.ui.common.LocalBadges
 import com.gabriel.zenithui.ui.common.LocalMotionLevel
 import com.gabriel.zenithui.ui.common.Motion
 import com.gabriel.zenithui.ui.common.appearIn
@@ -119,9 +126,9 @@ import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.ZenithShapes
 import com.gabriel.zenithui.ui.theme.glass
 import androidx.compose.ui.unit.round
+import com.gabriel.zenithui.ui.theme.withAccent
 import kotlinx.coroutines.launch
 import kotlin.math.abs
-import kotlin.math.hypot
 import kotlin.math.roundToInt
 import kotlin.math.sin
 
@@ -195,8 +202,25 @@ class HomeDragState {
         grab = pointerRoot - itemRoot
     }
 
+    /**
+     * Icons gathered while one is carried: tapped with another finger, each flies into a stack
+     * under the carried one, and they are put down round it together. Only plain app icons, and
+     * only while a plain app icon is carried. Each comes with where it was gathered from, on screen.
+     */
+    val gathered = androidx.compose.runtime.mutableStateListOf<Pair<HomeItem, Offset>>()
+
+    /** [other] tapped while carrying: into the stack, if it can be carried with what is carried. */
+    fun gather(other: HomeItem, from: Offset): Boolean {
+        val carrying = item as? AppCell ?: return false
+        if (!carrying.isPlainIcon || other !is AppCell || !other.isPlainIcon || other.id == carrying.id) return false
+        if (gathered.any { it.first.id == other.id } || gathered.size >= MOST_GATHERED) return false
+        gathered += other to from
+        return true
+    }
+
     fun clear() {
         item = null
+        gathered.clear()
         hoverItemId = null
         hoverCandidateId = null
         removeArmed = false
@@ -234,12 +258,19 @@ class HomeDragState {
  * search bar, the dock — arriving with it: up or down from [from] and fading in, as late as
  * [distance] says (0 with the middle of the page, 1 with its corners).
  */
-internal fun Modifier.arriving(clock: () -> Float, depth: () -> Float, distance: Float, from: Dp): Modifier =
+internal fun Modifier.arriving(clock: () -> Float, depth: () -> Float, distance: Float, from: Dp, style: String = "middle"): Modifier =
     graphicsLayer {
         val at = clock()
         if (at < FlyIn.TOTAL_MS) {
             val out = (1f - FlyIn.progress(at, FlyIn.delayMs(distance))) * depth()
-            translationY = from.toPx() * out
+            // From below everything rises, and in a cascade everything drops in; from the middle
+            // each comes in from its own side.
+            val reach = when (style) {
+                "below" -> abs(from.toPx())
+                "cascade" -> -abs(from.toPx())
+                else -> from.toPx()
+            }
+            translationY = reach * out
             alpha = (1f - out * out).coerceIn(0f, 1f)
         }
     }
@@ -267,7 +298,7 @@ private const val COPY_ALPHA_OVER_BIN = 0.32f
 
 /** How much bigger than itself something is while it is carried: an icon a good deal, anything larger only a little. */
 private fun carriedScale(item: HomeItem): Float =
-    if (item is WidgetCell || (item is AppCell && !item.isPlainIcon)) 1.02f else 1.14f
+    if (item.isWidgetLike || (item is AppCell && !item.isPlainIcon)) 1.02f else 1.14f
 
 /**
  * What has just left a page: thrown away, put in the dock, made into a folder, taken off from its
@@ -313,6 +344,8 @@ fun HomePage(
     onResize: (HomeItem, Int, Int) -> Boolean,
     /** Tapping the item being resized puts it down, just like tapping anywhere else. */
     onResizeDone: () -> Unit = {},
+    /** Another icon has just joined the one being carried. */
+    onGathered: () -> Unit = {},
     onOpenApp: (String) -> Unit,
     /** A folder was tapped: which one, and where its icon is on screen, for it to open out of. */
     onOpenFolder: (FolderCell, Rect) -> Unit,
@@ -321,6 +354,8 @@ fun HomePage(
     onNoteChange: (String) -> Unit,
     onAmbient: () -> Unit,
     onDrop: () -> Unit,
+    /** Another app's widget that did not come through a restore, to be put back: the item, and what it is. */
+    onRestoreWidget: (HomeItem, android.appwidget.AppWidgetProviderInfo) -> Unit = { _, _ -> },
     /**
      * Where the carried item would land if let go now, and what would step aside for it. Only
      * ever for the page in view; the hint and the drop both come from it, so they always agree.
@@ -437,7 +472,7 @@ fun HomePage(
                                 .clip(RoundedCornerShape(round))
                                 .background(palette.onGlass.copy(alpha = 0.12f))
                         )
-                    } else if (dragged is WidgetCell) {
+                    } else if (dragged.isWidgetLike) {
                         Box(
                             Modifier
                                 .fillMaxSize()
@@ -525,15 +560,15 @@ fun HomePage(
             // item flies in from and when it sets off, the middle of the page first.
             val fromCentreX = (item.col + item.dx + item.spanX / 2f) * cellWidthPx - geometry.gridWidth / 2f
             val fromCentreY = (item.row + item.dy + item.spanY / 2f) * cellHeightPx - geometry.gridHeight / 2f
-            val flyDelay = FlyIn.delayMs(
-                hypot(fromCentreX, fromCentreY) / hypot(geometry.gridWidth / 2f, geometry.gridHeight / 2f).coerceAtLeast(1f)
-            )
+            val flyIn = FlyIn.start(settings.arrival, fromCentreX, fromCentreY, geometry.gridWidth.toFloat(), geometry.gridHeight.toFloat())
             // While something is carried everything else on the page rocks a little, each item out
             // of step with its neighbours and at its own pace. A wide widget rocks less: the same
             // angle would swing its corners much further than an icon's.
             val jigglePhase = remember(item.id) { (item.id.hashCode() and 0xFF) / 255f }
             val jiggleAngle = if (item.spanX > 1 || item.spanY > ROW_UNITS) 0.45f else 1.2f
             val carried = item.id == dragged?.id
+            val gatheredHere = drag.gathered.any { it.first.id == item.id }
+            val gatheredAlpha by animateFloatAsState(if (gatheredHere) 0.3f else 1f, Motion.smooth(), label = "gathered")
             // Put down, it comes back to its own size from the size it was carried at, with one
             // small bounce: the copy under your finger and the thing itself are the same thing.
             val lifted = carriedScale(item)
@@ -556,11 +591,12 @@ fun HomePage(
                 }
             }
             val ringFrame = when {
-                item is WidgetCell -> geometry.widgetFrame(item.spanX, item.spanY)
+                item.isWidgetLike -> geometry.widgetFrame(item.spanX, item.spanY)
                 item is AppCell && !item.isPlainIcon -> geometry.superIconFrame(item.spanX, (item.spanY / ROW_UNITS).coerceAtLeast(1))
                 else -> geometry.iconFrame
             }
-            val ringRound = item is FolderCell || (item is AppCell && item.isPlainIcon)
+            val ringRound = item is FolderCell || item is ShortcutCell || (item is AppCell && item.isPlainIcon)
+            val opens = item.launchKey
             val makingWay = carriedCovered && item.id == dragged?.id
             val wayAlpha by animateFloatAsState(if (makingWay) 0f else 1f, tween(140), label = "makingWay")
 
@@ -584,10 +620,10 @@ fun HomePage(
                         // The real item stays put, in full colour, until you let go — it is the
                         // grey copy under your finger that moves. An app that has just been closed
                         // lands back into its place, super icons included.
-                        val landing = if (item is AppCell) AppLanding.scaleFor(item.key) else 1f
+                        val landing = if (opens != null) AppLanding.scaleFor(opens) else 1f
                         scaleX = scale * landing * settle.value
                         scaleY = scale * landing * settle.value
-                        alpha = wayAlpha * (if (item is AppCell) AppLanding.alphaFor(item.key) else 1f)
+                        alpha = wayAlpha * gatheredAlpha * (if (opens != null) AppLanding.alphaFor(opens) else 1f)
                         // Parallax: while pages slide, items drift apart from the middle of the page
                         // and settle back together as it lands, so the page has depth.
                         translationX = pageOffset * cellWidthPx * PAGE_PARALLAX *
@@ -597,9 +633,9 @@ fun HomePage(
                         // recomposes nothing.
                         val clock = arrivalClock()
                         if (clock < FlyIn.TOTAL_MS) {
-                            val out = (1f - FlyIn.progress(clock, flyDelay)) * arrivalDepth()
-                            translationX += fromCentreX * FlyIn.SPREAD * out
-                            translationY = fromCentreY * FlyIn.SPREAD * out
+                            val out = (1f - FlyIn.progress(clock, flyIn.delayMs)) * arrivalDepth()
+                            translationX += flyIn.x * out
+                            translationY = flyIn.y * out
                             val shrink = 1f - 0.3f * out
                             scaleX *= shrink
                             scaleY *= shrink
@@ -666,26 +702,57 @@ fun HomePage(
                     modifier = Modifier
                         .fillMaxSize()
                         .onGloballyPositioned { contentRoot = it.positionInRoot() }
-                        .then(if (item is AppCell) Modifier.launchOrigin(item.key) else Modifier)
-                        .pointerInput(item.id, cellWidthPx, cellHeightPx, settings.columns, resizing) {
+                        .then(if (opens != null) Modifier.launchOrigin(opens) else Modifier)
+                        .pointerInput(item.id, cellWidthPx, cellHeightPx, settings.columns, resizing, settings.lockLayout) {
                             // While its size is being pulled, the item stays put: a finger resting
                             // on the pointer must never turn into a long press that carries it off.
                             if (resizing) return@pointerInput
+                            // Another app's widget and a stack keep their own taps and swipes; only
+                            // a hold that stays still is taken for a pick-up.
+                            if (liveItem.hasOwnTouches) {
+                                holdToCarry(
+                                    onStart = { local ->
+                                        longPressHandled = true
+                                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        // Locked, a hold only ever opens the menu.
+                                        if (!settings.lockLayout) drag.begin(liveItem, contentRoot + local, cellRoot)
+                                    },
+                                    onDrag = { delta ->
+                                        if (!settings.lockLayout) {
+                                            drag.pointer += delta
+                                            drag.hoverCandidateId = hoverTarget(drag, liveItems, liveItem)
+                                        }
+                                    },
+                                    onEnd = { moved ->
+                                        if (settings.lockLayout || moved < 24f) {
+                                            drag.clear()
+                                            onItemMenu(liveItem)
+                                        } else {
+                                            onDrop()
+                                        }
+                                    },
+                                    onCancel = { drag.clear() },
+                                )
+                                return@pointerInput
+                            }
                             detectDragGesturesAfterLongPress(
                                 onDragStart = { local ->
                                     travelled = 0f
                                     longPressHandled = true
                                     haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    drag.begin(liveItem, contentRoot + local, cellRoot)
+                                    // Locked, a hold only ever opens the menu.
+                                    if (!settings.lockLayout) drag.begin(liveItem, contentRoot + local, cellRoot)
                                 },
                                 onDrag = { change, delta ->
                                     change.consume()
-                                    travelled += delta.getDistance()
-                                    drag.pointer += delta
-                                    drag.hoverCandidateId = hoverTarget(drag, liveItems, liveItem)
+                                    if (!settings.lockLayout) {
+                                        travelled += delta.getDistance()
+                                        drag.pointer += delta
+                                        drag.hoverCandidateId = hoverTarget(drag, liveItems, liveItem)
+                                    }
                                 },
                                 onDragEnd = {
-                                    if (travelled < 24f) {
+                                    if (settings.lockLayout || travelled < 24f) {
                                         drag.clear()
                                         onItemMenu(liveItem)
                                     } else {
@@ -696,6 +763,8 @@ fun HomePage(
                             )
                         }
                         .pointerInput(item.id, resizing) {
+                            // Its taps are its own: the widget inside answers them.
+                            if (liveItem.hasOwnTouches) return@pointerInput
                             detectTapGestures(
                                 onPress = {
                                     longPressHandled = false
@@ -706,9 +775,14 @@ fun HomePage(
                                         longPressHandled = false
                                         return@detectTapGestures
                                     }
+                                    // Another icon tapped while one is carried joins it.
+                                    if (drag.isDragging && drag.gather(item, cellRoot)) {
+                                        onGathered()
+                                        return@detectTapGestures
+                                    }
                                     when {
                                         resizing -> onResizeDone()
-                                        item is AppCell -> onOpenApp(item.key)
+                                        opens != null -> onOpenApp(opens)
                                         item is FolderCell -> {
                                             val icon = geometry.iconFrame
                                             onOpenFolder(
@@ -737,12 +811,13 @@ fun HomePage(
                         onSearch = onSearch,
                         onNoteChange = onNoteChange,
                         onAmbient = onAmbient,
+                        onRestoreWidget = onRestoreWidget,
                     )
                 }
 
                 // As a sibling on top, so a finger on the pointer is never also a press on the item.
                 // It stays a moment after resizing is done, to be seen letting go of the item.
-                val framed = resizing && (item is WidgetCell || item is AppCell)
+                val framed = resizing && (item.isWidgetLike || item is AppCell)
                 var lingering by remember { mutableStateOf(false) }
                 LaunchedEffect(framed) { if (framed) lingering = true }
                 if (framed || lingering) {
@@ -799,6 +874,7 @@ fun HomePage(
                         geometry = geometry,
                         onSearch = {},
                         onNoteChange = {},
+                        live = false,
                     )
                     // A picture of what was there, not the thing: nothing in it takes a touch.
                     Box(Modifier.matchParentSize().pointerInput(Unit) { detectTapGestures { } })
@@ -835,6 +911,25 @@ private fun covers(other: HomeItem, spot: DropPlanner.Spot, item: HomeItem): Boo
 /** How near the middle of an icon, in icon widths, the carried icon has to be to make a folder. */
 private const val FOLDER_REACH = 0.45f
 
+/** Drawn in a widget's frame: one of Zenith's, another app's, or a stack of them. */
+internal val HomeItem.isWidgetLike: Boolean
+    get() = this is WidgetCell || this is HostedWidgetCell || this is StackCell
+
+/**
+ * Has touches of its own inside it, which must keep working: another app's widget, or a stack
+ * that pages. Picked up with [holdToCarry], which watches without taking.
+ */
+private val HomeItem.hasOwnTouches: Boolean
+    get() = this is HostedWidgetCell || this is StackCell
+
+/** What tapping this item opens, by the key it opens through: an app or a shortcut. Null for the rest. */
+private val HomeItem.launchKey: String?
+    get() = when (this) {
+        is AppCell -> key
+        is ShortcutCell -> key
+        else -> null
+    }
+
 @Composable
 fun HomeItemContent(
     item: HomeItem,
@@ -845,30 +940,84 @@ fun HomeItemContent(
     onSearch: () -> Unit,
     onNoteChange: (String) -> Unit,
     onAmbient: () -> Unit = {},
+    /**
+     * False for a copy — the grey one under a finger, the small home screen in Settings — which
+     * shows another app's widget by its picture: Android lets only one view draw a widget at once.
+     */
+    live: Boolean = true,
+    onRestoreWidget: (HomeItem, android.appwidget.AppWidgetProviderInfo) -> Unit = { _, _ -> },
 ) {
     val iconSize = geometry.iconDp.dp
     when (item) {
+        is HostedWidgetCell -> HostedWidget(
+            cell = item,
+            live = live,
+            onRestore = { onRestoreWidget(item, it) },
+            modifier = Modifier
+                .fillMaxSize()
+                .pixelFrame(geometry.widgetFrame(item.spanX, item.spanY)),
+        )
+
+        is StackCell -> WidgetStack(
+            stack = item,
+            modifier = Modifier
+                .fillMaxSize()
+                .pixelFrame(geometry.widgetFrame(item.spanX, item.spanY)),
+        ) { member ->
+            if (member.hosted) {
+                HostedWidget(
+                    cell = HostedWidgetCell(member.id, item.page, item.col, item.row, item.spanX, item.spanY, member.appWidgetId, member.provider),
+                    live = live,
+                    onRestore = { onRestoreWidget(item, it) },
+                    modifier = Modifier.fillMaxSize(),
+                )
+            } else {
+                ZenithWidget(
+                    type = member.type,
+                    userName = settings.userName,
+                    note = settings.note,
+                    toggles = settings.toggles,
+                    onNoteChange = onNoteChange,
+                    onSearch = onSearch,
+                    onAmbient = onAmbient,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+        }
+
         is AppCell -> {
             val app = appsByKey[item.key]
             val label = app?.label ?: item.packageName.substringAfterLast('.')
+            // An app whose name you hid shows none, whatever Labels says.
+            val showLabel = settings.showLabels && settings.appEdits[item.key]?.hideLabel != true
             when {
                 !item.isPlainIcon ->
                     SuperAppTile(
                         key = item.key,
                         label = label,
                         frame = geometry.superIconFrame(item.spanX, (item.spanY / ROW_UNITS).coerceAtLeast(1)),
-                        showLabel = settings.showLabels,
+                        showLabel = showLabel,
                     )
                 else -> AppTile(
                     key = item.key,
                     label = label,
                     iconSize = iconSize,
-                    showLabel = settings.showLabels,
+                    showLabel = showLabel,
                     shape = ZenithShapes.forIconShape(settings.iconShape),
                     frame = geometry.iconFrame,
+                    badge = true,
                 )
             }
         }
+
+        is ShortcutCell -> ShortcutTile(
+            item = item,
+            appsByKey = appsByKey,
+            iconSize = iconSize,
+            showLabel = settings.showLabels,
+            shape = ZenithShapes.forIconShape(settings.iconShape),
+            frame = geometry.iconFrame,
+        )
 
         is FolderCell -> FolderTile(
             folder = item,
@@ -876,21 +1025,111 @@ fun HomeItemContent(
             iconSize = iconSize,
             showLabel = settings.showLabels,
             frame = geometry.iconFrame,
+            style = settings.folderStyle,
         )
 
-        is WidgetCell -> ZenithWidget(
-            type = item.type,
-            userName = settings.userName,
-            note = settings.note,
-            toggles = settings.toggles,
-            onNoteChange = onNoteChange,
-            onSearch = onSearch,
-            onAmbient = onAmbient,
-            modifier = Modifier
-                .fillMaxSize()
-                .pixelFrame(geometry.widgetFrame(item.spanX, item.spanY)),
+        is WidgetCell -> InOwnColour(item.accent) {
+            ZenithWidget(
+                type = item.type,
+                userName = settings.userName,
+                note = settings.note,
+                toggles = settings.toggles,
+                onNoteChange = onNoteChange,
+                onSearch = onSearch,
+                onAmbient = onAmbient,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .pixelFrame(geometry.widgetFrame(item.spanX, item.spanY)),
+            )
+        }
+    }
+}
+
+/** What a folder shows of what is in it, in its [style]. */
+@Composable
+private fun FolderInside(folder: FolderCell, appsByKey: Map<String, AppInfo>, iconSize: androidx.compose.ui.unit.Dp, style: String) {
+    when (style) {
+        // The first three fanned like cards in a hand, the first in front.
+        "stack" -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            val fan = listOf(Triple(-0.14f, -0.06f, -12f), Triple(0.14f, -0.04f, 11f), Triple(0f, 0.05f, 0f))
+            val keys = folder.keys.take(3)
+            keys.indices.reversed().forEach { from ->
+                val (x, y, turn) = fan[2 - from]
+                val key = keys[from]
+                AppIcon(
+                    key = key,
+                    label = appsByKey[key]?.label ?: "",
+                    size = iconSize * 0.46f,
+                    onGlass = true,
+                    modifier = Modifier.graphicsLayer {
+                        translationX = x * iconSize.toPx()
+                        translationY = y * iconSize.toPx()
+                        rotationZ = turn
+                    },
+                )
+            }
+        }
+        // The first app large, the next two small at its corner.
+        "cover" -> Box(Modifier.fillMaxSize()) {
+            folder.keys.firstOrNull()?.let { key ->
+                AppIcon(key = key, label = appsByKey[key]?.label ?: "", size = iconSize * 0.54f, onGlass = true, modifier = Modifier.align(Alignment.TopStart))
+            }
+            Row(Modifier.align(Alignment.BottomEnd), horizontalArrangement = Arrangement.spacedBy(iconSize * 0.03f)) {
+                folder.keys.drop(1).take(2).forEach { key ->
+                    AppIcon(key = key, label = appsByKey[key]?.label ?: "", size = iconSize * 0.2f, onGlass = true)
+                }
+            }
+        }
+        else -> Column(
+            verticalArrangement = Arrangement.spacedBy(iconSize * 0.06f),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            folder.keys.take(4).chunked(2).forEach { rowKeys ->
+                Row(horizontalArrangement = Arrangement.spacedBy(iconSize * 0.06f)) {
+                    rowKeys.forEach { key ->
+                        AppIcon(
+                            key = key,
+                            label = appsByKey[key]?.label ?: "",
+                            size = iconSize * 0.33f,
+                            onGlass = true,
+                        )
+                    }
+                    if (rowKeys.size == 1) Spacer(Modifier.size(iconSize * 0.33f))
+                }
+            }
+        }
+    }
+}
+
+/**
+ * [content] in a widget's own colour, [accent], or the theme's when it is 0. A change of colour is
+ * eased in, and back out to the theme's, rather than switched. With no colour of its own a widget
+ * wears the theme's palette itself, so it changes with the theme to the frame.
+ */
+@Composable
+private fun InOwnColour(accent: Long, content: @Composable () -> Unit) {
+    val palette = LocalPalette.current
+    val ease = if (LocalMotionLevel.current.reduced) tween<Float>(Motion.REDUCED_MS) else tween(420)
+    // The colour it last had of its own: going back to the theme's fades out of it, not out of nothing.
+    val lastOwn = remember { arrayOf(palette.accent) }
+    if (accent != 0L) lastOwn[0] = Color(accent.toInt())
+    val own by androidx.compose.animation.animateColorAsState(
+        lastOwn[0],
+        if (LocalMotionLevel.current.reduced) tween(Motion.REDUCED_MS) else tween(420),
+        label = "widgetAccent",
+    )
+    val mix by androidx.compose.animation.core.animateFloatAsState(if (accent != 0L) 1f else 0f, ease, label = "widgetOwn")
+    val wearing = if (mix <= 0f) {
+        palette
+    } else {
+        val its = palette.withAccent(own)
+        palette.copy(
+            accent = androidx.compose.ui.graphics.lerp(palette.accent, its.accent, mix),
+            accentAlt = androidx.compose.ui.graphics.lerp(palette.accentAlt, its.accentAlt, mix),
+            glassTint = androidx.compose.ui.graphics.lerp(palette.glassTint, its.glassTint, mix),
         )
     }
+    CompositionLocalProvider(LocalPalette provides wearing, content = content)
 }
 
 /**
@@ -916,14 +1155,7 @@ private fun SuperAppTile(key: String, label: String, frame: PxRect, showLabel: B
         )
         if (showLabel) {
             Box(Modifier.fillMaxWidth().height(LABEL_LINE_HEIGHT), contentAlignment = Alignment.BottomCenter) {
-                Text(
-                    text = label,
-                    color = palette.onGlass,
-                    fontSize = 11.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    fontWeight = FontWeight.Medium,
-                )
+                IconLabel(label)
             }
         }
     }
@@ -951,8 +1183,11 @@ fun AppTile(
     modifier: Modifier = Modifier,
     /** On a home page: exactly where the icon goes inside its cell. Elsewhere it is centred. */
     frame: PxRect? = null,
+    /** Shows the app's notification dot. */
+    badge: Boolean = false,
+    /** Over glass or the drawer already: see [AppIcon]. */
+    onGlass: Boolean = false,
 ) {
-    val palette = LocalPalette.current
     val density = LocalDensity.current
     Column(
         modifier = if (frame == null) modifier.padding(horizontal = 2.dp) else modifier.fillMaxSize(),
@@ -965,6 +1200,8 @@ fun AppTile(
             label = label,
             size = iconSize,
             shape = shape,
+            badge = badge,
+            onGlass = onGlass,
             modifier = Modifier
                 .then(if (frame != null) Modifier.padding(start = with(density) { frame.left.toDp() }) else Modifier)
                 .launchOrigin(key)
@@ -977,16 +1214,60 @@ fun AppTile(
                 (if (frame != null) Modifier.fillMaxWidth().padding(horizontal = 2.dp) else Modifier).height(LABEL_LINE_HEIGHT),
                 contentAlignment = Alignment.BottomCenter,
             ) {
-                Text(
-                    text = label,
-                    color = palette.onGlass,
-                    fontSize = 11.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    textAlign = TextAlign.Center,
-                    fontWeight = FontWeight.Medium,
-                    modifier = Modifier.graphicsLayer { shadowElevation = 0f },
+                IconLabel(label, textAlign = TextAlign.Center)
+            }
+        }
+    }
+}
+
+/**
+ * One of an app's shortcuts on the page: the shortcut's own picture with the app's icon small in
+ * its corner, as Android's own launcher shows them, so it is plain whose shortcut it is.
+ */
+@Composable
+fun ShortcutTile(
+    item: ShortcutCell,
+    appsByKey: Map<String, AppInfo>,
+    iconSize: androidx.compose.ui.unit.Dp,
+    showLabel: Boolean,
+    shape: androidx.compose.ui.graphics.Shape = ZenithShapes.icon,
+    modifier: Modifier = Modifier,
+    frame: PxRect? = null,
+) {
+    val density = LocalDensity.current
+    val owner = remember(appsByKey, item.packageName) { appsByKey.values.firstOrNull { it.packageName == item.packageName }?.key }
+    Column(
+        modifier = if (frame == null) modifier.padding(horizontal = 2.dp) else modifier.fillMaxSize(),
+        horizontalAlignment = if (frame == null) Alignment.CenterHorizontally else Alignment.Start,
+        verticalArrangement = if (frame == null) Arrangement.Center else Arrangement.Top,
+    ) {
+        if (frame != null) Spacer(Modifier.height(with(density) { frame.top.toDp() }))
+        Box(
+            Modifier
+                .then(if (frame != null) Modifier.padding(start = with(density) { frame.left.toDp() }) else Modifier)
+                .size(iconSize)
+                .launchOrigin(item.key)
+                .pressBounce(),
+        ) {
+            AppIcon(key = item.key, label = item.label, size = iconSize, shape = shape)
+            if (owner != null) {
+                AppIcon(
+                    key = owner,
+                    label = "",
+                    size = iconSize * 0.42f,
+                    shape = shape,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .offset(x = iconSize * 0.06f, y = iconSize * 0.06f),
                 )
+            }
+        }
+        if (showLabel) {
+            Box(
+                (if (frame != null) Modifier.fillMaxWidth().padding(horizontal = 2.dp) else Modifier).height(LABEL_LINE_HEIGHT),
+                contentAlignment = Alignment.BottomCenter,
+            ) {
+                IconLabel(item.label, textAlign = TextAlign.Center)
             }
         }
     }
@@ -1001,9 +1282,12 @@ fun FolderTile(
     modifier: Modifier = Modifier,
     /** On a home page: exactly where the folder goes inside its cell. Elsewhere it is centred. */
     frame: PxRect? = null,
+    /** "grid": four small, two by two; "stack": the first three fanned; "cover": the first large. */
+    style: String = "grid",
 ) {
-    val palette = LocalPalette.current
     val density = LocalDensity.current
+    val own = if (folder.colour == 0L) null else Color(folder.colour.toInt())
+    val shownColour by animateColorAsState(own ?: Color.Transparent, tween(420), label = "folderColour")
     Column(
         modifier = if (frame == null) modifier else modifier.fillMaxSize(),
         horizontalAlignment = if (frame == null) Alignment.CenterHorizontally else Alignment.Start,
@@ -1014,42 +1298,28 @@ fun FolderTile(
             Modifier
                 .then(if (frame != null) Modifier.padding(start = with(density) { frame.left.toDp() }) else Modifier)
                 .size(iconSize)
-                .pressBounce()
-                .glass(ZenithShapes.icon, strength = 1.2f, material = GlassMaterial.Clear, interactive = true)
-                .padding(iconSize * 0.12f),
-            contentAlignment = Alignment.Center,
+                .pressBounce(),
         ) {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(iconSize * 0.06f),
-                horizontalAlignment = Alignment.CenterHorizontally,
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .glass(ZenithShapes.icon, strength = 1.2f, material = GlassMaterial.Clear, interactive = true, tint = own ?: Color.Unspecified)
+                    // A colour of its own, laid in the glass, easing in and out as it is chosen.
+                    .background(shownColour.copy(alpha = shownColour.alpha * 0.3f), ZenithShapes.icon)
+                    .padding(iconSize * 0.12f),
+                contentAlignment = Alignment.Center,
             ) {
-                folder.keys.take(4).chunked(2).forEach { rowKeys ->
-                    Row(horizontalArrangement = Arrangement.spacedBy(iconSize * 0.06f)) {
-                        rowKeys.forEach { key ->
-                            AppIcon(
-                                key = key,
-                                label = appsByKey[key]?.label ?: "",
-                                size = iconSize * 0.33f,
-                            )
-                        }
-                        if (rowKeys.size == 1) Spacer(Modifier.size(iconSize * 0.33f))
-                    }
-                }
+                FolderInside(folder, appsByKey, iconSize, style)
             }
+            // One dot for the whole folder: all of its apps' put together.
+            IconBadge(count = LocalBadges.current.forKeys(folder.keys), iconSize = iconSize)
         }
         if (showLabel) {
             Box(
                 (if (frame != null) Modifier.fillMaxWidth() else Modifier).height(LABEL_LINE_HEIGHT),
                 contentAlignment = Alignment.BottomCenter,
             ) {
-                Text(
-                    text = folder.title,
-                    color = palette.onGlass,
-                    fontSize = 11.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    fontWeight = FontWeight.Medium,
-                )
+                IconLabel(folder.title)
             }
         }
     }
@@ -1373,11 +1643,42 @@ fun DragGhost(
     val lift = remember { Animatable(1f) }
     LaunchedEffect(item.id) { lift.animateTo(carriedScale(item), Motion.lift()) }
     val shadowFrame = when {
-        item is WidgetCell -> geometry.widgetFrame(item.spanX, item.spanY)
+        item.isWidgetLike -> geometry.widgetFrame(item.spanX, item.spanY)
         item is AppCell && !item.isPlainIcon -> geometry.superIconFrame(item.spanX, (item.spanY / ROW_UNITS).coerceAtLeast(1))
         else -> geometry.iconFrame
     }
     val ghostAlpha by animateFloatAsState(if (drag.overRemove) COPY_ALPHA_OVER_BIN else COPY_ALPHA, Motion.smooth(), label = "ghost")
+    val reduced = LocalMotionLevel.current.reduced
+
+    // The gathered ones, behind it: each flies from its place into the stack, fanned a little.
+    drag.gathered.forEachIndexed { index, (other, from) ->
+        key(other.id) {
+            val flight = remember { Animatable(if (reduced) 1f else 0f) }
+            LaunchedEffect(Unit) { flight.animateTo(1f, spring(dampingRatio = 0.62f, stiffness = 300f)) }
+            val depth = (drag.gathered.size - index).coerceAtMost(3)
+            val step = with(density) { 5.dp.toPx() }
+            GreyCopy(
+                item = other,
+                geometry = geometry,
+                settings = settings,
+                appsByKey = appsByKey,
+                modifier = Modifier
+                    .offset {
+                        val stack = topLeft + Offset(step * depth, -step * depth)
+                        val at = from + (stack - from) * flight.value
+                        IntOffset(at.x.roundToInt(), at.y.roundToInt())
+                    }
+                    .requiredSize(with(density) { drag.cellWidth.toDp() }, with(density) { (drag.cellHeight * other.spanY).toDp() })
+                    .graphicsLayer {
+                        val size = 1f + (carriedScale(other) - 0.06f * depth - 1f) * flight.value
+                        scaleX = size
+                        scaleY = size
+                        rotationZ = (if (index % 2 == 0) 5f else -5f) * depth * flight.value
+                        alpha = COPY_ALPHA * (0.6f + 0.4f * flight.value)
+                    },
+            )
+        }
+    }
 
     GreyCopy(
         item = item,
@@ -1415,7 +1716,39 @@ fun DragGhost(
                 alpha = ghostAlpha
             },
     )
+
+    // How many are carried, once there is more than one, on the corner of the icon.
+    val count = drag.gathered.size + 1
+    androidx.compose.animation.AnimatedVisibility(
+        visible = count > 1,
+        enter = com.gabriel.zenithui.ui.common.popIn(reduced),
+        exit = com.gabriel.zenithui.ui.common.popOut(reduced),
+        modifier = Modifier.offset {
+            val icon = geometry.iconFrame
+            IntOffset((topLeft.x + icon.right - 10.dp.toPx()).roundToInt(), (topLeft.y + icon.top - 10.dp.toPx()).roundToInt())
+        },
+    ) {
+        val palette = LocalPalette.current
+        androidx.compose.animation.AnimatedContent(
+            targetState = count,
+            transitionSpec = { com.gabriel.zenithui.ui.common.rollOver(reduced) },
+            label = "carriedCount",
+        ) { shown ->
+            Box(
+                Modifier
+                    .size(24.dp)
+                    .clip(androidx.compose.foundation.shape.CircleShape)
+                    .background(palette.accent),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text("$shown", color = Color(0xFF0A0B12), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+    }
 }
+
+/** As many as can be gathered onto one carried icon. */
+private const val MOST_GATHERED = 15
 
 /**
  * The grey copy once it has been let go into the bin, the dock or a folder: it shrinks away into
@@ -1506,6 +1839,7 @@ private fun GreyCopy(
             geometry = geometry,
             onSearch = {},
             onNoteChange = {},
+            live = false,
         )
     }
 }
@@ -1631,6 +1965,24 @@ fun DockBar(
     val target = targetNow()
 
     val rim by animateFloatAsState(if (highlight) 1f else 0f, tween(220), label = "dockRim")
+    // The floating pill's ends, eased as icons come and go so the pill grows and shrinks round them.
+    val pillPad = with(density) { 12.dp.toPx() }
+    val pillTarget = currentGeometry?.let { lines ->
+        val count = keys.size
+        if (count == 0) null else {
+            val side = lines.dockIcon(count).toFloat()
+            (lines.dockIconLeft(0, count) - pillPad) to (lines.dockIconLeft(count - 1, count) + side + pillPad)
+        }
+    }
+    val pillLeft by animateFloatAsState(pillTarget?.first ?: 0f, spring(dampingRatio = 0.8f, stiffness = 380f), label = "pillLeft")
+    val pillRight by animateFloatAsState(pillTarget?.second ?: 0f, spring(dampingRatio = 0.8f, stiffness = 380f), label = "pillRight")
+    val dockPill = remember(pillLeft, pillRight, pillTarget == null) {
+        if (pillTarget == null) ZenithShapes.panel else androidx.compose.foundation.shape.GenericShape { size, _ ->
+            val left = pillLeft.coerceIn(0f, size.width)
+            val right = pillRight.coerceIn(left, size.width)
+            addRoundRect(androidx.compose.ui.geometry.RoundRect(left, 0f, right, size.height, androidx.compose.ui.geometry.CornerRadius(size.height / 2f)))
+        }
+    }
 
     Box(modifier.fillMaxWidth()) {
         Row(
@@ -1656,10 +2008,18 @@ fun DockBar(
                     scaleX = grow
                     scaleY = grow
                 }
-                .glass(ZenithShapes.panel, strength = 1.15f, material = GlassMaterial.Clear, interactive = true)
+                .then(
+                    when (settings.dockStyle) {
+                        // Icons only, on the wallpaper.
+                        "none" -> Modifier
+                        // A pill hugging the icons there are, not the whole width.
+                        "floating" -> Modifier.glass(dockPill, strength = 1.15f, material = GlassMaterial.Clear, interactive = true)
+                        else -> Modifier.glass(ZenithShapes.panel, strength = 1.15f, material = GlassMaterial.Clear, interactive = true)
+                    }
+                )
                 .then(
                     if (rim > 0.01f) {
-                        Modifier.border(2.dp, palette.accent.copy(alpha = 0.85f * rim), ZenithShapes.panel)
+                        Modifier.border(2.dp, palette.accent.copy(alpha = 0.85f * rim), if (settings.dockStyle == "floating") dockPill else ZenithShapes.panel)
                     } else {
                         Modifier
                     }
@@ -1751,18 +2111,19 @@ fun DockBar(
                                 onTap = { if (!suppressTap) onOpen(key) },
                             )
                         }
-                        .pointerInput(key, index) {
+                        .pointerInput(key, index, settings.lockLayout) {
                             detectDragGesturesAfterLongPress(
                                 onDragStart = { local ->
                                     suppressTap = true
                                     haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                                     grabRoot = (slotOf(index)?.topLeft ?: Offset.Zero) + local
                                     dragOffset = Offset.Zero
-                                    draggingIndex = index
+                                    // Locked, a hold only ever opens the menu.
+                                    if (!settings.lockLayout) draggingIndex = index
                                 },
                                 onDrag = { change, amount ->
                                     change.consume()
-                                    dragOffset += amount
+                                    if (!settings.lockLayout) dragOffset += amount
                                 },
                                 onDragEnd = {
                                     val moved = dragOffset.getDistance()
@@ -1799,6 +2160,7 @@ fun DockBar(
                         label = appsByKey[key]?.label ?: "",
                         size = iconSize,
                         shape = ZenithShapes.forIconShape(settings.iconShape),
+                        badge = true,
                         modifier = Modifier
                             .launchOrigin(key)
                             .pressBounce()

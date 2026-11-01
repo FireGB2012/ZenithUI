@@ -43,12 +43,15 @@ import androidx.compose.material.icons.rounded.Animation
 import androidx.compose.material.icons.rounded.Apps
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Gesture
 import androidx.compose.material.icons.rounded.GridView
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.LocalFireDepartment
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.SettingsBackupRestore
+import androidx.compose.material.icons.rounded.SmartButton
+import androidx.compose.material.icons.rounded.Style
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -95,6 +98,7 @@ import com.gabriel.zenithui.ui.common.popIn
 import com.gabriel.zenithui.ui.common.popOut
 import com.gabriel.zenithui.ui.common.pressBounce
 import com.gabriel.zenithui.ui.theme.LocalPalette
+import com.gabriel.zenithui.ui.theme.LocalZenithFont
 import com.gabriel.zenithui.ui.theme.Palettes
 import kotlinx.coroutines.delay
 import androidx.compose.material.icons.rounded.AccountCircle
@@ -129,6 +133,18 @@ class SettingsActions(
     val tidy: () -> Int,
     /** The Zenith account, in a build that has a server to keep one on; null in a build that has none. */
     val account: AccountActions? = null,
+    /** Opens the list of what one gesture could do. */
+    val gesture: (String) -> Unit = {},
+    /** Says what the lock helper is, and opens Android's page for it. */
+    val lockHelper: () -> Unit = {},
+    /** Everything the Looks page does. */
+    val looks: LookActions? = null,
+    /** The Glass studio's sheet (Plus). */
+    val glassStudio: () -> Unit = {},
+    /** The sheet of a palette for each part of the day (Plus). */
+    val dayPalettes: () -> Unit = {},
+    /** The fonts Zenith carries, and their licence. */
+    val fontLicences: () -> Unit = {},
 )
 
 /**
@@ -154,6 +170,8 @@ fun SettingsScreen(
     preview: SettingsPreview,
     actions: SettingsActions,
     onDismiss: () -> Unit,
+    /** The Looks saved on this phone. */
+    looks: List<com.gabriel.zenithui.data.Look> = emptyList(),
 ) {
     var page by remember { mutableStateOf<SettingsPage?>(null) }
     var query by remember { mutableStateOf("") }
@@ -260,14 +278,17 @@ fun SettingsScreen(
                 ) {
                     when (current) {
                         null -> Root(settings, plus, actions.account, query, onQuery = { query = it }, onOpen = ::open)
-                        SettingsPage.Theme -> ThemeOptions(settings, preview, actions)
+                        SettingsPage.Theme -> ThemeOptions(settings, plus, preview, actions)
                         SettingsPage.Home -> HomeOptions(settings, plus, preview, actions)
                         SettingsPage.Motion -> MotionOptions(settings, actions, onAdvanced = { open(SettingsPage.AdvancedMotion, null) })
                         SettingsPage.AdvancedMotion -> AdvancedMotionOptions(settings, actions)
+                        SettingsPage.Gestures -> GestureOptions(settings, preview, actions)
                         SettingsPage.Apps -> AppsOptions(settings, plus, actions)
                         SettingsPage.Backup -> BackupOptions(plus, actions, onClose = onDismiss, onAccount = { open(SettingsPage.Account, null) })
                         SettingsPage.About -> AboutOptions(actions)
                         SettingsPage.Aura -> AuraOptions(settings, actions, onAccount = { open(SettingsPage.Account, null) })
+                        SettingsPage.Looks -> actions.looks?.let { LooksOptions(settings, plus, looks, it) }
+                        SettingsPage.Island -> IslandOptions(settings, plus, actions)
                         SettingsPage.Account -> AccountOptions(actions)
                         // Opens a sheet instead; see open().
                         SettingsPage.Plus -> Unit
@@ -339,10 +360,10 @@ private fun Groups(settings: ZenithSettings, plus: PlusStatus, account: AccountA
     // stands further from the next than its rows do from each other, so the page reads as three
     // and the eye can go straight to one. A heading rises in with its block.
     listOf(
-        "Look and feel" to listOf(SettingsPage.Theme, SettingsPage.Home, SettingsPage.Motion, SettingsPage.Apps),
+        "Look and feel" to listOf(SettingsPage.Theme, SettingsPage.Home, SettingsPage.Motion, SettingsPage.Gestures, SettingsPage.Apps),
         // The account is only there in a build with a server to keep it on.
         (if (account != null) "Plus, Aura and account" else "Plus and Aura") to
-            listOfNotNull(SettingsPage.Plus, SettingsPage.Aura, SettingsPage.Account.takeIf { account != null }),
+            listOfNotNull(SettingsPage.Plus, SettingsPage.Island, SettingsPage.Looks, SettingsPage.Aura, SettingsPage.Account.takeIf { account != null }),
         "Backup and help" to listOf(SettingsPage.Backup, SettingsPage.About),
     ).forEachIndexed { block, (heading, pages) ->
         Column(
@@ -414,7 +435,7 @@ private fun SearchField(query: String, onQuery: (String) -> Unit, modifier: Modi
                 value = query,
                 onValueChange = onQuery,
                 singleLine = true,
-                textStyle = TextStyle(color = palette.onGlass, fontSize = 15.sp),
+                textStyle = TextStyle(fontFamily = LocalZenithFont.current, color = palette.onGlass, fontSize = 15.sp),
                 cursorBrush = SolidColor(palette.accent),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                 modifier = Modifier
@@ -474,8 +495,11 @@ private fun SettingsPage.icon(): ImageVector = when (this) {
     SettingsPage.Home -> Icons.Rounded.GridView
     SettingsPage.Motion -> Icons.Rounded.Animation
     SettingsPage.AdvancedMotion -> Icons.Rounded.Animation
+    SettingsPage.Gestures -> Icons.Rounded.Gesture
     SettingsPage.Apps -> Icons.Rounded.Apps
     SettingsPage.Plus -> Icons.Rounded.AutoAwesome
+    SettingsPage.Island -> Icons.Rounded.SmartButton
+    SettingsPage.Looks -> Icons.Rounded.Style
     SettingsPage.Aura -> Icons.Rounded.LocalFireDepartment
     SettingsPage.Account -> Icons.Rounded.AccountCircle
     SettingsPage.Backup -> Icons.Rounded.SettingsBackupRestore
@@ -487,8 +511,11 @@ private fun SettingsPage.tile(): List<Color> = when (this) {
     SettingsPage.Home -> listOf(Color(0xFF2FC9A6), Color(0xFF1C9C8B))
     SettingsPage.Motion -> listOf(Color(0xFFFF7AB6), Color(0xFFE2559A))
     SettingsPage.AdvancedMotion -> listOf(Color(0xFFFF7AB6), Color(0xFFE2559A))
+    SettingsPage.Gestures -> listOf(Color(0xFFB08CFF), Color(0xFF7D5CF0))
     SettingsPage.Apps -> listOf(Color(0xFF4FB3FF), Color(0xFF2F7FE6))
     SettingsPage.Plus -> listOf(Color(0xFFFFD36B), Color(0xFFF5A623))
+    SettingsPage.Island -> listOf(Color(0xFF4A4A58), Color(0xFF0E0E14))
+    SettingsPage.Looks -> listOf(Color(0xFF6BD6FF), Color(0xFF7C6CFF))
     SettingsPage.Aura -> listOf(Color(0xFFFF9F5A), Color(0xFFFF6A4D))
     SettingsPage.Account -> listOf(Color(0xFFC77DFF), Color(0xFF9D4EDD))
     SettingsPage.Backup -> listOf(Color(0xFF7BC96F), Color(0xFF4CA65A))
@@ -511,6 +538,11 @@ private fun summary(page: SettingsPage, settings: ZenithSettings, plus: PlusStat
         append(if (settings.haptics) ", haptics on" else ", haptics off")
     }
     SettingsPage.AdvancedMotion -> AnimationPreset.byId(settings.animation.preset).label
+    SettingsPage.Gestures -> when (val changed = settings.gestures.size) {
+        0 -> "Swipe down for notifications, pinch for Customise"
+        1 -> "1 gesture set by you"
+        else -> "$changed gestures set by you"
+    }
     SettingsPage.Apps -> buildString {
         append(if (settings.appsView == "library") "App Library" else "App drawer")
         if (settings.hiddenApps.isNotEmpty() && plus.active) append(", ${settings.hiddenApps.size} hidden")
@@ -521,6 +553,21 @@ private fun summary(page: SettingsPage, settings: ZenithSettings, plus: PlusStat
         plus.trialDaysLeft > 1 -> "${plus.trialDaysLeft} days of your trial left"
         plus.trialDaysLeft == 1 -> "Last day of your trial"
         else -> "Wallpapers, theme maker, hidden apps, backup"
+    }
+    SettingsPage.Island -> when {
+        !plus.active -> "Plus: your camera, stretched, over every app"
+        settings.island.on -> "On: " + listOfNotNull(
+            "music".takeIf { settings.island.music },
+            "calls".takeIf { settings.island.live },
+            "notifications".takeIf { settings.island.notifications },
+            "charger".takeIf { settings.island.charging },
+        ).joinToString(", ").ifEmpty { "nothing chosen" }
+        else -> "Off"
+    }
+    SettingsPage.Looks -> when {
+        !plus.active -> "Plus: save looks, switch, schedule and share them"
+        settings.lookRules.isNotEmpty() -> "${settings.lookRules.size} on a schedule"
+        else -> "Save your home screen and switch in a tap"
     }
     SettingsPage.Aura -> if (settings.streak > 0) "${settings.aura} aura, ${settings.streak} day streak" else "${settings.aura} aura"
     SettingsPage.Account -> when {

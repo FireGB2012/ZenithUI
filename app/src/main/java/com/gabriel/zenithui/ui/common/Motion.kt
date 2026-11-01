@@ -5,6 +5,7 @@ import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -33,7 +34,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
@@ -48,6 +51,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /**
  * One motion vocabulary for the whole launcher. Springs, not curves — nothing should look like it
@@ -208,31 +212,81 @@ fun rememberAnimationsEnabled(): Boolean {
     }
 }
 
-/** Squeezes anything under a finger and lets it spring back — works alongside tap and drag. */
+/** What a press does, everywhere: "bounce", "squish" or "ripple" (Motion & feel → Press). */
+val LocalPressStyle = staticCompositionLocalOf { "bounce" }
+
+/**
+ * Answers a finger, in the way chosen under Motion & feel, and lets go again — works alongside
+ * tap and drag. Bounce squeezes it and springs it back. Squish squashes it wider and shorter, the
+ * way something soft gives, and it wobbles back. Ripple barely moves it and sends a ring of light
+ * out from the finger across it, and only across it: the light falls on its own pixels, not on a
+ * square round a round button. With movement reduced, a ripple is a bounce.
+ */
 @Composable
 fun Modifier.pressBounce(pressedScale: Float = 0.88f, enabled: Boolean = true): Modifier {
     if (!enabled) return this
+    val reduced = LocalMotionLevel.current.reduced
+    val style = LocalPressStyle.current.let { if (reduced && it == "ripple") "bounce" else it }
     var pressed by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(
-        targetValue = if (pressed) pressedScale else 1f,
+        targetValue = if (!pressed) 1f else if (style == "ripple") 1f - (1f - pressedScale) * 0.25f else pressedScale,
         animationSpec = spring(dampingRatio = 0.36f, stiffness = 420f),
         label = "press",
     )
+    val ripple = if (style == "ripple") remember { Animatable(1f) } else null
+    // Where the finger came down, read only while drawing: a press recomposes nothing more.
+    val from = remember { arrayOf(Offset.Zero) }
+    val scope = rememberCoroutineScope()
+    val palette = com.gabriel.zenithui.ui.theme.LocalPalette.current
+    val light = if (palette.dark) Color.White else palette.accent
     return this
-        .pointerInput(Unit) {
+        .pointerInput(style) {
             awaitPointerEventScope {
                 while (true) {
-                    awaitFirstDown(requireUnconsumed = false)
+                    val down = awaitFirstDown(requireUnconsumed = false)
                     pressed = true
+                    if (ripple != null) {
+                        from[0] = down.position
+                        scope.launch {
+                            ripple.snapTo(0f)
+                            ripple.animateTo(1f, tween(560, easing = FastOutSlowInEasing))
+                        }
+                    }
                     waitForUpOrCancellation()
                     pressed = false
                 }
             }
         }
         .graphicsLayer {
-            scaleX = scale
-            scaleY = scale
+            if (style == "squish") {
+                scaleX = 1f + (1f - scale) * 0.55f
+                scaleY = scale
+            } else {
+                scaleX = scale
+                scaleY = scale
+            }
+            // Only while the light spreads is the press drawn apart, so it can light just itself.
+            if (ripple != null && ripple.value < 1f) compositingStrategy = CompositingStrategy.Offscreen
         }
+        .then(
+            if (ripple == null) {
+                Modifier
+            } else {
+                Modifier.drawWithContent {
+                    drawContent()
+                    val p = ripple.value
+                    if (p < 1f) {
+                        val reach = size.maxDimension * (0.25f + 0.9f * p)
+                        drawCircle(
+                            brush = Brush.radialGradient(listOf(light.copy(alpha = 0.5f * (1f - p)), Color.Transparent), center = from[0], radius = reach),
+                            radius = reach,
+                            center = from[0],
+                            blendMode = BlendMode.SrcAtop,
+                        )
+                    }
+                }
+            }
+        )
 }
 
 /**

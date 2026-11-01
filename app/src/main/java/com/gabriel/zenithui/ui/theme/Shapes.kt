@@ -5,6 +5,8 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.asComposePath
+import com.gabriel.zenithui.data.IconShapes
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -34,6 +36,21 @@ class SquircleShape(private val exponent: Float = 2.9f) : Shape {
     }
 }
 
+/**
+ * One of [IconShapes]' outlines as a Compose shape: the very path the icon renderer cuts pictures
+ * with, so a tile drawn here and an icon cut there are the same shape to the pixel.
+ */
+class IconOutlineShape(private val id: String) : Shape {
+    override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density): Outline {
+        val side = minOf(size.width, size.height).coerceAtLeast(1f)
+        val path = IconShapes.path(id, side)
+        if (size.width != side || size.height != side) {
+            path.transform(android.graphics.Matrix().apply { setScale(size.width / side, size.height / side) })
+        }
+        return Outline.Generic(path.asComposePath())
+    }
+}
+
 object ZenithShapes {
     val panel = RoundedCornerShape(30.dp)
     val card = RoundedCornerShape(24.dp)
@@ -41,10 +58,13 @@ object ZenithShapes {
     val pill = RoundedCornerShape(percent = 50)
     val icon = SquircleShape()
 
+    private val outlines = HashMap<String, Shape>()
+
     fun forIconShape(id: String): Shape = when (id) {
         "circle" -> RoundedCornerShape(percent = 50)
         "rounded" -> RoundedCornerShape(22)
         "square" -> RoundedCornerShape(4)
+        "pebble", "teardrop", "hexagon", "clover" -> synchronized(outlines) { outlines.getOrPut(id) { IconOutlineShape(id) } }
         else -> icon
     }
 }

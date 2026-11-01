@@ -42,6 +42,7 @@ import com.gabriel.zenithui.data.AnimationTuning
 import com.gabriel.zenithui.data.LaunchMotion
 import com.gabriel.zenithui.data.Tune
 import com.gabriel.zenithui.ui.theme.GlassMaterial
+import com.gabriel.zenithui.ui.theme.LocalGlassTuning
 import com.gabriel.zenithui.ui.theme.drawLiquidGlass
 import com.gabriel.zenithui.ui.theme.glassLook
 import com.gabriel.zenithui.ui.theme.rememberLens
@@ -52,6 +53,7 @@ import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.LocalScreenSize
 import com.gabriel.zenithui.ui.theme.LocalTilt
 import com.gabriel.zenithui.ui.theme.LocalWallpaperOffset
+import com.gabriel.zenithui.ui.theme.tuned
 import kotlin.math.roundToInt
 
 /**
@@ -131,6 +133,7 @@ fun AppLaunchCard(
     val wallpaperOffset = LocalWallpaperOffset.current
     val glassStrength = LocalGlassStrength.current.coerceIn(0f, 1.4f)
     val tilt = LocalTilt.current
+    val tuning = LocalGlassTuning.current
     var origin by remember { mutableStateOf(Offset.Zero) }
     val clip = remember { Path() }
     val lens = rememberLens(if (glass) levels else null)
@@ -206,7 +209,7 @@ fun AppLaunchCard(
                 opacity = 1f,
                 dark = palette.dark,
                 tint = palette.glassTint,
-            )
+            ).tuned(tuning, palette.glassTint)
             translate(left, top) {
                 clipPath(clip) {
                     drawLiquidGlass(
@@ -220,6 +223,7 @@ fun AppLaunchCard(
                         look = look,
                         lean = tilt.value,
                         dark = palette.dark,
+                        tuning = tuning,
                     )
                 }
             }

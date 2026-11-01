@@ -47,6 +47,12 @@ data class SignedIn(val token: String, val account: Account, /** True when signi
 /** The backup kept in an account, exactly as the app sent it, and when. */
 data class CloudBackup(val text: String, val savedAt: Long)
 
+/** A Look on the server, as the Featured list names it: its code and its name. */
+data class SharedLook(val code: String, val name: String) {
+    /** How the code is written for people: LOOK- and the six characters. */
+    val shown: String get() = "LOOK-$code"
+}
+
 /** What came of asking the server for something. */
 sealed interface Reply<out T> {
     data class Ok<T>(val value: T) : Reply<T>

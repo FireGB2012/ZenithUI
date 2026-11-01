@@ -7,7 +7,7 @@ Please do not rewrite, reformat or "improve" the program: the app is built again
 - One Python file, standard library only (Python 3.9 or newer). No pip, no virtualenv, no Docker needed.
 - It keeps everything in one SQLite file.
 - It listens on `127.0.0.1:8787` only. A web server in front of it does the HTTPS.
-- It does three things for the app: accounts (username and password, or Google), one backup per account, and referral codes.
+- It does four things for the app: accounts (username and password, or Google), one backup per account, referral codes, and Looks (home screen designs people share with each other by a short code).
 
 ## Before you touch anything
 
@@ -26,7 +26,7 @@ Adapt paths and commands to this system, but keep the shape.
    ```
    sha256sum /opt/zenith/zenith_server.py
    ```
-   It must print `684035d3fe53b2c6482c4ad053641b51a5f291205dc6428c171f62d032740f19`. If it does not, the copy was damaged (line endings, a missing last line, trailing spaces): fix the copy. Do not go on with a file that does not match. The file ends with one newline after `sys.exit(main(sys.argv[1:]))`.
+   It must print `f3c10ad96ce9e2902e68ddb9686ac9abf1d041ef62a41f410e48e7e152f7a20c`. If it does not, the copy was damaged (line endings, a missing last line, trailing spaces): fix the copy. Do not go on with a file that does not match. The file ends with one newline after `sys.exit(main(sys.argv[1:]))`.
 5. Try it, as the `zenith` user:
    ```
    sudo -u zenith python3 /opt/zenith/zenith_server.py --selftest
@@ -125,6 +125,7 @@ Adapt paths and commands to this system, but keep the shape.
 
 - **Google sign-in.** When I give you a Google "Web application" client ID (it ends in `.apps.googleusercontent.com`), put it in `/etc/zenith.env` as `ZENITH_GOOGLE_CLIENT_ID=...`, run `systemctl restart zenith`, and check that `/v1/health` now says `"google":true`. The server then needs to be able to reach `https://www.googleapis.com` going out.
 - **Updating.** I may send a newer `zenith_server.py` with a new checksum. Replace the file, check the checksum, run `--selftest`, `systemctl restart zenith`, run `--check` again. The database stays where it is.
+- **Featured Looks.** The app lists a few Looks for everybody to try, and only ones I have chosen. When I send you a code such as `LOOK-BCD234`, run `sudo -u zenith env ZENITH_DB=/var/lib/zenith/zenith.db python3 /opt/zenith/zenith_server.py --feature LOOK-BCD234` (and `--unfeature` the same way to take one off). Never feature a Look I did not name.
 - **Looking at it.** `journalctl -u zenith` shows one line for each request (method, path, status) and never a password, a token or a request body.
 
 ## What I need back from you
@@ -156,7 +157,7 @@ Save everything between the two marker lines as `/opt/zenith/zenith_server.py`. 
 -----BEGIN zenith_server.py-----
 #!/usr/bin/env python3
 """
-Zenith UI server: accounts, one backup per account, and Aura codes.
+Zenith UI server: accounts, one backup per account, Aura codes, and shared Looks.
 
 One file, standard library only (Python 3.9 or newer). It listens on the loopback address and is
 meant to sit behind a web server that speaks HTTPS for it (Caddy, nginx). Everything it keeps is
@@ -165,6 +166,8 @@ in one SQLite file.
     python3 zenith_server.py                 run the server
     python3 zenith_server.py --selftest      start a throwaway copy and try every route
     python3 zenith_server.py --check URL     try a running server from outside, over its real address
+    python3 zenith_server.py --feature CODE  show a shared Look in the app's Featured list
+    python3 zenith_server.py --unfeature CODE  take it off again
 
 Settings come from the environment:
 
@@ -178,8 +181,11 @@ Settings come from the environment:
 
 What is stored: for a password account, the username and a salted scrypt hash of the password; for
 a Google account, Google's id number for that person and nothing else from Google; the account's
-Aura code; who redeemed a code (so it counts once); and the last backup the app sent, exactly as
-it was sent. Passwords, tokens and request bodies are never written to the log.
+Aura code; who redeemed a code (so it counts once); the last backup the app sent, exactly as it
+was sent; and each Look the account shared, under its code, until the account is deleted. Which
+Looks are featured is set only from this command line, so nothing anybody uploads is shown to
+anybody else unless the person running the server chose it. Passwords, tokens and request bodies
+are never written to the log.
 """
 
 import base64
@@ -197,6 +203,7 @@ import tempfile
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -210,6 +217,11 @@ PASSWORD_MIN, PASSWORD_MAX = 8, 200
 
 MAX_JSON_BODY = 16 * 1024
 MAX_BACKUP_BODY = 512 * 1024
+# A Look is a home screen's settings and layout, without anything personal: a backup's size at most.
+MAX_LOOK_BODY = 256 * 1024
+# The newest this many of an account's shared Looks are kept; older ones go, unless featured.
+MAX_LOOKS_PER_ACCOUNT = 20
+MAX_FEATURED = 30
 # How much of a request nobody asked to read is still read before answering; see Handler.drain.
 MAX_DRAIN = 2 * 1024 * 1024
 
@@ -411,6 +423,16 @@ CREATE TABLE IF NOT EXISTS redemptions (
     at           INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS redemptions_owner ON redemptions(owner_id);
+-- A Look somebody shared: whose it is, what it is called and what it is. It goes with its account.
+CREATE TABLE IF NOT EXISTS looks (
+    code        TEXT PRIMARY KEY,
+    account_id  INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    name        TEXT NOT NULL,
+    body        BLOB NOT NULL,
+    featured    INTEGER NOT NULL DEFAULT 0,
+    created     INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS looks_account ON looks(account_id);
 """
 
 
@@ -472,6 +494,25 @@ def new_code(db, wanted=None):
         if not db.execute("SELECT 1 FROM accounts WHERE code=?", (code,)).fetchone():
             return code
     raise Refused(503, "busy", "Could not make a code. Try again.")
+
+
+def new_look_code(db):
+    """A code for a shared Look: six of the same characters as an Aura code, unique among Looks."""
+    for _ in range(100):
+        code = "".join(secrets.choice(CODE_ALPHABET) for _ in range(6))
+        if not db.execute("SELECT 1 FROM looks WHERE code=?", (code,)).fetchone():
+            return code
+    raise Refused(503, "busy", "Could not make a code. Try again.")
+
+
+def look_code(text):
+    """The six characters of a Look's code, however it was typed: LOOK-ABC234, abc 234, ABC234."""
+    if not isinstance(text, str):
+        return ""
+    cleaned = "".join(ch for ch in text.upper() if ch.isalnum())
+    if cleaned.startswith("LOOK"):
+        cleaned = cleaned[4:]
+    return cleaned if CODE_RE.match(cleaned) else ""
 
 
 def new_session(db, account_id):
@@ -860,6 +901,64 @@ class Handler(BaseHTTPRequestHandler):
         self.server.store.write(work)
         self.answer(200, {"redeemed": True, "account": self.describe(account["id"])})
 
+    # ---- Looks
+
+    def query(self, name):
+        values = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query).get(name)
+        return values[0] if values else None
+
+    def share_look(self):
+        account = self.account()
+        self.limit("look-share", 30, 3600, key=str(account["id"]))
+        raw = self.body(MAX_LOOK_BODY)
+        try:
+            value = json.loads(raw.decode("utf-8"))
+        except (ValueError, UnicodeDecodeError):
+            raise Refused(400, "bad_json", "A Look is JSON.")
+        if not isinstance(value, dict) or value.get("format") != "zenith-look":
+            raise Refused(400, "not_look", "That is not a Zenith Look.")
+        name = value.get("name")
+        name = name.strip()[:40] if isinstance(name, str) and name.strip() else "A Look"
+
+        def work(db):
+            code = new_look_code(db)
+            db.execute("INSERT INTO looks(code, account_id, name, body, created) VALUES (?,?,?,?,?)",
+                       (code, account["id"], name, raw, now_ms()))
+            # An account keeps its newest Looks; the oldest give way, except the featured ones.
+            # Two shared in the same millisecond are told apart by the order they came in, so the
+            # one just shared is never the one to go.
+            db.execute("DELETE FROM looks WHERE account_id=? AND featured=0 AND code NOT IN "
+                       "(SELECT code FROM looks WHERE account_id=? ORDER BY created DESC, rowid DESC LIMIT ?)",
+                       (account["id"], account["id"], MAX_LOOKS_PER_ACCOUNT))
+            return code
+
+        self.answer(201, {"code": self.server.store.write(work)})
+
+    def get_look(self):
+        # Anybody may open a Look by its code: that is what sharing one is for. Not by guessing.
+        self.limit("look-get", 60, 60)
+        code = look_code(self.query("code"))
+        if not code:
+            raise Refused(400, "bad_code", "That is not a Look's code.")
+        rows = self.server.store.read("SELECT body FROM looks WHERE code=?", (code,))
+        if not rows:
+            raise Refused(404, "no_look", "Nobody has shared a Look with that code.")
+        self.send(200, bytes(rows[0]["body"]))
+
+    def featured_looks(self):
+        self.limit("look-get", 60, 60)
+        rows = self.server.store.read("SELECT code, name FROM looks WHERE featured=1 ORDER BY created DESC, rowid DESC LIMIT ?", (MAX_FEATURED,))
+        self.answer(200, {"looks": [{"code": row["code"], "name": row["name"]} for row in rows]})
+
+    def delete_look(self):
+        account = self.account()
+        code = look_code(self.query("code"))
+        gone = self.server.store.write(lambda db: db.execute(
+            "DELETE FROM looks WHERE code=? AND account_id=?", (code, account["id"])).rowcount)
+        if not gone:
+            raise Refused(404, "no_look", "This account has shared no Look with that code.")
+        self.send(204)
+
 
 ROUTES = {
     ("GET", "/"): Handler.front_page,
@@ -875,6 +974,10 @@ ROUTES = {
     ("GET", "/v1/backup"): Handler.get_backup,
     ("DELETE", "/v1/backup"): Handler.delete_backup,
     ("POST", "/v1/aura/redeem"): Handler.redeem,
+    ("POST", "/v1/looks"): Handler.share_look,
+    ("GET", "/v1/look"): Handler.get_look,
+    ("DELETE", "/v1/look"): Handler.delete_look,
+    ("GET", "/v1/looks/featured"): Handler.featured_looks,
 }
 
 
@@ -984,6 +1087,20 @@ def check(base):
         expect("and the owner of the code is told", me.get("account", {}).get("referrals") if isinstance(me, dict) else None, 1)
         expect("the second account can be deleted", call(base, "DELETE", "/v1/account", {"password": password}, token=friend)[0], 204)
 
+    look = {"format": "zenith-look", "version": 1, "name": "Check", "settings": {}, "layout": []}
+    expect("something that is not a Look is not shared", call(base, "POST", "/v1/looks", token=token, raw=b'{"format":"other"}')[0], 400)
+    expect("a Look cannot be shared without an account", call(base, "POST", "/v1/looks", raw=json.dumps(look).encode("utf-8"))[0], 401)
+    status, shared, _ = call(base, "POST", "/v1/looks", token=token, raw=json.dumps(look).encode("utf-8"))
+    expect("a Look can be shared", status, 201)
+    look_code_given = shared.get("code") if isinstance(shared, dict) else None
+    status, opened, _ = call(base, "GET", "/v1/look?code=LOOK-" + (look_code_given or ""))
+    expect("and opened by its code, with no account", (status, opened if isinstance(opened, dict) else None), (200, look))
+    expect("a code nobody has opens nothing", call(base, "GET", "/v1/look?code=ZZZZZZ")[0], 404)
+    status, featured, _ = call(base, "GET", "/v1/looks/featured")
+    expect("the featured Looks can be listed", (status, isinstance(featured, dict) and isinstance(featured.get("looks"), list)), (200, True))
+    expect("a shared Look can be taken back", call(base, "DELETE", "/v1/look?code=" + (look_code_given or ""), token=token)[0], 204)
+    expect("and is gone", call(base, "GET", "/v1/look?code=" + (look_code_given or ""))[0], 404)
+
     expect("signing out ends that sign-in", call(base, "DELETE", "/v1/session", token=signed.get("token") if isinstance(signed, dict) else None)[0], 204)
     expect("deleting needs the password", call(base, "DELETE", "/v1/account", {"password": "wrong-" + password}, token=token)[0], 401)
     expect("the account can be deleted", call(base, "DELETE", "/v1/account", {"password": password}, token=token)[0], 204)
@@ -1015,6 +1132,13 @@ def main(arguments):
         failures = check(arguments[1])
         print("check of %s: %s" % (arguments[1], "all passed" if failures == 0 else "%d FAILED" % failures))
         return 1 if failures else 0
+    if arguments[:1] in (["--feature"], ["--unfeature"]) and len(arguments) == 2:
+        code = look_code(arguments[1])
+        store = Store(os.environ.get("ZENITH_DB", "zenith.db"))
+        changed = store.write(lambda db: db.execute(
+            "UPDATE looks SET featured=? WHERE code=?", (1 if arguments[0] == "--feature" else 0, code)).rowcount)
+        print("%s %s" % ("featured" if arguments[0] == "--feature" else "unfeatured", code) if changed else "no Look has the code %r" % arguments[1])
+        return 0 if changed else 1
     if arguments:
         print(__doc__)
         return 2

@@ -1,3 +1,7 @@
 <resources>
     <string name="app_name">Zenith UI</string>
+    <string name="notification_dots">Zenith notification dots</string>
+    <string name="lock_service">Zenith lock helper</string>
+    <string name="lock_service_summary">Locks the phone when you use the gesture you chose for it in Zenith.</string>
+    <string name="lock_service_description">Zenith uses this for one thing: turning the screen off and locking the phone when you use the gesture you chose for it, the way the side button does. It asks Android for no events and cannot see what is on the screen, so nothing on it is read, kept or sent. Every other part of Zenith works without it.</string>
 </resources>

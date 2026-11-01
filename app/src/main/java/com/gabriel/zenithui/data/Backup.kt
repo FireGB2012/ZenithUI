@@ -22,7 +22,7 @@ object Backup {
         return "zenith-backup-$stamp.json"
     }
 
-    fun encode(settings: ZenithSettings, items: List<HomeItem>): String {
+    fun encode(settings: ZenithSettings, items: List<HomeItem>, looks: List<Look> = emptyList()): String {
         val layout = JSONArray()
         items.forEach { layout.put(it.toJson()) }
         return JSONObject().apply {
@@ -31,8 +31,18 @@ object Backup {
             put("savedAt", System.currentTimeMillis())
             put("settings", settings.toJson())
             put("layout", layout)
+            // The Looks saved on the phone go too: a Zenith from before there were Looks reads past them.
+            if (looks.isNotEmpty()) put("looks", JSONArray().apply { looks.forEach { put(it.toJson()) } })
         }.toString(2)
     }
+
+    /** The Looks a backup holds. One made before there were Looks holds none. */
+    fun looks(text: String): List<Look> = runCatching {
+        val root = JSONObject(text)
+        if (root.optString("format") != "zenith-ui-backup") return emptyList()
+        val array = root.optJSONArray("looks") ?: return emptyList()
+        (0 until array.length()).mapNotNull { array.optJSONObject(it)?.let(Look::fromJson) }
+    }.getOrDefault(emptyList())
 
     /** Reads a backup, or returns null if the file is not one. */
     fun decode(text: String): Pair<ZenithSettings, List<HomeItem>>? = runCatching {

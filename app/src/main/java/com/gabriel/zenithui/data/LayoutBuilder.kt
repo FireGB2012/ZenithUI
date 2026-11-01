@@ -123,6 +123,51 @@ object LayoutBuilder {
      */
     fun pagesToTry(lastPage: Int, from: Int = 0): IntRange = from..minOf(maxOf(lastPage, from) + 1, MAX_PAGES - 1)
 
+    /**
+     * [items] with the icons [gathered] while [mainId] was carried put down round where it landed:
+     * each in the free spot nearest it on its page, in the order they were gathered. One with no
+     * room left on that page stays where it was.
+     */
+    fun landBeside(items: List<HomeItem>, mainId: String, gathered: List<String>, columns: Int, rows: Int, rowStep: Int = ROW_UNITS): List<HomeItem> {
+        val main = items.firstOrNull { it.id == mainId } ?: return items
+        var now = items
+        for (id in gathered) {
+            val item = now.firstOrNull { it.id == id } ?: continue
+            val grid = PageGrid(columns, rows * ROW_UNITS)
+            now.filter { it.page == main.page && it.id != id }.forEach { grid.occupyItem(it) }
+            val (col, row) = grid.nearestSlot(main.col, main.row, item.spanX, item.spanY, rowStep) ?: continue
+            now = now.map { if (it.id == id) it.moved(main.page, col, row) else it }
+        }
+        return now
+    }
+
+    /**
+     * Where [item], just taken off, goes back among [items]: where it was if that spot is still
+     * free, or else the first opening that fits it. Null when there is no room for it anywhere.
+     */
+    fun putBack(items: List<HomeItem>, item: HomeItem, columns: Int, rows: Int, rowStep: Int = ROW_UNITS): HomeItem? {
+        val grid = PageGrid(columns, rows * ROW_UNITS)
+        items.filter { it.page == item.page && it.id != item.id }.forEach { grid.occupyItem(it) }
+        if (grid.isFree(item.col, item.row, item.spanX, item.spanY)) return item
+        val slot = firstFreeSlot(items.filter { it.id != item.id }, columns, rows, item.spanX, item.spanY, rowStep) ?: return null
+        return item.moved(slot.first, slot.second, slot.third)
+    }
+
+    /**
+     * The first opening for something [spanX] across and [spanY] row units down, on the pages in
+     * use or a new one after them: its page, column and row. Null when every page there can be is
+     * full.
+     */
+    fun firstFreeSlot(items: List<HomeItem>, columns: Int, rows: Int, spanX: Int, spanY: Int, rowStep: Int = ROW_UNITS): Triple<Int, Int, Int>? {
+        for (page in pagesToTry(items.maxOfOrNull { it.page } ?: 0)) {
+            val grid = PageGrid(columns, rows * ROW_UNITS)
+            items.filter { it.page == page }.forEach { grid.occupyItem(it) }
+            val slot = grid.findSlot(spanX, spanY, rowStep) ?: continue
+            return Triple(page, slot.first, slot.second)
+        }
+        return null
+    }
+
     /** [spanY] row units as whole rows: the nearest, and never fewer than one. */
     fun wholeRows(spanY: Int): Int = ((spanY + ROW_UNITS / 2) / ROW_UNITS).coerceAtLeast(1) * ROW_UNITS
 
@@ -242,6 +287,8 @@ object LayoutBuilder {
             is WidgetCell -> item.copy(row = item.row * ROW_UNITS, spanY = item.spanY * ROW_UNITS)
             is AppCell -> item.copy(row = item.row * ROW_UNITS)
             is FolderCell -> item.copy(row = item.row * ROW_UNITS)
+            // Nothing this new was ever saved in whole rows.
+            is ShortcutCell, is HostedWidgetCell, is StackCell -> item
         }
     }
 
@@ -261,6 +308,9 @@ object LayoutBuilder {
                 is WidgetCell -> item.copy(row = item.row / ROW_UNITS, spanY = item.spanY / ROW_UNITS)
                 is AppCell -> item.copy(row = item.row / ROW_UNITS)
                 is FolderCell -> item.copy(row = item.row / ROW_UNITS)
+                is ShortcutCell -> item.copy(row = item.row / ROW_UNITS)
+                is HostedWidgetCell -> item.copy(row = item.row / ROW_UNITS, spanY = item.spanY / ROW_UNITS)
+                is StackCell -> item.copy(row = item.row / ROW_UNITS, spanY = item.spanY / ROW_UNITS)
             }
         }
         return if (shrunk.all { it.row + it.spanY <= unitRows }) shrunk else items

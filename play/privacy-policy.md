@@ -1,6 +1,6 @@
 # Privacy Policy — Zenith UI
 
-**Last updated: 4 October 2026**
+**Last updated: 31 October 2026**
 
 > The copy Play actually links to is `docs/index.html`, published from the public repo
 > github.com/FireGB2012/zenith-privacy at <https://firegb2012.github.io/zenith-privacy/>. Edit all
@@ -11,20 +11,53 @@
 
 Zenith UI is a home screen replacement (launcher) for Android. This policy explains what the app
 does with your information. The short version: Zenith works without an account, and without one
-nothing you do in it leaves your phone. If you choose to make a Zenith account, the app sends
-Zenith's server only what is listed under "A Zenith account" below.
+nothing you do in it leaves your phone — with two exceptions you choose: the Weather widget, which
+sends the place you pick to a weather service, and opening a Look somebody shared, which asks
+Zenith's server for it. If you choose to make a Zenith account, the app sends Zenith's server only
+what is listed under "A Zenith account" below.
 
 ## What Zenith UI collects
 
 **Without an account: nothing.** Zenith UI has no analytics, no advertising and no crash reporting,
 and no personal data is sold or shared. Until you make a Zenith account or sign in to one, the only
 network traffic the app produces is Google Play Billing checking with Google Play whether you own
-Zenith Plus — see Payments below.
+Zenith Plus — see Payments below — and, only if you ask for them, the requests described under
+"The Weather widget" and "Opening a Look".
+
+## The Weather widget
+
+The Weather widget is off until you choose a place for it. When you search for one, what you type is
+sent to Open-Meteo's place search (geocoding-api.open-meteo.com). Once you choose a place, its
+latitude and longitude — and nothing else: no name, no account, no identifier — are sent to
+Open-Meteo's forecast service (api.open-meteo.com), at most every half hour while the home screen is
+showing, and the forecast that comes back is kept on your phone. Zenith does not use your phone's
+location for this; it only ever sends the place you picked. Like any server, Open-Meteo sees the
+internet address the request comes from; its own terms and privacy policy, at open-meteo.com, cover
+what it does with that. Choosing "Stop getting the weather" in the widget's sheet stops the requests.
+
+## The island
+
+The island (Zenith Plus) is black round your phone's camera, shown over other apps. It needs
+Android's "Display over other apps" permission, which you give in Android's settings and can take
+back there at any time. It shows the music playing, a call or timer that is running, the ringer when
+you change it, the battery as you plug in, and, for a moment, a notification as it arrives: whose it
+is, and its message if you tap the island to read it. It reads these through the notification access
+described under Permissions, if you have given it. Nothing it shows is kept, logged or sent
+anywhere.
+
+## Opening a Look
+
+A Look is a home screen design: its colours, wallpaper design, icon choices and layout. Under
+Settings > Looks you can type a code somebody gave you, or tap Featured looks. Either one asks
+Zenith's server for the Look, with or without an account: the request holds the code, or asks for
+the list, and nothing about you. Like any server, Zenith's sees the internet address the request
+comes from, as described under "A Zenith account". The Look that comes back is put on your home
+screen and kept on your phone only if you save it. Nothing is sent until you tap.
 
 ## A Zenith account
 
 An account is optional. It makes your Aura code count, for the friend who uses it and for you, and
-with Zenith Plus it can keep a backup of your home screen. You make one in the app under Settings >
+with Zenith Plus it can keep a backup of your home screen and share Looks. You make one in the app under Settings >
 Account, with a username and a password or with Continue with Google. From then on the app talks to
 Zenith's server, which is run by the developer, over an encrypted (HTTPS) connection, and the server
 keeps:
@@ -44,6 +77,14 @@ keeps:
   PIN for hidden apps or anything about your purchase. Each new backup replaces the one before. It
   is kept as it was sent, not locked with a password of its own, so whoever runs the server could
   read it.
+- **The Looks you share**, only if you have Zenith Plus and tap Share on a Look. A shared Look
+  holds how your home screen looks — its colours, wallpaper design, icon shape, pack and style, the
+  grid, and which apps, folders and Zenith widgets are where — and the name you gave the Look. It
+  never holds your name, your notes or lists, the apps you hid, photos, other apps' widgets, the
+  names you gave apps, or anything about Aura or your purchase. Anybody who has its code can open
+  it; it is shown to nobody else unless the developer chooses it for the Featured list. An account
+  keeps its twenty newest. Stop sharing, or deleting the Look in the app, removes it from the
+  server.
 - **A sign-in key** for each phone you are signed in on, stored as a hash.
 
 Like any server, it also sees the internet (IP) address a request comes from. It uses that to limit
@@ -60,7 +101,7 @@ covers its side.
 ## Deleting your account
 
 You can delete your account at any time: in the app under Settings > Account > Delete account, or
-without the app at <https://zenithlabz.duckdns.org/delete-account>. Deleting removes the account, its sign-in keys, its Aura code and its backup from the server at once. The
+without the app at <https://zenithlabz.duckdns.org/delete-account>. Deleting removes the account, its sign-in keys, its Aura code, its backup and the Looks it shared from the server at once. The
 records of codes used stay, with nothing left in them that says whose they were. Signing out removes
 the sign-in key for that phone. Uninstalling the app does not delete an account. For a copy of what
 is kept about your account, write to the address at the end.
@@ -73,7 +114,10 @@ The app saves the following in its own private storage, readable only by Zenith 
 - Your home screen layout: which apps, folders and widgets you placed and where.
 - Your preferences: palette, light/dark mode, glass strength, grid size, icon size and shape, and
   the icon pack you selected.
-- The text of the Quick Note widget, if you use it.
+- The text of the Quick Note widget, the To-do widget's list, the Countdown's name and date, the
+  World clock's cities and the Weather widget's place, if you use them.
+- Names you gave apps, icons you chose for them, and photos you picked for an app's icon or the
+  Photo frame widget, copied small into the app's own storage.
 - Whether you own Zenith Plus, and the date your free trial began.
 - The palette you built, the apps you chose to hide, and the PIN you set for them, if you use those
   features. The PIN keeps a list tidy; it is not a device security measure and is stored as typed.
@@ -123,6 +167,15 @@ To work as a launcher, the app reads:
 - **The motion sensor (accelerometer)**, only while the home screen is showing, so the light on the
   glass panels moves as you tilt the phone. Readings are used for drawing and are never stored or
   sent anywhere.
+- **Notifications, only if you give Zenith notification access** in Android's settings, for
+  notification dots and the Now playing widget. Zenith counts how many notifications each app has
+  showing, and reads the title, artist and album picture of whatever is playing; it does not read,
+  keep or send what your notifications say.
+- **Apps' shortcuts and widgets**, through Android's launcher services, so they can be shown and
+  started from the home screen. They are drawn on the phone and never sent anywhere.
+- **Nothing through the lock helper.** If you choose a gesture that locks the phone, Android asks you
+  to switch on Zenith's lock helper, an accessibility service. It asks Android for no events and
+  cannot see the screen; its only use is pressing lock when you make the gesture.
 
 ## Permissions
 
@@ -132,7 +185,10 @@ To work as a launcher, the app reads:
 | `VIBRATE` | Provides a short haptic tick when you pick up an icon or resize a widget |
 | `READ_CALENDAR` | Optional. Asked for only when you tap "Allow calendar" on the bedside clock, so it can list today's events |
 | `com.android.vending.BILLING` | Lets Google Play sell Zenith Plus inside the app |
-| `INTERNET`, `ACCESS_NETWORK_STATE` | Lets the app reach Zenith's server once you make or sign in to a Zenith account, and lets Google's Play Billing library reach Google Play. Without an account, Zenith UI itself opens no network connections |
+| `INTERNET`, `ACCESS_NETWORK_STATE` | Lets the app reach Zenith's server once you make or sign in to a Zenith account, lets Google's Play Billing library reach Google Play, and lets the Weather widget reach Open-Meteo once you choose a place for it. Otherwise Zenith UI itself opens no network connections |
+| `EXPAND_STATUS_BAR` | Lets a swipe down on the home screen pull down the notification shade, as a phone's own launcher does |
+| Notification access (optional) | Given in Android's settings, for notification dots and the Now playing widget, as described above |
+| Accessibility: the lock helper (optional) | Switched on in Android's settings, only to lock the phone with a gesture you chose |
 
 Zenith UI does not request location, contacts, storage, camera or microphone permissions. Calendar
 access is optional, requested only in the bedside clock, and can be revoked at any time in Android

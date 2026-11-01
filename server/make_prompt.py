@@ -20,7 +20,7 @@ Please do not rewrite, reformat or "improve" the program: the app is built again
 - One Python file, standard library only (Python 3.9 or newer). No pip, no virtualenv, no Docker needed.
 - It keeps everything in one SQLite file.
 - It listens on `127.0.0.1:8787` only. A web server in front of it does the HTTPS.
-- It does three things for the app: accounts (username and password, or Google), one backup per account, and referral codes.
+- It does four things for the app: accounts (username and password, or Google), one backup per account, referral codes, and Looks (home screen designs people share with each other by a short code).
 
 ## Before you touch anything
 
@@ -138,6 +138,7 @@ Adapt paths and commands to this system, but keep the shape.
 
 - **Google sign-in.** When I give you a Google "Web application" client ID (it ends in `.apps.googleusercontent.com`), put it in `/etc/zenith.env` as `ZENITH_GOOGLE_CLIENT_ID=...`, run `systemctl restart zenith`, and check that `/v1/health` now says `"google":true`. The server then needs to be able to reach `https://www.googleapis.com` going out.
 - **Updating.** I may send a newer `zenith_server.py` with a new checksum. Replace the file, check the checksum, run `--selftest`, `systemctl restart zenith`, run `--check` again. The database stays where it is.
+- **Featured Looks.** The app lists a few Looks for everybody to try, and only ones I have chosen. When I send you a code such as `LOOK-BCD234`, run `sudo -u zenith env ZENITH_DB=/var/lib/zenith/zenith.db python3 /opt/zenith/zenith_server.py --feature LOOK-BCD234` (and `--unfeature` the same way to take one off). Never feature a Look I did not name.
 - **Looking at it.** `journalctl -u zenith` shows one line for each request (method, path, status) and never a password, a token or a request body.
 
 ## What I need back from you

@@ -26,10 +26,22 @@ class SettingsJsonTest {
         showLabels = false,
         iconShape = "circle",
         iconPack = "com.example.icons",
+        appEdits = mapOf(
+            "a/b" to AppEdit(label = "Mail", icon = IconSource.pack("com.example.icons", "mail_blue")),
+            "c/d" to AppEdit(hideLabel = true),
+        ),
+        iconStyle = "glass",
+        badges = "count",
+        labelSize = "large",
+        labelShadow = true,
         glassShine = false,
         openAnimation = "glass",
         appsView = "library",
         recentLaunches = listOf("a/b", "c/d"),
+        launchCounts = mapOf("a/b" to 7),
+        drawerSort = "used",
+        drawerColumns = 5,
+        drawerTabs = listOf(DrawerTab("Games", listOf("g/h"))),
         freeform = true,
         widgetTuck = 2,
         dock = listOf("x/y", "z/w"),
@@ -44,9 +56,41 @@ class SettingsJsonTest {
         animation = AnimationTuning(preset = "bouncy", speed = 1.25f, changed = mapOf("openArc" to 24f, "homeScale" to 1.05f)),
         pageEffect = "cube",
         haptics = false,
+        gestures = mapOf(Gestures.DOUBLE_TAP to GestureActions.LOCK),
         toggles = listOf("wifi", "torch"),
         pages = 3,
         note = "milk",
+        worldClocks = listOf("Asia/Kolkata"),
+        countdownTitle = "Lisbon",
+        countdownDay = 20_500L,
+        countdownFrom = 20_400L,
+        framePhotos = listOf("frame-1.jpg"),
+        todos = listOf(TodoItem("bread"), TodoItem("post", done = true)),
+        weatherPlace = "Oslo",
+        weatherLat = 59.91,
+        weatherLon = 10.75,
+        weatherUnits = "f",
+        lookRules = listOf(LookRule("night", 1320, 420, setOf(5, 6))),
+        lookOccasion = "night@1320@20400",
+        activeLook = "night",
+        font = "inter",
+        numberFont = "thin",
+        glassTuning = GlassTuning(bend = 1.4f, frost = -0.5f, rim = 0.6f, rainbow = 2f, tint = 0.2f, lightAngle = 90f, lightTilt = false),
+        dayPalettes = mapOf("dawn" to "sunset", "night" to "midnight"),
+        paletteOccasion = "night@20400",
+        wallAccent = 0xFFFF6B8B,
+        wallAccentAlt = 0xFF4FB4FF,
+        wallBackdrop = 0xFF101018,
+        wallDark = false,
+        arrival = "cascade",
+        drawerArrival = "grow",
+        press = "ripple",
+        dockStyle = "floating",
+        indicator = "numbers",
+        folderStyle = "cover",
+        lockLayout = true,
+        hideStatusBar = true,
+        island = IslandSettings(on = true, live = false, always = true, hideSideways = false),
         homePrompts = 2,
         calendarDeclined = true,
         layoutVersion = 2,
@@ -105,6 +149,12 @@ class SettingsJsonTest {
         assertEquals("clear", ZenithSettings.fromJson(JSONObject("""{"glassBody":"frosted"}""")).glassBody)
         // Asked for by name, it is.
         assertEquals("frosted", ZenithSettings.fromJson(JSONObject("""{"glassPanels":"frosted"}""")).glassBody)
+        // Icons as their apps draw them, dots that only say something is there, names as they were.
+        assertEquals(IconStyles.ORIGINAL, old.iconStyle)
+        assertEquals(Badges.DOT, old.badges)
+        assertEquals(LabelSizes.MEDIUM, old.labelSize)
+        assertFalse(old.labelShadow)
+        assertTrue(old.appEdits.isEmpty())
     }
 
     @Test

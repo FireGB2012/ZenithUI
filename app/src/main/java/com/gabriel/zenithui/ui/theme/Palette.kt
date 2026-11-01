@@ -52,6 +52,17 @@ fun ZenithPalette.toned(dark: Boolean): ZenithPalette {
     return copy(dark = dark, backdrop = backdrop)
 }
 
+/**
+ * This palette with [accent] in place of its own, for a widget given a colour of its own: the
+ * second accent a little round the colour wheel from it, so gradients still have two ends.
+ */
+fun ZenithPalette.withAccent(accent: Color): ZenithPalette {
+    val hsv = FloatArray(3)
+    android.graphics.Color.colorToHSV(accent.toArgb(), hsv)
+    hsv[0] = (hsv[0] + 40f) % 360f
+    return copy(accent = accent, accentAlt = Color(android.graphics.Color.HSVToColor(hsv)), glassTint = accent)
+}
+
 /** The five colours a wallpaper is painted from, and whether it is the light or the dark picture. */
 fun ZenithPalette.wallColors(): WallColors = WallColors(
     accent = accent.toArgb(),
@@ -210,9 +221,36 @@ object Palettes {
         )
     }
 
-    /** Every palette by id, including the custom one when it is the one in use. */
-    fun resolve(settings: ZenithSettings): ZenithPalette =
-        if (settings.paletteId == CUSTOM) custom(settings) else byId(settings.paletteId)
+    /** The id of the palette taken from your wallpaper. */
+    const val WALLPAPER = "wallpaper"
+
+    /**
+     * The palette taken from the wallpaper, as it was last worked out (`WallpaperPalette`): its
+     * liveliest colour to glow, a second for gradients, and its main colour, kept deep or pale,
+     * behind the glass.
+     */
+    fun fromWallpaper(settings: ZenithSettings): ZenithPalette {
+        val accent = Color(settings.wallAccent.toInt())
+        val accentAlt = Color(settings.wallAccentAlt.toInt())
+        val base = Color(settings.wallBackdrop.toInt())
+        return ZenithPalette(
+            id = WALLPAPER,
+            name = "Wallpaper",
+            tagline = "Taken from your wallpaper",
+            accent = accent,
+            accentAlt = accentAlt,
+            backdrop = listOf(base, lerp(base, accent, 0.16f), lerp(base, accentAlt, 0.08f)),
+            glassTint = accent,
+            dark = settings.wallDark,
+        )
+    }
+
+    /** Every palette by id, including your own and the wallpaper's when they are the one in use. */
+    fun resolve(settings: ZenithSettings): ZenithPalette = when (settings.paletteId) {
+        CUSTOM -> custom(settings)
+        WALLPAPER -> fromWallpaper(settings)
+        else -> byId(settings.paletteId)
+    }
 
     /** The palette a Zenith wallpaper is painted in: the one it was pinned to, or the theme's, in the tone in use. */
     fun forWallpaper(settings: ZenithSettings, dark: Boolean): ZenithPalette = when (settings.wallpaperPalette) {

@@ -52,6 +52,7 @@ import androidx.compose.ui.unit.sp
 import com.gabriel.zenithui.ui.common.Motion
 import com.gabriel.zenithui.ui.common.pressBounce
 import com.gabriel.zenithui.ui.theme.LocalPalette
+import com.gabriel.zenithui.ui.theme.LocalZenithFont
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -86,6 +87,7 @@ fun GreetingLine(text: String, modifier: Modifier = Modifier) {
     Text(
         text = text,
         style = TextStyle(
+            fontFamily = LocalZenithFont.current,
             brush = Brush.linearGradient(colours),
             fontSize = 20.sp,
             lineHeight = 26.sp,
@@ -233,6 +235,7 @@ private fun GreetingWords(
 
     val colours = greetingColours()
     val baseStyle = TextStyle(
+        fontFamily = LocalZenithFont.current,
         color = palette.onGlass,
         fontWeight = FontWeight.SemiBold,
         letterSpacing = (-0.034).em,

@@ -83,6 +83,7 @@ object Plus {
         "Theme maker" to "Build your own palette: any accent, any glass, any background.",
         "Hidden apps" to "Keep chosen apps out of the drawer, behind a PIN.",
         "Backup & restore" to "Save your whole home screen to a file and put it back any time.",
+        "Island" to "A pill round the camera, over every app: music, charging, notifications.",
     )
 }
 

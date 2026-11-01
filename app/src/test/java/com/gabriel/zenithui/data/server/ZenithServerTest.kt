@@ -1,6 +1,9 @@
 package com.gabriel.zenithui.data.server
 
 import com.gabriel.zenithui.data.Aura
+import com.gabriel.zenithui.data.Look
+import com.gabriel.zenithui.data.Looks
+import com.gabriel.zenithui.data.ZenithSettings
 import kotlinx.coroutines.runBlocking
 import org.json.JSONObject
 import org.junit.AfterClass
@@ -129,6 +132,25 @@ class ZenithServerTest {
         assertEquals(1, paid.referrals)
         assertEquals(Aura.REFERRAL_REWARD, Aura.referralPayout(paid.referrals, paid = 0))
 
+        // A Look goes up from the account and opens by its code for anybody, however it is typed.
+        val look = Looks.forSharing(Looks.capture(ZenithSettings(paletteId = "aurora"), emptyList(), "Night ✨", "look-1", 1L)).toJson().toString()
+        val code = server.shareLook(mine.token, look).yes()
+        assertTrue(code.matches(Regex("[A-Z2-9]{6}")))
+        val opened = Look.fromJson(JSONObject(server.openLook("look-" + code.lowercase()).yes()))
+        assertEquals("Night ✨", opened?.name)
+        assertEquals("aurora", opened?.let(Looks::paletteOf))
+        assertEquals("no_look", server.openLook("ZZZZZZ").no().error)
+        assertEquals("not_look", server.shareLook(mine.token, """{"format":"something else"}""").no().error)
+        assertTrue(server.shareLook("made-up", look).no().signedOut)
+        // Nothing is featured until the server's keeper says so, from its command line.
+        assertEquals(emptyList<SharedLook>(), server.featuredLooks().yes())
+        // Only the account that shared a Look can take it back.
+        assertEquals("no_look", server.deleteLook(friend.token, code).no().error)
+        server.deleteLook(mine.token, code).yes()
+        assertEquals("no_look", server.openLook(code).no().error)
+        // One left shared goes with the account, further down.
+        val left = server.shareLook(mine.token, look).yes()
+
         // Signing out ends that phone's sign-in and no other.
         server.signOut(second.token).yes()
         assertTrue(server.me(second.token).no().signedOut)
@@ -140,6 +162,7 @@ class ZenithServerTest {
         server.deleteAccount(mine.token, "password-1").yes()
         assertTrue(server.me(mine.token).no().signedOut)
         assertEquals("wrong", server.signIn("gabriel", "password-1").no().error)
+        assertEquals("no_look", server.openLook(left).no().error)
         // The friend keeps their account, and stays someone who has used a code.
         assertTrue(server.me(friend.token).yes().redeemed)
     }

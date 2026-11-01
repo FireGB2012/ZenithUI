@@ -83,6 +83,7 @@ import androidx.compose.material.icons.rounded.WifiTethering
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Immutable
@@ -139,7 +140,9 @@ import com.gabriel.zenithui.ui.common.rememberTick
 import com.gabriel.zenithui.ui.common.shake
 import com.gabriel.zenithui.ui.settings.Toggle as OnOffSwitch
 import com.gabriel.zenithui.ui.theme.GlassMaterial
+import com.gabriel.zenithui.ui.theme.LocalNumberFont
 import com.gabriel.zenithui.ui.theme.LocalPalette
+import com.gabriel.zenithui.ui.theme.LocalZenithFont
 import com.gabriel.zenithui.ui.theme.ZenithShapes
 import com.gabriel.zenithui.ui.theme.glass
 import com.gabriel.zenithui.ui.theme.glassInk
@@ -160,7 +163,7 @@ private fun formOf(width: Dp, height: Dp): WidgetForm = WidgetForm.of(width.valu
  * True inside a "No glass" widget. There is no pane: the widget sits straight on the wallpaper,
  * its words white with a soft shadow, and its big numbers, rings and icons made of glass.
  */
-private val LocalBare = staticCompositionLocalOf { false }
+internal val LocalBare = staticCompositionLocalOf { false }
 
 /** Renders one of Zenith's built-in widgets into whatever space the grid gave it. */
 @Composable
@@ -255,6 +258,13 @@ private fun WidgetBody(
         "calendar" -> CalendarWidget(form, width, height)
         "notes" -> NotesWidget(form, note, onNoteChange)
         "toggles" -> TogglesWidget(form, toggles, width, height)
+        "media" -> MediaWidget(form, width, height)
+        "world" -> WorldClockWidget(form, width, height)
+        "countdown" -> CountdownWidget(form, width, height)
+        "photo" -> PhotoFrameWidget(form, width, height)
+        "todo" -> TodoWidget(form, width, height)
+        "aura" -> AuraWidget(form, width, height)
+        "weather" -> WeatherWidget(form, width, height)
         else -> Box(Modifier.fillMaxSize())
     }
 }
@@ -263,18 +273,27 @@ private fun WidgetBody(
 
 /** A text size that fits the smaller of two limits. */
 @Composable
-private fun fit(first: Dp, second: Dp = Dp.Infinity): TextUnit =
+internal fun fit(first: Dp, second: Dp = Dp.Infinity): TextUnit =
     with(LocalDensity.current) { minOf(first, second).coerceAtLeast(8.dp).toSp() }
 
-/** Big numbers set with no font padding, so they sit exactly where they are placed. */
-private fun tight(size: TextUnit, weight: FontWeight = FontWeight.Light) = TextStyle(
-    fontSize = size,
-    lineHeight = size,
-    fontWeight = weight,
-    letterSpacing = (-0.02 * size.value).sp,
-    platformStyle = PlatformTextStyle(includeFontPadding = false),
-    lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.Both),
-)
+/**
+ * Big numbers set with no font padding, so they sit exactly where they are placed, in the font
+ * numbers are set in. A number font with a weight of its own (Thin) sets every number in it,
+ * unless [keepWeight]: glass letters need the body they ask for.
+ */
+@Composable
+internal fun tight(size: TextUnit, weight: FontWeight = FontWeight.Light, keepWeight: Boolean = false): TextStyle {
+    val numbers = LocalNumberFont.current
+    return TextStyle(
+        fontFamily = numbers.family,
+        fontSize = size,
+        lineHeight = size,
+        fontWeight = if (keepWeight) weight else numbers.weight ?: weight,
+        letterSpacing = (-0.02 * size.value).sp,
+        platformStyle = PlatformTextStyle(includeFontPadding = false),
+        lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.Both),
+    )
+}
 
 /**
  * The colour of a widget's second line: the date under the time, "On battery", "25 days left".
@@ -282,7 +301,7 @@ private fun tight(size: TextUnit, weight: FontWeight = FontWeight.Light) = TextS
  * wallpaper, and stronger still with no pane behind it.
  */
 @Composable
-private fun quiet(): Color = LocalPalette.current.onGlass.copy(alpha = if (LocalBare.current) 0.94f else 0.82f)
+internal fun quiet(): Color = LocalPalette.current.onGlass.copy(alpha = if (LocalBare.current) 0.94f else 0.82f)
 
 /**
  * The accent as ink on a pane. A palette's accent is chosen to glow as a fill; as small letters on
@@ -290,14 +309,14 @@ private fun quiet(): Color = LocalPalette.current.onGlass.copy(alpha = if (Local
  * take it part of the way towards the pane's own ink: still the theme's colour, and legible.
  */
 @Composable
-private fun accentInk(): Color {
+internal fun accentInk(): Color {
     val palette = LocalPalette.current
     return lerp(palette.accent, palette.onGlass, if (palette.dark) 0.4f else 0.3f)
 }
 
 /** The small upper-case accent label that heads most widgets. White on the wallpaper, to be read. */
 @Composable
-private fun Caps(text: String, size: TextUnit = 11.sp, modifier: Modifier = Modifier) {
+internal fun Caps(text: String, size: TextUnit = 11.sp, modifier: Modifier = Modifier) {
     Text(
         text = text.uppercase(),
         color = if (LocalBare.current) LocalPalette.current.onGlass else accentInk(),
@@ -311,7 +330,7 @@ private fun Caps(text: String, size: TextUnit = 11.sp, modifier: Modifier = Modi
 }
 
 @Composable
-private fun accentBrush(): Brush {
+internal fun accentBrush(): Brush {
     val palette = LocalPalette.current
     // The accents a little towards the pane's ink, so the far end of a number is as easy to read
     // as the near one.
@@ -326,7 +345,7 @@ private fun accentBrush(): Brush {
  * "No glass" widget it is the glass itself, set heavier so there is body for the light to bend in.
  */
 @Composable
-private fun Figure(
+internal fun Figure(
     text: String,
     size: TextUnit,
     weight: FontWeight = FontWeight.Light,
@@ -340,7 +359,7 @@ private fun Figure(
     if (LocalBare.current) {
         // Bold runs a touch wider than the light weights these sizes were fitted for.
         val glassSize = size * 0.94f
-        style = tight(glassSize, FontWeight.Bold).copy(color = Color.White)
+        style = tight(glassSize, FontWeight.Bold, keepWeight = true).copy(color = Color.White)
         look = Modifier.glassInk(bevel = with(LocalDensity.current) { glassSize.toDp() } * 0.075f)
     } else {
         style = if (accent) tight(size, weight).copy(brush = accentBrush()) else tight(size, weight).copy(color = palette.onGlass)
@@ -355,7 +374,7 @@ private fun Figure(
 
 /** A small symbol in a widget: glass in a "No glass" widget, accent ink on a pane. */
 @Composable
-private fun Symbol(icon: ImageVector, size: Dp, modifier: Modifier = Modifier, tint: Color = Color.Unspecified) {
+internal fun Symbol(icon: ImageVector, size: Dp, modifier: Modifier = Modifier, tint: Color = Color.Unspecified) {
     val bare = LocalBare.current
     Icon(
         icon,
@@ -379,7 +398,7 @@ private fun timeOfDayIcon(hour: Int): ImageVector = when (hour) {
 }
 
 @Composable
-private fun rememberNow(): LocalDateTime {
+internal fun rememberNow(): LocalDateTime {
     val now by produceState(initialValue = LocalDateTime.now()) {
         while (true) {
             value = LocalDateTime.now()
@@ -518,7 +537,7 @@ private fun ClockWidget(form: WidgetForm, userName: String, width: Dp, height: D
 }
 
 @Composable
-private fun AnimatedDigits(text: String, style: TextStyle, modifier: Modifier = Modifier) {
+internal fun AnimatedDigits(text: String, style: TextStyle, modifier: Modifier = Modifier) {
     val reduced = LocalMotionLevel.current.reduced
     AnimatedContent(
         targetState = text,
@@ -535,7 +554,7 @@ private fun AnimatedDigits(text: String, style: TextStyle, modifier: Modifier = 
 }
 
 @Composable
-private fun AnalogFace(now: LocalDateTime, modifier: Modifier) {
+internal fun AnalogFace(now: LocalDateTime, modifier: Modifier) {
     val palette = LocalPalette.current
     // With no pane, the face is only its marks and hands, each a sliver of glass.
     val bare = LocalBare.current
@@ -778,7 +797,7 @@ private fun BatteryWidget(form: WidgetForm, width: Dp, height: Dp) {
  * track stays a faint line on the wallpaper and the charge is a band of glass.
  */
 @Composable
-private fun Ring(fraction: Float, stroke: Dp, modifier: Modifier, charging: Boolean = false) {
+internal fun Ring(fraction: Float, stroke: Dp, modifier: Modifier, charging: Boolean = false) {
     val palette = LocalPalette.current
     val bare = LocalBare.current
     val reduced = LocalMotionLevel.current.reduced
@@ -845,7 +864,7 @@ private const val GLINT = 26f
  * shown as runs on this, so they all fill the same way. With movement reduced it is simply there.
  */
 @Composable
-private fun rememberFilled(fraction: Float): Animatable<Float, AnimationVector1D> {
+internal fun rememberFilled(fraction: Float): Animatable<Float, AnimationVector1D> {
     val reduced = LocalMotionLevel.current.reduced
     val filled = remember { Animatable(if (reduced) fraction else 0f) }
     LaunchedEffect(fraction, reduced) {
@@ -1056,6 +1075,7 @@ private fun MonthGrid(today: LocalDate, fontSize: TextUnit, dot: Dp, modifier: M
     // Numbers are drawn with no font padding and their line trimmed to the glyphs, so a digit
     // sits in the exact middle of its cell — and of the dot behind today.
     val dayStyle = TextStyle(
+        fontFamily = LocalZenithFont.current,
         fontSize = fontSize,
         lineHeight = fontSize,
         textAlign = TextAlign.Center,
@@ -1294,7 +1314,7 @@ private fun NoteField(
         value = note,
         onValueChange = { onNoteChange(if (singleLine) it.replace("\n", " ") else it) },
         singleLine = singleLine,
-        textStyle = TextStyle(color = palette.onGlass, fontSize = fontSize, lineHeight = lineHeight, shadow = shade),
+        textStyle = TextStyle(fontFamily = LocalZenithFont.current, color = palette.onGlass, fontSize = fontSize, lineHeight = lineHeight, shadow = shade),
         cursorBrush = SolidColor(palette.accent),
         modifier = modifier
             .fillMaxWidth()
@@ -1403,24 +1423,11 @@ private data class Toggle(val option: ToggleOption, val active: Boolean, val onC
 private fun TogglesWidget(form: WidgetForm, chosen: List<String>, width: Dp, height: Dp) {
     val palette = LocalPalette.current
     val context = LocalContext.current
-    var torchOn by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { com.gabriel.zenithui.data.Torch.watch(context) }
+    val torchOn by com.gabriel.zenithui.data.Torch.on.collectAsState()
 
     fun actionFor(id: String): () -> Unit = when (id) {
-        "torch" -> {
-            {
-                val manager = context.getSystemService(CameraManager::class.java)
-                runCatching {
-                    val camera = manager.cameraIdList.firstOrNull { camId ->
-                        manager.getCameraCharacteristics(camId)
-                            .get(android.hardware.camera2.CameraCharacteristics.FLASH_INFO_AVAILABLE) == true
-                    }
-                    if (camera != null) {
-                        torchOn = !torchOn
-                        manager.setTorchMode(camera, torchOn)
-                    }
-                }
-            }
-        }
+        "torch" -> { { com.gabriel.zenithui.data.Torch.toggle(context) } }
         "wifi" -> { { context.startActivityIntent(Settings.Panel.ACTION_WIFI, Settings.ACTION_WIFI_SETTINGS) } }
         "bluetooth" -> { { context.startActivityIntent(Settings.ACTION_BLUETOOTH_SETTINGS) } }
         "data" -> { { context.startActivityIntent(Settings.Panel.ACTION_INTERNET_CONNECTIVITY, Settings.ACTION_WIRELESS_SETTINGS) } }
@@ -1457,9 +1464,11 @@ private fun TogglesWidget(form: WidgetForm, chosen: List<String>, width: Dp, hei
     val measurer = rememberTextMeasurer()
     val labels = toggles.map { it.label }
     val nameLine = with(density) { TOGGLE_NAME_LINE.toDp() }
-    val names = remember(labels, cellWidth, cellHeight, density.density, density.fontScale) {
+    // Measured in the font they are drawn in, or a wider font would not fit where it was measured to.
+    val nameFont = LocalZenithFont.current
+    val names = remember(labels, cellWidth, cellHeight, density.density, density.fontScale, nameFont) {
         fun widthOf(text: String) = with(density) {
-            measurer.measure(text, TOGGLE_NAME_STYLE, softWrap = false, maxLines = 1).size.width.toDp().value
+            measurer.measure(text, TOGGLE_NAME_STYLE.copy(fontFamily = nameFont), softWrap = false, maxLines = 1).size.width.toDp().value
         }
         ToggleNames.fit(
             widestName = labels.maxOf { widthOf(it) },
@@ -1469,6 +1478,7 @@ private fun TogglesWidget(form: WidgetForm, chosen: List<String>, width: Dp, hei
         )
     }
     val nameStyle = TOGGLE_NAME_STYLE.copy(
+        fontFamily = nameFont,
         fontSize = TOGGLE_NAME * names.scale,
         lineHeight = TOGGLE_NAME_LINE * names.scale,
         color = palette.onGlass,

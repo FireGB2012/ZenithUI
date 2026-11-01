@@ -32,8 +32,11 @@ object Reshape {
             when (val moved = other.moved(other.page, col, row)) {
                 is WidgetCell -> moved.copy(spanX = spanX, spanY = spanY)
                 is AppCell -> moved.copy(spanX = spanX, spanY = spanY)
-                // A folder is always one cell: there is no other size to give it.
+                is HostedWidgetCell -> moved.copy(spanX = spanX, spanY = spanY)
+                is StackCell -> moved.copy(spanX = spanX, spanY = spanY)
+                // A folder or a shortcut is always one cell: there is no other size to give it.
                 is FolderCell -> moved
+                is ShortcutCell -> moved
             }
         }
     }

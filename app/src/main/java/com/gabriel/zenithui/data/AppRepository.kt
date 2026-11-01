@@ -126,6 +126,135 @@ class AppRepository(context: Context) {
         }
     }
 
+    // ------------------------------------------------------------ the work profile
+
+    private val workActivities = HashMap<String, Pair<LauncherActivityInfo, UserHandle>>()
+
+    private val _workApps = MutableStateFlow<List<AppInfo>>(emptyList())
+
+    /** The work profile's apps, A to Z; empty on a phone with no work profile. */
+    val workApps: StateFlow<List<AppInfo>> = _workApps.asStateFlow()
+
+    suspend fun refreshWork() = withContext(Dispatchers.IO) {
+        val others = runCatching { launcherApps.profiles }.getOrNull().orEmpty().filter { it != user }
+        val found = HashMap<String, Pair<LauncherActivityInfo, UserHandle>>()
+        val list = ArrayList<AppInfo>()
+        for (profile in others) {
+            for (info in runCatching { launcherApps.getActivityList(null, profile) }.getOrNull().orEmpty()) {
+                val cn = info.componentName
+                val app = AppInfo(
+                    packageName = cn.packageName,
+                    className = cn.className,
+                    label = info.label?.toString().orEmpty().ifEmpty { cn.packageName },
+                    system = (info.applicationInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0,
+                    work = true,
+                )
+                found[app.key] = info to profile
+                list += app
+            }
+        }
+        list.sortBy { it.label.lowercase() }
+        synchronized(workActivities) {
+            workActivities.clear()
+            workActivities.putAll(found)
+        }
+        _workApps.value = list
+    }
+
+    fun workIcon(key: String, densityDpi: Int): Drawable? =
+        runCatching { synchronized(workActivities) { workActivities[key] }?.first?.getIcon(densityDpi) }.getOrNull()
+
+    /** Opens a work app, in the work profile. */
+    fun launchWork(key: String, sourceBounds: Rect? = null, opts: Bundle? = null): Boolean {
+        val (info, profile) = synchronized(workActivities) { workActivities[key] } ?: return false
+        return runCatching {
+            launcherApps.startMainActivity(info.componentName, profile, sourceBounds, opts)
+            true
+        }.getOrDefault(false)
+    }
+
+    fun openWorkAppInfo(key: String) {
+        val (info, profile) = synchronized(workActivities) { workActivities[key] } ?: return
+        runCatching { launcherApps.startAppDetailsActivity(info.componentName, profile, null, null) }
+    }
+
+    // ------------------------------------------------------------ shortcuts
+
+    /** Every app's shortcuts at once, for finding one by its name from the drawer's search. */
+    suspend fun allShortcuts(): List<AppShortcut> = withContext(Dispatchers.IO) {
+        if (!canUseShortcuts()) return@withContext emptyList()
+        val query = LauncherApps.ShortcutQuery()
+            .setQueryFlags(LauncherApps.ShortcutQuery.FLAG_MATCH_MANIFEST or LauncherApps.ShortcutQuery.FLAG_MATCH_DYNAMIC)
+        val found = runCatching { launcherApps.getShortcuts(query, user) }.getOrNull().orEmpty().filter { it.isEnabled }
+        synchronized(shortcutInfos) { found.forEach { shortcutInfos[ShortcutKeys.of(it.`package`, it.id)] = it } }
+        found.map { AppShortcut(it.`package`, it.id, (it.shortLabel ?: it.longLabel ?: "").toString()) }
+    }
+
+    /** Whether Android lets Zenith read and start apps' shortcuts: only while it is the home app. */
+    fun canUseShortcuts(): Boolean = runCatching { launcherApps.hasShortcutHostPermission() }.getOrDefault(false)
+
+    private val shortcutInfos = HashMap<String, android.content.pm.ShortcutInfo>()
+
+    /** The shortcuts [packageName] offers from its icon, in the order it ranks them: up to five. */
+    suspend fun shortcuts(packageName: String): List<AppShortcut> = withContext(Dispatchers.IO) {
+        if (!canUseShortcuts()) return@withContext emptyList()
+        val query = LauncherApps.ShortcutQuery()
+            .setPackage(packageName)
+            .setQueryFlags(LauncherApps.ShortcutQuery.FLAG_MATCH_MANIFEST or LauncherApps.ShortcutQuery.FLAG_MATCH_DYNAMIC)
+        val found = runCatching { launcherApps.getShortcuts(query, user) }.getOrNull().orEmpty()
+            .filter { it.isEnabled }
+            // As Android's own launcher lists them: the ones the app always has first, then the
+            // ones it changes as it goes, each in the app's own order.
+            .sortedWith(compareBy({ if (it.isDeclaredInManifest) 0 else 1 }, { it.rank }))
+            .take(MAX_SHORTCUTS)
+        synchronized(shortcutInfos) { found.forEach { shortcutInfos[ShortcutKeys.of(it.`package`, it.id)] = it } }
+        found.map { AppShortcut(it.`package`, it.id, (it.shortLabel ?: it.longLabel ?: "").toString()) }
+    }
+
+    private fun findShortcut(key: String): android.content.pm.ShortcutInfo? {
+        synchronized(shortcutInfos) { shortcutInfos[key] }?.let { return it }
+        val (pkg, id) = ShortcutKeys.parse(key) ?: return null
+        if (!canUseShortcuts()) return null
+        val query = LauncherApps.ShortcutQuery()
+            .setPackage(pkg)
+            .setShortcutIds(listOf(id))
+            .setQueryFlags(
+                LauncherApps.ShortcutQuery.FLAG_MATCH_MANIFEST or
+                    LauncherApps.ShortcutQuery.FLAG_MATCH_DYNAMIC or
+                    LauncherApps.ShortcutQuery.FLAG_MATCH_PINNED
+            )
+        val info = runCatching { launcherApps.getShortcuts(query, user) }.getOrNull()?.firstOrNull() ?: return null
+        synchronized(shortcutInfos) { shortcutInfos[key] = info }
+        return info
+    }
+
+    fun shortcutIcon(key: String, densityDpi: Int): Drawable? = runCatching {
+        findShortcut(key)?.let { launcherApps.getShortcutIconDrawable(it, densityDpi) }
+    }.getOrNull()
+
+    /** Runs a shortcut, the way tapping it in the app's own menu would. False when it is not offered any more. */
+    fun startShortcut(key: String, sourceBounds: Rect? = null, opts: Bundle? = null): Boolean {
+        val (pkg, id) = ShortcutKeys.parse(key) ?: return false
+        return runCatching {
+            launcherApps.startShortcut(pkg, id, sourceBounds, opts, user)
+            true
+        }.getOrDefault(false)
+    }
+
+    /**
+     * Keeps a shortcut while it is on a page, or lets it go. An app may take back a shortcut that
+     * nobody has pinned, so one on the home screen is pinned for as long as it is there.
+     */
+    fun pinShortcut(key: String, pinned: Boolean) {
+        val (pkg, id) = ShortcutKeys.parse(key) ?: return
+        if (!canUseShortcuts()) return
+        runCatching {
+            val query = LauncherApps.ShortcutQuery().setPackage(pkg).setQueryFlags(LauncherApps.ShortcutQuery.FLAG_MATCH_PINNED)
+            val already = launcherApps.getShortcuts(query, user).orEmpty().map { it.id }
+            launcherApps.pinShortcuts(pkg, if (pinned) (already + id).distinct() else already - id, user)
+        }
+    }
+
     fun openAppInfo(key: String) {
         val app = byKey(key) ?: return
         runCatching {
@@ -235,6 +364,9 @@ class AppRepository(context: Context) {
     }
 
     private companion object {
+        /** As many as Android's own launcher shows from an icon. */
+        const val MAX_SHORTCUTS = 5
+
         val GOOGLE_PACKAGES = listOf("com.google.android.googlequicksearchbox", "com.google.android.apps.search")
         val MAIL_PACKAGES = listOf("com.google.android.gm", "com.samsung.android.email.provider")
     }

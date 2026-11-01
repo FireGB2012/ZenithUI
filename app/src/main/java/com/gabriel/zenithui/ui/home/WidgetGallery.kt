@@ -85,6 +85,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.gabriel.zenithui.data.HomeGeometry
+import com.gabriel.zenithui.data.ROW_UNITS
 import com.gabriel.zenithui.data.WidgetLayouts
 import com.gabriel.zenithui.data.WidgetSize
 import com.gabriel.zenithui.data.WidgetSizes
@@ -132,6 +133,10 @@ fun WidgetGallery(
     /** Puts the widget on the home screen at that size (in columns and row units); false when no page has room. */
     onAdd: (type: String, spanX: Int, spanY: Int) -> Boolean,
     onDismiss: () -> Unit,
+    /** Puts another app's widget on the home screen; Android may be asked first. */
+    onAddHosted: (android.appwidget.AppWidgetProviderInfo) -> Unit = {},
+    /** Opened from a widget's "Stack another widget here": what is chosen goes onto that widget. */
+    stacking: Boolean = false,
 ) {
     var bare by remember { mutableStateOf(false) }
     var picked by remember { mutableStateOf<Picked?>(null) }
@@ -161,7 +166,7 @@ fun WidgetGallery(
     FullPage(
         visible = visible,
         covered = false,
-        title = picked?.let { (if (bare) bareOf(it.spec) else it.spec).title } ?: "Widgets",
+        title = picked?.let { (if (bare) bareOf(it.spec) else it.spec).title } ?: if (stacking) "Stack a widget" else "Widgets",
         canGoBack = picked != null,
         titleShown = { maxOf(inShowcase.value, (scroll.value / TITLE_GONE_PX).coerceIn(0f, 1f)) },
         onBack = { picked = null },
@@ -190,6 +195,11 @@ fun WidgetGallery(
                     bare = bare,
                     onBare = { bare = it },
                     scrolled = scroll,
+                    stacking = stacking,
+                    onHosted = { info ->
+                        onAddHosted(info)
+                        onDismiss()
+                    },
                     arrive = remember { !returned[0] },
                     onPick = { spec, size, centre ->
                         returned[0] = true
@@ -212,6 +222,7 @@ fun WidgetGallery(
                     onBare = { bare = it },
                     growFrom = growFrom,
                     leaving = transition.targetState == EnterExitState.PostExit,
+                    stacking = stacking,
                     onAdd = onAdd,
                     onAdded = onDismiss,
                 )
@@ -232,11 +243,14 @@ private fun Gallery(
     bare: Boolean,
     onBare: (Boolean) -> Unit,
     scrolled: ScrollState,
+    stacking: Boolean,
+    onHosted: (android.appwidget.AppWidgetProviderInfo) -> Unit,
     /** Whether the page is opening, and the cards should come in one after another. */
     arrive: Boolean,
     onPick: (WidgetSpec, WidgetSize, Offset) -> Unit,
 ) {
     val palette = LocalPalette.current
+    val density = LocalDensity.current
     // Four of them at their ordinary size, two to a row; the toggles at their widest across the
     // foot. Every card shows a size its showcase offers, and the showcase opens on that size.
     val square = Widgets.placeable.filter { it != Widgets.Toggles }
@@ -250,9 +264,13 @@ private fun Gallery(
             .padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        LargeTitle("Widgets", scrolled = { scrolled.value })
+        LargeTitle(if (stacking) "Stack a widget" else "Widgets", scrolled = { scrolled.value })
         Text(
-            "Each one is live. Tap it to see its sizes and add it.",
+            if (stacking) {
+                "The one you choose goes onto the widget you held. Swipe up or down on the stack to go between them."
+            } else {
+                "Each one is live. Tap it to see its sizes and add it."
+            },
             color = palette.onGlassMuted,
             fontSize = 15.sp,
             lineHeight = 21.sp,
@@ -301,6 +319,19 @@ private fun Gallery(
                 .fillMaxWidth()
                 .arriving(arrive, 2 + square.size, card = true),
             onPick = onPick,
+        )
+        // Other apps' widgets, below Zenith's own.
+        val cellDp = geometry?.let { with(density) { it.cellWidth.toDp().value } } ?: 80f
+        val rowDp = geometry?.let { with(density) { (it.unitHeight * ROW_UNITS).toDp().value } } ?: 100f
+        HostedWidgetPicker(
+            cellDp = cellDp,
+            rowDp = rowDp,
+            columns = settings.columns,
+            rows = settings.rows,
+            modifier = Modifier
+                .padding(top = 14.dp)
+                .arriving(arrive, 3 + square.size, card = true),
+            onPick = onHosted,
         )
         Spacer(Modifier.height(28.dp))
     }
@@ -462,6 +493,8 @@ private fun Showcase(
     onBare: (Boolean) -> Unit,
     growFrom: TransformOrigin,
     leaving: Boolean,
+    /** Going onto a widget already on the page, at its size, rather than a spot of its own. */
+    stacking: Boolean = false,
     onAdd: (type: String, spanX: Int, spanY: Int) -> Boolean,
     onAdded: () -> Unit,
 ) {
@@ -617,7 +650,7 @@ private fun Showcase(
                 }
                 Spacer(Modifier.height(18.dp))
                 PrimaryButton(
-                    text = "Add to home screen",
+                    text = if (stacking) "Stack it here" else "Add to home screen",
                     modifier = Modifier.shake(refusals),
                     onClick = {
                         val size = sizes[current]

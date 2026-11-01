@@ -28,8 +28,10 @@ import androidx.compose.material.icons.rounded.PrivacyTip
 import androidx.compose.material.icons.rounded.RestartAlt
 import androidx.compose.material.icons.rounded.Restore
 import androidx.compose.material.icons.rounded.Save
+import androidx.compose.material.icons.rounded.TextFields
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.VisibilityOff
+import androidx.compose.material.icons.rounded.WbTwilight
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -42,12 +44,20 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.gabriel.zenithui.data.AnimationPreset
+import com.gabriel.zenithui.data.Badges
+import com.gabriel.zenithui.data.DayParts
+import com.gabriel.zenithui.data.DrawerSort
 import com.gabriel.zenithui.data.GlassBody
 import com.gabriel.zenithui.data.GridDensity
 import com.gabriel.zenithui.data.HomeHeader
 import com.gabriel.zenithui.data.IconPackInfo
 import com.gabriel.zenithui.data.IconPacks
 import com.gabriel.zenithui.data.IconShapes
+import com.gabriel.zenithui.data.IconStyles
+import com.gabriel.zenithui.data.LabelSizes
+import com.gabriel.zenithui.data.NotificationDots
+import androidx.compose.material.icons.rounded.NotificationsActive
+import androidx.compose.runtime.DisposableEffect
 import com.gabriel.zenithui.data.PlusStatus
 import com.gabriel.zenithui.data.WallStyle
 import com.gabriel.zenithui.data.ZenithSettings
@@ -84,8 +94,8 @@ private fun MiniPhone(settings: ZenithSettings, preview: SettingsPreview) {
     val sweep = remember { Animatable(1f) }
     val look = listOf(
         settings.paletteId, settings.appearance, settings.gridDensity, settings.columns, settings.rows,
-        settings.iconShape, settings.iconPack, settings.glassBody,
-        settings.showLabels, settings.showDock, settings.searchBar, settings.header,
+        settings.iconShape, settings.iconPack, settings.iconStyle, settings.glassBody,
+        settings.showLabels, settings.labelSize, settings.labelShadow, settings.showDock, settings.searchBar, settings.header,
     )
     val shown = remember { arrayOf<List<Any>?>(null) }
     LaunchedEffect(look) {
@@ -117,15 +127,19 @@ private fun MiniPhone(settings: ZenithSettings, preview: SettingsPreview) {
 }
 
 @Composable
-internal fun ThemeOptions(settings: ZenithSettings, preview: SettingsPreview, actions: SettingsActions) {
+internal fun ThemeOptions(settings: ZenithSettings, plus: PlusStatus, preview: SettingsPreview, actions: SettingsActions) {
     val change = actions.change
-    // Every palette you can use right now: the six everyone has, the ones bought with aura, and
-    // your own once you have made one.
-    val options = remember(settings.unlockedThemes, settings.paletteId, settings.customAccent, settings.customAccentAlt, settings.customBackdrop) {
+    // Every palette you can use right now: the six everyone has, the ones bought with aura, your
+    // own once you have made one, and the one in your wallpaper.
+    val options = remember(
+        settings.unlockedThemes, settings.paletteId, settings.customAccent, settings.customAccentAlt, settings.customBackdrop,
+        settings.wallAccent, settings.wallAccentAlt, settings.wallBackdrop, settings.wallDark,
+    ) {
         buildList {
             addAll(Palettes.all)
             addAll(Palettes.aura.filter { it.id in settings.unlockedThemes })
             if (settings.paletteId == Palettes.CUSTOM) add(Palettes.custom(settings))
+            add(Palettes.fromWallpaper(settings))
         }
     }
     val design = WallStyle.byName(settings.wallpaperStyle)
@@ -143,8 +157,30 @@ internal fun ThemeOptions(settings: ZenithSettings, preview: SettingsPreview, ac
                     onMake = actions.themeMaker,
                 )
                 Spacer(Modifier.height(10.dp))
-                Note("Colours the glass, the highlights and Zenith's own wallpapers.")
+                Note(
+                    when {
+                        settings.paletteId != Palettes.WALLPAPER -> "Colours the glass, the highlights and Zenith's own wallpapers."
+                        design != null -> "The colours of the last photo you had as wallpaper. With a photo up, they follow it."
+                        else -> "Taken from your wallpaper, and changed along with it."
+                    }
+                )
             }
+        }
+        GroupDivider()
+        Spot("dayPalettes") {
+            ActionRow(
+                icon = if (plus.active) Icons.Rounded.WbTwilight else Icons.Rounded.Lock,
+                title = "By time of day",
+                subtitle = when {
+                    !plus.active && settings.dayPalettes.isEmpty() -> "Plus: a palette for dawn, day, dusk and night"
+                    settings.dayPalettes.isEmpty() -> "A palette for dawn, day, dusk and night"
+                    !plus.active -> "Kept, but resting: it changes the palette while you have Plus"
+                    else -> DayParts.all.filter { it.id in settings.dayPalettes }.joinToString(" · ") { part ->
+                        part.label + " " + Palettes.resolve(settings.copy(paletteId = settings.dayPalettes.getValue(part.id))).name
+                    }
+                },
+                onClick = actions.dayPalettes,
+            )
         }
     }
     Group(rise = 2) {
@@ -169,6 +205,25 @@ internal fun ThemeOptions(settings: ZenithSettings, preview: SettingsPreview, ac
         }
     }
     Group(rise = 3) {
+        Spot("font") {
+            Column(Modifier.padding(start = 14.dp, end = 14.dp, top = 14.dp, bottom = 10.dp)) {
+                Caption("Font")
+                Spacer(Modifier.height(10.dp))
+                FontChoice(settings.font) { id -> change { it.copy(font = id) } }
+            }
+        }
+        GroupDivider(inset = 16.dp)
+        Spot("numberFont") {
+            Column(Modifier.padding(14.dp)) {
+                Caption("Numbers")
+                Spacer(Modifier.height(10.dp))
+                NumberFontChoice(settings.numberFont, settings.font) { id -> change { it.copy(numberFont = id) } }
+                Spacer(Modifier.height(8.dp))
+                Note("The clocks, the battery, the countdown and the weather.")
+            }
+        }
+    }
+    Group(rise = 4) {
         Spot("wallpaper") {
             ActionRow(
                 icon = Icons.Rounded.Image,
@@ -190,7 +245,7 @@ internal fun ThemeOptions(settings: ZenithSettings, preview: SettingsPreview, ac
             ) { value -> change { it.copy(wallpaperFollow = value) } }
         }
     }
-    Group(rise = 4) {
+    Group(rise = 5) {
         Spot("glass") {
             Column(Modifier.padding(14.dp)) {
                 PillSlider(
@@ -224,6 +279,20 @@ internal fun ThemeOptions(settings: ZenithSettings, preview: SettingsPreview, ac
                 subtitle = "Light moves across the glass as you tilt the phone",
                 checked = settings.glassShine,
             ) { value -> change { it.copy(glassShine = value) } }
+        }
+        GroupDivider()
+        Spot("glassStudio") {
+            ActionRow(
+                icon = if (plus.active) Icons.Rounded.Tune else Icons.Rounded.Lock,
+                title = "Glass studio",
+                subtitle = when {
+                    !plus.active && settings.glassTuning.isDefault -> "Plus: bend, frost, rim light and where the light comes from"
+                    settings.glassTuning.isDefault -> "Bend, frost, rim light and where the light comes from"
+                    !plus.active -> "Kept, but resting: your glass comes back with Plus"
+                    else -> "Your own glass. Reset puts Zenith's back"
+                },
+                onClick = actions.glassStudio,
+            )
         }
     }
 }
@@ -298,19 +367,59 @@ internal fun HomeOptions(settings: ZenithSettings, plus: PlusStatus, preview: Se
             Column(Modifier.padding(14.dp)) {
                 Caption("Icon shape")
                 Spacer(Modifier.height(12.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    IconShapes.ids.forEach { id ->
-                        ShapeChoice(id = id, selected = id == settings.iconShape) { change { it.copy(iconShape = id) } }
+                IconShapes.ids.chunked(4).forEachIndexed { line, ids ->
+                    if (line > 0) Spacer(Modifier.height(12.dp))
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        ids.forEach { id ->
+                            ShapeChoice(id = id, selected = id == settings.iconShape) { change { it.copy(iconShape = id) } }
+                        }
                     }
                 }
                 Spacer(Modifier.height(10.dp))
                 Note("The outline every app icon and folder is cut to.")
             }
         }
+        GroupDivider(inset = 16.dp)
+        Spot("iconStyle") {
+            Column(Modifier.padding(14.dp)) {
+                Caption("Icon style")
+                Spacer(Modifier.height(10.dp))
+                Segmented(
+                    options = IconStyles.ids.map { it to IconStyles.label(it) },
+                    selected = IconStyles.of(settings.iconStyle),
+                    onSelect = { value -> change { it.copy(iconStyle = value) } },
+                )
+                Spacer(Modifier.height(8.dp))
+                Note(IconStyles.detail(settings.iconStyle) + if (settings.iconStyle != IconStyles.ORIGINAL) " An icon you chose for an app stays as you chose it." else "")
+            }
+        }
     }
     Group(rise = 3) {
         Spot("labels") {
             ToggleRow("Labels", "App names under the icons", settings.showLabels) { value -> change { it.copy(showLabels = value) } }
+        }
+        // How the names look opens out under the switch, and folds away with the names.
+        AnimatedVisibility(visible = settings.showLabels, enter = unfoldIn(reduced), exit = unfoldOut(reduced)) {
+            Column {
+                GroupDivider(inset = 16.dp)
+                Spot("labelSize") {
+                    Column(Modifier.padding(14.dp)) {
+                        Caption("Name size")
+                        Spacer(Modifier.height(10.dp))
+                        Segmented(
+                            options = LabelSizes.ids.map { it to LabelSizes.label(it) },
+                            selected = LabelSizes.of(settings.labelSize),
+                            onSelect = { value -> change { it.copy(labelSize = value) } },
+                        )
+                    }
+                }
+                GroupDivider(inset = 16.dp)
+                Spot("labelShadow") {
+                    ToggleRow("Name shadow", "A soft shadow under the names, for a busy wallpaper", settings.labelShadow) { value ->
+                        change { it.copy(labelShadow = value) }
+                    }
+                }
+            }
         }
         GroupDivider(inset = 16.dp)
         Spot("dock") {
@@ -320,18 +429,75 @@ internal fun HomeOptions(settings: ZenithSettings, plus: PlusStatus, preview: Se
                 settings.showDock,
             ) { value -> change { it.copy(showDock = value) } }
         }
+        AnimatedVisibility(visible = settings.showDock, enter = unfoldIn(LocalMotionLevel.current.reduced), exit = unfoldOut(LocalMotionLevel.current.reduced)) {
+            Spot("dockStyle") {
+                Column(Modifier.padding(start = 14.dp, end = 14.dp, bottom = 14.dp)) {
+                    Segmented(
+                        options = listOf("glass" to "Glass bar", "floating" to "Floating", "none" to "Icons only"),
+                        selected = settings.dockStyle,
+                        onSelect = { value -> change { it.copy(dockStyle = value) } },
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Note(
+                        when (settings.dockStyle) {
+                            "floating" -> "A pill of glass that hugs its icons, however few."
+                            "none" -> "The icons on the wallpaper, with nothing behind them."
+                            else -> "A bar of glass the width of the page."
+                        }
+                    )
+                }
+            }
+        }
         GroupDivider(inset = 16.dp)
         Spot("searchBar") {
             ToggleRow("Search bar", "Above the dock, for your apps and the web", settings.searchBar) { value -> change { it.copy(searchBar = value) } }
         }
     }
     Group(rise = 4) {
+        Spot("badges") {
+            val allowed = rememberNotificationAccess()
+            val dots = Badges.of(settings.badges)
+            Column(Modifier.padding(14.dp)) {
+                Caption("Notification dots")
+                Spacer(Modifier.height(10.dp))
+                Segmented(
+                    options = Badges.ids.map { it to Badges.label(it) },
+                    selected = dots,
+                    onSelect = { value -> change { it.copy(badges = value) } },
+                )
+                Spacer(Modifier.height(8.dp))
+                Note(
+                    when {
+                        dots == Badges.OFF -> "No dots on icons."
+                        !allowed -> "Android has to let Zenith see notifications first."
+                        dots == Badges.COUNT -> "A dot with how many are waiting, on the app's icon and on its folder."
+                        else -> "A dot on an app, and on its folder, while it has something to read."
+                    }
+                )
+            }
+            AnimatedVisibility(visible = dots != Badges.OFF && !allowed, enter = unfoldIn(reduced), exit = unfoldOut(reduced)) {
+                Column {
+                    GroupDivider(inset = 16.dp)
+                    ActionRow(
+                        icon = Icons.Rounded.NotificationsActive,
+                        title = "Let Zenith see notifications",
+                        subtitle = "Only to count them. Nothing in them is kept or sent",
+                        onClick = { NotificationDots.ask(context) },
+                    )
+                }
+            }
+        }
+    }
+    Group(rise = 5) {
         Spot("header") {
             Column(Modifier.padding(14.dp)) {
                 Caption("Top of the page")
                 Spacer(Modifier.height(10.dp))
-                Segmented(
-                    options = listOf(HomeHeader.NAME to "Name", HomeHeader.GREETING to "Greeting", HomeHeader.OFF to "Nothing"),
+                ChoiceChips(
+                    options = listOf(
+                        HomeHeader.NAME to "Name", HomeHeader.GREETING to "Greeting", HomeHeader.CLOCK to "Clock",
+                        HomeHeader.DATE to "Date", HomeHeader.GLANCE to "At a glance", HomeHeader.OFF to "Nothing",
+                    ),
                     selected = settings.header,
                     onSelect = { value -> change { it.copy(header = value) } },
                 )
@@ -340,13 +506,73 @@ internal fun HomeOptions(settings: ZenithSettings, plus: PlusStatus, preview: Se
                     when (settings.header) {
                         HomeHeader.GREETING -> "A greeting for the time of day, with your name, above the first row."
                         HomeHeader.OFF -> "Nothing is written above the first row."
+                        HomeHeader.CLOCK -> "A large clock in the numbers' font, the date under it."
+                        HomeHeader.DATE -> "The day and the date, large."
+                        HomeHeader.GLANCE -> "The date, and the weather where the Weather widget is set to."
                         else -> "Your name, small, above the first row."
                     }
                 )
             }
         }
+        GroupDivider(inset = 16.dp)
+        Spot("indicator") {
+            Column(Modifier.padding(14.dp)) {
+                Caption("Which page you are on")
+                Spacer(Modifier.height(10.dp))
+                Segmented(
+                    options = listOf("dots" to "Dots", "line" to "Line", "numbers" to "Numbers", "none" to "None"),
+                    selected = settings.indicator,
+                    onSelect = { value -> change { it.copy(indicator = value) } },
+                )
+                Spacer(Modifier.height(8.dp))
+                Note(
+                    when (settings.indicator) {
+                        "line" -> "A short bar gliding along a line as the pages turn."
+                        "numbers" -> "The page's number, out of how many there are."
+                        "none" -> "Nothing. Pinch out for every page at once."
+                        else -> "A dot for each page; the one in view stretches."
+                    }
+                )
+            }
+        }
+        GroupDivider(inset = 16.dp)
+        Spot("folderStyle") {
+            Column(Modifier.padding(14.dp)) {
+                Caption("Folders")
+                Spacer(Modifier.height(10.dp))
+                Segmented(
+                    options = listOf("grid" to "Grid", "stack" to "Stack", "cover" to "Cover"),
+                    selected = settings.folderStyle,
+                    onSelect = { value -> change { it.copy(folderStyle = value) } },
+                )
+                Spacer(Modifier.height(8.dp))
+                Note(
+                    when (settings.folderStyle) {
+                        "stack" -> "The first three apps fanned like cards. A folder's own colour is in its menu."
+                        "cover" -> "The first app large, the next two small at its corner."
+                        else -> "Four apps, two by two. A folder's own colour is in its menu."
+                    }
+                )
+            }
+        }
+        GroupDivider()
+        Spot("lockLayout") {
+            ToggleRow(
+                "Lock layout",
+                if (settings.lockLayout) "Nothing can be moved, resized or removed. Menus offer to unlock" else "Hold an item to move it, as usual",
+                settings.lockLayout,
+            ) { value -> change { it.copy(lockLayout = value) } }
+        }
+        GroupDivider()
+        Spot("hideStatusBar") {
+            ToggleRow(
+                "Hide the status bar",
+                "Swipe down from the very top to see it for a moment",
+                settings.hideStatusBar,
+            ) { value -> change { it.copy(hideStatusBar = value) } }
+        }
     }
-    Group(rise = 5) {
+    Group(rise = 6) {
         Spot("freeform") {
             ToggleRow(
                 title = "Free placement",
@@ -375,7 +601,7 @@ internal fun HomeOptions(settings: ZenithSettings, plus: PlusStatus, preview: Se
             }
         }
     }
-    Group(rise = 6) {
+    Group(rise = 7) {
         Spot("iconPack") {
             Caption("Icon pack", Modifier.padding(start = 12.dp, top = 14.dp, bottom = 2.dp))
             Note("Redraws your apps' icons in a set from an icon pack app.", Modifier.padding(start = 12.dp, end = 12.dp, bottom = 4.dp))
@@ -392,6 +618,25 @@ internal fun HomeOptions(settings: ZenithSettings, plus: PlusStatus, preview: Se
             }
         }
     }
+}
+
+/**
+ * Whether Android has let Zenith see notifications, looked at again each time Settings comes back
+ * to the front — which is how it hears that the switch on Android's own page was turned on.
+ */
+@Composable
+private fun rememberNotificationAccess(): Boolean {
+    val context = LocalContext.current
+    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    var allowed by remember { mutableStateOf(NotificationDots.allowed(context)) }
+    DisposableEffect(lifecycle) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) allowed = NotificationDots.allowed(context)
+        }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer) }
+    }
+    return allowed
 }
 
 @Composable
@@ -444,18 +689,78 @@ internal fun MotionOptions(settings: ZenithSettings, actions: SettingsActions, o
             Column(Modifier.padding(14.dp)) {
                 Caption("Page swipe")
                 Spacer(Modifier.height(10.dp))
-                Segmented(
-                    options = listOf("depth" to "Depth", "slide" to "Slide", "cube" to "Cube", "stack" to "Stack"),
-                    selected = settings.pageEffect,
-                    onSelect = { value -> change { it.copy(pageEffect = value) } },
-                )
+                PageTurnChoice(settings.pageEffect) { value -> change { it.copy(pageEffect = value) } }
                 Spacer(Modifier.height(8.dp))
                 Note(
                     when (settings.pageEffect) {
                         "slide" -> "Pages move side by side, nothing else."
                         "cube" -> "Pages turn about the edge they share, like the sides of a box."
                         "stack" -> "The page you leave shrinks and fades under the next."
+                        "carousel" -> "Pages go round as on a turntable, each turning to face you."
+                        "wheel" -> "Pages swing round a great wheel under the screen."
+                        "flip" -> "A page turns over where it stands, the next on its back."
+                        "fold" -> "Pages fold in at the crease between them, like a leaflet."
                         else -> "Pages tilt back a little as they pass."
+                    }
+                )
+            }
+        }
+        GroupDivider(inset = 16.dp)
+        Spot("arrival") {
+            Column(Modifier.padding(14.dp)) {
+                Caption("Coming home")
+                Spacer(Modifier.height(10.dp))
+                Segmented(
+                    options = listOf("middle" to "Middle", "below" to "Below", "cascade" to "Cascade"),
+                    selected = settings.arrival,
+                    onSelect = { value -> change { it.copy(arrival = value) } },
+                )
+                Spacer(Modifier.height(8.dp))
+                Note(
+                    when (settings.arrival) {
+                        "below" -> "Everything rises into place, the foot of the page first."
+                        "cascade" -> "Everything drops in, a column at a time from the left."
+                        else -> "Everything comes in from round the middle, the middle first."
+                    }
+                )
+            }
+        }
+        GroupDivider(inset = 16.dp)
+        Spot("drawerArrival") {
+            Column(Modifier.padding(14.dp)) {
+                Caption("Opening the drawer")
+                Spacer(Modifier.height(10.dp))
+                Segmented(
+                    options = listOf("rise" to "Rise", "grow" to "Grow", "glass" to "Glass"),
+                    selected = settings.drawerArrival,
+                    onSelect = { value -> change { it.copy(drawerArrival = value) } },
+                )
+                Spacer(Modifier.height(8.dp))
+                Note(
+                    when (settings.drawerArrival) {
+                        "grow" -> "It grows up out of the foot of the screen as you swipe."
+                        "glass" -> "It clears into view where it is, like glass."
+                        else -> "It slides up from the foot of the screen under your finger."
+                    }
+                )
+            }
+        }
+        GroupDivider(inset = 16.dp)
+        Spot("press") {
+            Column(Modifier.padding(14.dp)) {
+                Caption("Pressing")
+                Spacer(Modifier.height(10.dp))
+                Segmented(
+                    options = listOf("bounce" to "Bounce", "squish" to "Squish", "ripple" to "Ripple"),
+                    selected = settings.press,
+                    onSelect = { value -> change { it.copy(press = value) } },
+                )
+                Spacer(Modifier.height(8.dp))
+                Note(
+                    when (settings.press) {
+                        "squish" -> "What you press gives like something soft, and wobbles back."
+                        "ripple" -> "Light spreads across what you press, out from your finger."
+                        else -> "What you press dips under your finger and springs back."
                     }
                 )
             }
@@ -509,6 +814,52 @@ internal fun AppsOptions(settings: ZenithSettings, plus: PlusStatus, actions: Se
         }
     }
     Group(rise = 1) {
+        Spot("drawerSort") {
+            Column(Modifier.padding(14.dp)) {
+                Caption("Order")
+                Spacer(Modifier.height(10.dp))
+                Segmented(
+                    options = DrawerSort.ids.map { it to DrawerSort.short(it) },
+                    selected = DrawerSort.of(settings.drawerSort),
+                    onSelect = { value -> change { it.copy(drawerSort = value) } },
+                )
+                Spacer(Modifier.height(8.dp))
+                Note(DrawerSort.detail(settings.drawerSort))
+            }
+        }
+        GroupDivider(inset = 16.dp)
+        Spot("drawerColumns") {
+            Column(Modifier.padding(14.dp)) {
+                Caption("Columns")
+                Spacer(Modifier.height(10.dp))
+                Segmented(
+                    options = listOf("0" to "Auto", "3" to "3", "4" to "4", "5" to "5", "6" to "6"),
+                    selected = settings.drawerColumns.coerceIn(0, 6).toString().let { if (it == "1" || it == "2") "0" else it },
+                    onSelect = { value -> change { it.copy(drawerColumns = value.toInt()) } },
+                )
+                Spacer(Modifier.height(8.dp))
+                Note(
+                    if (settings.drawerColumns <= 0) "As many across as the home screen: ${settings.columns}."
+                    else "${settings.drawerColumns} apps across, whatever the home screen has."
+                )
+            }
+        }
+        GroupDivider(inset = 16.dp)
+        Spot("drawerTabs") {
+            Column(Modifier.padding(14.dp)) {
+                Caption("Tabs")
+                Spacer(Modifier.height(6.dp))
+                Note(
+                    when (val n = settings.drawerTabs.size) {
+                        0 -> "Make one with the + along the top of the drawer: Games, Work, Friends. Hold a tab to change it."
+                        1 -> "1 tab of your own, along the top of the drawer. Hold it to change it."
+                        else -> "$n tabs of your own, along the top of the drawer. Hold one to change it."
+                    }
+                )
+            }
+        }
+    }
+    Group(rise = 2) {
         Spot("hiddenApps") {
             ActionRow(
                 icon = if (plus.active) Icons.Rounded.VisibilityOff else Icons.Rounded.Lock,
@@ -749,11 +1100,20 @@ internal fun AboutOptions(actions: SettingsActions) {
             )
         }
         GroupDivider()
+        Spot("fonts") {
+            ActionRow(
+                icon = Icons.Rounded.TextFields,
+                title = "Fonts",
+                subtitle = "Inter and JetBrains Mono, under the SIL Open Font Licence",
+                onClick = actions.fontLicences,
+            )
+        }
+        GroupDivider()
         Spot("privacy") {
             ActionRow(
                 icon = Icons.Rounded.PrivacyTip,
                 title = "Privacy policy",
-                subtitle = "No account, no analytics, nothing leaves your phone",
+                subtitle = "No analytics, no ads; what leaves the phone, and only when you ask",
             ) {
                 runCatching {
                     context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(PRIVACY_POLICY)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))

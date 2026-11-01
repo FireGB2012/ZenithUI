@@ -47,6 +47,7 @@ import com.gabriel.zenithui.data.ZenithSettings
 import com.gabriel.zenithui.ui.common.launchOrigin
 import com.gabriel.zenithui.ui.common.rollOver
 import com.gabriel.zenithui.ui.theme.LocalPalette
+import com.gabriel.zenithui.ui.theme.LocalZenithFont
 import com.gabriel.zenithui.ui.theme.ZenithShapes
 import com.gabriel.zenithui.ui.theme.glass
 import kotlinx.coroutines.delay
@@ -131,7 +132,7 @@ internal fun FolderPanel(
                             value = title,
                             onValueChange = { title = it.replace("\n", "") },
                             singleLine = true,
-                            textStyle = TextStyle(color = palette.onGlass, fontSize = 20.sp, fontWeight = FontWeight.SemiBold),
+                            textStyle = TextStyle(fontFamily = LocalZenithFont.current, color = palette.onGlass, fontSize = 20.sp, fontWeight = FontWeight.SemiBold),
                             cursorBrush = SolidColor(palette.accent),
                             modifier = Modifier.weight(1f),
                         )
@@ -183,6 +184,8 @@ internal fun FolderPanel(
                                     iconSize = STANDARD_ICON_SIZE,
                                     showLabel = true,
                                     shape = ZenithShapes.forIconShape(settings.iconShape),
+                                    badge = true,
+                                    onGlass = true,
                                 )
                             }
                         }

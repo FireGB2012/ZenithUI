@@ -15,7 +15,9 @@ import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Apps
 import androidx.compose.material.icons.rounded.Dashboard
 import androidx.compose.material.icons.rounded.DragIndicator
+import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Folder
+import androidx.compose.material.icons.rounded.Gesture
 import androidx.compose.material.icons.rounded.OpenInFull
 import androidx.compose.material.icons.rounded.SwipeUp
 import androidx.compose.material.icons.rounded.TouchApp
@@ -105,7 +107,9 @@ private val TIPS = listOf(
     Tip(Icons.Rounded.Folder, "Drop to make a folder", "Drop one app onto another and Zenith makes a folder. Drag to the top to remove."),
     Tip(Icons.Rounded.OpenInFull, "Resize your widgets", "Long press a widget, tap Resize, then drag its handles. It snaps to the grid."),
     Tip(Icons.Rounded.Dashboard, "Add more any time", "Long press an empty spot for wallpaper, widgets and settings."),
-    Tip(Icons.Rounded.Tune, "Make it yours", "Palette, glass, grid size, icon shape and icon packs all live in Zenith settings."),
+    Tip(Icons.Rounded.Gesture, "Gestures your way", "Swipe down for notifications and pinch in for Customise. Double tap, two fingers, pinch out and the home button can do what you like, under Settings → Gestures."),
+    Tip(Icons.Rounded.Edit, "Any app, any name", "Long press an app and tap Edit for a name, an icon from an icon pack or a photo of your own. Its shortcuts are at the top of the same menu."),
+    Tip(Icons.Rounded.Tune, "Make it yours", "Palette, glass, grid size, icon shape, icon style and icon packs all live in Zenith settings."),
 )
 
 /** Every gesture, for the How it works sheet. */

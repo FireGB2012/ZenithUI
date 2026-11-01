@@ -72,6 +72,9 @@ import com.gabriel.zenithui.data.HomeGeometry
 import com.gabriel.zenithui.data.HomeHeader
 import com.gabriel.zenithui.data.HomeItem
 import com.gabriel.zenithui.data.ROW_UNITS
+import com.gabriel.zenithui.data.HostedWidgetCell
+import com.gabriel.zenithui.data.ShortcutCell
+import com.gabriel.zenithui.data.StackCell
 import com.gabriel.zenithui.data.WidgetCell
 import com.gabriel.zenithui.data.ZenithSettings
 import com.gabriel.zenithui.ui.common.AppIcon
@@ -339,6 +342,8 @@ private fun MiniHome(
                                 geometry = geometry,
                                 onSearch = {},
                                 onNoteChange = {},
+                                // The real one is on the home screen: a widget can only be drawn once.
+                                live = false,
                             )
                         }
                     }
@@ -452,4 +457,7 @@ private fun stableKey(item: HomeItem): String = when (item) {
     is WidgetCell -> "w:${item.type}"
     is AppCell -> "a:${item.packageName}/${item.className}"
     is FolderCell -> "f:${item.title}"
+    is ShortcutCell -> "s:${item.key}"
+    is HostedWidgetCell -> "h:${item.provider}"
+    is StackCell -> "k:${item.members.joinToString(",") { it.type.ifEmpty { it.provider } }}"
 }

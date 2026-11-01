@@ -66,4 +66,38 @@ class FlyInTest {
         assertEquals(FlyIn.delayMs(1f), FlyIn.delayMs(4f))
         assertEquals(FlyIn.delayMs(0f), FlyIn.delayMs(-1f))
     }
+
+    @Test
+    fun `from the middle is the arrival as it always was`() {
+        val start = FlyIn.start("middle", 300f, -400f, 1000f, 2000f)
+        assertEquals(FlyIn.delayMs(kotlin.math.hypot(300f, -400f) / kotlin.math.hypot(500f, 1000f)), start.delayMs)
+        assertEquals(300f * FlyIn.SPREAD, start.x, 0f)
+        assertEquals(-400f * FlyIn.SPREAD, start.y, 0f)
+        assertEquals(start, FlyIn.start("anything else", 300f, -400f, 1000f, 2000f))
+        assertEquals("middle", FlyIn.styles.first())
+    }
+
+    @Test
+    fun `from below everything rises, the foot of the page first`() {
+        val foot = FlyIn.start("below", 0f, 1000f, 1000f, 2000f)
+        val top = FlyIn.start("below", 0f, -1000f, 1000f, 2000f)
+        assertEquals(0, foot.delayMs)
+        assertTrue(top.delayMs > foot.delayMs)
+        assertTrue("under its place", foot.y > 0f && top.y > 0f)
+        assertEquals(0f, foot.x, 0f)
+    }
+
+    @Test
+    fun `a cascade drops everything in, a column at a time from the left`() {
+        val left = FlyIn.start("cascade", -500f, 0f, 1000f, 2000f)
+        val right = FlyIn.start("cascade", 500f, 0f, 1000f, 2000f)
+        assertEquals(0, left.delayMs)
+        assertTrue(right.delayMs > left.delayMs)
+        assertTrue("over its place", left.y < 0f)
+        // Every style is over inside the arrival's own time.
+        for (style in FlyIn.styles) {
+            val last = FlyIn.start(style, 500f, -1000f, 1000f, 2000f)
+            assertEquals(1f, FlyIn.progress(FlyIn.TOTAL_MS.toFloat(), last.delayMs), 0f)
+        }
+    }
 }

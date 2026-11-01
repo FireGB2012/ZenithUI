@@ -63,6 +63,7 @@ import com.gabriel.zenithui.ui.common.GlassButton
 import com.gabriel.zenithui.ui.common.appearIn
 import com.gabriel.zenithui.ui.common.pressBounce
 import com.gabriel.zenithui.ui.common.staggerDelay
+import com.gabriel.zenithui.ui.theme.LocalNumberFont
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.ZenithShapes
 import com.gabriel.zenithui.ui.theme.glass
@@ -174,6 +175,7 @@ fun AmbientScreen(
                     text = value,
                     color = Color.White.copy(alpha = 0.92f),
                     fontSize = 92.sp,
+                    fontFamily = LocalNumberFont.current.family,
                     fontWeight = FontWeight.Thin,
                     letterSpacing = (-4).sp,
                 )

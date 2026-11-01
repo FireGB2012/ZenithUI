@@ -78,6 +78,7 @@ import com.gabriel.zenithui.ui.common.unfoldOut
 import com.gabriel.zenithui.ui.onboarding.PrimaryButton
 import com.gabriel.zenithui.ui.onboarding.Segmented
 import com.gabriel.zenithui.ui.theme.LocalPalette
+import com.gabriel.zenithui.ui.theme.LocalZenithFont
 import com.gabriel.zenithui.ui.theme.ZenithShapes
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -328,7 +329,7 @@ private fun AccountField(
                 value = value,
                 onValueChange = onChange,
                 singleLine = true,
-                textStyle = TextStyle(color = palette.onGlass, fontSize = 15.sp),
+                textStyle = TextStyle(fontFamily = LocalZenithFont.current, color = palette.onGlass, fontSize = 15.sp),
                 cursorBrush = SolidColor(palette.accent),
                 visualTransformation = if (secret && !shown) PasswordVisualTransformation() else VisualTransformation.None,
                 keyboardOptions = KeyboardOptions(

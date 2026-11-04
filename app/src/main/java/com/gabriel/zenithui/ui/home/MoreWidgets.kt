@@ -58,6 +58,7 @@ import androidx.compose.material.icons.rounded.WbSunny
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.collectAsState
@@ -78,6 +79,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
@@ -114,7 +116,9 @@ import com.gabriel.zenithui.ui.common.Motion
 import com.gabriel.zenithui.ui.common.pressBounce
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.LocalZenithFont
-import com.gabriel.zenithui.ui.theme.glassInk
+import com.gabriel.zenithui.ui.theme.AppleColours
+import com.gabriel.zenithui.ui.theme.inkOnTint
+import com.gabriel.zenithui.ui.theme.underWhite
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -165,6 +169,37 @@ private fun SetUpPrompt(icon: ImageVector, words: String, form: WidgetForm, onCl
     }
 }
 
+/**
+ * A widget painted in a colour of its own, head to foot, as the iPhone paints its weather and its
+ * music: the sky, the album's colour. Words, numbers and symbols on it are white. With no colour
+ * it is Apple's tile, as every other widget is.
+ */
+@Composable
+private fun Painted(top: Color?, bottom: Color?, content: @Composable () -> Unit) {
+    if (top == null || bottom == null) {
+        content()
+        return
+    }
+    val palette = LocalPalette.current
+    Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(top, bottom)))) {
+        CompositionLocalProvider(
+            LocalPalette provides palette.copy(dark = true, accent = Color.White, accentAlt = Color.White),
+            LocalWidgetFill provides bottom,
+        ) {
+            content()
+        }
+    }
+}
+
+/** The main colour of what is playing's picture, taken as deep as white words need; null with no picture. */
+@Composable
+private fun rememberAlbumColour(now: Playing): Color? = remember(now.art) {
+    now.art?.let { art ->
+        val one = android.graphics.Bitmap.createScaledBitmap(art.asAndroidBitmap(), 1, 1, true)
+        AppleColours.underWhite(Color(one.getPixel(0, 0)))
+    }
+}
+
 // ---------------------------------------------------------------------- now playing
 
 @Composable
@@ -185,41 +220,45 @@ internal fun MediaWidget(form: WidgetForm, width: Dp, height: Dp) {
         return
     }
     val pad = if (form == WidgetForm.Mini) 8.dp else 14.dp
-    when (form) {
-        WidgetForm.Mini -> Box(Modifier.fillMaxSize().padding(pad), contentAlignment = Alignment.Center) {
-            Art(now, Modifier.fillMaxSize())
-            PlayButton(now, size = minOf(width, height) * 0.36f, solid = true)
-        }
-        WidgetForm.Strip -> Row(Modifier.fillMaxSize().padding(horizontal = pad, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Art(now, Modifier.fillMaxHeight().aspectRatio(1f))
-            Spacer(Modifier.width(10.dp))
-            SongLines(now, Modifier.weight(1f))
-            PlayButton(now, size = 34.dp)
-        }
-        WidgetForm.Square -> Column(Modifier.fillMaxSize().padding(pad)) {
-            Art(now, Modifier.size(minOf(height * 0.42f, 64.dp)))
-            Spacer(Modifier.weight(1f))
-            SongLines(now)
-            Spacer(Modifier.height(8.dp))
-            Controls(now, Modifier.fillMaxWidth())
-        }
-        WidgetForm.Wide -> Row(Modifier.fillMaxSize().padding(pad), verticalAlignment = Alignment.CenterVertically) {
-            Art(now, Modifier.fillMaxHeight().aspectRatio(1f))
-            Spacer(Modifier.width(14.dp))
-            Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.SpaceBetween) {
+    // The tile takes the album's own colour, deep enough for white words, as Apple Music's widget does.
+    val album = rememberAlbumColour(now)
+    Painted(album, album) {
+        when (form) {
+            WidgetForm.Mini -> Box(Modifier.fillMaxSize().padding(pad), contentAlignment = Alignment.Center) {
+                Art(now, Modifier.fillMaxSize())
+                PlayButton(now, size = minOf(width, height) * 0.36f, solid = true)
+            }
+            WidgetForm.Strip -> Row(Modifier.fillMaxSize().padding(horizontal = pad, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Art(now, Modifier.fillMaxHeight().aspectRatio(1f))
+                Spacer(Modifier.width(10.dp))
+                SongLines(now, Modifier.weight(1f))
+                PlayButton(now, size = 34.dp)
+            }
+            WidgetForm.Square -> Column(Modifier.fillMaxSize().padding(pad)) {
+                Art(now, Modifier.size(minOf(height * 0.42f, 64.dp)))
+                Spacer(Modifier.weight(1f))
                 SongLines(now)
-                Progress(now)
+                Spacer(Modifier.height(8.dp))
                 Controls(now, Modifier.fillMaxWidth())
             }
-        }
-        else -> Column(Modifier.fillMaxSize().padding(pad), horizontalAlignment = Alignment.CenterHorizontally) {
-            Art(now, Modifier.weight(1f).aspectRatio(1f, matchHeightConstraintsFirst = true))
-            Spacer(Modifier.height(10.dp))
-            SongLines(now, Modifier.fillMaxWidth())
-            Spacer(Modifier.height(8.dp))
-            Progress(now)
-            Spacer(Modifier.height(6.dp))
-            Controls(now, Modifier.fillMaxWidth())
+            WidgetForm.Wide -> Row(Modifier.fillMaxSize().padding(pad), verticalAlignment = Alignment.CenterVertically) {
+                Art(now, Modifier.fillMaxHeight().aspectRatio(1f))
+                Spacer(Modifier.width(14.dp))
+                Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.SpaceBetween) {
+                    SongLines(now)
+                    Progress(now)
+                    Controls(now, Modifier.fillMaxWidth())
+                }
+            }
+            else -> Column(Modifier.fillMaxSize().padding(pad), horizontalAlignment = Alignment.CenterHorizontally) {
+                Art(now, Modifier.weight(1f).aspectRatio(1f, matchHeightConstraintsFirst = true))
+                Spacer(Modifier.height(10.dp))
+                SongLines(now, Modifier.fillMaxWidth())
+                Spacer(Modifier.height(8.dp))
+                Progress(now)
+                Spacer(Modifier.height(6.dp))
+                Controls(now, Modifier.fillMaxWidth())
+            }
         }
     }
 }
@@ -244,10 +283,10 @@ private fun Art(now: Playing, modifier: Modifier) {
             Box(
                 Modifier
                     .fillMaxSize()
-                    .background(Brush.linearGradient(listOf(palette.accent.copy(alpha = 0.55f), palette.accentAlt.copy(alpha = 0.4f)))),
+                    .background(palette.onGlass.copy(alpha = 0.12f)),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Rounded.MusicNote, contentDescription = null, tint = Color.White.copy(alpha = 0.9f), modifier = Modifier.fillMaxSize(0.4f))
+                Icon(Icons.Rounded.MusicNote, contentDescription = null, tint = palette.onGlass.copy(alpha = 0.6f), modifier = Modifier.fillMaxSize(0.4f))
             }
         }
     }
@@ -292,7 +331,7 @@ private fun Progress(now: Playing) {
                 .fillMaxHeight()
                 .fillMaxWidth(shown)
                 .clip(CircleShape)
-                .background(Brush.horizontalGradient(listOf(palette.accent, palette.accentAlt))),
+                .background(palette.accent),
         )
     }
 }
@@ -309,7 +348,6 @@ private fun Controls(now: Playing, modifier: Modifier) {
 @Composable
 private fun ControlIcon(icon: ImageVector, says: String, enabled: Boolean, onClick: () -> Unit) {
     val palette = LocalPalette.current
-    val bare = LocalBare.current
     Box(
         Modifier
             .size(36.dp)
@@ -321,8 +359,8 @@ private fun ControlIcon(icon: ImageVector, says: String, enabled: Boolean, onCli
         Icon(
             icon,
             contentDescription = says,
-            tint = if (bare) Color.White else palette.onGlass.copy(alpha = if (enabled) 0.9f else 0.3f),
-            modifier = Modifier.size(24.dp).then(if (bare) Modifier.glassInk(bevel = 2.dp) else Modifier),
+            tint = palette.onGlass.copy(alpha = if (enabled) 0.9f else 0.3f),
+            modifier = Modifier.size(24.dp),
         )
     }
 }
@@ -337,7 +375,7 @@ private fun PlayButton(now: Playing, size: Dp, solid: Boolean = false) {
             .size(size)
             .pressBounce(0.86f)
             .clip(CircleShape)
-            .then(if (solid) Modifier.background(Brush.linearGradient(listOf(palette.accent, palette.accentAlt))) else Modifier.background(palette.onGlass.copy(alpha = 0.12f)))
+            .background(if (solid) palette.accent else palette.onGlass.copy(alpha = 0.12f))
             .clickable { NowPlaying.playPause() },
         contentAlignment = Alignment.Center,
     ) {
@@ -352,7 +390,7 @@ private fun PlayButton(now: Playing, size: Dp, solid: Boolean = false) {
             Icon(
                 if (going) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
                 contentDescription = if (going) "Pause" else "Play",
-                tint = if (solid) Color(0xFF0A0B12) else palette.onGlass,
+                tint = if (solid) inkOnTint(palette.accent) else palette.onGlass,
                 modifier = Modifier.size(size * 0.55f),
             )
         }
@@ -510,7 +548,6 @@ private fun CountRing(progress: Float, modifier: Modifier, content: @Composable 
 internal fun PhotoFrameWidget(form: WidgetForm, width: Dp, height: Dp) {
     val world = LocalWidgetWorld.current
     val photos = widgetSettings().framePhotos
-    val bare = LocalBare.current
     val reduced = LocalMotionLevel.current.reduced
     if (photos.isEmpty() || world?.frameDir == null) {
         SetUpPrompt(Icons.Rounded.PhotoLibrary, "Tap to choose your photos", form) { world?.setUp("photo") }
@@ -532,8 +569,6 @@ internal fun PhotoFrameWidget(form: WidgetForm, width: Dp, height: Dp) {
         },
         modifier = Modifier
             .fillMaxSize()
-            .padding(if (bare) 0.dp else 6.dp)
-            .clip(RoundedCornerShape(if (bare) 20.dp else 18.dp))
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { tapped++ },
         label = "framePhoto",
     ) { image ->
@@ -642,10 +677,11 @@ private fun Tick(done: Boolean, onClick: () -> Unit) {
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
+        val tickInk = inkOnTint(palette.accent)
         Canvas(Modifier.fillMaxSize()) {
             val r = size.minDimension / 2f
             drawCircle(palette.onGlass.copy(alpha = 0.45f * (1f - fill)), r - 1.dp.toPx(), style = Stroke(1.5.dp.toPx()))
-            drawCircle(lerp(palette.accent, palette.accentAlt, 0.3f), r * fill.coerceIn(0f, 1f))
+            drawCircle(palette.accent, r * fill.coerceIn(0f, 1f))
             if (fill > 0.05f) {
                 // The check draws itself in from its foot as the circle fills.
                 val draw = fill.coerceIn(0f, 1f)
@@ -653,8 +689,8 @@ private fun Tick(done: Boolean, onClick: () -> Unit) {
                 val b = Offset(size.width * 0.44f, size.height * 0.68f)
                 val c = Offset(size.width * 0.74f, size.height * 0.36f)
                 val first = (draw * 2f).coerceAtMost(1f)
-                drawLine(Color(0xFF0A0B12), a, a + (b - a) * first, 2.dp.toPx(), StrokeCap.Round)
-                if (draw > 0.5f) drawLine(Color(0xFF0A0B12), b, b + (c - b) * ((draw - 0.5f) * 2f), 2.dp.toPx(), StrokeCap.Round)
+                drawLine(tickInk, a, a + (b - a) * first, 2.dp.toPx(), StrokeCap.Round)
+                if (draw > 0.5f) drawLine(tickInk, b, b + (c - b) * ((draw - 0.5f) * 2f), 2.dp.toPx(), StrokeCap.Round)
             }
         }
     }
@@ -756,7 +792,7 @@ internal fun AuraWidget(form: WidgetForm, width: Dp, height: Dp) {
                         Text("${next.name} at ${next.price}", color = quiet(), fontSize = 11.sp)
                         Spacer(Modifier.height(4.dp))
                         Box(Modifier.width(width * 0.6f).height(4.dp).clip(CircleShape).background(palette.onGlass.copy(alpha = 0.14f))) {
-                            Box(Modifier.fillMaxHeight().fillMaxWidth(filled.value).clip(CircleShape).background(Brush.horizontalGradient(listOf(palette.accent, palette.accentAlt))))
+                            Box(Modifier.fillMaxHeight().fillMaxWidth(filled.value).clip(CircleShape).background(palette.accent))
                         }
                     }
                 }
@@ -803,55 +839,58 @@ internal fun WeatherWidget(form: WidgetForm, width: Dp, height: Dp) {
     val temp = WeatherParse.degrees(forecast.temperature)
     val words = WeatherCodes.words(forecast.code, forecast.day)
     val pad = if (form == WidgetForm.Mini) 10.dp else 14.dp
-    when (form) {
-        WidgetForm.Mini -> Column(Modifier.fillMaxSize().padding(pad), verticalArrangement = Arrangement.SpaceBetween) {
-            Symbol(skyIcon(forecast.code, forecast.day), minOf(width, height) * 0.3f)
-            Figure(temp, fit(height * 0.36f, width * 0.32f), animated = true)
-        }
-        WidgetForm.Strip -> Row(Modifier.fillMaxSize().padding(horizontal = pad), verticalAlignment = Alignment.CenterVertically) {
-            Symbol(skyIcon(forecast.code, forecast.day), 26.dp)
-            Spacer(Modifier.width(10.dp))
-            Figure(temp, fit(height * 0.5f, 40.dp), animated = true)
-            Spacer(Modifier.width(10.dp))
-            Column(Modifier.weight(1f)) {
+    val sky = WeatherSky.of(forecast.code, forecast.day)
+    Painted(sky.top, sky.bottom) {
+        when (form) {
+            WidgetForm.Mini -> Column(Modifier.fillMaxSize().padding(pad), verticalArrangement = Arrangement.SpaceBetween) {
+                Symbol(skyIcon(forecast.code, forecast.day), minOf(width, height) * 0.3f)
+                Figure(temp, fit(height * 0.36f, width * 0.32f), animated = true)
+            }
+            WidgetForm.Strip -> Row(Modifier.fillMaxSize().padding(horizontal = pad), verticalAlignment = Alignment.CenterVertically) {
+                Symbol(skyIcon(forecast.code, forecast.day), 26.dp)
+                Spacer(Modifier.width(10.dp))
+                Figure(temp, fit(height * 0.5f, 40.dp), animated = true)
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f)) {
+                    Caps(forecast.place)
+                    Text(words, color = quiet(), fontSize = 12.sp, maxLines = 1)
+                }
+            }
+            WidgetForm.Square -> Column(Modifier.fillMaxSize().padding(pad)) {
                 Caps(forecast.place)
-                Text(words, color = quiet(), fontSize = 12.sp, maxLines = 1)
+                Spacer(Modifier.weight(1f))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Figure(temp, fit(height * 0.3f, width * 0.3f), animated = true)
+                    Spacer(Modifier.width(6.dp))
+                    Symbol(skyIcon(forecast.code, forecast.day), 28.dp)
+                }
+                Spacer(Modifier.weight(1f))
+                Text(words, color = palette.onGlass, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                Text("H ${WeatherParse.degrees(forecast.high)}  L ${WeatherParse.degrees(forecast.low)}", color = quiet(), fontSize = 12.sp)
             }
-        }
-        WidgetForm.Square -> Column(Modifier.fillMaxSize().padding(pad)) {
-            Caps(forecast.place)
-            Spacer(Modifier.weight(1f))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Figure(temp, fit(height * 0.3f, width * 0.3f), animated = true)
-                Spacer(Modifier.width(6.dp))
-                Symbol(skyIcon(forecast.code, forecast.day), 28.dp)
+            WidgetForm.Wide -> Row(Modifier.fillMaxSize().padding(pad), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(0.9f)) {
+                    Caps(forecast.place)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Figure(temp, fit(height * 0.38f), animated = true)
+                        Spacer(Modifier.width(6.dp))
+                        Symbol(skyIcon(forecast.code, forecast.day), 26.dp)
+                    }
+                    Text("$words · H ${WeatherParse.degrees(forecast.high)} L ${WeatherParse.degrees(forecast.low)}", color = quiet(), fontSize = 12.sp, maxLines = 1)
+                }
+                Hours(forecast, Modifier.weight(1.1f), across = true)
             }
-            Spacer(Modifier.weight(1f))
-            Text(words, color = palette.onGlass, fontSize = 13.sp, fontWeight = FontWeight.Medium)
-            Text("H ${WeatherParse.degrees(forecast.high)}  L ${WeatherParse.degrees(forecast.low)}", color = quiet(), fontSize = 12.sp)
-        }
-        WidgetForm.Wide -> Row(Modifier.fillMaxSize().padding(pad), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(0.9f)) {
+            else -> Column(Modifier.fillMaxSize().padding(pad)) {
                 Caps(forecast.place)
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Figure(temp, fit(height * 0.38f), animated = true)
-                    Spacer(Modifier.width(6.dp))
-                    Symbol(skyIcon(forecast.code, forecast.day), 26.dp)
+                    Figure(temp, fit(height * 0.18f, width * 0.24f), animated = true)
+                    Spacer(Modifier.width(8.dp))
+                    Symbol(skyIcon(forecast.code, forecast.day), 30.dp)
                 }
                 Text("$words · H ${WeatherParse.degrees(forecast.high)} L ${WeatherParse.degrees(forecast.low)}", color = quiet(), fontSize = 12.sp, maxLines = 1)
+                Spacer(Modifier.height(10.dp))
+                Hours(forecast, Modifier.weight(1f).fillMaxWidth(), across = form == WidgetForm.Big)
             }
-            Hours(forecast, Modifier.weight(1.1f), across = true)
-        }
-        else -> Column(Modifier.fillMaxSize().padding(pad)) {
-            Caps(forecast.place)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Figure(temp, fit(height * 0.18f, width * 0.24f), animated = true)
-                Spacer(Modifier.width(8.dp))
-                Symbol(skyIcon(forecast.code, forecast.day), 30.dp)
-            }
-            Text("$words · H ${WeatherParse.degrees(forecast.high)} L ${WeatherParse.degrees(forecast.low)}", color = quiet(), fontSize = 12.sp, maxLines = 1)
-            Spacer(Modifier.height(10.dp))
-            Hours(forecast, Modifier.weight(1f).fillMaxWidth(), across = form == WidgetForm.Big)
         }
     }
 }

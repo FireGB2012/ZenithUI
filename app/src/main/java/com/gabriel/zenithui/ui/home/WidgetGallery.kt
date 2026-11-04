@@ -138,7 +138,6 @@ fun WidgetGallery(
     /** Opened from a widget's "Stack another widget here": what is chosen goes onto that widget. */
     stacking: Boolean = false,
 ) {
-    var bare by remember { mutableStateOf(false) }
     var picked by remember { mutableStateOf<Picked?>(null) }
     // Where the card that was tapped sits within the page, for its showcase to grow out of.
     var pagesAt by remember { mutableStateOf(Rect.Zero) }
@@ -166,7 +165,7 @@ fun WidgetGallery(
     FullPage(
         visible = visible,
         covered = false,
-        title = picked?.let { (if (bare) bareOf(it.spec) else it.spec).title } ?: if (stacking) "Stack a widget" else "Widgets",
+        title = picked?.spec?.title ?: if (stacking) "Stack a widget" else "Widgets",
         canGoBack = picked != null,
         titleShown = { maxOf(inShowcase.value, (scroll.value / TITLE_GONE_PX).coerceIn(0f, 1f)) },
         onBack = { picked = null },
@@ -192,8 +191,6 @@ fun WidgetGallery(
                 Gallery(
                     settings = settings,
                     geometry = geometry,
-                    bare = bare,
-                    onBare = { bare = it },
                     scrolled = scroll,
                     stacking = stacking,
                     onHosted = { info ->
@@ -218,8 +215,6 @@ fun WidgetGallery(
                     opensOn = chosen.size,
                     settings = settings,
                     geometry = geometry,
-                    bare = bare,
-                    onBare = { bare = it },
                     growFrom = growFrom,
                     leaving = transition.targetState == EnterExitState.PostExit,
                     stacking = stacking,
@@ -240,8 +235,6 @@ private data class Picked(val spec: WidgetSpec, val size: WidgetSize)
 private fun Gallery(
     settings: ZenithSettings,
     geometry: HomeGeometry?,
-    bare: Boolean,
-    onBare: (Boolean) -> Unit,
     scrolled: ScrollState,
     stacking: Boolean,
     onHosted: (android.appwidget.AppWidgetProviderInfo) -> Unit,
@@ -278,12 +271,6 @@ private fun Gallery(
                 .padding(horizontal = 4.dp)
                 .arriving(arrive, 0),
         )
-        // What the switch does is said under it, where the eye is when it is used.
-        Column(Modifier.arriving(arrive, 1)) {
-            StyleSwitch(bare, onBare)
-            Spacer(Modifier.height(8.dp))
-            StyleNote(bare, Modifier.padding(horizontal = 4.dp))
-        }
         square.chunked(2).forEachIndexed { row, pair ->
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 pair.forEachIndexed { column, spec ->
@@ -297,7 +284,6 @@ private fun Gallery(
                         wellHeight = 196.dp,
                         settings = settings,
                         geometry = geometry,
-                        bare = bare,
                         modifier = Modifier
                             .weight(1f)
                             .arriving(arrive, 2 + row * 2 + column, card = true),
@@ -314,7 +300,6 @@ private fun Gallery(
             wellHeight = 196.dp,
             settings = settings,
             geometry = geometry,
-            bare = bare,
             modifier = Modifier
                 .fillMaxWidth()
                 .arriving(arrive, 2 + square.size, card = true),
@@ -334,44 +319,6 @@ private fun Gallery(
             onPick = onHosted,
         )
         Spacer(Modifier.height(28.dp))
-    }
-}
-
-/**
- * Glass or no glass: the one choice that changes every widget on the page at once, so each side
- * of it says so in a symbol as well as a word, a pane and a pane struck through.
- */
-@Composable
-private fun StyleSwitch(bare: Boolean, onBare: (Boolean) -> Unit) {
-    Segmented(
-        options = listOf("glass" to "Glass", "bare" to "No glass"),
-        selected = if (bare) "bare" else "glass",
-        onSelect = { onBare(it == "bare") },
-        icons = listOf(Icons.Rounded.Layers, Icons.Rounded.LayersClear),
-    )
-}
-
-/** What the style chosen means, changing where it stands when the other is chosen. */
-@Composable
-private fun StyleNote(bare: Boolean, modifier: Modifier = Modifier) {
-    val palette = LocalPalette.current
-    val reduced = LocalMotionLevel.current.reduced
-    AnimatedContent(
-        targetState = bare,
-        transitionSpec = { wordsChange(reduced) },
-        modifier = modifier,
-        label = "styleNote",
-    ) { noGlass ->
-        Text(
-            text = if (noGlass) {
-                "No pane round them: the numbers and icons are the glass, like the clock on an iPhone's Lock Screen."
-            } else {
-                "On a pane of glass that bends your wallpaper."
-            },
-            color = palette.onGlassMuted,
-            fontSize = 13.sp,
-            lineHeight = 18.sp,
-        )
     }
 }
 
@@ -421,7 +368,6 @@ private fun WidgetCard(
     wellHeight: Dp,
     settings: ZenithSettings,
     geometry: HomeGeometry?,
-    bare: Boolean,
     modifier: Modifier,
     onPick: (WidgetSpec, WidgetSize, Offset) -> Unit,
 ) {
@@ -450,11 +396,11 @@ private fun WidgetCard(
         ) {
             // Its real size, or as near as the card has room for.
             val fit = min(1f, min(maxWidth / real.width, maxHeight / real.height))
-            LiveWidget(spec, real, fit, bare, settings)
+            LiveWidget(spec, real, fit, settings)
         }
         Spacer(Modifier.height(10.dp))
         AnimatedContent(
-            targetState = (if (bare) bareOf(spec) else spec).title,
+            targetState = spec.title,
             transitionSpec = { fadeIn(tween(220, delayMillis = 60)).togetherWith(fadeOut(tween(120))) },
             modifier = Modifier.padding(horizontal = 4.dp),
             label = "widgetCardName",
@@ -489,8 +435,6 @@ private fun Showcase(
     opensOn: WidgetSize,
     settings: ZenithSettings,
     geometry: HomeGeometry?,
-    bare: Boolean,
-    onBare: (Boolean) -> Unit,
     growFrom: TransformOrigin,
     leaving: Boolean,
     /** Going onto a widget already on the page, at its size, rather than a spot of its own. */
@@ -565,7 +509,7 @@ private fun Showcase(
             }
         }
         // What each size shows: every one is a design of its own, and says which.
-        val kind = Widgets.baseType(spec.type)
+        val kind = Widgets.solid(spec.type)
         val notes = remember(real, kind, settings.toggles.size) {
             real.map { WidgetLayouts.note(kind, it.width.value, it.height.value, settings.toggles.size) }
         }
@@ -584,7 +528,6 @@ private fun Showcase(
                 width = stageWidth,
                 strip = strip,
                 names = sizes.map { "${it.name}, ${it.spanX} by ${it.rows}" },
-                bare = bare,
                 settings = settings,
                 onPick = goTo,
             )
@@ -632,10 +575,8 @@ private fun Showcase(
             }
             Spacer(Modifier.height(20.dp))
             Column(Modifier.padding(horizontal = STAGE_INSET), horizontalAlignment = Alignment.CenterHorizontally) {
-                StyleSwitch(bare, onBare)
-                Spacer(Modifier.height(14.dp))
                 AnimatedContent(
-                    targetState = (if (bare) bareOf(spec) else spec).description,
+                    targetState = spec.description,
                     transitionSpec = { wordsChange(reduced) },
                     label = "widgetAbout",
                 ) { words ->
@@ -654,7 +595,7 @@ private fun Showcase(
                     modifier = Modifier.shake(refusals),
                     onClick = {
                         val size = sizes[current]
-                        if (onAdd((if (bare) bareOf(spec) else spec).type, size.spanX, size.spanY)) {
+                        if (onAdd(spec.type, size.spanX, size.spanY)) {
                             haptics.confirm()
                             onAdded()
                         } else {
@@ -704,7 +645,6 @@ private fun Stage(
     strip: LazyListState,
     /** What each size is called, for a screen reader. */
     names: List<String>,
-    bare: Boolean,
     settings: ZenithSettings,
     /** A size was tapped: bring it to the middle. */
     onPick: (Int) -> Unit,
@@ -727,7 +667,6 @@ private fun Stage(
                 spec = spec,
                 real = size,
                 scale = scale,
-                bare = bare,
                 settings = settings,
                 label = names[index],
                 modifier = Modifier
@@ -912,10 +851,6 @@ private val STAGE_GAP = 14.dp
 /** How far from the middle a size is when it has stood all the way back. */
 private val STAGE_REACH = 230.dp
 
-/** The "No glass" version of [spec]. */
-private fun bareOf(spec: WidgetSpec): WidgetSpec =
-    Widgets.noGlass.firstOrNull { Widgets.baseType(it.type) == spec.type } ?: spec
-
 // ------------------------------------------------------------------------------- a live widget
 
 /**
@@ -964,19 +899,13 @@ private fun LiveWidget(
     spec: WidgetSpec,
     real: DpSize,
     scale: Float,
-    bare: Boolean,
     settings: ZenithSettings,
     modifier: Modifier = Modifier,
     label: String? = null,
 ) {
     val shown = DpSize(real.width * scale, real.height * scale)
     Box(modifier.size(shown)) {
-        AnimatedContent(
-            targetState = bare,
-            transitionSpec = { fadeIn(tween(240)).togetherWith(fadeOut(tween(160))) },
-            modifier = Modifier.clearAndSetSemantics { if (label != null) contentDescription = label },
-            label = "widgetStyle",
-        ) { noGlass ->
+        Box(Modifier.clearAndSetSemantics { if (label != null) contentDescription = label }) {
             Box(Modifier.size(shown)) {
                 Box(
                     Modifier
@@ -989,7 +918,7 @@ private fun LiveWidget(
                         },
                 ) {
                     ZenithWidget(
-                        type = (if (noGlass) bareOf(spec) else spec).type,
+                        type = spec.type,
                         userName = settings.userName,
                         note = settings.note,
                         toggles = settings.toggles,

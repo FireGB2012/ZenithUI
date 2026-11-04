@@ -221,7 +221,10 @@ data class HostedWidgetCell(
     val appWidgetId: Int,
     /** Which widget it is, as a flattened component name: how it is found again after a restore. */
     val provider: String,
-    /** A pane of glass behind it. Off by default: most widgets bring a background of their own. */
+    /**
+     * A solid tile behind it (saved as "glass", from when it was a pane of glass). Off by default:
+     * most widgets bring a background of their own.
+     */
     val glass: Boolean = false,
     override val dx: Float = 0f,
     override val dy: Float = 0f,
@@ -266,7 +269,7 @@ data class StackMember(
             return when {
                 id.isEmpty() -> null
                 wid != 0 -> StackMember(id, appWidgetId = wid, provider = o.optString("prov"))
-                type.isNotEmpty() -> StackMember(id, type = type)
+                type.isNotEmpty() -> StackMember(id, type = Widgets.solid(type))
                 else -> null
             }
         }
@@ -318,17 +321,17 @@ data class WidgetSpec(
     val minSpanY: Int = 1,
     /** Search stretches across whatever grid you chose. */
     val fullWidth: Boolean = false,
-) {
-    /** A "No glass" widget: no pane behind it; its numbers and icons are the glass. */
-    val isBare: Boolean get() = type.startsWith(Widgets.BARE_PREFIX)
-}
+)
 
 object Widgets {
-    /** Marks a "No glass" version of a widget; what follows is the widget it is a version of. */
-    const val BARE_PREFIX = "bare_"
+    /**
+     * Marked a "No glass" version of a widget, in layouts saved before every widget became a solid
+     * tile. Such a widget is read as the widget it was a version of ([solid]).
+     */
+    private const val BARE_PREFIX = "bare_"
 
-    /** The widget a type draws, whichever section it came from: "bare_clock" is a clock. */
-    fun baseType(type: String): String = type.removePrefix(BARE_PREFIX)
+    /** The widget a type draws: "bare_clock", from before the iPhone look, is a clock. */
+    fun solid(type: String): String = type.removePrefix(BARE_PREFIX)
 
     val Clock = WidgetSpec(
         "clock", "Zenith Clock",
@@ -406,26 +409,7 @@ object Widgets {
     /** The widgets that can be put on a page. */
     val placeable = listOf(Clock, Battery, Calendar, Notes, Toggles, Media, WorldClock, Countdown, Photos, Todo, Streak, Weather)
 
-    /**
-     * The "No glass" section: the same widgets with no pane round them. Their numbers, rings and
-     * icons are made of glass instead, like the clock on an iPhone's Lock Screen.
-     */
-    val noGlass = listOf(
-        Clock.copy(type = BARE_PREFIX + Clock.type, title = "Glass Clock", description = "Big glass numbers straight on the wallpaper, with a sun or moon for the time of day."),
-        Battery.copy(type = BARE_PREFIX + Battery.type, title = "Glass Power", description = "A glass ring and battery icon floating on the wallpaper."),
-        Calendar.copy(type = BARE_PREFIX + Calendar.type, title = "Glass Calendar", description = "Today's date in glass, with the month around it."),
-        Notes.copy(type = BARE_PREFIX + Notes.type, title = "Glass Note", description = "Your note written on the wallpaper, under a glass pencil."),
-        Toggles.copy(type = BARE_PREFIX + Toggles.type, title = "Glass Toggles", description = "Your quick controls as glass icons, lit in colour when on."),
-        Media.copy(type = BARE_PREFIX + Media.type, title = "Glass Now playing", description = "The album's picture on the wallpaper, under glass controls."),
-        WorldClock.copy(type = BARE_PREFIX + WorldClock.type, title = "Glass World clock", description = "The cities' times in glass, a sun or a moon by each."),
-        Countdown.copy(type = BARE_PREFIX + Countdown.type, title = "Glass Countdown", description = "The days left as a big glass number."),
-        Photos.copy(type = BARE_PREFIX + Photos.type, title = "Glass Photo frame", description = "Your photo straight on the wallpaper, with no frame round it."),
-        Todo.copy(type = BARE_PREFIX + Todo.type, title = "Glass To-do", description = "Your list written on the wallpaper, under glass ticks."),
-        Streak.copy(type = BARE_PREFIX + Streak.type, title = "Glass Aura", description = "Your streak in glass, under a glass flame."),
-        Weather.copy(type = BARE_PREFIX + Weather.type, title = "Glass Weather", description = "The temperature in glass, under a glass sky."),
-    )
-
-    fun byType(type: String): WidgetSpec? = all.firstOrNull { it.type == type } ?: noGlass.firstOrNull { it.type == type }
+    fun byType(type: String): WidgetSpec? = solid(type).let { kind -> all.firstOrNull { it.type == kind } }
 
     /** The size a widget takes when first placed. [rows] is in rows; spans are in row units. */
     fun defaultSpan(spec: WidgetSpec, columns: Int, rows: Int): Pair<Int, Int> =
@@ -468,7 +452,8 @@ private fun baseItemFromJson(o: JSONObject): HomeItem? = when (o.optString("t"))
 
     "widget" -> WidgetCell(
         id = o.optString("id"), page = o.optInt("p"), col = o.optInt("c"), row = o.optInt("r"),
-        type = o.optString("type"), spanX = o.optInt("sx", 2).coerceAtLeast(1), spanY = o.optInt("sy", 2).coerceAtLeast(1),
+        // A "No glass" widget from before the iPhone look is its solid self from now on.
+        type = Widgets.solid(o.optString("type")), spanX = o.optInt("sx", 2).coerceAtLeast(1), spanY = o.optInt("sy", 2).coerceAtLeast(1),
         accent = o.optLong("acc", 0L),
     )
 

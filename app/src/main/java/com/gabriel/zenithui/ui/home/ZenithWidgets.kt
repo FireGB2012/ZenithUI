@@ -147,7 +147,9 @@ import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.LocalZenithFont
 import com.gabriel.zenithui.ui.theme.ZenithShapes
 import com.gabriel.zenithui.ui.theme.glass
-import com.gabriel.zenithui.ui.theme.glassInk
+import com.gabriel.zenithui.ui.theme.CardKind
+import com.gabriel.zenithui.ui.theme.inkOnTint
+import com.gabriel.zenithui.ui.theme.solidCard
 import kotlinx.coroutines.delay
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -162,12 +164,16 @@ import kotlin.math.sin
 private fun formOf(width: Dp, height: Dp): WidgetForm = WidgetForm.of(width.value, height.value)
 
 /**
- * True inside a "No glass" widget. There is no pane: the widget sits straight on the wallpaper,
- * its words white with a soft shadow, and its big numbers, rings and icons made of glass.
+ * What a widget's tile is filled with when it is not Apple's card: a colour of the widget's own
+ * (see `InOwnColour`), or what a widget paints for itself, the weather's sky or the album's colour.
+ * Unspecified for the card. Words on a filled tile are a shade stronger ([quiet]).
  */
-internal val LocalBare = staticCompositionLocalOf { false }
+internal val LocalWidgetFill = staticCompositionLocalOf { Color.Unspecified }
 
-/** Renders one of Zenith's built-in widgets into whatever space the grid gave it. */
+/**
+ * Renders one of Zenith's built-in widgets into whatever space the grid gave it: a solid tile, as an
+ * iPhone's widgets are, in Apple's card colour or the colour it was given ([LocalWidgetFill]).
+ */
 @Composable
 fun ZenithWidget(
     type: String,
@@ -180,7 +186,7 @@ fun ZenithWidget(
     toggles: List<String> = listOf("torch", "wifi", "bluetooth", "focus"),
     modifier: Modifier = Modifier,
 ) {
-    val kind = Widgets.baseType(type)
+    val kind = Widgets.solid(type)
     if (kind == "search") {
         // A one line bar: it draws, and reacts, at exactly its own size.
         Box(modifier, contentAlignment = Alignment.Center) {
@@ -189,60 +195,12 @@ fun ZenithWidget(
         return
     }
 
-    val palette = LocalPalette.current
-    if (type.startsWith(Widgets.BARE_PREFIX)) {
-        // Straight on the wallpaper, words take the ink the labels under the icons have: white in
-        // the dark, near-black in the light, where Zenith's own wallpapers are pale and white
-        // words would be lost. Each gets a soft edge of the opposite tone to stand on.
-        val shadow = with(LocalDensity.current) {
-            if (palette.dark) {
-                Shadow(Color.Black.copy(alpha = 0.72f), Offset(0f, 1.dp.toPx()), 5.dp.toPx())
-            } else {
-                Shadow(Color.White.copy(alpha = 0.9f), Offset.Zero, 5.dp.toPx())
-            }
-        }
-        CompositionLocalProvider(
-            LocalBare provides true,
-            LocalTextStyle provides LocalTextStyle.current.merge(TextStyle(shadow = shadow)),
-        ) {
-            BoxWithConstraints(modifier) {
-                WidgetBody(kind, formOf(maxWidth, maxHeight), maxWidth, maxHeight, userName, note, onNoteChange, toggles)
-            }
-        }
-        return
-    }
-
-    BoxWithConstraints(
-        modifier
-            .glass(ZenithShapes.card, strength = 1f)
-            .clip(ZenithShapes.card)
-            // A trace of the theme's colour, leaving the wallpaper and refracted edge visible.
-            .drawBehind {
-                drawCircle(
-                    brush = Brush.radialGradient(
-                        listOf(palette.accent.copy(alpha = 0.08f), Color.Transparent),
-                        center = Offset(size.width * 0.12f, size.height * 0.05f),
-                        radius = size.maxDimension * 0.75f,
-                    ),
-                    radius = size.maxDimension * 0.75f,
-                    center = Offset(size.width * 0.12f, size.height * 0.05f),
-                )
-                drawCircle(
-                    brush = Brush.radialGradient(
-                        listOf(palette.accentAlt.copy(alpha = 0.05f), Color.Transparent),
-                        center = Offset(size.width * 0.95f, size.height),
-                        radius = size.maxDimension * 0.6f,
-                    ),
-                    radius = size.maxDimension * 0.6f,
-                    center = Offset(size.width * 0.95f, size.height),
-                )
-            }
-    ) {
+    BoxWithConstraints(modifier.solidCard(CardKind.Widget, LocalWidgetFill.current)) {
         WidgetBody(kind, formOf(maxWidth, maxHeight), maxWidth, maxHeight, userName, note, onNoteChange, toggles)
     }
 }
 
-/** What a widget shows, the same whether it sits on a pane or straight on the wallpaper. */
+/** What a widget shows on its tile. */
 @Composable
 private fun WidgetBody(
     kind: String,
@@ -299,29 +257,26 @@ internal fun tight(size: TextUnit, weight: FontWeight = FontWeight.Light, keepWe
 
 /**
  * The colour of a widget's second line: the date under the time, "On battery", "25 days left".
- * Stronger than the muted grey a page uses, because a widget is read at a glance and over a
- * wallpaper, and stronger still with no pane behind it.
+ * Apple's quieter words on its card; a shade stronger on a tile of a colour, where they must stand
+ * on whatever colour it is.
  */
 @Composable
-internal fun quiet(): Color = LocalPalette.current.onGlass.copy(alpha = if (LocalBare.current) 0.94f else 0.82f)
+internal fun quiet(): Color =
+    LocalPalette.current.onGlass.copy(alpha = if (LocalWidgetFill.current.isSpecified) 0.85f else 0.6f)
 
 /**
- * The accent as ink on a pane. A palette's accent is chosen to glow as a fill; as small letters on
- * glass of nearly its own colour, Frost's blue over a blue wallpaper, it is hard to read. So words
- * take it part of the way towards the pane's own ink: still the theme's colour, and legible.
+ * The accent as ink on a tile. Apple's card is solid and the accent is already one that can be read
+ * on it (`AppleColours.accent`); on a tile of a colour the accent is that tile's own ink.
  */
 @Composable
-internal fun accentInk(): Color {
-    val palette = LocalPalette.current
-    return lerp(palette.accent, palette.onGlass, if (palette.dark) 0.4f else 0.3f)
-}
+internal fun accentInk(): Color = LocalPalette.current.accent
 
-/** The small upper-case accent label that heads most widgets. White on the wallpaper, to be read. */
+/** The small upper-case accent label that heads most widgets. */
 @Composable
 internal fun Caps(text: String, size: TextUnit = 11.sp, modifier: Modifier = Modifier) {
     Text(
         text = text.uppercase(),
-        color = if (LocalBare.current) LocalPalette.current.onGlass else accentInk(),
+        color = accentInk(),
         fontSize = size,
         fontWeight = FontWeight.SemiBold,
         letterSpacing = 1.4.sp,
@@ -331,20 +286,9 @@ internal fun Caps(text: String, size: TextUnit = 11.sp, modifier: Modifier = Mod
     )
 }
 
-@Composable
-internal fun accentBrush(): Brush {
-    val palette = LocalPalette.current
-    // The accents a little towards the pane's ink, so the far end of a number is as easy to read
-    // as the near one.
-    val towards = if (palette.dark) 0.22f else 0.12f
-    return Brush.linearGradient(
-        listOf(palette.onGlass, lerp(palette.accent, palette.onGlass, towards), lerp(palette.accentAlt, palette.onGlass, towards))
-    )
-}
-
 /**
- * A widget's headline number. On a pane it is ink, in the accent gradient or plain; in a
- * "No glass" widget it is the glass itself, set heavier so there is body for the light to bend in.
+ * A widget's headline number: in the accent, or in the words' own colour. Solid, as Apple sets
+ * numbers on a widget; no gradient.
  */
 @Composable
 internal fun Figure(
@@ -356,47 +300,23 @@ internal fun Figure(
     modifier: Modifier = Modifier,
 ) {
     val palette = LocalPalette.current
-    val style: TextStyle
-    val look: Modifier
-    if (LocalBare.current) {
-        // Bold runs a touch wider than the light weights these sizes were fitted for.
-        val glassSize = size * 0.94f
-        style = tight(glassSize, FontWeight.Bold, keepWeight = true).copy(color = Color.White)
-        look = Modifier.glassInk(bevel = with(LocalDensity.current) { glassSize.toDp() } * 0.075f)
-    } else {
-        style = if (accent) tight(size, weight).copy(brush = accentBrush()) else tight(size, weight).copy(color = palette.onGlass)
-        look = Modifier
-    }
+    val style = tight(size, weight).copy(color = if (accent) palette.accent else palette.onGlass)
     if (animated) {
-        AnimatedDigits(text, style, modifier.then(look))
+        AnimatedDigits(text, style, modifier)
     } else {
-        Text(text, style = style, maxLines = 1, modifier = modifier.then(look))
+        Text(text, style = style, maxLines = 1, modifier = modifier)
     }
 }
 
-/** A small symbol in a widget: glass in a "No glass" widget, accent ink on a pane. */
+/** A small symbol in a widget, in the accent unless it is given a colour. */
 @Composable
 internal fun Symbol(icon: ImageVector, size: Dp, modifier: Modifier = Modifier, tint: Color = Color.Unspecified) {
-    val bare = LocalBare.current
     Icon(
         icon,
         contentDescription = null,
-        tint = when {
-            tint.isSpecified -> tint
-            bare -> Color.White
-            else -> LocalPalette.current.accent
-        },
-        modifier = modifier
-            .size(size)
-            .then(if (bare) Modifier.glassInk(bevel = size * 0.09f) else Modifier),
+        tint = if (tint.isSpecified) tint else LocalPalette.current.accent,
+        modifier = modifier.size(size),
     )
-}
-
-/** The sky at this hour: the icon a "No glass" clock wears. */
-private fun timeOfDayIcon(hour: Int): ImageVector = when (hour) {
-    in 6..8, in 18..20 -> Icons.Rounded.WbTwilight
-    in 9..17 -> Icons.Rounded.WbSunny
-    else -> Icons.Rounded.NightsStay
 }
 
 @Composable
@@ -430,8 +350,6 @@ private fun ClockWidget(form: WidgetForm, userName: String, width: Dp, height: D
         else -> "Still up"
     }
     val hello = if (userName.isBlank()) greeting else "$greeting, $userName"
-    val bare = LocalBare.current
-    val sky = timeOfDayIcon(now.hour)
 
     when (form) {
         // Just the time, as large as it will go.
@@ -450,7 +368,6 @@ private fun ClockWidget(form: WidgetForm, userName: String, width: Dp, height: D
                 Caps(shortDay)
                 Text(date, color = quiet(), fontSize = 13.sp, maxLines = 1)
             }
-            if (bare) Symbol(sky, minOf(height * 0.36f, 26.dp))
         }
 
         // Hours stacked over minutes, like a lock screen.
@@ -458,17 +375,10 @@ private fun ClockWidget(form: WidgetForm, userName: String, width: Dp, height: D
             Modifier.fillMaxSize().padding(14.dp),
             verticalArrangement = Arrangement.SpaceBetween,
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Caps(weekday, modifier = Modifier.weight(1f))
-                if (bare) Symbol(sky, 20.dp)
-            }
-            // With no pane to fill, the numbers get the room: as big as a lock screen's, less what
-            // the day above them and the date below need, so a short widget keeps all three.
-            val size = if (bare) {
-                fit(width * 0.4f, minOf(height * 0.29f, (height - 80.dp) / 2))
-            } else {
-                fit(width * 0.27f, minOf(height * 0.19f, (height - 80.dp) / 2))
-            }
+            Caps(weekday)
+            // As big as they will go, less what the day above them and the date below need, so a
+            // short widget keeps all three.
+            val size = fit(width * 0.27f, minOf(height * 0.19f, (height - 80.dp) / 2))
             Column {
                 Figure(hours, size, FontWeight.Medium, accent = false, animated = true)
                 Figure(minutes, size, FontWeight.Light, animated = true)
@@ -484,13 +394,7 @@ private fun ClockWidget(form: WidgetForm, userName: String, width: Dp, height: D
             Figure(time, fit(height * 0.32f, width * 0.13f), animated = true)
             Spacer(Modifier.width(16.dp))
             Column(Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (bare) {
-                        Symbol(sky, 18.dp)
-                        Spacer(Modifier.width(6.dp))
-                    }
-                    Caps(weekday, 12.sp)
-                }
+                Caps(weekday, 12.sp)
                 Text(date, color = palette.onGlass, fontSize = 15.sp, fontWeight = FontWeight.Medium, maxLines = 1)
                 Text(hello, color = quiet(), fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
@@ -502,13 +406,7 @@ private fun ClockWidget(form: WidgetForm, userName: String, width: Dp, height: D
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceEvenly,
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (bare) {
-                    Symbol(sky, 16.dp)
-                    Spacer(Modifier.width(6.dp))
-                }
-                Caps(weekday)
-            }
+            Caps(weekday)
             AnalogFace(now, Modifier.fillMaxWidth(0.78f).aspectRatio(1f))
             Figure(time, fit(width * 0.15f, 24.dp), FontWeight.Medium, accent = false, animated = true)
             Text(date, color = quiet(), fontSize = 12.sp, maxLines = 1)
@@ -520,10 +418,6 @@ private fun ClockWidget(form: WidgetForm, userName: String, width: Dp, height: D
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                if (bare) {
-                    Symbol(sky, 26.dp)
-                    Spacer(Modifier.width(10.dp))
-                }
                 Column(Modifier.weight(1f)) {
                     Caps(weekday, 12.sp)
                     Text(date, color = palette.onGlass, fontSize = 16.sp, fontWeight = FontWeight.Medium)
@@ -558,25 +452,21 @@ internal fun AnimatedDigits(text: String, style: TextStyle, modifier: Modifier =
 @Composable
 internal fun AnalogFace(now: LocalDateTime, modifier: Modifier) {
     val palette = LocalPalette.current
-    // With no pane, the face is only its marks and hands, each a sliver of glass.
-    val bare = LocalBare.current
-    Canvas(modifier.then(if (bare) Modifier.glassInk(bevel = 1.6.dp) else Modifier)) {
+    Canvas(modifier) {
         val radius = size.minDimension / 2f
         val middle = center
-        if (!bare) {
-            drawCircle(palette.onGlass.copy(alpha = 0.06f), radius, middle)
-            drawCircle(palette.onGlass.copy(alpha = 0.16f), radius, middle, style = Stroke(1.dp.toPx()))
-        }
+        drawCircle(palette.onGlass.copy(alpha = 0.06f), radius, middle)
+        drawCircle(palette.onGlass.copy(alpha = 0.16f), radius, middle, style = Stroke(1.dp.toPx()))
         for (tick in 0 until 60) {
             val major = tick % 5 == 0
             val angle = Math.toRadians(tick * 6.0 - 90.0)
             val outer = radius * 0.9f
             val inner = if (major) radius * 0.76f else radius * 0.84f
             drawLine(
-                color = palette.onGlass.copy(alpha = if (major) 0.7f else if (bare) 0.4f else 0.2f),
+                color = palette.onGlass.copy(alpha = if (major) 0.7f else 0.2f),
                 start = Offset(middle.x + (cos(angle) * inner).toFloat(), middle.y + (sin(angle) * inner).toFloat()),
                 end = Offset(middle.x + (cos(angle) * outer).toFloat(), middle.y + (sin(angle) * outer).toFloat()),
-                strokeWidth = (if (major) (if (bare) 3.dp else 2.dp) else 1.dp).toPx(),
+                strokeWidth = (if (major) 2.dp else 1.dp).toPx(),
                 cap = StrokeCap.Round,
             )
         }
@@ -638,36 +528,18 @@ private fun rememberBattery(): BatteryState {
     return BatteryState(level, charging)
 }
 
-/** The battery as a symbol: how full, or charging. A "No glass" Power widget wears it in glass. */
-private fun batteryIcon(battery: BatteryState): ImageVector = when {
-    battery.charging -> Icons.Rounded.BatteryChargingFull
-    battery.level < 0 -> Icons.Rounded.BatteryFull
-    battery.level <= 12 -> Icons.Rounded.BatteryAlert
-    battery.level <= 30 -> Icons.Rounded.Battery2Bar
-    battery.level <= 45 -> Icons.Rounded.Battery3Bar
-    battery.level <= 60 -> Icons.Rounded.Battery4Bar
-    battery.level <= 75 -> Icons.Rounded.Battery5Bar
-    battery.level <= 90 -> Icons.Rounded.Battery6Bar
-    else -> Icons.Rounded.BatteryFull
-}
-
 @Composable
 private fun BatteryWidget(form: WidgetForm, width: Dp, height: Dp) {
     val palette = LocalPalette.current
     val battery = rememberBattery()
-    val bare = LocalBare.current
-    // On a pane the bolt lights up while charging; with no pane it is the battery itself, in glass.
-    val symbol = if (bare) batteryIcon(battery) else Icons.Rounded.Bolt
-    val symbolTint = when {
-        bare -> Color.Unspecified
-        battery.charging -> palette.accent
-        else -> palette.onGlassMuted
-    }
+    // The bolt lights up while charging.
+    val symbol = Icons.Rounded.Bolt
+    val symbolTint = if (battery.charging) palette.accent else palette.onGlassMuted
 
     when (form) {
         // A thin ring with the number inside.
         WidgetForm.Mini -> Box(Modifier.fillMaxSize().padding(6.dp), contentAlignment = Alignment.Center) {
-            Ring(battery.fraction, 4.dp, Modifier.fillMaxSize(), charging = battery.charging)
+            Ring(battery.fraction, 4.dp, Modifier.fillMaxSize())
             Figure("${battery.level.coerceAtLeast(0)}", fit(width * 0.21f, height * 0.21f), FontWeight.Medium, accent = false, animated = true)
         }
 
@@ -676,21 +548,17 @@ private fun BatteryWidget(form: WidgetForm, width: Dp, height: Dp) {
             Modifier.fillMaxSize().padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Symbol(symbol, if (bare) 24.dp else 18.dp, tint = symbolTint)
+            Symbol(symbol, 18.dp, tint = symbolTint)
             Spacer(Modifier.width(10.dp))
-            Capsule(battery.fraction, Modifier.weight(1f).height(if (bare) 12.dp else 9.dp))
+            Capsule(battery.fraction, Modifier.weight(1f).height(9.dp))
             Spacer(Modifier.width(12.dp))
             Text(battery.percent, color = palette.onGlass, fontSize = 14.sp, fontWeight = FontWeight.Medium)
         }
 
         // The ring.
         WidgetForm.Square -> Box(Modifier.fillMaxSize().padding(20.dp), contentAlignment = Alignment.Center) {
-            Ring(battery.fraction, if (bare) 9.dp else 7.dp, Modifier.fillMaxSize(), charging = battery.charging)
+            Ring(battery.fraction, 7.dp, Modifier.fillMaxSize())
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                if (bare) {
-                    Symbol(symbol, 22.dp)
-                    Spacer(Modifier.height(4.dp))
-                }
                 Figure(battery.percent, fit(width * 0.15f, 24.dp), FontWeight.Medium, accent = false, animated = true)
                 Spacer(Modifier.height(4.dp))
                 Text(battery.status, color = quiet(), fontSize = 12.sp)
@@ -703,8 +571,8 @@ private fun BatteryWidget(form: WidgetForm, width: Dp, height: Dp) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(Modifier.fillMaxHeight(0.8f).aspectRatio(1f), contentAlignment = Alignment.Center) {
-                Ring(battery.fraction, if (bare) 8.dp else 6.dp, Modifier.fillMaxSize(), charging = battery.charging)
-                Symbol(symbol, if (bare) 28.dp else 22.dp, tint = symbolTint)
+                Ring(battery.fraction, 6.dp, Modifier.fillMaxSize())
+                Symbol(symbol, 22.dp, tint = symbolTint)
             }
             Spacer(Modifier.width(16.dp))
             Column(Modifier.weight(1f)) {
@@ -722,54 +590,26 @@ private fun BatteryWidget(form: WidgetForm, width: Dp, height: Dp) {
             Modifier.fillMaxSize().padding(14.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (bare) {
-                    Symbol(symbol, 16.dp)
-                    Spacer(Modifier.width(6.dp))
-                }
-                Caps("Battery")
-            }
+            Caps("Battery")
             Spacer(Modifier.height(10.dp))
             // It fills from the bottom as it appears, the way the ring runs round.
             val level = rememberFilled(battery.fraction)
-            if (bare) {
-                // The liquid is glass; the number moves out below it, where it can be read.
+            Box(
+                Modifier
+                    .weight(1f)
+                    .fillMaxWidth(0.42f)
+                    .clip(RoundedCornerShape(percent = 30))
+                    .background(palette.onGlass.copy(alpha = 0.10f)),
+                contentAlignment = Alignment.Center,
+            ) {
                 Box(
                     Modifier
-                        .weight(1f)
-                        .fillMaxWidth(0.42f)
-                        .clip(RoundedCornerShape(percent = 30))
-                        .background(palette.onGlass.copy(alpha = 0.14f)),
-                ) {
-                    Box(
-                        Modifier
-                            .align(Alignment.BottomCenter)
-                            .fillMaxWidth()
-                            .heightShare { level.value.coerceAtLeast(0.04f) }
-                            .glassInk(bevel = 6.dp)
-                            .background(Color.White, RoundedCornerShape(percent = 30)),
-                    )
-                }
-                Spacer(Modifier.height(8.dp))
-                Figure(battery.percent, fit(width * 0.12f, 22.dp), accent = false, animated = true)
-            } else {
-                Box(
-                    Modifier
-                        .weight(1f)
-                        .fillMaxWidth(0.42f)
-                        .clip(RoundedCornerShape(percent = 30))
-                        .background(palette.onGlass.copy(alpha = 0.10f)),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Box(
-                        Modifier
-                            .align(Alignment.BottomCenter)
-                            .fillMaxWidth()
-                            .heightShare { level.value.coerceAtLeast(0.04f) }
-                            .background(Brush.verticalGradient(listOf(palette.accentAlt, palette.accent))),
-                    )
-                    Text(battery.percent, style = tight(fit(width * 0.11f, 20.dp), FontWeight.SemiBold).copy(color = palette.onGlass))
-                }
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .heightShare { level.value.coerceAtLeast(0.04f) }
+                        .background(palette.accent),
+                )
+                Text(battery.percent, style = tight(fit(width * 0.11f, 20.dp), FontWeight.SemiBold).copy(color = palette.onGlass))
             }
             Spacer(Modifier.height(10.dp))
             Text(battery.status, color = quiet(), fontSize = 13.sp)
@@ -778,15 +618,11 @@ private fun BatteryWidget(form: WidgetForm, width: Dp, height: Dp) {
         // A large ring with the number in the middle and a gauge below.
         WidgetForm.Big -> Column(Modifier.fillMaxSize().padding(18.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                if (bare) {
-                    Symbol(symbol, 22.dp)
-                    Spacer(Modifier.width(8.dp))
-                }
                 Caps("Battery", 12.sp, Modifier.weight(1f))
                 Text(battery.status, color = quiet(), fontSize = 13.sp)
             }
             Box(Modifier.weight(1f).fillMaxWidth().padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
-                Ring(battery.fraction, if (bare) 13.dp else 10.dp, Modifier.fillMaxSize(0.8f), charging = battery.charging)
+                Ring(battery.fraction, 10.dp, Modifier.fillMaxSize(0.8f))
                 Figure(battery.percent, fit(width * 0.1f, height * 0.085f), animated = true)
             }
             Segments(battery.fraction, Modifier.fillMaxWidth())
@@ -794,71 +630,26 @@ private fun BatteryWidget(form: WidgetForm, width: Dp, height: Dp) {
     }
 }
 
-/**
- * The charge as an arc. On a pane it is an accent gradient over a faint track; with no pane the
- * track stays a faint line on the wallpaper and the charge is a band of glass.
- */
+/** The charge as an arc of the accent over a faint track, as an iPhone's battery widget draws it. */
 @Composable
-internal fun Ring(fraction: Float, stroke: Dp, modifier: Modifier, charging: Boolean = false) {
+internal fun Ring(fraction: Float, stroke: Dp, modifier: Modifier) {
     val palette = LocalPalette.current
-    val bare = LocalBare.current
-    val reduced = LocalMotionLevel.current.reduced
     val filled = rememberFilled(fraction)
-    // While it is charging a glint runs up the filled part of the ring, over and over. It is the
-    // one thing on the home screen that keeps moving by itself, and only while there is a charger.
-    val glint = if (charging && !reduced) {
-        rememberInfiniteTransition(label = "charging").animateFloat(
-            initialValue = 0f,
-            targetValue = 1f,
-            animationSpec = infiniteRepeatable(tween(1900, easing = LinearEasing)),
-            label = "glint",
-        )
-    } else {
-        null
-    }
-    val fill = remember(palette.accent, palette.accentAlt) { Brush.linearGradient(listOf(palette.accent, palette.accentAlt)) }
-    fun DrawScope.arc(sweep: Float, brush: Brush) {
+    fun DrawScope.arc(sweep: Float, colour: Color) {
         val width = stroke.toPx()
         val side = size.minDimension - width
         drawArc(
-            brush = brush,
+            color = colour,
             startAngle = 130f, sweepAngle = sweep, useCenter = false,
             topLeft = Offset((size.width - side) / 2f, (size.height - side) / 2f), size = Size(side, side),
             style = Stroke(width = width, cap = StrokeCap.Round),
         )
     }
-    Box(modifier) {
-        Canvas(Modifier.fillMaxSize()) {
-            arc(280f, SolidColor(palette.onGlass.copy(alpha = if (bare) 0.16f else 0.12f)))
-            val sweep = (280f * filled.value).coerceIn(0f, 280f)
-            if (!bare) arc(sweep, fill)
-            val along = glint?.value
-            if (along != null && sweep > GLINT) {
-                val width = stroke.toPx()
-                val side = size.minDimension - width
-                drawArc(
-                    color = Color.White,
-                    startAngle = 130f + (sweep - GLINT) * along,
-                    sweepAngle = GLINT,
-                    useCenter = false,
-                    topLeft = Offset((size.width - side) / 2f, (size.height - side) / 2f),
-                    size = Size(side, side),
-                    // In at the foot of the ring, out at the head of it.
-                    alpha = 0.6f * kotlin.math.sin(along * Math.PI).toFloat(),
-                    style = Stroke(width = width, cap = StrokeCap.Round),
-                )
-            }
-        }
-        if (bare && fraction > 0f) {
-            Canvas(Modifier.fillMaxSize().glassInk(bevel = stroke * 0.4f)) {
-                arc((280f * filled.value).coerceIn(0f, 280f), SolidColor(Color.White))
-            }
-        }
+    Canvas(modifier) {
+        arc(280f, palette.onGlass.copy(alpha = 0.12f))
+        arc((280f * filled.value).coerceIn(0f, 280f), palette.accent)
     }
 }
-
-/** How much of the ring the charging glint covers, in degrees. */
-private const val GLINT = 26f
 
 /**
  * How full a gauge is drawn on its way to [fraction]. It springs there: up from empty when it
@@ -892,23 +683,14 @@ private fun Modifier.heightShare(share: () -> Float): Modifier = layout { measur
 @Composable
 private fun Capsule(fraction: Float, modifier: Modifier) {
     val palette = LocalPalette.current
-    val bare = LocalBare.current
-    val track = palette.onGlass.copy(alpha = if (bare) 0.16f else 0.12f)
     val filled = rememberFilled(fraction)
-    Box(modifier.clip(RoundedCornerShape(percent = 50)).background(track)) {
+    Box(modifier.clip(RoundedCornerShape(percent = 50)).background(palette.onGlass.copy(alpha = 0.12f))) {
         Box(
             Modifier
                 .fillMaxHeight()
                 .widthShare { filled.value.coerceAtLeast(0.03f) }
-                .then(
-                    if (bare) {
-                        Modifier.glassInk(bevel = 3.dp).background(Color.White, RoundedCornerShape(percent = 50))
-                    } else {
-                        Modifier
-                            .clip(RoundedCornerShape(percent = 50))
-                            .background(Brush.horizontalGradient(listOf(palette.accent, palette.accentAlt)))
-                    }
-                ),
+                .clip(RoundedCornerShape(percent = 50))
+                .background(palette.accent),
         )
     }
 }
@@ -916,37 +698,17 @@ private fun Capsule(fraction: Float, modifier: Modifier) {
 @Composable
 private fun Segments(fraction: Float, modifier: Modifier) {
     val palette = LocalPalette.current
-    val bare = LocalBare.current
     // They light one after another as the gauge runs up, never one more than the charge is worth.
     val filled = rememberFilled(fraction)
     val lit by remember(fraction) { derivedStateOf { (minOf(filled.value, fraction) * 10f + 0.001f).toInt() } }
-    Box(modifier) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            repeat(10) { index ->
-                val colour by animateColorAsState(
-                    targetValue = when {
-                        bare -> palette.onGlass.copy(alpha = 0.16f)
-                        index < lit -> palette.accent
-                        else -> palette.onGlass.copy(alpha = 0.12f)
-                    },
-                    animationSpec = tween(200),
-                    label = "segment",
-                )
-                Box(Modifier.weight(1f).height(8.dp).clip(RoundedCornerShape(percent = 50)).background(colour))
-            }
-        }
-        if (bare && lit > 0) {
-            // The lit ones as one strip of glass beads laid over their tracks.
-            Row(Modifier.fillMaxWidth().glassInk(bevel = 2.5.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                repeat(10) { index ->
-                    Box(
-                        Modifier
-                            .weight(1f)
-                            .height(8.dp)
-                            .then(if (index < lit) Modifier.background(Color.White, RoundedCornerShape(percent = 50)) else Modifier),
-                    )
-                }
-            }
+    Row(modifier, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        repeat(10) { index ->
+            val colour by animateColorAsState(
+                targetValue = if (index < lit) palette.accent else palette.onGlass.copy(alpha = 0.12f),
+                animationSpec = tween(200),
+                label = "segment",
+            )
+            Box(Modifier.weight(1f).height(8.dp).clip(RoundedCornerShape(percent = 50)).background(colour))
         }
     }
 }
@@ -962,7 +724,6 @@ private fun CalendarWidget(form: WidgetForm, width: Dp, height: Dp) {
     val weekday = today.format(DateTimeFormatter.ofPattern("EEEE"))
     val month = today.format(DateTimeFormatter.ofPattern("MMMM"))
     val left = if (remaining <= 0) "Last day of the month" else "$remaining days left"
-    val bare = LocalBare.current
     val day = "${today.dayOfMonth}"
 
     when (form) {
@@ -982,10 +743,6 @@ private fun CalendarWidget(form: WidgetForm, width: Dp, height: Dp) {
             Modifier.fillMaxSize().padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (bare) {
-                Symbol(Icons.Rounded.CalendarMonth, minOf(height * 0.36f, 24.dp))
-                Spacer(Modifier.width(10.dp))
-            }
             Figure(day, fit(height * 0.42f, 30.dp))
             Spacer(Modifier.width(12.dp))
             Column {
@@ -999,10 +756,7 @@ private fun CalendarWidget(form: WidgetForm, width: Dp, height: Dp) {
             Modifier.fillMaxSize().padding(14.dp),
             verticalArrangement = Arrangement.SpaceBetween,
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Caps(weekday, modifier = Modifier.weight(1f))
-                if (bare) Symbol(Icons.Rounded.CalendarMonth, 20.dp)
-            }
+            Caps(weekday)
             Figure(day, fit(width * 0.32f, height * 0.28f))
             Column {
                 Text(month, color = palette.onGlass, fontSize = 14.sp, fontWeight = FontWeight.Medium)
@@ -1016,13 +770,7 @@ private fun CalendarWidget(form: WidgetForm, width: Dp, height: Dp) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(Modifier.weight(0.8f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (bare) {
-                        Symbol(Icons.Rounded.CalendarMonth, 16.dp)
-                        Spacer(Modifier.width(6.dp))
-                    }
-                    Caps(weekday, 12.sp)
-                }
+                Caps(weekday, 12.sp)
                 Figure(day, fit(height * 0.26f, 38.dp))
                 Spacer(Modifier.height(6.dp))
                 Text(month, color = palette.onGlass, fontSize = 14.sp, fontWeight = FontWeight.Medium)
@@ -1034,13 +782,7 @@ private fun CalendarWidget(form: WidgetForm, width: Dp, height: Dp) {
 
         // The month, headed by today.
         WidgetForm.Tall -> Column(Modifier.fillMaxSize().padding(12.dp)) {
-            Row(Modifier.padding(start = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                if (bare) {
-                    Symbol(Icons.Rounded.CalendarMonth, 16.dp)
-                    Spacer(Modifier.width(6.dp))
-                }
-                Caps(month, 12.sp)
-            }
+            Caps(month, 12.sp, Modifier.padding(start = 4.dp))
             Figure(day, fit(width * 0.22f, 32.dp), modifier = Modifier.padding(start = 4.dp, top = 4.dp, bottom = 8.dp))
             MonthGrid(today, 11.sp, 20.dp, Modifier.weight(1f).fillMaxWidth())
             Text(left, color = quiet(), fontSize = 12.sp, modifier = Modifier.padding(start = 4.dp, top = 6.dp))
@@ -1049,10 +791,6 @@ private fun CalendarWidget(form: WidgetForm, width: Dp, height: Dp) {
         // A full month with room to breathe.
         WidgetForm.Big -> Column(Modifier.fillMaxSize().padding(16.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
-                if (bare) {
-                    Symbol(Icons.Rounded.CalendarMonth, 26.dp, Modifier.align(Alignment.CenterVertically))
-                    Spacer(Modifier.width(10.dp))
-                }
                 Column(Modifier.weight(1f)) {
                     Caps(weekday, 12.sp)
                     Text("${today.dayOfMonth} $month", color = palette.onGlass, fontSize = 18.sp, fontWeight = FontWeight.Medium)
@@ -1068,7 +806,6 @@ private fun CalendarWidget(form: WidgetForm, width: Dp, height: Dp) {
 @Composable
 private fun MonthGrid(today: LocalDate, fontSize: TextUnit, dot: Dp, modifier: Modifier) {
     val palette = LocalPalette.current
-    val bare = LocalBare.current
     val firstOfMonth = today.withDayOfMonth(1)
     val leading = (firstOfMonth.dayOfWeek.value - 1).coerceAtLeast(0)
     val daysInMonth = today.lengthOfMonth()
@@ -1083,8 +820,6 @@ private fun MonthGrid(today: LocalDate, fontSize: TextUnit, dot: Dp, modifier: M
         textAlign = TextAlign.Center,
         platformStyle = PlatformTextStyle(includeFontPadding = false),
         lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.Both),
-        // On the wallpaper every figure needs its shadow to be read.
-        shadow = if (bare) LocalTextStyle.current.shadow else null,
     )
 
     // Today's dot grows into its place with a ring drawn round it, once, as the calendar appears.
@@ -1142,31 +877,21 @@ private fun MonthGrid(today: LocalDate, fontSize: TextUnit, dot: Dp, modifier: M
                                             }
                                         )
                                         .then(
-                                            if (isToday && !bare) {
+                                            if (isToday) {
                                                 Modifier
                                                     .clip(RoundedCornerShape(percent = 50))
-                                                    .background(Brush.linearGradient(listOf(palette.accent, palette.accentAlt)))
+                                                    .background(palette.accent)
                                             } else {
                                                 Modifier
                                             }
                                         ),
                                     contentAlignment = Alignment.Center,
                                 ) {
-                                    if (isToday && bare) {
-                                        // With no pane, today is a bead of glass in the accent.
-                                        Box(
-                                            Modifier
-                                                .matchParentSize()
-                                                .glassInk(bevel = dot * 0.22f)
-                                                .background(palette.accent, RoundedCornerShape(percent = 50)),
-                                        )
-                                    }
                                     Text(
                                         text = dayNumber.toString(),
                                         style = dayStyle.copy(
                                             color = when {
-                                                isToday && bare -> Color.White
-                                                isToday -> Color(0xFF0A0B12)
+                                                isToday -> inkOnTint(palette.accent)
                                                 dow >= 5 -> palette.onGlass.copy(alpha = 0.62f)
                                                 else -> palette.onGlass.copy(alpha = 0.92f)
                                             },
@@ -1200,24 +925,17 @@ val HomeTypingArea = TypingArea()
 private fun NotesWidget(form: WidgetForm, note: String, onNoteChange: (String) -> Unit) {
     val palette = LocalPalette.current
     val today = remember { LocalDate.now().format(DateTimeFormatter.ofPattern("EEE d MMM", Locale.getDefault())) }
-    val bare = LocalBare.current
 
-    /** The heading most forms share; with no pane a glass pencil leads it. */
+    /** The heading most forms share. */
     @Composable
     fun Heading(modifier: Modifier = Modifier) {
-        Row(modifier, verticalAlignment = Alignment.CenterVertically) {
-            if (bare) {
-                Symbol(Icons.Rounded.EditNote, 20.dp)
-                Spacer(Modifier.width(6.dp))
-            }
-            Caps("Note")
-        }
+        Caps("Note", modifier = modifier)
     }
 
     when (form) {
         // An icon and a couple of lines.
         WidgetForm.Mini -> Column(Modifier.fillMaxSize().padding(8.dp)) {
-            Symbol(Icons.Rounded.EditNote, if (bare) 20.dp else 16.dp)
+            Symbol(Icons.Rounded.EditNote, 16.dp)
             NoteField(note, onNoteChange, 11.sp, 14.sp, singleLine = false, ruled = false, placeholder = "Note", modifier = Modifier.weight(1f))
         }
 
@@ -1226,7 +944,7 @@ private fun NotesWidget(form: WidgetForm, note: String, onNoteChange: (String) -
             Modifier.fillMaxSize().padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Symbol(Icons.Rounded.EditNote, if (bare) 26.dp else 20.dp)
+            Symbol(Icons.Rounded.EditNote, 20.dp)
             Spacer(Modifier.width(10.dp))
             NoteField(note, onNoteChange, 14.sp, 18.sp, singleLine = true, ruled = false, placeholder = "Jot something down", modifier = Modifier.weight(1f))
         }
@@ -1242,18 +960,10 @@ private fun NotesWidget(form: WidgetForm, note: String, onNoteChange: (String) -
         WidgetForm.Wide -> Row(Modifier.fillMaxSize().padding(14.dp)) {
             Box(
                 Modifier
-                    .width(if (bare) 6.dp else 4.dp)
+                    .width(4.dp)
                     .fillMaxHeight()
-                    .then(
-                        if (bare) {
-                            // A rod of glass instead of the coloured stripe.
-                            Modifier.glassInk(bevel = 2.5.dp).background(Color.White, RoundedCornerShape(percent = 50))
-                        } else {
-                            Modifier
-                                .clip(RoundedCornerShape(percent = 50))
-                                .background(Brush.verticalGradient(listOf(palette.accent, palette.accentAlt)))
-                        }
-                    ),
+                    .clip(RoundedCornerShape(percent = 50))
+                    .background(palette.accent),
             )
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
@@ -1276,10 +986,6 @@ private fun NotesWidget(form: WidgetForm, note: String, onNoteChange: (String) -
         // A notepad page with a heading.
         WidgetForm.Big -> Column(Modifier.fillMaxSize().padding(18.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                if (bare) {
-                    Symbol(Icons.Rounded.EditNote, 30.dp)
-                    Spacer(Modifier.width(10.dp))
-                }
                 Column {
                     Text("Notes", color = palette.onGlass, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
                     Text(today, color = quiet(), fontSize = 13.sp)
@@ -1307,16 +1013,13 @@ private fun NoteField(
     var fieldBounds by remember { mutableStateOf(Rect.Zero) }
     // A note scrolled off with its page, or removed, must not leave a stale area behind.
     DisposableEffect(Unit) { onDispose { if (focused) HomeTypingArea.bounds = null } }
-    val bare = LocalBare.current
-    val ruleColour = palette.onGlass.copy(alpha = if (bare) 0.16f else 0.08f)
-    // Written straight on the wallpaper, the words carry the same shadow as the rest of the widget.
-    val shade = if (bare) LocalTextStyle.current.shadow else null
+    val ruleColour = palette.onGlass.copy(alpha = 0.08f)
 
     BasicTextField(
         value = note,
         onValueChange = { onNoteChange(if (singleLine) it.replace("\n", " ") else it) },
         singleLine = singleLine,
-        textStyle = TextStyle(fontFamily = LocalZenithFont.current, color = palette.onGlass, fontSize = fontSize, lineHeight = lineHeight, shadow = shade),
+        textStyle = TextStyle(fontFamily = LocalZenithFont.current, color = palette.onGlass, fontSize = fontSize, lineHeight = lineHeight),
         cursorBrush = SolidColor(palette.accent),
         modifier = modifier
             .fillMaxWidth()
@@ -1347,7 +1050,7 @@ private fun NoteField(
                 if (note.isEmpty()) {
                     Text(
                         placeholder,
-                        color = palette.onGlass.copy(alpha = if (bare) 0.74f else 0.5f),
+                        color = palette.onGlass.copy(alpha = 0.5f),
                         fontSize = fontSize,
                         maxLines = if (singleLine) 1 else 3,
                         softWrap = !singleLine,
@@ -1371,9 +1074,6 @@ private val MAX_TILE_HEIGHT = 118.dp
  * a glance at 46%; 54% is about what Android's own quick settings give theirs.
  */
 private const val TOGGLE_SYMBOL = 0.54f
-
-/** The same for a "No glass" toggle, where the symbol is the whole button. */
-private const val BARE_TOGGLE_SYMBOL = 0.8f
 
 /** The name under a round toggle: the size of the label under an app, and a little heavier. */
 private val TOGGLE_NAME = 12.sp
@@ -1644,32 +1344,13 @@ private fun Context.startActivityIntent(action: String, fallback: String? = null
 @Composable
 private fun ToggleButton(toggle: Toggle, size: Dp) {
     val palette = LocalPalette.current
-    if (LocalBare.current) {
-        // No disc: the symbol alone is the button, clear glass when off and the accent's glass when on.
-        val ink by animateColorAsState(
-            targetValue = if (toggle.active) palette.accent else Color.White,
-            animationSpec = tween(420),
-            label = "toggleInk",
-        )
-        Box(
-            Modifier
-                .size(size)
-                .glassPress(GlassMotion.Lean)
-                .clip(RoundedCornerShape(percent = 50))
-                .clickable(onClick = toggle.onClick),
-            contentAlignment = Alignment.Center,
-        ) {
-            Symbol(toggle.icon, size * BARE_TOGGLE_SYMBOL, tint = ink)
-        }
-        return
-    }
     val background by animateColorAsState(
         targetValue = if (toggle.active) palette.accent.copy(alpha = 0.9f) else palette.onGlass.copy(alpha = 0.10f),
         animationSpec = tween(420),
         label = "toggleBg",
     )
     val tint by animateColorAsState(
-        targetValue = if (toggle.active) Color(0xFF0A0B12) else palette.onGlass,
+        targetValue = if (toggle.active) inkOnTint(palette.accent) else palette.onGlass,
         animationSpec = tween(420),
         label = "toggleTint",
     )
@@ -1696,31 +1377,12 @@ private fun ToggleButton(toggle: Toggle, size: Dp) {
 @Composable
 private fun ToggleTile(toggle: Toggle, modifier: Modifier, detail: Boolean) {
     val palette = LocalPalette.current
-    if (LocalBare.current) {
-        val ink by animateColorAsState(
-            targetValue = if (toggle.active) palette.accent else Color.White,
-            animationSpec = tween(420),
-            label = "tileInk",
-        )
-        Column(
-            modifier
-                .pressBounce(0.94f)
-                .clip(RoundedCornerShape(20.dp))
-                .clickable(onClick = toggle.onClick)
-                .padding(12.dp),
-            verticalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Symbol(toggle.icon, 34.dp, tint = ink)
-            TileText(toggle, palette.onGlass, detail)
-        }
-        return
-    }
     val background by animateColorAsState(
         targetValue = if (toggle.active) palette.accent.copy(alpha = 0.9f) else palette.onGlass.copy(alpha = 0.08f),
         animationSpec = tween(420),
         label = "tileBg",
     )
-    val ink = if (toggle.active) Color(0xFF0A0B12) else palette.onGlass
+    val ink = if (toggle.active) inkOnTint(palette.accent) else palette.onGlass
     Column(
         modifier
             .pressBounce(0.94f)
@@ -1749,87 +1411,56 @@ private fun ColumnScope.TileText(toggle: Toggle, ink: Color, detail: Boolean) {
 
 // ---------------------------------------------------------------------- search
 
-/** The search bar that sits above the dock when it is switched on in settings. */
+/**
+ * Search above the dock, as on an iPhone: a small pill of glass that says Search, and beside it a
+ * round glass button that goes straight to the web. Switched on in Settings → Home screen.
+ */
 @Composable
 fun HomeSearchBar(onSearch: () -> Unit, modifier: Modifier = Modifier) {
-    Box(modifier) { SearchBar(onSearch) }
+    // In the middle of the row it is given, as the iPhone's sits in the middle above its dock.
+    Box(modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { SearchPill(onSearch) }
 }
 
+/** The same, where a page from before still has search as a widget of its own. */
 @Composable
 private fun SearchWidget(onSearch: () -> Unit) {
-    BoxWithConstraints(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-        // Too narrow for a bar: a round search button instead.
-        if (maxWidth < 150.dp) SearchButton(onSearch) else SearchBar(onSearch)
-    }
+    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { SearchPill(onSearch) }
 }
 
 @Composable
-private fun SearchButton(onSearch: () -> Unit) {
-    val palette = LocalPalette.current
-    Box(
-        Modifier
-            .size(SEARCH_BAR_HEIGHT)
-            .glass(
-                RoundedCornerShape(percent = 50),
-                strength = 1.1f,
-                material = GlassMaterial.Clear,
-                motion = GlassMotion.Lean,
-            )
-            .clickable(onClick = onSearch),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(Icons.Rounded.Search, contentDescription = "Search", tint = palette.onGlass, modifier = Modifier.size(22.dp))
-    }
-}
-
-@Composable
-private fun SearchBar(onSearch: () -> Unit) {
+private fun SearchPill(onSearch: () -> Unit) {
     val palette = LocalPalette.current
     val context = LocalContext.current
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .height(SEARCH_BAR_HEIGHT)
-            .pressBounce(0.97f)
-            .glass(ZenithShapes.pill, strength = 1.1f)
-            .clickable(onClick = onSearch)
-            .padding(start = 18.dp, end = SEARCH_BAR_INSET),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(Icons.Rounded.Search, contentDescription = null, tint = palette.onGlassMuted, modifier = Modifier.size(18.dp))
-        Spacer(Modifier.size(10.dp))
-        Text(
-            text = "Search apps or the web",
-            color = palette.onGlassMuted,
-            fontSize = 14.sp,
-            maxLines = 1,
-            modifier = Modifier.weight(1f),
-        )
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(
+            Modifier
+                .height(SEARCH_PILL_HEIGHT)
+                .glass(ZenithShapes.pill, strength = 1.1f, material = GlassMaterial.Clear, motion = GlassMotion.Flex)
+                .clickable(onClick = onSearch)
+                .padding(horizontal = 18.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(Icons.Rounded.Search, contentDescription = null, tint = palette.onGlass, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(6.dp))
+            Text("Search", color = palette.onGlass, fontSize = 15.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+        }
         Box(
             Modifier
-                // Sized to the bar so the circle sits flush inside its rounded end.
-                .size(SEARCH_BAR_HEIGHT - SEARCH_BAR_INSET * 2)
-                .pressBounce(0.88f)
-                .clip(RoundedCornerShape(percent = 50))
-                .background(palette.accent.copy(alpha = 0.9f))
+                .size(SEARCH_PILL_HEIGHT)
+                .glass(RoundedCornerShape(percent = 50), strength = 1.1f, material = GlassMaterial.Clear, motion = GlassMotion.Lean)
                 .clickable { openWebSearch(context) },
             contentAlignment = Alignment.Center,
         ) {
-            Icon(
-                Icons.Rounded.TravelExplore,
-                contentDescription = "Search the web",
-                tint = Color(0xFF0A0B12),
-                modifier = Modifier.size(20.dp),
-            )
+            Icon(Icons.Rounded.TravelExplore, contentDescription = "Search the web", tint = palette.onGlass, modifier = Modifier.size(20.dp))
         }
     }
 }
 
-/** The visible height of the search bar; its cell only reacts to touches inside this. */
+/** The visible height of the search row; its cell only reacts to touches inside this. */
 val SEARCH_BAR_HEIGHT = 50.dp
 
-/** Gap between the bar's edge and the round web-search button. */
-private val SEARCH_BAR_INSET = 6.dp
+/** The Search pill and its round button, inside that row. */
+private val SEARCH_PILL_HEIGHT = 42.dp
 
 /** Opens the device search app ready for a query, or Google in a browser. */
 private fun openWebSearch(context: Context) {

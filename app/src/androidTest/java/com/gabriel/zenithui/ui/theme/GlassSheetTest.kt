@@ -40,7 +40,7 @@ import kotlin.math.max
  * Not a check: a home screen's worth of glass painted over a few wallpapers, to be pulled off the
  * device and looked at, which is the only way to judge a material. The panes are drawn by the
  * launcher's own [drawLiquidGlass], from its own recipe, over a wallpaper lined up the way Android
- * shows it; the numerals at the top are [GlassInkShader]'s.
+ * shows it.
  *
  * Run it with `adb shell am instrument -w -e class com.gabriel.zenithui.ui.theme.GlassSheetTest`
  * and the test runner's name, then pull `glass-*.png` from the app's external cache. It takes:
@@ -119,7 +119,6 @@ class GlassSheetTest {
         val picture = Picture()
         val canvas = picture.beginRecording(screen.width, screen.height)
         drawWallpaper(canvas, levels)
-        drawGlassNumerals(canvas, GlassInkShader(shown), body, lean)
         val words = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = palette.onGlass.toArgb()
             textSize = 15f * density
@@ -177,41 +176,6 @@ class GlassSheetTest {
         // A picture is played back on the GPU, which is the only place the shader runs.
         val hardware = Bitmap.createBitmap(picture)
         return hardware.copy(Bitmap.Config.ARGB_8888, false).also { hardware.recycle() }
-    }
-
-    /** The time in numerals made of glass, the way a "No glass" clock widget draws it. */
-    private fun drawGlassNumerals(canvas: Canvas, ink: GlassInkShader, body: GlassBody, lean: Offset) {
-        val width = 380f * density
-        val height = 104f * density
-        val origin = Offset(16f * density, 8f * density)
-        val numeral = 88f * density
-        val shape = Bitmap.createBitmap(width.toInt(), height.toInt(), Bitmap.Config.ARGB_8888)
-        Canvas(shape).drawText(
-            "9:41",
-            12f * density, 90f * density,
-            Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = android.graphics.Color.WHITE
-                textSize = numeral
-                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-            },
-        )
-        val program = ink.program(
-            size = Size(width, height),
-            origin = origin,
-            screen = screen,
-            wallpaperOffset = systemWallpaperOffset(Offset(0.5f, 0.5f)),
-            bevel = numeral * 0.075f,
-            light = Offset(-0.45f - 1.6f * lean.x, -1f - 1.2f * lean.y),
-            strength = 0.8f,
-            halo = true,
-            lift = body.lift,
-            lean = lean,
-        )!!
-        program.setInputShader("content", BitmapShader(shape, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP))
-        canvas.save()
-        canvas.translate(origin.x, origin.y)
-        canvas.drawRect(0f, 0f, width, height, Paint().apply { shader = program })
-        canvas.restore()
     }
 
     /** The wallpaper as Android shows it, by the same sums the glass lines itself up with. */

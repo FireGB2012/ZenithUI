@@ -6,7 +6,7 @@ import org.junit.Test
 
 class WidgetSizesTest {
 
-    private val every = Widgets.placeable + Widgets.noGlass
+    private val every = Widgets.placeable
 
     private fun sizes(spec: WidgetSpec, columns: Int = 4, rows: Int = 5) =
         WidgetSizes.options(spec, columns, rows).map { Triple(it.name, it.spanX, it.rows) }
@@ -64,12 +64,5 @@ class WidgetSizesTest {
     fun `on a narrow grid wide means the whole width of it`() {
         assertEquals(Triple("Wide", 3, 2), sizes(Widgets.Notes, columns = 3, rows = 4).first { it.first == "Wide" })
         assertEquals(Triple("Large", 3, 3), sizes(Widgets.Notes, columns = 3, rows = 4).first { it.first == "Large" })
-    }
-
-    @Test
-    fun `a glass widget comes in the same sizes as the widget it is a version of`() {
-        Widgets.placeable.zip(Widgets.noGlass).forEach { (pane, bare) ->
-            assertEquals(pane.type, sizes(pane), sizes(bare))
-        }
     }
 }

@@ -502,7 +502,7 @@ fun ItemMenuSheet(
             }
 
             is WidgetCell -> {
-                when (Widgets.baseType(item.type)) {
+                when (Widgets.solid(item.type)) {
                     "toggles" -> MenuRow(Icons.Rounded.Tune, "Choose buttons", "Pick which controls it shows", index = row++) { onChooseToggles() }
                     "world" -> MenuRow(Icons.Rounded.Public, "Choose cities", "Up to four, in the order shown", index = row++) { onSetUp("world") }
                     "countdown" -> MenuRow(Icons.Rounded.Event, "Set the date", "What it counts down to, and when", index = row++) { onSetUp("countdown") }
@@ -532,8 +532,8 @@ fun ItemMenuSheet(
                 if (!locked) MenuRow(Icons.Rounded.OpenInFull, "Resize and move", "Pull its corner, or move it a cell at a time", index = row++) { onResize() }
                 MenuRow(
                     if (item.glass) Icons.Rounded.LayersClear else Icons.Rounded.Layers,
-                    if (item.glass) "Take the glass away" else "Put glass behind it",
-                    if (item.glass) "The widget on its own, as its app draws it" else "A pane of glass, for a widget with no background of its own",
+                    if (item.glass) "Take the tile away" else "Put a tile behind it",
+                    if (item.glass) "The widget on its own, as its app draws it" else "A solid tile, for a widget with no background of its own",
                     index = row++,
                 ) { onGlassBehind(!item.glass); onDismiss() }
                 if (!locked) MenuRow(Icons.Rounded.Layers, "Stack another widget here", "Swipe up and down between them, in this one spot", index = row++) { onStack() }

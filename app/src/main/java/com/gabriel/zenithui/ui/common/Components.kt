@@ -67,6 +67,7 @@ import com.gabriel.zenithui.ui.theme.LocalZenithFont
 import com.gabriel.zenithui.ui.theme.ZenithShapes
 import com.gabriel.zenithui.ui.theme.GlassMaterial
 import com.gabriel.zenithui.ui.theme.GlassMotion
+import com.gabriel.zenithui.ui.theme.LocalApple
 import com.gabriel.zenithui.ui.theme.glass
 import com.gabriel.zenithui.ui.theme.inkOnTint
 import kotlin.math.cos
@@ -262,14 +263,14 @@ private fun StyledIcon(key: String, label: String, px: Int, shape: Shape, style:
 }
 
 /**
- * A notification dot: a small bead of glass in the accent at the icon's top corner, with the count
- * in it if counts are asked for. It springs up with the first notification and shrinks away with
- * the last, still saying what it said as it goes.
+ * A notification badge, as an iPhone draws it: Apple's red at the icon's top corner, with the count
+ * in white if counts are asked for, or a small red dot. It springs up with the first notification
+ * and shrinks away with the last, still saying what it said as it goes.
  */
 @Composable
 fun BoxScope.IconBadge(count: Int, iconSize: Dp) {
     val badges = LocalBadges.current
-    val palette = LocalPalette.current
+    val red = LocalApple.current.badge
     val reduced = LocalMotionLevel.current.reduced
     val shown = count > 0 && badges.style != Badges.OFF
     val said = remember { intArrayOf(0) }
@@ -284,7 +285,6 @@ fun BoxScope.IconBadge(count: Int, iconSize: Dp) {
     val side = iconSize * (if (counting) 0.34f else 0.24f)
     val words = Badges.text(said[0])
     val width = if (counting && words.length > 1) side * (0.55f + 0.32f * words.length) else side
-    val accent = palette.accent
     Box(
         Modifier
             .align(Alignment.TopEnd)
@@ -295,26 +295,14 @@ fun BoxScope.IconBadge(count: Int, iconSize: Dp) {
                 alpha = grow.coerceIn(0f, 1f)
             }
             .size(width, side)
-            .drawBehind {
-                // A bead: deeper at its foot, a rim of light round it and a spot of light near its top.
-                val round = CornerRadius(size.height / 2f)
-                drawRoundRect(
-                    brush = Brush.verticalGradient(listOf(lerp(accent, Color.White, 0.35f), accent, lerp(accent, Color.Black, 0.25f))),
-                    cornerRadius = round,
-                )
-                drawRoundRect(color = Color.White.copy(alpha = 0.55f), cornerRadius = round, style = Stroke(width = size.height * 0.07f))
-                drawOval(
-                    color = Color.White.copy(alpha = 0.5f),
-                    topLeft = Offset(size.width * 0.24f, size.height * 0.12f),
-                    size = Size(size.width * 0.52f, size.height * 0.28f),
-                )
-            },
+            .clip(RoundedCornerShape(percent = 50))
+            .background(red),
         contentAlignment = Alignment.Center,
     ) {
         if (counting) {
             Text(
                 text = words,
-                color = Color(0xFF0A0B12),
+                color = Color.White,
                 fontSize = (side.value * 0.56f).sp,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,

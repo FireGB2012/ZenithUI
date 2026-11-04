@@ -79,8 +79,8 @@ built entirely in Jetpack Compose.
   small in its corner, pinned for as long as it is there. Another app's "Add to home screen" —
   Chrome's, say — comes up as a card of glass over that app (`PinItemActivity`), and lands on the
   first free spot.
-- **Notification dots** — a bead of glass in the accent at an icon's top corner while its app has
-  something to read, on the page, in the dock and in the drawer; a folder's is the sum of its apps'.
+- **Notification dots** — Apple's red badge at an icon's top corner, with the count in white, while
+  its app has something to read, on the page, in the dock and in the drawer; a folder's is the sum of its apps'.
   Off, Dot or Count, under Settings → Home screen, which also asks Android for notification access
   the first time. `NotificationDots` only counts: nothing ongoing (music, a download), nothing an
   app asked not to badge, and nothing of what they say is kept or sent. A dot springs in with the
@@ -145,8 +145,13 @@ anywhere else.
 | Aura | 2×2 | Your streak in rolling digits under a flame, the week behind it as dots that fill one after another, your aura, and in the large size how near the next theme is |
 | Weather | 2×2 | Now, today's high and low, and the next five hours with their skies, for a place you choose (`WeatherRepository`, Open-Meteo) |
 
-Each of them has a No glass version and a design for every shape of space, like the first five,
-and says in the gallery what each size shows. What they need is set from their own menu: cities,
+Each of them is a solid tile, as an iPhone's widgets are — Apple's dark grey in the dark and white
+in the light — with a design for every shape of space, and says in the gallery what each size
+shows. A few take a colour of their own, as Apple's do: Weather is painted in its sky (a deep blue by
+day, navy by night, grey under cloud, slate in rain: `WeatherSky`), Now playing in the main colour of
+the album's picture, taken as deep as white words need (`AppleColours.underWhite`), and a photo
+fills its frame. A "No glass" widget from before is read as the widget it was a version of, on a
+page, in a stack, in a backup or in a Look (`Widgets.solid`). What they need is set from their own menu: cities,
 a date, photos, a place. **Weather is the one thing in Zenith that sends anything without an
 account:** nothing until a place is searched for; then what was typed, to Open-Meteo's place
 search, and from then on the chosen place's latitude and longitude, to its forecast, at most every
@@ -154,31 +159,21 @@ half hour while the home screen is shown. Nothing else goes with it, and the she
 anything is sent.
 
 The **search bar** is not a widget: switch it on under Zenith settings → Home screen and it sits
-above the dock, as wide as the icons above it. Tap to search apps, or hit the button for Google.
+above the dock as the iPhone's does, a small pill of glass that says Search, in the middle, with a
+round glass button beside it for Google.
 
 **The gallery** — long-press an empty spot → **Customise** → **Widgets**
 (`ui/home/WidgetGallery.kt`). Every widget is drawn by the code that draws it on the home screen,
 at the size it is there, on a window onto your wallpaper, so what you see is what lands on the
 page. Tap one and it grows into a showcase: its sizes in a row, all to one scale — Small, Medium,
 Wide, Tall and Large, each fitted to the widget and to your grid (`WidgetSizes`), and each a
-different design — with a switch between Glass and No glass and one button that adds the size in
-the middle. Under the row the sizes are named, each over the room it takes on the page: a little
+different design — and one button that adds the size in the middle. Under the row the sizes are named, each over the room it takes on the page: a little
 grid as wide as your page, its cells filled in (`SizeShape`), so Wide is plainly the width of the
 page and Tall a row more. A tap on a name brings that size to the middle, and under it a line says
 what that size shows ("Hours over minutes, like a Lock Screen"). The lines come from
 `WidgetLayouts`, which reads the same rules the widgets lay themselves out by (`WidgetForm`, and
 `ToggleGrid` for the toggles), so they cannot say a size shows what it does not. The bar that
 comes up for **Resize and move** shows the same little grid on each of its sizes.
-
-The switch between Glass and No glass carries a symbol on each side, a pane and a pane struck
-through, and what the side chosen means is said right under it.
-
-**No glass** — the other side of that switch: the same widgets with no pane round
-them, like the clock on an iPhone's Lock Screen: the big numbers, rings and icons are made of glass
-themselves and sit straight on the wallpaper, with small glass icons added (a sun or moon on the
-clock, a battery on Power, a calendar, a pencil). Their words are white with a soft shadow. They are
-stored as `bare_<type>` (`bare_clock`, …) and otherwise behave exactly like the widget they are a
-version of.
 
 **Words that can be read.** A widget is read at a glance, over a wallpaper, so its second line (the
 date, "On battery", "25 days left") is set stronger than the muted grey a page uses, nothing in a
@@ -203,7 +198,7 @@ comes up as a card of glass over that app, the same one shortcuts use.
 
 On the page it is the app's own view in Zenith's frame (`HostedWidgetCell`, through one
 `AppWidgetHost`, kept up to date while the home screen is on show), told its size in dp, with an
-optional pane of glass behind it from its menu, off unless asked for since most widgets bring a
+optional solid tile behind it from its menu, off unless asked for since most widgets bring a
 background of their own. It keeps its taps and scrolls: a hold that does not move is watched from
 above without taking anything (`holdToCarry`), and only then is it picked up, carried, resized
 with the same corner and bar, and taken away like any widget, giving its number back to Android.
@@ -343,8 +338,9 @@ change nothing (`GlassTuningTest`), and without Plus the glass is Zenith's own a
 kept.
 
 **Each Zenith widget** can have a colour of its own (its menu → Colour): twelve, or the theme's.
-The widget eases into it and back out to the theme's; with none it changes with the theme to the
-frame.
+The colour fills its tile, as a coloured widget on an iPhone does, and its words take the ink the
+colour needs, white on a deep one and near-black on a pale one. It eases in, and back out to
+Apple's card.
 
 ## Motion
 
@@ -391,8 +387,8 @@ far out of an opening folder each app is) and `AnimationTuning` (the numbers it 
   your hand settles from where it was let go, each starting from wherever it was last seen.
 - **Folders** grow out of their own icon into a pane of glass and go back into it, and their apps
   come out one after another as it opens.
-- **Widgets** animate their own changes: rolling digits, a ring that springs to its value and
-  glints while charging, every other gauge filling the same way as it appears, today's dot drawing
+- **Widgets** animate their own changes: rolling digits, a ring that springs to its value, every
+  other gauge filling the same way as it appears, today's dot drawing
   itself in, toggles that change shape.
 - **The drawer and sheets.** The drawer is put together just after the home screen arrives, out of
   sight, so the first swipe up is as smooth as the tenth. Rows rise in each time it opens, its
@@ -413,7 +409,7 @@ far out of an opening folder each app is) and `AnimationTuning` (the numbers it 
 Movement goes through `graphicsLayer` or draw-time state rather than layout, except where glass
 has to be told where it is: a sheet, and the bars that come in from an edge, are moved by being
 placed. Anything that runs for a while runs on one clock per page, so nothing is left running once
-it has settled (the one exception is the charging glint, while there is a charger).
+it has settled.
 **Animations: Reduced** in Settings, or the phone's own *Remove animations*, turns all of it down
 to quick fades: no fly-in, no rocking, no tilt; sheets and full-screen pages fade in where they
 stand, a sheet still follows a finger but settles without a spring, and home pages simply slide.
@@ -556,14 +552,6 @@ A material can only be judged by looking at it, so `GlassSheetTest` paints a hom
 panes over several wallpapers with the launcher's own drawing code and leaves the pictures in the
 app's external cache (`glass-*.png`), for Clear, Frosted and Solid and for both fallbacks.
 
-`Modifier.glassInk()` makes whatever a composable draws out of glass, for the "No glass" widgets:
-its own outline becomes the rim, so the wallpaper bends at the edges of each numeral and icon,
-which throw back what is beside them, and the highlight runs along them in the wallpaper's colour.
-Each stroke is a rounded bar of glass, shaded and glinting by the same light as the panes.
-What is drawn white is clear glass; a colour becomes tinted glass.
-With Glass panels on Frosted or Solid the glass also gathers more light over a dark wallpaper, so
-a glass clock stands out from it.
-
 Android 13+ does not let a launcher read the wallpaper, so `GlassWallpaper` keeps its own copy of
 any wallpaper Zenith sets (its own designs, or a photo picked under Wallpapers → Your photos) and
 checks it is still current by the number Android gives every wallpaper (`WallpaperManager.getWallpaperId`,
@@ -573,8 +561,7 @@ still wallpaper zoomed by a tenth to leave room for parallax, and the shader mat
 usable copy (a live wallpaper, or one set in another app) panes fall back to frosted glass with a
 rim of the same kind and the slab's form drawn in plain shading, rather than showing a picture that
 is not really behind them. Android 12
-uses the frosted copy, and "No glass" widgets draw their numbers and icons plain white below
-Android 13. Nothing is captured or blurred per frame.
+uses the frosted copy. Nothing is captured or blurred per frame.
 
 ## Accounts and the server
 

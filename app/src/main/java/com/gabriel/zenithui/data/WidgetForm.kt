@@ -111,7 +111,7 @@ data class ToggleGrid(
 object WidgetLayouts {
 
     /**
-     * [kind] is the widget's type without its "No glass" prefix ([Widgets.baseType]); [width] and
+     * [kind] is the widget's type ([Widgets.solid]); [width] and
      * [height] are its size on the home page, in dp; [toggles] is how many controls the Quick
      * Toggles widget has been given. Null for a kind that has no layouts of its own.
      */

@@ -126,7 +126,8 @@ import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.ZenithShapes
 import com.gabriel.zenithui.ui.theme.glass
 import androidx.compose.ui.unit.round
-import com.gabriel.zenithui.ui.theme.withAccent
+import com.gabriel.zenithui.ui.theme.LocalApple
+import com.gabriel.zenithui.ui.theme.inkOnTint
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -795,7 +796,7 @@ fun HomePage(
                                         }
                                         // Tapping the clock opens the bedside screen; long press
                                         // still belongs to the drag and menu detector.
-                                        item is WidgetCell && Widgets.baseType(item.type) == "clock" -> onAmbient()
+                                        item is WidgetCell && Widgets.solid(item.type) == "clock" -> onAmbient()
                                         else -> Unit
                                     }
                                 },
@@ -1102,9 +1103,10 @@ private fun FolderInside(folder: FolderCell, appsByKey: Map<String, AppInfo>, ic
 }
 
 /**
- * [content] in a widget's own colour, [accent], or the theme's when it is 0. A change of colour is
- * eased in, and back out to the theme's, rather than switched. With no colour of its own a widget
- * wears the theme's palette itself, so it changes with the theme to the frame.
+ * [content] on a tile of a widget's own colour, [accent], as a coloured widget is on an iPhone, or on
+ * Apple's card when it is 0. Words on the colour take the ink it needs (white on blue, near-black on
+ * yellow), and the accent in it is that ink. A change of colour is eased in, and back out to the
+ * card, rather than switched.
  */
 @Composable
 private fun InOwnColour(accent: Long, content: @Composable () -> Unit) {
@@ -1119,17 +1121,18 @@ private fun InOwnColour(accent: Long, content: @Composable () -> Unit) {
         label = "widgetAccent",
     )
     val mix by androidx.compose.animation.core.animateFloatAsState(if (accent != 0L) 1f else 0f, ease, label = "widgetOwn")
-    val wearing = if (mix <= 0f) {
-        palette
-    } else {
-        val its = palette.withAccent(own)
-        palette.copy(
-            accent = androidx.compose.ui.graphics.lerp(palette.accent, its.accent, mix),
-            accentAlt = androidx.compose.ui.graphics.lerp(palette.accentAlt, its.accentAlt, mix),
-            glassTint = androidx.compose.ui.graphics.lerp(palette.glassTint, its.glassTint, mix),
-        )
+    if (mix <= 0f) {
+        content()
+        return
     }
-    CompositionLocalProvider(LocalPalette provides wearing, content = content)
+    val fill = androidx.compose.ui.graphics.lerp(LocalApple.current.card, own, mix)
+    val ink = inkOnTint(fill)
+    val wearing = palette.copy(
+        dark = ink == Color.White,
+        accent = androidx.compose.ui.graphics.lerp(palette.accent, ink, mix),
+        accentAlt = androidx.compose.ui.graphics.lerp(palette.accentAlt, ink, mix),
+    )
+    CompositionLocalProvider(LocalPalette provides wearing, LocalWidgetFill provides fill, content = content)
 }
 
 /**

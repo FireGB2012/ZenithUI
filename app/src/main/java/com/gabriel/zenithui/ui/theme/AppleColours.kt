@@ -97,6 +97,27 @@ object AppleColours {
     }
 }
 
+/**
+ * [colour] as a tile for white words: left as it is when it is deep enough already, and otherwise
+ * taken towards black only as far as white words need to stand four and a half to one on it. For a
+ * colour Zenith did not choose, the main colour of an album's picture.
+ */
+fun AppleColours.underWhite(colour: Color): Color {
+    val own = colour.copy(alpha = 1f)
+    fun stands(c: Color) = contrast(Color.White, c) >= WORDS_CONTRAST
+    if (stands(own)) return own
+    var low = 0f
+    var high = 1f
+    repeat(24) {
+        val mid = (low + high) / 2f
+        if (stands(lerp(own, Color.Black, mid))) high = mid else low = mid
+    }
+    return lerp(own, Color.Black, high)
+}
+
+/** How far words stand from what they are written on, at the least. */
+const val WORDS_CONTRAST = 4.5f
+
 /** The colours of the light or the dark in use, for anything drawn solid. */
 val LocalApple = staticCompositionLocalOf { AppleColours.Dark }
 

@@ -70,6 +70,17 @@ class AppleColoursTest {
     }
 
     @Test
+    fun `a tile for white words is left alone when deep, and taken only as deep as it must be when pale`() {
+        val deep = Color(0xFF1B2C55)
+        assertEquals(deep, AppleColours.underWhite(deep))
+        val pale = Color(0xFFFFE08A)
+        val under = AppleColours.underWhite(pale)
+        val stands = contrast(Color.White, under)
+        assertTrue("$stands", stands in 4.5f..4.65f)
+        assertTrue(under.luminance() < pale.luminance())
+    }
+
+    @Test
     fun `contrast is the same either way round, and words see through to what is under them`() {
         assertEquals(contrast(Color.Black, Color.White), contrast(Color.White, Color.Black), 0.0001f)
         assertEquals(21f, contrast(Color.Black, Color.White), 0.01f)

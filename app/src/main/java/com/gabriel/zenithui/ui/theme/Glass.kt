@@ -36,9 +36,11 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.isSpecified
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.unit.IntOffset
@@ -94,6 +96,23 @@ fun Modifier.glass(
     interactive: Boolean = false,
     /** The soft shadow the pane floats on. Off for glass lying flat inside other glass. */
     shadow: Boolean = true,
+    /**
+     * Coloured glass in [tint] rather than a neutral veil: the accent's glass, for the one button
+     * that moves you on. It bends the wallpaper like clear glass and carries its own readability.
+     */
+    tinted: Boolean = false,
+    /** How the pane moves under a finger, if it does: see [GlassMotion]. */
+    motion: GlassMotion? = null,
+    /** Whether [motion] answers a finger now: off for a button that cannot be pressed. */
+    pressEnabled: Boolean = true,
+    /** Drives the finger's light from outside, for a pane its own finger cannot reach. */
+    light: PressLight? = null,
+    /**
+     * For a pane that something outside it moves or scales with a graphicsLayer, as a dragged lens
+     * is: reads what moves it, while drawing, so the wallpaper behind is lined up again as it goes
+     * rather than travelling with the pane.
+     */
+    tracking: (() -> Unit)? = null,
 ): Modifier {
     val palette = LocalPalette.current
     val backdrop = LocalBackdrop.current
@@ -112,28 +131,37 @@ fun Modifier.glass(
         tint = if (tint.isSpecified) tint else palette.glassTint,
         border = border,
         depth = LocalGlassBody.current,
+        tinted = tinted,
     ).tuned(tuning, if (tint.isSpecified) tint else palette.glassTint)
     val lens = rememberLens(levels)
     var origin by remember { mutableStateOf(Offset.Zero) }
+    // Where the pane was laid out, kept to work out where it is drawn while something moves it.
+    val placed = remember { arrayOfNulls<LayoutCoordinates>(1) }
     val scope = rememberCoroutineScope()
-    val press = if (interactive) remember { PressLight(scope) } else null
+    val ownLight = if (interactive && light == null) remember { PressLight(scope) } else null
+    val press = light ?: ownLight
+    val moved = if (motion != null) remember { PressMotion(scope) } else null
 
     return this
-        .onGloballyPositioned { origin = it.positionInWindow() }
+        .then(if (moved != null && motion != null) Modifier.pressMotion(moved, motion, pressEnabled) else Modifier)
+        .onGloballyPositioned {
+            origin = it.positionInWindow()
+            placed[0] = it
+        }
         .then(
-            if (press != null) {
+            if (ownLight != null) {
                 Modifier.pointerInput(Unit) {
                     // Watches the finger without taking it: taps, drags and long presses still
                     // belong to whatever the pane is part of.
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
-                        press.press(down.position)
+                        ownLight.press(down.position)
                         while (true) {
                             val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
                             if (!change.pressed) break
-                            press.at = change.position
+                            ownLight.at = change.position
                         }
-                        press.release()
+                        ownLight.release()
                     }
                 }
             } else {
@@ -167,18 +195,21 @@ fun Modifier.glass(
             onDrawBehind {
                 // Position, wallpaper scroll, tilt and the finger's light are all read here, while
                 // drawing, so any of them changing repaints the glass without recomposing anything.
+                val touch = press?.touch(size) ?: GlassTouch.None
+                // A pressed pane bends the light a little more, as the finger's light comes up.
+                val lit = if (touch.strength > 0f) look.copy(refraction = look.refraction * (1f + 0.22f * touch.strength)) else look
                 drawLiquidGlass(
                     paneSize = size,
                     outline = outline,
                     lens = lens,
                     softened = backdrop,
-                    origin = origin,
+                    origin = if (moved != null || tracking != null) drawnOrigin(placed[0], moved, tracking) ?: origin else origin,
                     screen = screen,
                     wallpaperOffset = wallpaperOffset.value,
-                    look = look,
+                    look = lit,
                     lean = tilt.value,
                     dark = palette.dark,
-                    touch = press?.touch(size) ?: GlassTouch.None,
+                    touch = touch,
                     tuning = tuning,
                 )
             }
@@ -186,16 +217,34 @@ fun Modifier.glass(
 }
 
 /**
+ * Where a pane that something is moving is drawn on screen, worked out while drawing. A graphicsLayer
+ * moves a pane without laying it out again, so where it was laid out is not where it is; this asks
+ * the layout for where its middle is now, so the wallpaper stays put behind a pane that leans or is
+ * dragged. A pane that swells is a lens that swells: what is behind it grows about its middle.
+ *
+ * Reads [moved] and [tracking] so that whatever moves the pane redraws it as it goes.
+ */
+private fun DrawScope.drawnOrigin(placed: LayoutCoordinates?, moved: PressMotion?, tracking: (() -> Unit)?): Offset? {
+    moved?.watch()
+    tracking?.invoke()
+    if (placed == null || !placed.isAttached) return null
+    return placed.localToWindow(center) - center
+}
+
+/**
  * The light a finger puts into a pane. It follows the finger, comes up quickly, and spreads out
  * from under the fingertip while held; let go and it fades away slowly.
+ *
+ * A pane lights itself when it is `interactive`; one its own finger cannot reach, under the words it
+ * carries, is given one of these to drive (`glass(light = ...)`).
  */
 @Stable
-private class PressLight(private val scope: CoroutineScope) {
-    var at by mutableStateOf(Offset.Zero)
+class PressLight internal constructor(private val scope: CoroutineScope) {
+    internal var at by mutableStateOf(Offset.Zero)
     private val strength = Animatable(0f)
     private val spread = Animatable(0f)
 
-    fun press(position: Offset) {
+    internal fun press(position: Offset) {
         at = position
         scope.launch { strength.animateTo(1f, tween(140)) }
         scope.launch {
@@ -204,12 +253,12 @@ private class PressLight(private val scope: CoroutineScope) {
         }
     }
 
-    fun release() {
+    internal fun release() {
         scope.launch { strength.animateTo(0f, tween(560)) }
     }
 
     /** Read while drawing, so the glow animates without recomposing. */
-    fun touch(pane: Size): GlassTouch {
+    internal fun touch(pane: Size): GlassTouch {
         val level = strength.value
         if (level <= 0.001f) return GlassTouch.None
         val reach = max(pane.width, pane.height) * (0.1f + 0.32f * spread.value)
@@ -325,9 +374,32 @@ internal fun glassLook(
     border: Boolean = true,
     /** How much body the person asked the glass to have. Clear is the glass with nothing added. */
     depth: GlassBody = GlassBody.Clear,
+    /** Coloured glass in [tint]: see `glass(tinted = ...)`. */
+    tinted: Boolean = false,
 ): GlassLook {
     val clear = material == GlassMaterial.Clear
     val amount = strength.coerceIn(0f, 1.4f)
+    if (tinted) {
+        // Clear glass's bend under a coat of the accent, about three fifths of it, so the wallpaper
+        // still shows through and bends at the rim. The colour already carries the words on it, so
+        // the veil hardly needs to thicken.
+        return GlassLook(
+            refraction = 1f * (0.35f + 0.65f * min(amount, 1f)),
+            frost = 0.25f,
+            dispersion = 0.06f * min(amount, 1f),
+            shine = if (border) 0.32f + 0.26f * min(amount, 1.2f) else 0f,
+            vibrance = 1.30f,
+            wash = tint.copy(alpha = 0.58f),
+            adapt = 0.10f,
+            opacity = opacity.coerceIn(0f, 1f),
+            mirror = if (border) MIRROR_CLEAR * min(amount, 1f) else 0f,
+            glow = if (border) GLOW else 0f,
+            gather = GATHER_CLEAR,
+            rimmed = border,
+            relief = if (border) min(amount, 1f) else 0f,
+            tinted = true,
+        )
+    }
     val body = (solid + depth.solid).coerceIn(0f, 1.5f)
     // A whisper of the theme in the veil, never enough to turn the glass into a coloured card.
     val veil = lerp(if (dark) Color(0xFF0A0C12) else Color.White, tint, 0.10f)
@@ -360,6 +432,12 @@ internal fun glassLook(
         relief = if (border) min(amount, 1f) else 0f,
     )
 }
+
+/**
+ * The ink for words on tinted glass or a pill of the accent: dark on anything lighter than a mid
+ * tone, white on a deep colour. White on Sunset's orange, or dark on violet, was hard to read.
+ */
+fun inkOnTint(fill: Color): Color = if (fill.luminance() > 0.3f) Color(0xFF0B0C10) else Color.White
 
 /** The Glass studio's tuning, for every pane: Zenith's own glass with the defaults, and without Plus. */
 val LocalGlassTuning = staticCompositionLocalOf { GlassTuning() }
@@ -519,10 +597,15 @@ internal fun DrawScope.drawLiquidGlass(
     } else {
         // Nothing readable behind (a live wallpaper, or setup): a frosted body of its own, lit
         // from the top, so the pane still reads as glass rather than a flat card.
-        val base = if (dark) Color(0xFF181B24) else Color.White
-        // Light for floating controls, much fuller for sheets, whose text sits over the page.
-        val bodyAlpha = (if (dark) 0.22f else 0.28f) + 1.3f * look.wash.alpha
-        drawRect(base.copy(alpha = bodyAlpha.coerceAtMost(0.94f)), size = paneSize, alpha = look.opacity)
+        if (look.tinted) {
+            // Tinted glass keeps its colour, a little fuller, rather than turning into a white slab.
+            drawRect(look.wash.copy(alpha = 0.88f), size = paneSize, alpha = look.opacity)
+        } else {
+            val base = if (dark) Color(0xFF181B24) else Color.White
+            // Light for floating controls, much fuller for sheets, whose text sits over the page.
+            val bodyAlpha = (if (dark) 0.22f else 0.28f) + 1.3f * look.wash.alpha
+            drawRect(base.copy(alpha = bodyAlpha.coerceAtMost(0.94f)), size = paneSize, alpha = look.opacity)
+        }
         drawRect(
             Brush.verticalGradient(
                 0f to Color.White.copy(alpha = if (dark) 0.10f else 0.30f),

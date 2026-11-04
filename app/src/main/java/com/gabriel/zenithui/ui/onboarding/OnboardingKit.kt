@@ -42,8 +42,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.gabriel.zenithui.ui.common.pressBounce
+import com.gabriel.zenithui.ui.theme.GlassMaterial
+import com.gabriel.zenithui.ui.theme.GlassMotion
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.ZenithShapes
+import com.gabriel.zenithui.ui.theme.glass
+import com.gabriel.zenithui.ui.theme.inkOnTint
 import kotlinx.coroutines.delay
 
 /** How far a piece of a screen travels as it arrives, and the beat between neighbours. */
@@ -129,26 +133,28 @@ fun Lede(text: String, modifier: Modifier = Modifier) {
 }
 
 /**
- * The one button that moves you on: a pill of the accent colour with a faint sheen across its top
- * half, and its label swapping in place when what it will do changes.
+ * The one button that moves you on: a pill of the accent's tinted glass, bending the wallpaper at
+ * its rim, that squishes under a finger and wobbles back, its label swapping in place when what it
+ * will do changes. The glass draws its own rim and sheen.
  */
 @Composable
 fun PrimaryButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val palette = LocalPalette.current
     val fill by animateColorAsState(palette.accent, tween(420), label = "buttonFill")
     // Dark text on anything lighter than a mid tone: white on Sunset's orange was hard to read.
-    val ink = if (fill.luminance() > 0.3f) Color(0xFF0B0C10) else Color.White
-    val sheen = remember {
-        Brush.verticalGradient(0f to Color.White.copy(alpha = 0.14f), 0.5f to Color.Transparent)
-    }
+    val ink = inkOnTint(fill)
     Box(
         modifier
             .fillMaxWidth()
             .height(56.dp)
-            .pressBounce(0.96f)
-            .clip(ZenithShapes.pill)
-            .background(fill)
-            .background(sheen)
+            .glass(
+                ZenithShapes.pill,
+                tint = fill,
+                material = GlassMaterial.Clear,
+                interactive = true,
+                tinted = true,
+                motion = GlassMotion.Jelly,
+            )
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {

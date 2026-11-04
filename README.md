@@ -423,6 +423,16 @@ the switch is off.
   **Pressing**: Bounce, Squish (soft, and it wobbles back), or Ripple, a ring of light from the
   finger that falls only on what was pressed. All of it gives way to plain fades with movement
   reduced.
+- **Glass under a finger** (`GlassPress`). Glass buttons move like glass, each its own way, and
+  not by the Pressing setting: the plain ones in sheets swell and light up from the fingertip
+  (Flex); the one button that moves you on, in the accent's tinted glass, squishes and wobbles
+  back (Jelly); clear glass over the wallpaper or the dark (the round search button, the bedside
+  clock's button) and the Quick Toggles swell and lean towards the finger (Lean). The pill of a
+  row of options can be picked up: it turns into a lens of clear glass that swells, follows the
+  finger along the row, stretching the faster it goes, ticks as each option comes under it, and
+  settles on the nearest, which is then the one picked. Only how they are drawn changes, and the
+  wallpaper behind stays where it is on screen. With movement reduced a press is only a small
+  change of size, and a lens does not stretch.
 - **Page overview** (pinch out, or any gesture set to it): every page small on a tray. Tap one to
   go there; hold and slide one to move it, the others stepping aside; flick one up to take it away
   (an empty one goes at once, one with things on it asks); the last tile adds a page (`PageOrder`).
@@ -495,7 +505,11 @@ already show, keeps nothing and sends nothing.
 `Modifier.glass()` is Zenith's Liquid Glass, modelled on Apple's own description of it and on the
 pictures Apple published of it, in two finishes: **Clear** for the dock, folders and small
 controls, which only mists the wallpaper and bends it most, and **Regular** for widgets, search and
-sheets, which frosts it so text on top stays readable. On Android 13+ an AGSL shader
+sheets, which frosts it so text on top stays readable. A third, **Tinted** (`glass(tinted = true)`),
+is the accent's own glass, for the one button that moves you on: clear glass's bend under about
+three fifths of the accent, and with nothing readable behind it a body of the accent rather than a
+white one. A pressed pane bends the light a little more as the finger's light comes up. On Android
+13+ an AGSL shader
 (`LiquidGlassShader`) draws each pane, and does three things to the wallpaper round it:
 
 - **It bends it.** The flat middle shows the wallpaper exactly where it is; the rounded rim bends

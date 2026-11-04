@@ -140,6 +140,8 @@ import com.gabriel.zenithui.ui.common.rememberTick
 import com.gabriel.zenithui.ui.common.shake
 import com.gabriel.zenithui.ui.settings.Toggle as OnOffSwitch
 import com.gabriel.zenithui.ui.theme.GlassMaterial
+import com.gabriel.zenithui.ui.theme.GlassMotion
+import com.gabriel.zenithui.ui.theme.glassPress
 import com.gabriel.zenithui.ui.theme.LocalNumberFont
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.LocalZenithFont
@@ -1652,7 +1654,7 @@ private fun ToggleButton(toggle: Toggle, size: Dp) {
         Box(
             Modifier
                 .size(size)
-                .pressBounce(0.86f)
+                .glassPress(GlassMotion.Lean)
                 .clip(RoundedCornerShape(percent = 50))
                 .clickable(onClick = toggle.onClick),
             contentAlignment = Alignment.Center,
@@ -1680,7 +1682,8 @@ private fun ToggleButton(toggle: Toggle, size: Dp) {
     Box(
         Modifier
             .size(size)
-            .pressBounce(0.86f)
+            // Leans towards the finger, and keeps squaring up when it is on.
+            .glassPress(GlassMotion.Lean)
             .clip(RoundedCornerShape(percent = corner.coerceIn(0, 50)))
             .background(background)
             .clickable(onClick = toggle.onClick),
@@ -1766,8 +1769,13 @@ private fun SearchButton(onSearch: () -> Unit) {
     Box(
         Modifier
             .size(SEARCH_BAR_HEIGHT)
-            .pressBounce(0.9f)
-            .glass(RoundedCornerShape(percent = 50), strength = 1.1f, material = GlassMaterial.Clear, interactive = true)
+            .glass(
+                RoundedCornerShape(percent = 50),
+                strength = 1.1f,
+                material = GlassMaterial.Clear,
+                interactive = true,
+                motion = GlassMotion.Lean,
+            )
             .clickable(onClick = onSearch),
         contentAlignment = Alignment.Center,
     ) {

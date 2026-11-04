@@ -66,7 +66,9 @@ import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.LocalZenithFont
 import com.gabriel.zenithui.ui.theme.ZenithShapes
 import com.gabriel.zenithui.ui.theme.GlassMaterial
+import com.gabriel.zenithui.ui.theme.GlassMotion
 import com.gabriel.zenithui.ui.theme.glass
+import com.gabriel.zenithui.ui.theme.inkOnTint
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -380,26 +382,33 @@ fun GlassButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    /** The button that does the thing: tinted glass. Kept for older callers; [style] says the same. */
     filled: Boolean = false,
     leading: (@Composable () -> Unit)? = null,
+    style: GlassButtonStyle = if (filled) GlassButtonStyle.Tinted else GlassButtonStyle.Regular,
+    motion: GlassMotion = if (style == GlassButtonStyle.Tinted) GlassMotion.Jelly else GlassMotion.Flex,
 ) {
     val palette = LocalPalette.current
     val contentAlpha = if (enabled) 1f else 0.4f
+    val tinted = style == GlassButtonStyle.Tinted
     Box(
         modifier = modifier
             .height(56.dp)
-            .pressBounce(0.96f, enabled = enabled)
             .graphicsLayer { alpha = contentAlpha }
-            .then(
-                if (filled) Modifier
-                    .clip(ZenithShapes.pill)
-                    .background(Brush.horizontalGradient(listOf(palette.accent, palette.accentAlt)))
-                else Modifier.glass(ZenithShapes.pill, strength = 0.9f, material = GlassMaterial.Clear)
+            .glass(
+                ZenithShapes.pill,
+                tint = if (tinted) palette.accent else Color.Unspecified,
+                strength = if (tinted) 1f else 0.9f,
+                material = if (style == GlassButtonStyle.Regular) GlassMaterial.Regular else GlassMaterial.Clear,
+                interactive = enabled,
+                tinted = tinted,
+                motion = motion,
+                pressEnabled = enabled,
             )
             .clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        val contentColor = if (filled) Color(0xFF0A0B12) else palette.onGlass
+        val contentColor = if (tinted) inkOnTint(palette.accent) else palette.onGlass
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -418,6 +427,13 @@ fun GlassButton(
         }
     }
 }
+
+/**
+ * The three glasses a [GlassButton] is made of. Regular frosts what is behind it, for buttons in
+ * sheets; Clear only mists it, for a button over the wallpaper or the dark; Tinted is the accent's
+ * glass, for the one that does the thing.
+ */
+enum class GlassButtonStyle { Regular, Clear, Tinted }
 
 /** The heading over a block of a page: small capitals, spaced out, in the muted ink. */
 @Composable

@@ -44,7 +44,7 @@ class GlassLiftTest {
     fun `a pane with a full veil of its own needs half the lift`() {
         val sheet = look(GlassBody.Frosted, solid = 1f)
         assertEquals(LIFT_DARK * 0.5f, sheet.lift.alpha, 0.003f)
-        assertEquals(LIFT_DARK * 0.5f, glassLift(clear = false, dark = true, tint = tint, body = 3f, lift = 1f).alpha, 0.003f)
+        assertEquals(LIFT_DARK * 0.5f, glassLift(clear = false, dark = true, body = 3f, lift = 1f).alpha, 0.003f)
     }
 
     @Test

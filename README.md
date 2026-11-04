@@ -8,7 +8,8 @@ built entirely in Jetpack Compose.
 1. **Welcome** — animated glass mark, the four pillars, and a name field. What you type here is
    used across the launcher ("Good afternoon, Gabriel").
 2. **Palette** — six palettes (Midnight, Aurora, Sunset, Frost, Sakura, Graphite), light/dark/auto,
-   and a Glass slider. A live phone mock updates as you choose.
+   and a Glass slider. A live phone mock updates as you choose. A new install starts on Frost, whose
+   accent is Apple's blue.
 3. **Widgets & grid** — pick the widgets for page one, the grid density (Compact 5×6, Balanced 4×5,
    Roomy 4×4) and the icon shape.
 4. **Setup** — a 20-second progress ring. It is not a fake wait: while it fills, the launcher reads
@@ -310,12 +311,19 @@ Look shows them, and let go of when nothing does.
 ## Fonts, palettes and the Glass studio
 
 **Font** (Wallpaper & theme): System, Inter, Condensed, Serif, Mono, Typewriter, Casual, Hand or
-Small caps, for everything; **Numbers** sets the clocks, the battery, the countdown and the weather
+Small caps, for everything, Inter unless another is chosen, as the nearest open font to Apple's
+SF Pro (which Apple's licence keeps to its own devices); **Numbers** sets the clocks, the battery, the countdown and the weather
 in the same font, in Thin, or in any other (`ui/theme/Fonts.kt`). Inter and JetBrains Mono are
 carried in the app, unchanged, under the SIL Open Font Licence (About & help → Fonts shows it in
 full); the rest are the phone's own fonts asked for by name, and a phone without one shows its
 usual font. Every style Zenith sets text in takes the font — the theme's, and the ones built by
 hand for names, fields and widgets — so nothing is left in a font that was not chosen.
+
+**The accent, readable.** In the interface a palette gives only its accent, and that is moved only
+as far as it must be to stand three to one on Apple's white and black, as Apple's own colours come
+in a light and a dark version (`AppleColours.accent`): Graphite's near-white and Solstice's yellow
+go deeper in the light, and Frost is Apple's blue in both. Wallpapers keep the palette's own
+colours.
 
 **Wallpaper** is a palette like the others, taken from the wallpaper (`WallpaperPalette`): its
 liveliest colour that is more than a speck, for the glow; a second of another hue, for gradients;
@@ -508,8 +516,9 @@ controls, which only mists the wallpaper and bends it most, and **Regular** for 
 sheets, which frosts it so text on top stays readable. A third, **Tinted** (`glass(tinted = true)`),
 is the accent's own glass, for the one button that moves you on: clear glass's bend under about
 three fifths of the accent, and with nothing readable behind it a body of the accent rather than a
-white one. A pressed pane bends the light a little more as the finger's light comes up. On Android
-13+ an AGSL shader
+white one. Glass goes only where the wallpaper is right behind it: it shows the wallpaper, so on a
+page of its own it would be a hole, and there things are solid (`solidCard`, in Apple's colours:
+`AppleColours`). On Android 13+ an AGSL shader
 (`LiquidGlassShader`) draws each pane, and does three things to the wallpaper round it:
 
 - **It bends it.** The flat middle shows the wallpaper exactly where it is; the rounded rim bends
@@ -522,9 +531,10 @@ white one. A pressed pane bends the light a little more as the finger's light co
   drawing. What is dark behind the glass comes through a little brighter, in its own colour.
 - **It reflects it.** The steep outer part of the rim is a mirror as much as a window and holds the
   wallpaper just outside the pane, turned over at the edge (`GlassLook.mirror`). The light the
-  glass catches is the colour of the wallpaper round it (`GlassLook.glow`): a crisp line all the
-  way round the rim, brightest where it faces the light and bright again opposite, with a soft glow
-  just inside it. Light, bend and reflection all move as the phone tilts.
+  glass catches is white, as Apple's is, and takes nothing of the wallpaper's colour
+  (`GlassLook.glow` is 0): a crisp line all the way round the rim, brightest where it faces the
+  light and bright again opposite, with a soft sheen just inside it. Light, bend and reflection all
+  move as the phone tilts.
 - **It is a thing, not a picture of one** (`GlassLook.relief`). A pane is a slab with a rounded
   shoulder and a polished edge, and the same light shows its shape: the shoulder turned to the lamp
   is lit and the one turned from it is in the slab's own shade, light falls away gently across the
@@ -534,13 +544,13 @@ white one. A pressed pane bends the light a little more as the finger's light co
 A readable veil thickens only over parts of the wallpaper that would fight the text. That is
 **Glass panels: Clear** in Settings → Wallpaper & theme, the glass with nothing added and what
 everybody has unless they ask for more. **Frosted** is for a wallpaper as dark as the pane itself,
-or in the light as pale, where clear glass is mostly its rim: a little frost in the theme's colour
-lifts the pane a step away, there and nowhere else (`glassLift`). **Solid** adds a fuller veil on
-top of that (`GlassBody`). Every pane casts a shadow in two parts, away from the light: a wide
-faint one that says how far off the wallpaper it floats and a close dark one under its edge that
-says it is solid, both deeper for a thicker slab (`shadowPaints`). Panes you press
-(`interactive = true`: the dock, folders, widgets, search) light up from within, the glow starting
-under your finger.
+or in the light as pale, where clear glass is mostly its rim: a little white frost (a little grey
+in the light) lifts the pane a step away, there and nowhere else (`glassLift`). **Solid** adds a
+fuller veil on top of that (`GlassBody`). The veil is neutral: nothing of the theme is in the glass
+unless the Glass studio puts it there. Every pane casts a shadow in two parts, away from the light:
+a wide faint one that says how far off the wallpaper it floats and a close dark one under its edge
+that says it is solid, both deeper for a thicker slab (`shadowPaints`). Nothing lights up under a
+finger: panes that move under one swell and lean (`GlassPress`), as Apple's do.
 
 A material can only be judged by looking at it, so `GlassSheetTest` paints a home screen's worth of
 panes over several wallpapers with the launcher's own drawing code and leaves the pictures in the

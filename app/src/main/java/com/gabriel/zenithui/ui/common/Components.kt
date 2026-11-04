@@ -237,7 +237,7 @@ private fun StyledIcon(key: String, label: String, px: Int, shape: Shape, style:
     val tile = when {
         // Glass inside glass would show the wallpaper through a hole in it: a pale plate instead.
         glass && onGlass -> Modifier.clip(shape).background(palette.onGlass.copy(alpha = 0.12f))
-        glass -> Modifier.glass(shape, strength = 1.2f, material = GlassMaterial.Clear, interactive = true)
+        glass -> Modifier.glass(shape, strength = 1.2f, material = GlassMaterial.Clear)
         palette.dark -> Modifier.clip(shape).background(lerp(Color(0xFF14151B), palette.accent, 0.22f))
         else -> Modifier.clip(shape).background(lerp(Color.White, palette.accent, 0.18f))
     }
@@ -400,7 +400,6 @@ fun GlassButton(
                 tint = if (tinted) palette.accent else Color.Unspecified,
                 strength = if (tinted) 1f else 0.9f,
                 material = if (style == GlassButtonStyle.Regular) GlassMaterial.Regular else GlassMaterial.Clear,
-                interactive = enabled,
                 tinted = tinted,
                 motion = motion,
                 pressEnabled = enabled,

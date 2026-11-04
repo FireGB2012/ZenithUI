@@ -97,6 +97,19 @@ class GlassLookTest {
     }
 
     @Test
+    fun `the glass takes no colour from anywhere, as Apple's does not`() {
+        for (material in GlassMaterial.entries) for (dark in listOf(true, false)) for (body in GlassBody.entries) {
+            val warm = glassLook(material, 0.8f, solid = 0.4f, opacity = 1f, dark = dark, tint = Palettes.Sunset.glassTint, depth = body)
+            val cool = glassLook(material, 0.8f, solid = 0.4f, opacity = 1f, dark = dark, tint = Palettes.Aurora.glassTint, depth = body)
+            // No light taken from the wallpaper round it into the rim.
+            assertEquals(0f, warm.glow, 0f)
+            // And nothing of the theme in the veil or in the frost that lifts it.
+            assertEquals(warm.wash, cool.wash)
+            assertEquals(warm.lift, cool.lift)
+        }
+    }
+
+    @Test
     fun `every number the shader is given is one it can use`() {
         for (material in GlassMaterial.entries) for (dark in listOf(true, false)) for (body in GlassBody.entries) {
             for (strength in listOf(0f, 0.2f, 0.8f, 1.2f, 5f)) {

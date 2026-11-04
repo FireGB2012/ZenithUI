@@ -1,17 +1,11 @@
 package com.gabriel.zenithui.ui.theme
 
 import android.os.Build
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.CubicBezierEasing
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -39,7 +33,6 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
@@ -52,8 +45,6 @@ import com.gabriel.zenithui.data.GlassTuning
 import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.sin
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.launch
 import kotlin.math.ceil
 import kotlin.math.max
 import kotlin.math.min
@@ -69,13 +60,17 @@ enum class GlassMaterial { Regular, Clear }
 /**
  * Liquid Glass, after Apple's. What is behind a pane shows through it, softened as glass softens
  * it and a little brighter where it is dark; towards the rounded rim it bends and magnifies like
- * the edge of a thick lens, and the rim throws back the wallpaper beside the pane. A crisp
+ * the edge of a thick lens, and the rim throws back the wallpaper beside the pane. A crisp white
  * highlight runs all the way round, brightest on the side facing the light and bright again
- * opposite, in the colour of the wallpaper round it, and it moves as the phone tilts. The pane is
- * a solid slab and looks it: its shoulders are shaded by that light, its polished edge glints, and
- * it casts a shadow, wide where it floats and close and dark under its edge, deeper in the dark.
- * An [interactive] pane lights up from within under your finger. Labels and icons drawn on top
+ * opposite, and it moves as the phone tilts. Nothing of the wallpaper's colour or the theme's is
+ * added to it: the glass is clear, as Apple's is. The pane is a solid slab and looks it: its
+ * shoulders are shaded by that light, its polished edge glints, and it casts a shadow, wide where
+ * it floats and close and dark under its edge, deeper in the dark. Labels and icons drawn on top
  * stay sharp.
+ *
+ * Glass goes only where the wallpaper is right behind it: the dock, search, folders, sheets, the
+ * drawer and controls floating over the home screen. It shows the wallpaper, so on a solid page it
+ * would be a hole; there things are solid (`solidCard`).
  *
  * On Android 13+ with a readable wallpaper this is a GPU shader over copies of the wallpaper
  * softened ahead of time (no screen capture, no per-frame blur). Android 12 gets the frosted
@@ -92,8 +87,6 @@ fun Modifier.glass(
     /** Extra body for surfaces that must stay readable over busy content, such as sheets. */
     solid: Float = 0f,
     material: GlassMaterial = GlassMaterial.Regular,
-    /** Lights up from within under a finger: for panes you press, like the dock or a widget. */
-    interactive: Boolean = false,
     /** The soft shadow the pane floats on. Off for glass lying flat inside other glass. */
     shadow: Boolean = true,
     /**
@@ -105,8 +98,6 @@ fun Modifier.glass(
     motion: GlassMotion? = null,
     /** Whether [motion] answers a finger now: off for a button that cannot be pressed. */
     pressEnabled: Boolean = true,
-    /** Drives the finger's light from outside, for a pane its own finger cannot reach. */
-    light: PressLight? = null,
     /**
      * For a pane that something outside it moves or scales with a graphicsLayer, as a dragged lens
      * is: reads what moves it, while drawing, so the wallpaper behind is lined up again as it goes
@@ -138,8 +129,6 @@ fun Modifier.glass(
     // Where the pane was laid out, kept to work out where it is drawn while something moves it.
     val placed = remember { arrayOfNulls<LayoutCoordinates>(1) }
     val scope = rememberCoroutineScope()
-    val ownLight = if (interactive && light == null) remember { PressLight(scope) } else null
-    val press = light ?: ownLight
     val moved = if (motion != null) remember { PressMotion(scope) } else null
 
     return this
@@ -148,26 +137,6 @@ fun Modifier.glass(
             origin = it.positionInWindow()
             placed[0] = it
         }
-        .then(
-            if (ownLight != null) {
-                Modifier.pointerInput(Unit) {
-                    // Watches the finger without taking it: taps, drags and long presses still
-                    // belong to whatever the pane is part of.
-                    awaitEachGesture {
-                        val down = awaitFirstDown(requireUnconsumed = false)
-                        ownLight.press(down.position)
-                        while (true) {
-                            val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
-                            if (!change.pressed) break
-                            ownLight.at = change.position
-                        }
-                        ownLight.release()
-                    }
-                }
-            } else {
-                Modifier
-            }
-        )
         .then(
             if (shadow && look.opacity > 0f) {
                 Modifier.drawWithCache {
@@ -193,11 +162,8 @@ fun Modifier.glass(
         .drawWithCache {
             val outline = shape.createOutline(size, layoutDirection, this)
             onDrawBehind {
-                // Position, wallpaper scroll, tilt and the finger's light are all read here, while
-                // drawing, so any of them changing repaints the glass without recomposing anything.
-                val touch = press?.touch(size) ?: GlassTouch.None
-                // A pressed pane bends the light a little more, as the finger's light comes up.
-                val lit = if (touch.strength > 0f) look.copy(refraction = look.refraction * (1f + 0.22f * touch.strength)) else look
+                // Position, wallpaper scroll and tilt are all read here, while drawing, so any of
+                // them changing repaints the glass without recomposing anything.
                 drawLiquidGlass(
                     paneSize = size,
                     outline = outline,
@@ -206,10 +172,9 @@ fun Modifier.glass(
                     origin = if (moved != null || tracking != null) drawnOrigin(placed[0], moved, tracking) ?: origin else origin,
                     screen = screen,
                     wallpaperOffset = wallpaperOffset.value,
-                    look = lit,
+                    look = look,
                     lean = tilt.value,
                     dark = palette.dark,
-                    touch = touch,
                     tuning = tuning,
                 )
             }
@@ -229,41 +194,6 @@ private fun DrawScope.drawnOrigin(placed: LayoutCoordinates?, moved: PressMotion
     tracking?.invoke()
     if (placed == null || !placed.isAttached) return null
     return placed.localToWindow(center) - center
-}
-
-/**
- * The light a finger puts into a pane. It follows the finger, comes up quickly, and spreads out
- * from under the fingertip while held; let go and it fades away slowly.
- *
- * A pane lights itself when it is `interactive`; one its own finger cannot reach, under the words it
- * carries, is given one of these to drive (`glass(light = ...)`).
- */
-@Stable
-class PressLight internal constructor(private val scope: CoroutineScope) {
-    internal var at by mutableStateOf(Offset.Zero)
-    private val strength = Animatable(0f)
-    private val spread = Animatable(0f)
-
-    internal fun press(position: Offset) {
-        at = position
-        scope.launch { strength.animateTo(1f, tween(140)) }
-        scope.launch {
-            spread.snapTo(0f)
-            spread.animateTo(1f, tween(700, easing = CubicBezierEasing(0.16f, 1f, 0.3f, 1f)))
-        }
-    }
-
-    internal fun release() {
-        scope.launch { strength.animateTo(0f, tween(560)) }
-    }
-
-    /** Read while drawing, so the glow animates without recomposing. */
-    internal fun touch(pane: Size): GlassTouch {
-        val level = strength.value
-        if (level <= 0.001f) return GlassTouch.None
-        val reach = max(pane.width, pane.height) * (0.1f + 0.32f * spread.value)
-        return GlassTouch(at, reach, level)
-    }
 }
 
 /**
@@ -401,8 +331,9 @@ internal fun glassLook(
         )
     }
     val body = (solid + depth.solid).coerceIn(0f, 1.5f)
-    // A whisper of the theme in the veil, never enough to turn the glass into a coloured card.
-    val veil = lerp(if (dark) Color(0xFF0A0C12) else Color.White, tint, 0.10f)
+    // A neutral veil, as Apple's glass has: nothing of the theme in it. (The Glass studio can still
+    // add some: see tuned.)
+    val veil = if (dark) Color(0xFF0B0B0D) else Color.White
     val veilAlpha = if (dark) {
         (if (clear) 0.08f else 0.20f) + 0.42f * body
     } else {
@@ -422,7 +353,7 @@ internal fun glassLook(
         wash = veil.copy(alpha = veilAlpha.coerceIn(0f, 0.92f)),
         adapt = (if (clear) 0.30f else 0.34f) + 0.2f * min(body, 1f),
         opacity = opacity.coerceIn(0f, 1f),
-        lift = glassLift(clear, dark, tint, body, depth.lift),
+        lift = glassLift(clear, dark, body, depth.lift),
         // A pane with no rim to catch the light has none to hold a reflection either.
         mirror = if (border) (if (clear) MIRROR_CLEAR else MIRROR_REGULAR) * min(amount, 1f) else 0f,
         glow = if (border) GLOW else 0f,
@@ -483,8 +414,11 @@ internal const val FROST_REGULAR = 1.55f
 internal const val MIRROR_CLEAR = 0.7f
 internal const val MIRROR_REGULAR = 0.6f
 
-/** How far the light on the glass takes the colour of the wallpaper round it: see [GlassLook.glow]. */
-internal const val GLOW = 0.4f
+/**
+ * How far the light on the glass takes the colour of the wallpaper round it: see [GlassLook.glow].
+ * None: Apple's rim is white, and a rim in the wallpaper's colour read as a glow round every pane.
+ */
+internal const val GLOW = 0f
 
 /** How much brighter what is dark comes through a pane: see [GlassLook.gather]. */
 internal const val GATHER_CLEAR = 0.35f
@@ -492,16 +426,17 @@ internal const val GATHER_REGULAR = 0.28f
 
 /**
  * The frost that lifts a pane off a picture of its own tone. In the dark a pane over a dark
- * wallpaper is a dark veil on a dark picture, and only its rim says it is there; a little pale
- * frost, in the theme's colour, makes it a shade lighter than what is round it. In the light it is
- * the other way about: over a near-white picture the pane takes a faint cool shade. The colour is
- * the frost; its alpha is how much of it, and the shader lays it on only where the picture behind
- * really is that dark or that pale, so glass over anything else stays as clear as it was.
+ * wallpaper is a dark veil on a dark picture, and only its rim says it is there; a little white
+ * frost makes it a shade lighter than what is round it. In the light it is the other way about:
+ * over a near-white picture the pane takes a faint grey shade. Neither has the theme in it. The
+ * colour is the frost; its alpha is how much of it, and the shader lays it on only where the
+ * picture behind really is that dark or that pale, so glass over anything else stays as clear as it
+ * was.
  *
  * A pane that already has a full veil, like a sheet, needs less of it.
  */
-internal fun glassLift(clear: Boolean, dark: Boolean, tint: Color, body: Float, lift: Float): Color {
-    val tone = if (dark) lerp(Color.White, tint, 0.22f) else lerp(Color(0xFF5E6878), tint, 0.18f)
+internal fun glassLift(clear: Boolean, dark: Boolean, body: Float, lift: Float): Color {
+    val tone = if (dark) Color.White else Color(0xFF636366)
     val most = if (dark) (if (clear) LIFT_DARK_CLEAR else LIFT_DARK) else (if (clear) LIFT_LIGHT_CLEAR else LIFT_LIGHT)
     val amount = most * lift.coerceIn(0f, 1f) * (1f - 0.5f * body.coerceIn(0f, 1f))
     return tone.copy(alpha = amount)
@@ -706,10 +641,9 @@ fun GlassPanel(
     solid: Float = 0f,
     contentPadding: PaddingValues = PaddingValues(0.dp),
     material: GlassMaterial = GlassMaterial.Regular,
-    interactive: Boolean = false,
     content: @Composable BoxScope.() -> Unit,
 ) {
-    Box(modifier = modifier.glass(shape, tint, strength, opacity, border, solid, material, interactive)) {
+    Box(modifier = modifier.glass(shape, tint, strength, opacity, border, solid, material)) {
         Box(modifier = Modifier.padding(contentPadding), content = content)
     }
 }

@@ -34,7 +34,7 @@ import com.gabriel.zenithui.ui.common.LocalIconStyle
 import com.gabriel.zenithui.ui.common.LocalLabelStyle
 import com.gabriel.zenithui.ui.common.LocalPressStyle
 
-val LocalPalette = staticCompositionLocalOf { Palettes.Midnight }
+val LocalPalette = staticCompositionLocalOf { Palettes.Frost }
 
 /**
  * The wallpaper frosted: what glass shows where there is no shader to draw it, and how anything
@@ -109,7 +109,9 @@ fun ZenithTheme(
 
     // Switching palette should look like the light changing, not like a page reload.
     val spec = tween<Color>(durationMillis = 750)
-    val accent by animateColorAsState(target.accent, spec, label = "accent")
+    // The accent as Apple would draw it on its white or black: moved only as far as it must be to
+    // be read there. Wallpapers are painted from the palette itself (Palettes.forWallpaper).
+    val accent by animateColorAsState(AppleColours.accent(target, dark), spec, label = "accent")
     val accentAlt by animateColorAsState(target.accentAlt, spec, label = "accentAlt")
     val glassTint by animateColorAsState(target.glassTint, spec, label = "glassTint")
     val backdropTop by animateColorAsState(target.backdrop[0], spec, label = "backdropTop")
@@ -155,6 +157,7 @@ fun ZenithTheme(
     CompositionLocalProvider(
         LocalTilt provides tilt,
         LocalPalette provides palette,
+        LocalApple provides AppleColours.of(palette.dark),
         LocalBackdrop provides glass?.frost,
         LocalGlassLevels provides glass,
         LocalScreenSize provides screenSize,

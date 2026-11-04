@@ -12,7 +12,7 @@ import org.json.JSONObject
 data class ZenithSettings(
     val onboarded: Boolean = false,
     val userName: String = "",
-    val paletteId: String = "midnight",
+    val paletteId: String = "frost",
     /** auto | light | dark */
     val appearance: String = "dark",
     val glass: Float = 0.8f,
@@ -44,7 +44,7 @@ data class ZenithSettings(
     /** The specular highlight that follows how you are holding the phone. */
     val glassShine: Boolean = true,
     /** The typeface everything is set in: see `ZenithFonts`. */
-    val font: String = "system",
+    val font: String = "inter",
     /** The typeface big numbers are set in: "same" as the rest, "thin", or one of the fonts. */
     val numberFont: String = "same",
     /** The Glass studio's changes to the glass (Plus): see [GlassTuning]. */

@@ -54,7 +54,6 @@ import com.gabriel.zenithui.ui.common.rememberTick
 import com.gabriel.zenithui.ui.theme.GlassMaterial
 import com.gabriel.zenithui.ui.theme.GlassMotion
 import com.gabriel.zenithui.ui.theme.LocalPalette
-import com.gabriel.zenithui.ui.theme.PressLight
 import com.gabriel.zenithui.ui.theme.STRETCH_THIN
 import com.gabriel.zenithui.ui.theme.ZenithShapes
 import com.gabriel.zenithui.ui.theme.dragStretch
@@ -77,9 +76,9 @@ import kotlin.math.floor
  * spring, so it stretches out towards the option you tapped and draws itself up when it gets
  * there, the way a drop of something thick moves. With movement reduced it is simply there.
  *
- * The pill can be picked up. Under a finger it turns into a lens of clear glass that swells and
- * lights up; slide it and it follows along the row, stretching with speed, with a tick as each
- * option comes under it; let go and it settles on the nearest, which is then the one picked.
+ * The pill can be picked up. Under a finger it turns into a lens of clear glass that swells; slide
+ * it and it follows along the row, stretching with speed, with a tick as each option comes under
+ * it; let go and it settles on the nearest, which is then the one picked.
  *
  * Given [icons], one for each option, the row is a little taller and each option's symbol stands
  * before a larger name: for a choice that changes how everything else on the page looks, which
@@ -142,8 +141,7 @@ fun Segmented(
             )
 
             // The lens the pill becomes under a finger. Laid out over the first option and moved
-            // by drawing alone; it sits under the names so they stay sharp, and so the finger's
-            // light is driven from the row rather than by a touch of its own.
+            // by drawing alone; it sits under the names so they stay sharp.
             Box(
                 Modifier
                     .width(itemWidth)
@@ -161,7 +159,6 @@ fun Segmented(
                     .glass(
                         ZenithShapes.pill,
                         material = GlassMaterial.Clear,
-                        light = thumb.light,
                         tracking = { thumb.watch() },
                     )
             )
@@ -180,7 +177,7 @@ fun Segmented(
                             val velocity = VelocityTracker()
                             velocity.addPosition(down.uptimeMillis, down.position)
                             thumb.nearest = latestIndex
-                            thumb.hold(thumb.onLens(down.position, itemPx), reduced)
+                            thumb.hold(reduced)
                             var dragging = false
                             var lifted = false
                             var nearest = latestIndex
@@ -192,7 +189,6 @@ fun Segmented(
                                         break
                                     }
                                     velocity.addPosition(change.uptimeMillis, change.position)
-                                    thumb.light.at = thumb.onLens(change.position, itemPx)
                                     if (!dragging) {
                                         val moved = change.position - down.position
                                         val slop = viewConfiguration.touchSlop
@@ -299,7 +295,6 @@ private class SegmentThumb(private val scope: CoroutineScope, from: Float, item:
     val swell = Animatable(1f)
     val stretch = Animatable(0f)
     val lens = Animatable(0f)
-    val light = PressLight(scope)
 
     /** The middle of the lens while a finger has it, or NaN. */
     private var dragged by mutableFloatStateOf(Float.NaN)
@@ -319,9 +314,6 @@ private class SegmentThumb(private val scope: CoroutineScope, from: Float, item:
     fun leftEdge(item: Float): Float = if (dragged.isNaN()) left.value else dragged - item / 2f
     fun rightEdge(item: Float): Float = if (dragged.isNaN()) right.value else dragged + item / 2f
     fun centre(item: Float): Float = (leftEdge(item) + rightEdge(item)) / 2f
-
-    /** Where [position] on the row falls on the lens, as the lens lays out its own glass. */
-    fun onLens(position: Offset, item: Float): Offset = Offset(position.x - centre(item) + item / 2f, position.y)
 
     /** Reads all that moves the lens, for its glass to redraw as it goes. */
     fun watch() {
@@ -350,12 +342,11 @@ private class SegmentThumb(private val scope: CoroutineScope, from: Float, item:
         launch { right.animateTo(toRight, if (rightwards) PILL_LEADS else PILL_TRAILS) }
     }
 
-    fun hold(at: Offset, reduced: Boolean) {
+    fun hold(reduced: Boolean) {
         held = true
         val target = pressTarget(GlassMotion.Drag, pressed = true, reduced)
         scope.launch { swell.animateTo(target.scale, pressSpring(GlassMotion.Drag, reduced).spec()) }
         scope.launch { lens.animateTo(1f, LENS_TURN) }
-        light.press(at)
     }
 
     fun dragTo(centre: Float) {
@@ -379,7 +370,6 @@ private class SegmentThumb(private val scope: CoroutineScope, from: Float, item:
         scope.launch { lens.animateTo(0f, LENS_TURN) }
         stretching?.cancel()
         stretching = scope.launch { stretch.animateTo(0f, STRETCH_EASES) }
-        light.release()
     }
 
     /** From where the finger left it to [target], on the snap spring; then to [current] if that differs. */

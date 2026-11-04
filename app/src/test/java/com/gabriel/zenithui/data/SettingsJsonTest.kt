@@ -73,7 +73,7 @@ class SettingsJsonTest {
         lookRules = listOf(LookRule("night", 1320, 420, setOf(5, 6))),
         lookOccasion = "night@1320@20400",
         activeLook = "night",
-        font = "inter",
+        font = "serif",
         numberFont = "thin",
         glassTuning = GlassTuning(bend = 1.4f, frost = -0.5f, rim = 0.6f, rainbow = 2f, tint = 0.2f, lightAngle = 90f, lightTilt = false),
         dayPalettes = mapOf("dawn" to "sunset", "night" to "midnight"),

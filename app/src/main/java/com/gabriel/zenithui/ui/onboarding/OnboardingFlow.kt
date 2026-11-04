@@ -154,7 +154,8 @@ fun OnboardingFlow(
 
     var step by rememberSaveable { mutableIntStateOf(Steps.HELLO) }
     var name by rememberSaveable { mutableStateOf("") }
-    var paletteId by rememberSaveable { mutableStateOf("midnight") }
+    // Setup starts on the palette a new install has: Frost, Apple's blue.
+    var paletteId by rememberSaveable { mutableStateOf(ZenithSettings().paletteId) }
     var appearance by rememberSaveable { mutableStateOf("dark") }
     var densityId by rememberSaveable { mutableStateOf(GridDensity.Balanced.id) }
     val widgets = rememberSaveable(saver = WIDGET_LIST_SAVER) { mutableStateListOf("clock", "toggles") }

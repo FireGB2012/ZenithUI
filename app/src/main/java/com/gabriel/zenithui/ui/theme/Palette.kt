@@ -17,6 +17,11 @@ data class ZenithPalette(
     val backdrop: List<Color>,
     val glassTint: Color,
     val dark: Boolean = true,
+    /**
+     * The accent for the light, where the palette has one of its own; otherwise [accent] is taken
+     * deeper as far as it needs to be read on white (`AppleColours.accent`).
+     */
+    val accentLight: Color? = null,
 ) {
     val onGlass: Color get() = if (dark) Color.White else Color(0xFF10131A)
 
@@ -60,7 +65,7 @@ fun ZenithPalette.withAccent(accent: Color): ZenithPalette {
     val hsv = FloatArray(3)
     android.graphics.Color.colorToHSV(accent.toArgb(), hsv)
     hsv[0] = (hsv[0] + 40f) % 360f
-    return copy(accent = accent, accentAlt = Color(android.graphics.Color.HSVToColor(hsv)), glassTint = accent)
+    return copy(accent = accent, accentAlt = Color(android.graphics.Color.HSVToColor(hsv)), glassTint = accent, accentLight = null)
 }
 
 /** The five colours a wallpaper is painted from, and whether it is the light or the dark picture. */
@@ -109,11 +114,13 @@ object Palettes {
         id = "frost",
         name = "Frost",
         tagline = "Clear ice, bright daylight glass",
-        accent = Color(0xFF2E7BFF),
+        // Apple's own blue: this, in the dark, and a shade deeper in the light.
+        accent = Color(0xFF0A84FF),
         accentAlt = Color(0xFF00C2D1),
         backdrop = listOf(Color(0xFFEFF4FF), Color(0xFFDCE7F7), Color(0xFFF6F9FF)),
         glassTint = Color(0xFF9FC2FF),
         dark = false,
+        accentLight = Color(0xFF007AFF),
     )
 
     val Sakura = ZenithPalette(

@@ -214,7 +214,7 @@ fun ZenithWidget(
 
     BoxWithConstraints(
         modifier
-            .glass(ZenithShapes.card, strength = 1f, interactive = true)
+            .glass(ZenithShapes.card, strength = 1f)
             .clip(ZenithShapes.card)
             // A trace of the theme's colour, leaving the wallpaper and refracted edge visible.
             .drawBehind {
@@ -1773,7 +1773,6 @@ private fun SearchButton(onSearch: () -> Unit) {
                 RoundedCornerShape(percent = 50),
                 strength = 1.1f,
                 material = GlassMaterial.Clear,
-                interactive = true,
                 motion = GlassMotion.Lean,
             )
             .clickable(onClick = onSearch),
@@ -1792,7 +1791,7 @@ private fun SearchBar(onSearch: () -> Unit) {
             .fillMaxWidth()
             .height(SEARCH_BAR_HEIGHT)
             .pressBounce(0.97f)
-            .glass(ZenithShapes.pill, strength = 1.1f, interactive = true)
+            .glass(ZenithShapes.pill, strength = 1.1f)
             .clickable(onClick = onSearch)
             .padding(start = 18.dp, end = SEARCH_BAR_INSET),
         verticalAlignment = Alignment.CenterVertically,

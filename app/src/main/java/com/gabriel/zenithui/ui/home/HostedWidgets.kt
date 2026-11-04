@@ -110,7 +110,7 @@ fun HostedWidget(
     }
     Box(
         modifier
-            .then(if (cell.glass) Modifier.glass(ZenithShapes.tile, strength = 1.1f, interactive = true) else Modifier)
+            .then(if (cell.glass) Modifier.glass(ZenithShapes.tile, strength = 1.1f) else Modifier)
             .clip(ZenithShapes.tile),
     ) {
         when {

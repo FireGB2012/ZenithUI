@@ -1303,7 +1303,7 @@ fun FolderTile(
             Box(
                 Modifier
                     .fillMaxSize()
-                    .glass(ZenithShapes.icon, strength = 1.2f, material = GlassMaterial.Clear, interactive = true, tint = own ?: Color.Unspecified)
+                    .glass(ZenithShapes.icon, strength = 1.2f, material = GlassMaterial.Clear, tint = own ?: Color.Unspecified)
                     // A colour of its own, laid in the glass, easing in and out as it is chosen.
                     .background(shownColour.copy(alpha = shownColour.alpha * 0.3f), ZenithShapes.icon)
                     .padding(iconSize * 0.12f),
@@ -2013,8 +2013,8 @@ fun DockBar(
                         // Icons only, on the wallpaper.
                         "none" -> Modifier
                         // A pill hugging the icons there are, not the whole width.
-                        "floating" -> Modifier.glass(dockPill, strength = 1.15f, material = GlassMaterial.Clear, interactive = true)
-                        else -> Modifier.glass(ZenithShapes.panel, strength = 1.15f, material = GlassMaterial.Clear, interactive = true)
+                        "floating" -> Modifier.glass(dockPill, strength = 1.15f, material = GlassMaterial.Clear)
+                        else -> Modifier.glass(ZenithShapes.panel, strength = 1.15f, material = GlassMaterial.Clear)
                     }
                 )
                 .then(

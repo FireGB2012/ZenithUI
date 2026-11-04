@@ -151,7 +151,6 @@ fun PrimaryButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifi
                 ZenithShapes.pill,
                 tint = fill,
                 material = GlassMaterial.Clear,
-                interactive = true,
                 tinted = true,
                 motion = GlassMotion.Jelly,
             )

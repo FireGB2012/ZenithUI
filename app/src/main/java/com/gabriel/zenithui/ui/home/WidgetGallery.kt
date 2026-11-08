@@ -167,6 +167,7 @@ fun WidgetGallery(
         covered = false,
         title = picked?.spec?.title ?: if (stacking) "Stack a widget" else "Widgets",
         canGoBack = picked != null,
+        backTo = if (stacking) "Stack a widget" else "Widgets",
         titleShown = { maxOf(inShowcase.value, (scroll.value / TITLE_GONE_PX).coerceIn(0f, 1f)) },
         onBack = { picked = null },
         onClose = onDismiss,

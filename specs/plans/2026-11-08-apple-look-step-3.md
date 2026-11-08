@@ -75,7 +75,7 @@ first three parts. Sheets, the drawer and "Add to home screen" are step 4.
 
 ### Part 2: the page
 
-- [ ] `FullPage`: solid, in the page colour; Back an accent chevron and where it goes; the close a
+- [x] `FullPage`: solid, in the page colour; Back an accent chevron and where it goes; the close a
   round grey button; the large and small titles in Apple's words.
 
 ### Part 3: the parts

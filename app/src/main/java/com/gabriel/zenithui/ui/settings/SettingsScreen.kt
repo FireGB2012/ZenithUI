@@ -230,6 +230,7 @@ fun SettingsScreen(
         covered = covered,
         title = page?.title ?: "Settings",
         canGoBack = page != null,
+        backTo = page?.let { backTo(it) } ?: "Settings",
         titleShown = { ((if (page == null) rootScroll.value else pageScroll.value) / TITLE_GONE_PX).coerceIn(0f, 1f) },
         onBack = { pop() },
         onClose = onDismiss,

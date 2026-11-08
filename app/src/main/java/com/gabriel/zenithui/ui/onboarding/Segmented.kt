@@ -1,12 +1,12 @@
 package com.gabriel.zenithui.ui.onboarding
 
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -35,29 +34,21 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.gabriel.zenithui.ui.common.LocalMotionLevel
-import com.gabriel.zenithui.ui.common.pressBounce
 import com.gabriel.zenithui.ui.common.rememberTick
-import com.gabriel.zenithui.ui.theme.GlassMaterial
 import com.gabriel.zenithui.ui.theme.GlassMotion
-import com.gabriel.zenithui.ui.theme.LocalPalette
+import com.gabriel.zenithui.ui.theme.LocalApple
 import com.gabriel.zenithui.ui.theme.STRETCH_THIN
 import com.gabriel.zenithui.ui.theme.ZenithShapes
 import com.gabriel.zenithui.ui.theme.dragStretch
-import com.gabriel.zenithui.ui.theme.glass
 import com.gabriel.zenithui.ui.theme.pressSpring
 import com.gabriel.zenithui.ui.theme.pressTarget
 import com.gabriel.zenithui.ui.theme.snapSpring
@@ -71,14 +62,16 @@ import kotlin.math.abs
 import kotlin.math.floor
 
 /**
- * A row of options with one picked. The pill under it does not slide across as a block: the edge
- * facing the way it is going sets off at once and fast, and the edge behind follows on a softer
- * spring, so it stretches out towards the option you tapped and draws itself up when it gets
- * there, the way a drop of something thick moves. With movement reduced it is simply there.
+ * A row of options with one picked, as an iPhone's segmented control: a grey track, and a raised
+ * pill, white in the light and grey in the dark, under the one picked. The pill does not slide
+ * across as a block: the edge facing the way it is going sets off at once and fast, and the edge
+ * behind follows on a softer spring, so it stretches out towards the option you tapped and draws
+ * itself up when it gets there. With movement reduced it is simply there.
  *
- * The pill can be picked up. Under a finger it turns into a lens of clear glass that swells; slide
- * it and it follows along the row, stretching with speed, with a tick as each option comes under
- * it; let go and it settles on the nearest, which is then the one picked.
+ * The pill can be picked up. Under a finger it swells; slide it and it follows along the row,
+ * stretching with speed, with a tick as each option comes under it; let go and it settles on the
+ * nearest, which is then the one picked. It stays solid the whole way: there is no glass on a
+ * solid page.
  *
  * Given [icons], one for each option, the row is a little taller and each option's symbol stands
  * before a larger name: for a choice that changes how everything else on the page looks, which
@@ -91,7 +84,7 @@ fun Segmented(
     onSelect: (String) -> Unit,
     icons: List<ImageVector>? = null,
 ) {
-    val palette = LocalPalette.current
+    val apple = LocalApple.current
     val large = icons != null
     val index = options.indexOfFirst { it.first == selected }.coerceAtLeast(0)
     val tick = rememberTick()
@@ -104,9 +97,10 @@ fun Segmented(
     Box(
         Modifier
             .fillMaxWidth()
-            .height(if (large) 52.dp else 46.dp)
-            .glass(ZenithShapes.pill, strength = 0.8f, material = GlassMaterial.Clear)
-            .padding(4.dp),
+            .height(if (large) 48.dp else 40.dp)
+            .clip(ZenithShapes.pill)
+            .background(apple.field)
+            .padding(3.dp),
     ) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val count = options.size.coerceAtLeast(1)
@@ -117,31 +111,8 @@ fun Segmented(
             val thumb = remember { SegmentThumb(scope, itemPx * index, itemPx) }
             LaunchedEffect(index, itemPx) { thumb.goTo(index, itemPx, reduced) }
 
-            // Dark words on a light accent, white on a deep one: dark on violet was hard to read.
-            val activeInk = if (palette.accent.luminance() > 0.3f) Color(0xFF0A0B12) else Color.White
-            val fill = palette.accent.copy(alpha = 0.9f)
-
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    // Read while drawing, so the pill moves without the row being composed again.
-                    .drawBehind {
-                        val shown = 1f - thumb.lens.value
-                        if (shown <= 0.01f) return@drawBehind
-                        val from = thumb.leftEdge(itemPx)
-                        val to = thumb.rightEdge(itemPx)
-                        drawRoundRect(
-                            color = fill,
-                            topLeft = Offset(minOf(from, to), 0f),
-                            size = Size(abs(to - from), size.height),
-                            cornerRadius = CornerRadius(size.height / 2f),
-                            alpha = shown,
-                        )
-                    }
-            )
-
-            // The lens the pill becomes under a finger. Laid out over the first option and moved
-            // by drawing alone; it sits under the names so they stay sharp.
+            // The pill. Laid out over the first option and moved by drawing alone, so it travels
+            // without the row being composed again; it sits under the names.
             Box(
                 Modifier
                     .width(itemWidth)
@@ -154,13 +125,12 @@ fun Segmented(
                         translationX = (from + to) / 2f - itemPx / 2f
                         scaleX = abs(to - from) / itemPx.coerceAtLeast(1f) * swell * (1f + stretch)
                         scaleY = swell * (1f - STRETCH_THIN * stretch)
-                        alpha = thumb.lens.value
+                        // Apple's raised pill casts a small soft shadow onto its track.
+                        shadowElevation = 3.dp.toPx()
+                        shape = ZenithShapes.pill
+                        clip = false
                     }
-                    .glass(
-                        ZenithShapes.pill,
-                        material = GlassMaterial.Clear,
-                        tracking = { thumb.watch() },
-                    )
+                    .background(apple.pill, ZenithShapes.pill)
             )
 
             Row(
@@ -227,28 +197,21 @@ fun Segmented(
                         }
                     },
             ) {
-                // While the pill is a lens there is no accent under the words: the one it is over
-                // takes the glass's own ink, as clear glass needs.
-                val lensUp = thumb.held
+                // While the pill is held, the option under it is the one written heavier.
+                val heldNow = thumb.held
                 options.forEachIndexed { position, (id, label) ->
                     val active = position == index
-                    val lit = if (lensUp) position == thumb.nearest else active
-                    val textColour by animateColorAsState(
-                        targetValue = when {
-                            lit && lensUp -> palette.onGlass
-                            lit -> activeInk
-                            else -> palette.onGlassMuted
-                        },
-                        animationSpec = tween(260),
-                        label = "segmentText",
-                    )
+                    val lit = if (heldNow) position == thumb.nearest else active
                     Box(
                         Modifier
                             .weight(1f)
                             .fillMaxHeight()
-                            .pressBounce(0.94f)
-                            .clip(RoundedCornerShape(percent = 50))
-                            .clickable {
+                            .clip(ZenithShapes.pill)
+                            .clickable(
+                                interactionSource = null,
+                                indication = null,
+                                role = Role.Tab,
+                            ) {
                                 if (!active) tick()
                                 onSelect(id)
                             },
@@ -256,14 +219,14 @@ fun Segmented(
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             icons?.getOrNull(position)?.let { icon ->
-                                Icon(icon, contentDescription = null, tint = textColour, modifier = Modifier.size(18.dp))
+                                Icon(icon, contentDescription = null, tint = apple.words, modifier = Modifier.size(18.dp))
                                 Spacer(Modifier.width(7.dp))
                             }
                             Text(
                                 text = label,
-                                color = textColour,
+                                color = apple.words,
                                 fontSize = if (large) 15.sp else 13.sp,
-                                fontWeight = if (lit) FontWeight.SemiBold else FontWeight.Medium,
+                                fontWeight = if (lit) FontWeight.SemiBold else FontWeight.Normal,
                                 maxLines = 1,
                             )
                         }
@@ -275,7 +238,7 @@ fun Segmented(
 }
 
 /**
- * Which of [count] options, side by side along a row [trackWidth] wide, a lens whose middle is at
+ * Which of [count] options, side by side along a row [trackWidth] wide, a pill whose middle is at
  * [thumbCentreX] is nearest: the one whose middle is closest, and an end one past either end.
  */
 internal fun nearestSegment(thumbCentreX: Float, trackWidth: Float, count: Int): Int {
@@ -284,9 +247,8 @@ internal fun nearestSegment(thumbCentreX: Float, trackWidth: Float, count: Int):
 }
 
 /**
- * The pill of a [Segmented] row, and the lens it becomes: where its two edges are, or where a
- * finger has it; how swollen and stretched it is; and how far it has turned to glass. All of it
- * read while drawing.
+ * The pill of a [Segmented] row: where its two edges are, or where a finger has it, and how
+ * swollen and stretched it is. All of it read while drawing.
  */
 @Stable
 private class SegmentThumb(private val scope: CoroutineScope, from: Float, item: Float) {
@@ -294,19 +256,18 @@ private class SegmentThumb(private val scope: CoroutineScope, from: Float, item:
     val right = Animatable(from + item)
     val swell = Animatable(1f)
     val stretch = Animatable(0f)
-    val lens = Animatable(0f)
 
-    /** The middle of the lens while a finger has it, or NaN. */
+    /** The middle of the pill while a finger has it, or NaN. */
     private var dragged by mutableFloatStateOf(Float.NaN)
 
-    /** Whether a finger has the pill, so it is a lens. */
+    /** Whether a finger has the pill. */
     var held by mutableStateOf(false)
         private set
 
-    /** The option nearest the lens while it is held. */
+    /** The option nearest the pill while it is held. */
     var nearest by mutableIntStateOf(0)
 
-    /** The option a lens that was let go is settling on, so the choice catching up does not move it again. */
+    /** The option a pill that was let go is settling on, so the choice catching up does not move it again. */
     private var settling = -1
     private var lastItem = item
     private var stretching: Job? = null
@@ -314,15 +275,6 @@ private class SegmentThumb(private val scope: CoroutineScope, from: Float, item:
     fun leftEdge(item: Float): Float = if (dragged.isNaN()) left.value else dragged - item / 2f
     fun rightEdge(item: Float): Float = if (dragged.isNaN()) right.value else dragged + item / 2f
     fun centre(item: Float): Float = (leftEdge(item) + rightEdge(item)) / 2f
-
-    /** Reads all that moves the lens, for its glass to redraw as it goes. */
-    fun watch() {
-        left.value
-        right.value
-        dragged
-        swell.value
-        stretch.value
-    }
 
     /** The choice changed (or the row was measured again): off to it, a tap's way. */
     suspend fun goTo(index: Int, item: Float, reduced: Boolean) = coroutineScope {
@@ -346,7 +298,6 @@ private class SegmentThumb(private val scope: CoroutineScope, from: Float, item:
         held = true
         val target = pressTarget(GlassMotion.Drag, pressed = true, reduced)
         scope.launch { swell.animateTo(target.scale, pressSpring(GlassMotion.Drag, reduced).spec()) }
-        scope.launch { lens.animateTo(1f, LENS_TURN) }
     }
 
     fun dragTo(centre: Float) {
@@ -367,7 +318,6 @@ private class SegmentThumb(private val scope: CoroutineScope, from: Float, item:
         held = false
         val rest = pressTarget(GlassMotion.Drag, pressed = false, reduced)
         scope.launch { swell.animateTo(rest.scale, pressSpring(GlassMotion.Drag, reduced).spec()) }
-        scope.launch { lens.animateTo(0f, LENS_TURN) }
         stretching?.cancel()
         stretching = scope.launch { stretch.animateTo(0f, STRETCH_EASES) }
     }
@@ -402,9 +352,6 @@ private val PILL_LEADS = spring<Float>(dampingRatio = 0.86f, stiffness = 640f)
 
 /** Its trailing edge: later, slower, and a little past where it stops before it comes back. */
 private val PILL_TRAILS = spring<Float>(dampingRatio = 0.7f, stiffness = 210f)
-
-/** The pill turning to glass under a finger and back. */
-private val LENS_TURN = spring<Float>(dampingRatio = 1f, stiffness = 500f)
 
 private val STRETCH_FOLLOWS = spring<Float>(dampingRatio = 1f, stiffness = 1400f)
 private val STRETCH_EASES = spring<Float>(dampingRatio = 1f, stiffness = 260f)

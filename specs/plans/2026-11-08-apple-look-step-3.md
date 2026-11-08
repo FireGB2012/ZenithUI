@@ -80,10 +80,10 @@ first three parts. Sheets, the drawer and "Add to home screen" are step 4.
 
 ### Part 3: the parts
 
-- [ ] `Section`; the iOS row for `NavRow`, `ActionRow`, `ToggleRow`, `ChoiceRow` (a check in the
+- [x] `Section`; the iOS row for `NavRow`, `ActionRow`, `ToggleRow`, `ChoiceRow` (a check in the
   accent), `StepperRow` (Apple's − + pair) and search results; the shade while pressed.
-- [ ] `Toggle`: iOS's switch. The slider: a thin track, the accent up to the knob, a white knob.
-- [ ] `Segmented`: grey track, solid pill; held, it swells, slides, ticks and settles (no lens).
+- [x] `Toggle`: iOS's switch. The slider: a thin track, the accent up to the knob, a white knob.
+- [x] `Segmented`: grey track, solid pill; held, it swells, slides, ticks and settles (no lens).
 
 ### Part 4: the pages
 

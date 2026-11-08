@@ -2,18 +2,16 @@ package com.gabriel.zenithui.ui.settings
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.snap
-import androidx.compose.animation.scaleIn
-import androidx.compose.foundation.LocalIndication
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -24,6 +22,7 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -35,18 +34,21 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -67,15 +69,18 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -87,20 +92,28 @@ import com.gabriel.zenithui.ui.common.BackButton
 import com.gabriel.zenithui.ui.common.LocalMotionLevel
 import com.gabriel.zenithui.ui.common.Motion
 import com.gabriel.zenithui.ui.common.appearIn
+import com.gabriel.zenithui.ui.common.popIn
+import com.gabriel.zenithui.ui.common.popOut
 import com.gabriel.zenithui.ui.common.pressBounce
 import com.gabriel.zenithui.ui.common.rememberTick
 import com.gabriel.zenithui.ui.common.rollOver
 import com.gabriel.zenithui.ui.common.wordsChange
+import com.gabriel.zenithui.ui.theme.CardKind
+import com.gabriel.zenithui.ui.theme.LocalApple
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.ZenithPalette
 import com.gabriel.zenithui.ui.theme.ZenithShapes
+import com.gabriel.zenithui.ui.theme.solidCard
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 
-// The parts Settings and its sheets are built from, in one version each. Every control animates
-// its own change, and ticks under the finger when haptics are on.
+// The parts Settings is built from, as an iPhone builds its own: groups of rows on solid cards,
+// each named small and grey above its card and explained in grey under it; switches, segmented
+// controls and sliders in the accent. Sheets use the same parts. A row shades under a finger
+// rather than bouncing; every control animates its own change, and ticks under the finger when
+// haptics are on.
 
-/** A back arrow, when there is somewhere to go back to, and the name of where you are. */
+/** A back arrow, when there is somewhere to go back to, and the name of where you are: a sheet's header. */
 @Composable
 internal fun SettingsHeader(title: String, canGoBack: Boolean, onBack: () -> Unit) {
     val palette = LocalPalette.current
@@ -142,32 +155,85 @@ internal fun Modifier.riseIn(index: Int): Modifier {
     )
 }
 
+// ------------------------------------------------------------------------- groups, as iOS's
+
+/** How far in from a card's edge the words of a row with a square start, and its hairline: 16 + 30 + 14. */
+internal val ROW_TEXT_INSET = 60.dp
+
+/** How far in from a card's edge the words of a row without a square start. */
+internal val ROW_INSET = 16.dp
+
+/** The colour of the squares on this page's rows: the colour of the group the page is. */
+internal val LocalGroupTile = compositionLocalOf<Color?> { null }
+
+/** The grey of a square that has no group's colour to take: Apple's own. */
+private val PLAIN_TILE = Color(0xFF8E8E93)
+
 /**
- * A rounded group of rows, the way a settings page is usually set out. With [rise], it is the
- * block that many down its page and rises in after the ones above it.
+ * A group of rows as an iPhone sets them out: [header], the group's name, small and grey above
+ * it; the rows on a solid card; and [footer], what the choice in it means, in grey under the card.
+ * With [rise], it is the block that many down its page and rises in after the ones above it.
+ */
+@Composable
+internal fun Section(
+    header: String? = null,
+    footer: String? = null,
+    modifier: Modifier = Modifier,
+    rise: Int? = null,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Column(
+        modifier
+            .fillMaxWidth()
+            .then(if (rise != null) Modifier.riseIn(rise) else Modifier),
+    ) {
+        if (header != null) GroupName(header)
+        Column(Modifier.fillMaxWidth().solidCard(CardKind.Grouped), content = content)
+        if (footer != null) Note(footer, Modifier.padding(start = 12.dp, end = 12.dp, top = 7.dp))
+    }
+}
+
+/** The name of a group of rows, as an iPhone writes it over the card: small grey capitals. */
+@Composable
+internal fun GroupName(text: String, modifier: Modifier = Modifier) {
+    Text(
+        text.uppercase(),
+        color = LocalApple.current.secondary,
+        fontSize = 13.sp,
+        letterSpacing = 0.3.sp,
+        modifier = modifier.padding(start = 16.dp, end = 16.dp, bottom = 7.dp),
+    )
+}
+
+/**
+ * A card of rows with nothing over it or under it. [padding] is for a card that holds something
+ * other than rows. With [rise], it is the block that many down its page.
  */
 @Composable
 internal fun Group(padding: Dp = 0.dp, rise: Int? = null, content: @Composable ColumnScope.() -> Unit) {
-    val palette = LocalPalette.current
     Column(
         Modifier
             .fillMaxWidth()
             .then(if (rise != null) Modifier.riseIn(rise) else Modifier)
-            .clip(RoundedCornerShape(22.dp))
-            .background(palette.onGlass.copy(alpha = 0.07f))
+            .solidCard(CardKind.Grouped)
             .padding(padding),
         content = content,
     )
 }
 
+/**
+ * The hairline between two rows of a card. As an iPhone's does, it starts under the words of the
+ * rows ([inset]) and runs to the card's far edge.
+ */
 @Composable
-internal fun GroupDivider(inset: Dp = 64.dp) {
+internal fun GroupDivider(inset: Dp = ROW_TEXT_INSET) {
+    val hairline = with(LocalDensity.current) { 1f.toDp() }
     Box(
         Modifier
             .padding(start = inset)
             .fillMaxWidth()
-            .height(1.dp)
-            .background(LocalPalette.current.onGlass.copy(alpha = 0.07f))
+            .height(hairline)
+            .background(LocalApple.current.separator)
     )
 }
 
@@ -176,7 +242,7 @@ internal fun GroupDivider(inset: Dp = 64.dp) {
 internal fun Caption(text: String, modifier: Modifier = Modifier) {
     Text(
         text,
-        color = LocalPalette.current.onGlassMuted,
+        color = LocalApple.current.secondary,
         fontSize = 13.sp,
         fontWeight = FontWeight.Medium,
         modifier = modifier.padding(horizontal = 4.dp),
@@ -184,87 +250,113 @@ internal fun Caption(text: String, modifier: Modifier = Modifier) {
 }
 
 /**
- * A line of small print under a control: what the choice just made means. Make another choice and
- * the words change where they stand, the page taking up the difference smoothly if there are now
- * more or fewer lines of them.
+ * Small grey print: what the choice just made means, as an iPhone writes it under a card. Make
+ * another choice and the words change where they stand, the page taking up the difference
+ * smoothly if there are now more or fewer lines of them.
  */
 @Composable
 internal fun Note(text: String, modifier: Modifier = Modifier) {
     val reduced = LocalMotionLevel.current.reduced
+    val secondary = LocalApple.current.secondary
     AnimatedContent(
         targetState = text,
         transitionSpec = { wordsChange(reduced) },
         modifier = modifier.padding(horizontal = 4.dp),
         label = "note",
     ) { words ->
-        Text(words, color = LocalPalette.current.onGlassMuted, fontSize = 12.sp)
+        Text(words, color = secondary, fontSize = 13.sp, lineHeight = 18.sp)
     }
 }
 
 /**
- * A row that opens a page: a coloured tile, what it is, how it is set, and a chevron. Under a
- * finger the tile swells and tips and the chevron leans the way you are about to go, unless
- * movement is reduced; when the setting it describes changes, the line saying so cross-fades to
- * the new one.
+ * Apple's answer to a finger on a row: while it is held the row shades, and the shade lifts as it
+ * is let go. Nothing moves, so it is the same with movement reduced. [touch] is the row's own,
+ * shared with its click.
+ */
+@Composable
+internal fun Modifier.rowPress(touch: MutableInteractionSource, enabled: Boolean = true): Modifier {
+    val pressed by touch.collectIsPressedAsState()
+    val colour = LocalApple.current.pressed
+    val shade by animateFloatAsState(
+        targetValue = if (pressed && enabled) 1f else 0f,
+        animationSpec = if (pressed && enabled) snap() else tween(320),
+        label = "rowShade",
+    )
+    return drawBehind { if (shade > 0f) drawRect(colour, alpha = shade) }
+}
+
+/** The small square at the start of a row, as an iPhone's Settings has: a symbol in white on a colour. */
+@Composable
+private fun Tile(icon: ImageVector, colour: Color, turned: () -> Float = { 0f }) {
+    Box(
+        Modifier
+            .size(30.dp)
+            .clip(RoundedCornerShape(7.dp))
+            .background(colour),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            icon,
+            contentDescription = null,
+            tint = Color.White,
+            modifier = Modifier
+                .size(19.dp)
+                .graphicsLayer { rotationZ = turned() },
+        )
+    }
+}
+
+/** The chevron at the end of a row that opens something. */
+@Composable
+internal fun Chevron() {
+    Icon(
+        Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+        contentDescription = null,
+        tint = LocalApple.current.faint,
+        modifier = Modifier.size(22.dp),
+    )
+}
+
+/**
+ * A row that opens a page: the group's square, its name, how it is set in grey under the name, and
+ * a chevron. Under a finger it shades; when the setting it describes changes, the grey line
+ * cross-fades to the new one.
  */
 @Composable
 internal fun NavRow(icon: ImageVector, tile: Color, title: String, summary: String, onClick: () -> Unit) {
-    val palette = LocalPalette.current
+    val apple = LocalApple.current
     val touch = remember { MutableInteractionSource() }
-    val pressed by touch.collectIsPressedAsState()
-    val reduced = LocalMotionLevel.current.reduced
-    // Read only where things are drawn, so a press redraws two layers and composes nothing again.
-    val lean = animateFloatAsState(if (pressed && !reduced) 1f else 0f, Motion.press(), label = "navLean")
     Row(
         Modifier
             .fillMaxWidth()
-            .pressBounce(0.98f)
-            .clickable(interactionSource = touch, indication = LocalIndication.current, onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 12.dp),
+            .rowPress(touch)
+            .clickable(interactionSource = touch, indication = null, onClick = onClick)
+            .heightIn(min = 52.dp)
+            .padding(start = 16.dp, end = 10.dp, top = 9.dp, bottom = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(
-            Modifier
-                .size(36.dp)
-                .graphicsLayer {
-                    val grown = 1f + 0.16f * lean.value
-                    scaleX = grown
-                    scaleY = grown
-                    rotationZ = -9f * lean.value
-                }
-                .clip(RoundedCornerShape(11.dp))
-                .background(tile),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
-        }
+        Tile(icon, tile)
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
-            Text(title, color = palette.onGlass, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+            Text(title, color = apple.words, fontSize = 16.sp)
             AnimatedContent(
                 targetState = summary,
                 transitionSpec = { fadeIn(tween(220, delayMillis = 60)).togetherWith(fadeOut(tween(120))) },
                 label = "navSummary",
             ) { line ->
-                Text(line, color = palette.onGlassMuted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(line, color = apple.secondary, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
-        Icon(
-            Icons.AutoMirrored.Rounded.KeyboardArrowRight,
-            contentDescription = null,
-            tint = palette.onGlass,
-            modifier = Modifier
-                .size(22.dp)
-                .graphicsLayer {
-                    // Faint at rest; it darkens as it leans.
-                    alpha = 0.35f + 0.4f * lean.value.coerceIn(0f, 1f)
-                    translationX = 5.dp.toPx() * lean.value
-                },
-        )
+        Spacer(Modifier.width(6.dp))
+        Chevron()
     }
 }
 
-/** A row that does something: open an Android screen, a Plus feature, or start over. */
+/**
+ * A row that does something: open an Android screen, a Plus feature, or start over. Its square is
+ * in the colour of the group it is in ([LocalGroupTile]) unless it is given one of its own, and a
+ * row that cannot be undone is red, square and words. [status] says at its end what it has done.
+ */
 @Composable
 internal fun ActionRow(
     icon: ImageVector,
@@ -273,14 +365,19 @@ internal fun ActionRow(
     danger: Boolean = false,
     status: String? = null,
     modifier: Modifier = Modifier,
-    /** Each time this goes up the icon turns once round: something was done. */
+    /** Each time this goes up the symbol turns once round: something was done. */
     spin: Int = 0,
+    /** The square's colour, where it should not be the group's. */
+    tile: Color? = null,
     onClick: () -> Unit,
 ) {
+    val apple = LocalApple.current
     val palette = LocalPalette.current
     val reduced = LocalMotionLevel.current.reduced
-    val tint by animateColorAsState(if (danger) Color(0xFFFF6B6B) else palette.onGlass, tween(200), label = "actionTint")
-    val turned by animateFloatAsState(
+    val touch = remember { MutableInteractionSource() }
+    val words by animateColorAsState(if (danger) apple.danger else apple.words, tween(200), label = "actionWords")
+    val square = if (danger) apple.danger else tile ?: LocalGroupTile.current ?: PLAIN_TILE
+    val turned = animateFloatAsState(
         targetValue = 360f * spin,
         animationSpec = if (reduced) snap() else spring(dampingRatio = 0.62f, stiffness = 110f),
         label = "actionSpin",
@@ -288,27 +385,13 @@ internal fun ActionRow(
     Row(
         modifier
             .fillMaxWidth()
-            .pressBounce(0.98f)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 12.dp),
+            .rowPress(touch)
+            .clickable(interactionSource = touch, indication = null, onClick = onClick)
+            .heightIn(min = 52.dp)
+            .padding(horizontal = 16.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(
-            Modifier
-                .size(36.dp)
-                .clip(RoundedCornerShape(11.dp))
-                .background(tint.copy(alpha = 0.1f)),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                icon,
-                contentDescription = null,
-                tint = tint,
-                modifier = Modifier
-                    .size(19.dp)
-                    .graphicsLayer { rotationZ = turned },
-            )
-        }
+        Tile(icon, square, turned = { turned.value })
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
             AnimatedContent(
@@ -316,7 +399,7 @@ internal fun ActionRow(
                 transitionSpec = { fadeIn(tween(180)).togetherWith(fadeOut(tween(100))) },
                 label = "actionTitle",
             ) { text ->
-                Text(text, color = tint, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+                Text(text, color = words, fontSize = 16.sp)
             }
             if (subtitle != null) {
                 AnimatedContent(
@@ -324,7 +407,7 @@ internal fun ActionRow(
                     transitionSpec = { fadeIn(tween(200, delayMillis = 40)).togetherWith(fadeOut(tween(100))) },
                     label = "actionSubtitle",
                 ) { line ->
-                    Text(line, color = palette.onGlassMuted, fontSize = 13.sp)
+                    Text(line, color = apple.secondary, fontSize = 14.sp)
                 }
             }
         }
@@ -333,19 +416,19 @@ internal fun ActionRow(
             enter = if (reduced) fadeIn(tween(Motion.REDUCED_MS)) else fadeIn(tween(160)) + scaleIn(Motion.snappy(), initialScale = 0.5f),
             exit = fadeOut(tween(120)),
         ) {
-            Text(status.orEmpty(), color = palette.accent, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+            Text(status.orEmpty(), color = palette.accent, fontSize = 15.sp, modifier = Modifier.padding(start = 8.dp))
         }
     }
 }
 
 /**
- * A setting that is on or off. The whole row is the switch, not just the little pill: a finger
- * anywhere on it is felt by the knob, and when what the switch means changes with it, the line
- * saying so changes where it stands.
+ * A setting that is on or off. The whole row is the switch, not just the switch itself: a finger
+ * anywhere on it is felt by the knob, and when what the switch means changes with it, the grey
+ * line saying so changes where it stands.
  */
 @Composable
 internal fun ToggleRow(title: String, subtitle: String?, checked: Boolean, onChange: (Boolean) -> Unit) {
-    val palette = LocalPalette.current
+    val apple = LocalApple.current
     val tick = rememberTick()
     val reduced = LocalMotionLevel.current.reduced
     val touch = remember { MutableInteractionSource() }
@@ -353,22 +436,23 @@ internal fun ToggleRow(title: String, subtitle: String?, checked: Boolean, onCha
     Row(
         Modifier
             .fillMaxWidth()
-            .clickable(interactionSource = touch, indication = null) {
+            .toggleable(value = checked, interactionSource = touch, indication = null, role = Role.Switch) { on ->
                 tick()
-                onChange(!checked)
+                onChange(on)
             }
-            .padding(horizontal = 16.dp, vertical = 13.dp),
+            .heightIn(min = 52.dp)
+            .padding(horizontal = 16.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
-            Text(title, color = palette.onGlass, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+            Text(title, color = apple.words, fontSize = 16.sp)
             if (subtitle != null) {
                 AnimatedContent(
                     targetState = subtitle,
                     transitionSpec = { wordsChange(reduced) },
                     label = "toggleSubtitle",
                 ) { line ->
-                    Text(line, color = palette.onGlassMuted, fontSize = 13.sp)
+                    Text(line, color = apple.secondary, fontSize = 14.sp)
                 }
             }
         }
@@ -378,33 +462,39 @@ internal fun ToggleRow(title: String, subtitle: String?, checked: Boolean, onCha
 }
 
 /**
- * The switch itself: the knob springs across and the track fills with the accent. While it is
- * [pressed] the knob spreads out towards the side it is about to go to, as something soft does
- * under a finger, and draws itself up again as it gets there.
+ * The switch itself, as an iPhone's: a white knob that springs across a grey track, and the track
+ * fills with the accent. While it is [pressed] the knob stretches out towards the side it is
+ * about to go to, and draws itself up again as it gets there.
  */
 @Composable
 internal fun Toggle(checked: Boolean, pressed: Boolean = false) {
-    val palette = LocalPalette.current
+    val apple = LocalApple.current
+    val accent = LocalPalette.current.accent
+    val reduced = LocalMotionLevel.current.reduced
     val progress by animateFloatAsState(
         if (checked) 1f else 0f,
-        spring(dampingRatio = 0.72f, stiffness = 520f),
+        if (reduced) tween(Motion.REDUCED_MS) else spring(dampingRatio = 0.78f, stiffness = 560f),
         label = "toggle",
     )
-    val spread by animateFloatAsState(if (pressed) 1f else 0f, spring(dampingRatio = 0.7f, stiffness = 600f), label = "toggleSpread")
-    val track = lerp(palette.onGlass.copy(alpha = 0.16f), palette.accent, progress.coerceIn(0f, 1f))
+    val spread by animateFloatAsState(
+        if (pressed && !reduced) 1f else 0f,
+        spring(dampingRatio = 0.8f, stiffness = 650f),
+        label = "toggleSpread",
+    )
+    val track = lerp(apple.grey, accent, progress.coerceIn(0f, 1f))
     Box(
         Modifier
-            .size(width = 50.dp, height = 30.dp)
+            .size(width = 51.dp, height = 31.dp)
             .clip(CircleShape)
             .background(track)
-            .padding(3.dp),
+            .padding(2.dp),
     ) {
-        val wide = 24.dp + 6.dp * spread
+        val wide = 27.dp + 7.dp * spread
         Box(
             Modifier
-                // Its outer edge stays where it is and it spreads inwards, so it never leaves the track.
-                .offset(x = (44.dp - wide) * progress)
-                .size(width = wide, height = 24.dp)
+                // Its outer edge stays where it is and it stretches inwards, so it never leaves the track.
+                .offset(x = (47.dp - wide) * progress)
+                .size(width = wide, height = 27.dp)
                 .shadow(2.dp, CircleShape)
                 .clip(CircleShape)
                 .background(Color.White)
@@ -412,10 +502,14 @@ internal fun Toggle(checked: Boolean, pressed: Boolean = false) {
     }
 }
 
+/** The knob of a slider: round and white, as an iPhone's. */
+private val KNOB = 28.dp
+
 /**
- * A slider you can grab anywhere: the whole bar is the control, it fills with the accent as the
- * value grows, and the name and number sit inside it. Tapping jumps, dragging follows the finger,
- * and every tenth of the way gives a tick.
+ * A slider as an iPhone draws one, under its name and its value: a thin grey track, filled with
+ * the accent up to a round white knob. Tapping glides the knob to the finger, dragging follows it,
+ * and every tenth of the way gives a tick; the knob lands under the finger ([SliderGeometry]).
+ * While it is held the knob swells a touch.
  */
 @Composable
 internal fun PillSlider(
@@ -426,91 +520,83 @@ internal fun PillSlider(
     modifier: Modifier = Modifier,
     onChange: (Float) -> Unit,
 ) {
-    val palette = LocalPalette.current
+    val apple = LocalApple.current
+    val accent = LocalPalette.current.accent
     val tick = rememberTick()
-    var width by remember { mutableFloatStateOf(1f) }
     val latest by rememberUpdatedState(onChange)
-    val span = range.endInclusive - range.start
-    val fraction = ((value - range.start) / span).coerceIn(0f, 1f)
-    // A tap glides the fill to where you touched; a drag is followed almost exactly.
+    var width by remember { mutableFloatStateOf(1f) }
+    val knob = with(LocalDensity.current) { KNOB.toPx() }
+    val fraction = SliderGeometry.fraction(value, range)
+    // A tap glides the knob to where you touched; a drag is followed almost exactly.
     val shown = animateFloatAsState(fraction, spring(dampingRatio = 1f, stiffness = 1400f), label = "slider")
     var step by remember { mutableIntStateOf((fraction * 10).roundToInt()) }
-    // In your hand the bar swells a touch and its fill brightens, and the number it is being set
-    // to stands out; let go and it all settles back. Read only where it is drawn.
     var held by remember { mutableStateOf(false) }
     val grip = animateFloatAsState(if (held) 1f else 0f, Motion.press(), label = "sliderGrip")
 
     fun setFrom(x: Float) {
-        val at = (x / width).coerceIn(0f, 1f)
+        val at = SliderGeometry.fractionAt(x, width, knob)
         val now = (at * 10).roundToInt()
         if (now != step) {
             step = now
             tick()
         }
-        latest(range.start + at * span)
+        latest(SliderGeometry.value(at, range))
     }
 
-    Box(
-        modifier
-            .fillMaxWidth()
-            .height(52.dp)
-            .graphicsLayer {
-                val grown = 1f + 0.012f * grip.value
-                scaleX = grown
-                scaleY = grown
-            }
-            .clip(RoundedCornerShape(16.dp))
-            .background(palette.onGlass.copy(alpha = 0.08f))
-            // The fill is drawn, not laid out, so following a finger composes nothing again.
-            .drawBehind {
-                drawRect(
-                    color = palette.accent,
-                    size = Size(size.width * shown.value.coerceIn(0f, 1f), size.height),
-                    alpha = 0.45f + 0.17f * grip.value.coerceIn(0f, 1f),
-                )
-            }
-            .onSizeChanged { width = it.width.toFloat().coerceAtLeast(1f) }
-            // Only watches, for as long as a finger is down: the tap and the drag are below.
-            .pointerInput(Unit) {
-                awaitEachGesture {
-                    awaitFirstDown(requireUnconsumed = false)
-                    held = true
-                    try {
-                        do {
-                            val event = awaitPointerEvent()
-                        } while (event.changes.any { it.pressed })
-                    } finally {
-                        held = false
-                    }
-                }
-            }
-            .pointerInput(range) { detectTapGestures { setFrom(it.x) } }
-            .pointerInput(range) {
-                detectHorizontalDragGestures(onDragStart = { setFrom(it.x) }) { change, _ ->
-                    change.consume()
-                    setFrom(change.position.x)
-                }
-            },
-    ) {
-        Row(
+    Column(modifier.fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(label, color = apple.words, fontSize = 16.sp, modifier = Modifier.weight(1f))
+            Text(display, color = apple.secondary, fontSize = 15.sp)
+        }
+        Box(
             Modifier
                 .fillMaxWidth()
-                .fillMaxHeight()
-                .padding(horizontal = 16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(label, color = palette.onGlass, fontSize = 15.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
-            Text(
-                display,
-                color = palette.onGlass.copy(alpha = 0.8f),
-                fontSize = 14.sp,
-                modifier = Modifier.graphicsLayer {
-                    val grown = 1f + 0.12f * grip.value
-                    scaleX = grown
-                    scaleY = grown
-                    // From its own end of the bar, so it grows inwards and is never cut off.
-                    transformOrigin = TransformOrigin(1f, 0.5f)
+                .height(KNOB + 12.dp)
+                .onSizeChanged { width = it.width.toFloat().coerceAtLeast(1f) }
+                // Only watches, for as long as a finger is down: the tap and the drag are below.
+                .pointerInput(Unit) {
+                    awaitEachGesture {
+                        awaitFirstDown(requireUnconsumed = false)
+                        held = true
+                        try {
+                            do {
+                                val event = awaitPointerEvent()
+                            } while (event.changes.any { it.pressed })
+                        } finally {
+                            held = false
+                        }
+                    }
+                }
+                .pointerInput(range) { detectTapGestures { setFrom(it.x) } }
+                .pointerInput(range) {
+                    detectHorizontalDragGestures(onDragStart = { setFrom(it.x) }) { change, _ ->
+                        change.consume()
+                        setFrom(change.position.x)
+                    }
+                }
+                // The track and its fill are drawn, not laid out, so following a finger composes
+                // nothing again.
+                .drawBehind {
+                    val thick = 4.dp.toPx()
+                    val top = (size.height - thick) / 2f
+                    val corner = CornerRadius(thick / 2f)
+                    drawRoundRect(apple.grey, topLeft = Offset(0f, top), size = Size(size.width, thick), cornerRadius = corner)
+                    val to = SliderGeometry.knobCentre(shown.value, size.width, knob)
+                    drawRoundRect(accent, topLeft = Offset(0f, top), size = Size(to, thick), cornerRadius = corner)
                 },
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            Box(
+                Modifier
+                    .size(KNOB)
+                    .graphicsLayer {
+                        translationX = SliderGeometry.knobCentre(shown.value, width, knob) - knob / 2f
+                        val grown = 1f + 0.1f * grip.value
+                        scaleX = grown
+                        scaleY = grown
+                    }
+                    .shadow(3.dp, CircleShape)
+                    .background(Color.White, CircleShape)
             )
         }
     }
@@ -551,93 +637,103 @@ internal object SliderGeometry {
 }
 
 /**
- * A number that goes up and down a step at a time: what it counts, the number, and a minus and a
- * plus either side of it. At the end of its range that button dims and does nothing.
+ * A number that goes up and down a step at a time, as an iPhone's stepper does: what it counts,
+ * the number, and a grey pill holding a minus and a plus. At the end of its range that half dims
+ * and does nothing.
  */
 @Composable
 internal fun StepperRow(title: String, value: Int, range: IntRange, onChange: (Int) -> Unit) {
-    val palette = LocalPalette.current
+    val apple = LocalApple.current
     val tick = rememberTick()
     val reduced = LocalMotionLevel.current.reduced
     Row(
         Modifier
             .fillMaxWidth()
-            .padding(horizontal = 4.dp, vertical = 6.dp),
+            .heightIn(min = 52.dp)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(title, color = palette.onGlass, fontSize = 16.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
-        listOf(-1, 1).forEach { step ->
-            val next = value + step
-            val can = next in range
-            if (step == 1) {
-                // One more and the number rolls up; one fewer and it rolls down.
-                AnimatedContent(
-                    targetState = value,
-                    transitionSpec = { rollOver(reduced, down = targetState < initialState) },
+        Text(title, color = apple.words, fontSize = 16.sp, modifier = Modifier.weight(1f))
+        // One more and the number rolls up; one fewer and it rolls down.
+        AnimatedContent(
+            targetState = value,
+            transitionSpec = { rollOver(reduced, down = targetState < initialState) },
+            contentAlignment = Alignment.Center,
+            label = "stepperNumber",
+        ) { number ->
+            Text(
+                "$number",
+                color = apple.secondary,
+                fontSize = 16.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.width(40.dp),
+            )
+        }
+        Spacer(Modifier.width(8.dp))
+        Row(
+            Modifier
+                .height(34.dp)
+                .clip(CircleShape)
+                .background(apple.field),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            listOf(-1, 1).forEachIndexed { index, step ->
+                if (index == 1) Box(Modifier.width(1.dp).height(18.dp).background(apple.separator))
+                val next = value + step
+                val can = next in range
+                val touch = remember { MutableInteractionSource() }
+                Box(
+                    Modifier
+                        .width(48.dp)
+                        .fillMaxHeight()
+                        .rowPress(touch, enabled = can)
+                        .clickable(
+                            interactionSource = touch,
+                            indication = null,
+                            enabled = can,
+                            onClickLabel = if (step < 0) "One fewer" else "One more",
+                        ) {
+                            tick()
+                            onChange(next)
+                        },
                     contentAlignment = Alignment.Center,
-                    modifier = Modifier.width(44.dp),
-                    label = "stepperNumber",
-                ) { number ->
-                    Text(
-                        "$number",
-                        color = palette.onGlass,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.width(44.dp),
+                ) {
+                    Icon(
+                        if (step < 0) Icons.Rounded.Remove else Icons.Rounded.Add,
+                        contentDescription = if (step < 0) "Fewer $title" else "More $title",
+                        tint = apple.words.copy(alpha = if (can) 1f else 0.3f),
+                        modifier = Modifier.size(20.dp),
                     )
                 }
-            }
-            Box(
-                Modifier
-                    .size(44.dp)
-                    .pressBounce(0.9f, enabled = can)
-                    .clip(CircleShape)
-                    .background(palette.onGlass.copy(alpha = if (can) 0.10f else 0.04f))
-                    .clickable(enabled = can, onClickLabel = if (step < 0) "One fewer" else "One more") {
-                        tick()
-                        onChange(next)
-                    },
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    if (step < 0) Icons.Rounded.Remove else Icons.Rounded.Add,
-                    contentDescription = if (step < 0) "Fewer $title" else "More $title",
-                    tint = palette.onGlass.copy(alpha = if (can) 1f else 0.3f),
-                    modifier = Modifier.size(20.dp),
-                )
             }
         }
     }
 }
 
-/** One option of several, marked with a filled dot. */
+/** One option of several, as an iPhone lists them: its name, and a check in the accent by the one chosen. */
 @Composable
 internal fun ChoiceRow(label: String, selected: Boolean, onClick: () -> Unit) {
-    val palette = LocalPalette.current
+    val apple = LocalApple.current
+    val accent = LocalPalette.current.accent
     val tick = rememberTick()
-    val ring by animateColorAsState(
-        if (selected) palette.accent else palette.onGlass.copy(alpha = 0.25f),
-        tween(220),
-        label = "choiceRing",
-    )
-    val dot by animateDpAsState(if (selected) 10.dp else 0.dp, spring(dampingRatio = 0.6f, stiffness = 500f), label = "choiceDot")
+    val reduced = LocalMotionLevel.current.reduced
+    val touch = remember { MutableInteractionSource() }
     Row(
         Modifier
             .fillMaxWidth()
-            .pressBounce(0.98f)
-            .clickable {
+            .rowPress(touch)
+            .selectable(selected = selected, interactionSource = touch, indication = null, role = Role.RadioButton) {
                 if (!selected) tick()
                 onClick()
             }
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+            .heightIn(min = 48.dp)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.size(22.dp).border(2.dp, ring, CircleShape), contentAlignment = Alignment.Center) {
-            Box(Modifier.size(dot).clip(CircleShape).background(palette.accent))
+        Text(label, color = apple.words, fontSize = 16.sp, modifier = Modifier.weight(1f))
+        AnimatedVisibility(visible = selected, enter = popIn(reduced, millis = 160), exit = popOut(reduced, millis = 100)) {
+            Icon(Icons.Rounded.Check, contentDescription = null, tint = accent, modifier = Modifier.size(22.dp))
         }
-        Spacer(Modifier.width(14.dp))
-        Text(label, color = palette.onGlass, fontSize = 15.sp)
     }
 }
 
@@ -662,10 +758,10 @@ internal fun PaletteGrid(
             PaletteDot(option.name, listOf(option.accent, option.accentAlt), selected = option.id == selectedId, turn = index) { onSelect(option) }
         }
         if (onMake != null) {
-            val palette = LocalPalette.current
+            val grey = LocalApple.current.grey
             PaletteDot(
                 "Your own",
-                listOf(palette.onGlass.copy(alpha = 0.14f), palette.onGlass.copy(alpha = 0.14f)),
+                listOf(grey, grey),
                 selected = false,
                 turn = options.size,
                 icon = Icons.Rounded.Add,
@@ -677,7 +773,7 @@ internal fun PaletteGrid(
 
 @Composable
 private fun PaletteDot(name: String, colours: List<Color>, selected: Boolean, turn: Int, icon: ImageVector? = null, onClick: () -> Unit) {
-    val palette = LocalPalette.current
+    val apple = LocalApple.current
     val tick = rememberTick()
     // As the page arrives the dots pop up one after another, like a row of lights coming on.
     val arrival = LocalSettingsRise.current
@@ -686,7 +782,7 @@ private fun PaletteDot(name: String, colours: List<Color>, selected: Boolean, tu
     } else {
         Modifier
     }
-    val ring by animateColorAsState(if (selected) palette.onGlass else Color.Transparent, tween(220), label = "dotRing")
+    val ring by animateColorAsState(if (selected) apple.words else Color.Transparent, tween(220), label = "dotRing")
     val inner by animateDpAsState(if (selected) 34.dp else 40.dp, spring(dampingRatio = 0.7f, stiffness = 420f), label = "dotInner")
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -707,13 +803,13 @@ private fun PaletteDot(name: String, colours: List<Color>, selected: Boolean, tu
                     .background(Brush.linearGradient(colours)),
                 contentAlignment = Alignment.Center,
             ) {
-                if (icon != null) Icon(icon, contentDescription = null, tint = palette.onGlass, modifier = Modifier.size(20.dp))
+                if (icon != null) Icon(icon, contentDescription = null, tint = apple.words, modifier = Modifier.size(20.dp))
             }
         }
         Spacer(Modifier.height(5.dp))
         Text(
             name,
-            color = if (selected) palette.onGlass else palette.onGlassMuted,
+            color = if (selected) apple.words else apple.secondary,
             fontSize = 11.sp,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
             maxLines = 1,
@@ -725,10 +821,11 @@ private fun PaletteDot(name: String, colours: List<Color>, selected: Boolean, tu
 /** An icon shape shown as the shape itself, so there is nothing to imagine. */
 @Composable
 internal fun ShapeChoice(id: String, selected: Boolean, onClick: () -> Unit) {
+    val apple = LocalApple.current
     val palette = LocalPalette.current
     val tick = rememberTick()
     val fill by animateColorAsState(
-        if (selected) palette.accent else palette.onGlass.copy(alpha = 0.16f),
+        if (selected) palette.accent else apple.grey,
         tween(220),
         label = "shapeFill",
     )
@@ -756,7 +853,7 @@ internal fun ShapeChoice(id: String, selected: Boolean, onClick: () -> Unit) {
         Spacer(Modifier.height(6.dp))
         Text(
             IconShapes.label(id),
-            color = if (selected) palette.onGlass else palette.onGlassMuted,
+            color = if (selected) apple.words else apple.secondary,
             fontSize = 12.sp,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
         )

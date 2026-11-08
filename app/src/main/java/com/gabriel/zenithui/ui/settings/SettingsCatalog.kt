@@ -1,5 +1,7 @@
 package com.gabriel.zenithui.ui.settings
 
+import androidx.compose.ui.graphics.Color
+
 /** The groups on the first page of Settings. Zenith Plus opens a sheet of its own, not a page. */
 enum class SettingsPage(val title: String, val opensSheet: Boolean = false) {
     Theme("Wallpaper & theme"),
@@ -17,6 +19,33 @@ enum class SettingsPage(val title: String, val opensSheet: Boolean = false) {
     Account("Account"),
     Backup("Backup & reset"),
     About("About & help"),
+}
+
+/** The page Back goes to from this one: the page it is part of, or null for the first page of Settings. */
+internal val SettingsPage.parent: SettingsPage?
+    get() = if (this == SettingsPage.AdvancedMotion) SettingsPage.Motion else null
+
+/** What Back on [page] says, as an iPhone's does: the name of where it goes. */
+internal fun backTo(page: SettingsPage): String = page.parent?.title ?: "Settings"
+
+/**
+ * The colour of a group's square on the first page, as an iPhone gives each row of Settings a colour
+ * of its own: Apple's colours, the orange, teal, green and cyan taken deeper so that the white
+ * symbol on them stands three to one (`SettingsPageTest`).
+ */
+internal fun SettingsPage.tile(): Color = when (this) {
+    SettingsPage.Theme -> Color(0xFF5856D6)
+    SettingsPage.Home -> Color(0xFF007AFF)
+    SettingsPage.Motion, SettingsPage.AdvancedMotion -> Color(0xFFFF2D55)
+    SettingsPage.Gestures -> Color(0xFFAF52DE)
+    SettingsPage.Apps -> Color(0xFF008299)
+    SettingsPage.Plus -> Color(0xFFD96C00)
+    SettingsPage.Island -> Color(0xFF48484A)
+    SettingsPage.Looks -> Color(0xFF0071A4)
+    SettingsPage.Aura -> Color(0xFFFF3B30)
+    SettingsPage.Account -> Color(0xFFA2845E)
+    SettingsPage.Backup -> Color(0xFF248A3D)
+    SettingsPage.About -> Color(0xFF8E8E93)
 }
 
 /**

@@ -33,6 +33,19 @@ data class AppleSurfaces(
     val grey: Color,
     /** A notification badge. */
     val badge: Color,
+    /** A row under a finger, for as long as it is held: Apple's shade, in place of a bounce. */
+    val pressed: Color,
+    /** The raised pill of a segmented control, standing on its grey track. */
+    val pill: Color,
+    /**
+     * The fill of the search field and the track of a segmented control. It is see-through, so it
+     * is a shade deeper than whatever it lies on, a card or the page.
+     */
+    val field: Color,
+    /** Words for what cannot be undone: start again, take it away. */
+    val danger: Color,
+    /** A row's chevron, and marks quieter still than a second line. */
+    val faint: Color,
 )
 
 object AppleColours {
@@ -47,6 +60,11 @@ object AppleColours {
         separator = Color(0xFF38383A),
         grey = Color(0xFF787880).copy(alpha = 0.36f),
         badge = Color(0xFFFF453A),
+        pressed = Color(0xFF3A3A3C),
+        pill = Color(0xFF636366),
+        field = Color(0xFF767680).copy(alpha = 0.24f),
+        danger = Color(0xFFFF453A),
+        faint = Color(0xFFEBEBF5).copy(alpha = 0.3f),
     )
 
     val Light = AppleSurfaces(
@@ -59,6 +77,11 @@ object AppleColours {
         separator = Color(0xFFC6C6C8),
         grey = Color(0xFF787880).copy(alpha = 0.20f),
         badge = Color(0xFFFF3B30),
+        pressed = Color(0xFFD1D1D6),
+        pill = Color.White,
+        field = Color(0xFF767680).copy(alpha = 0.12f),
+        danger = Color(0xFFFF3B30),
+        faint = Color(0xFF3C3C43).copy(alpha = 0.3f),
     )
 
     fun of(dark: Boolean): AppleSurfaces = if (dark) Dark else Light
@@ -117,6 +140,33 @@ fun AppleColours.underWhite(colour: Color): Color {
 
 /** How far words stand from what they are written on, at the least. */
 const val WORDS_CONTRAST = 4.5f
+
+/** The three kinds of button an iPhone has. */
+enum class ButtonKind {
+    /** The one that does the thing (Continue, Set wallpaper, Done): a solid pill of the accent. */
+    Main,
+
+    /** A second choice (Not now, Keep it, Clear): a grey pill, its words in the words' colour. */
+    Grey,
+
+    /** A small action: words in the accent, with nothing behind them. */
+    Plain,
+}
+
+/** What a button is filled with, and the colour of its words. */
+@Immutable
+data class ButtonColours(val fill: Color, val words: Color)
+
+/**
+ * A button of [kind] in the light or dark of [surfaces], for a palette whose accent, as the
+ * interface draws it, is [accent]. A main button's words take the ink the accent needs
+ * ([inkOnTint]): white on blue, near-black on yellow.
+ */
+fun AppleColours.button(kind: ButtonKind, accent: Color, surfaces: AppleSurfaces): ButtonColours = when (kind) {
+    ButtonKind.Main -> ButtonColours(fill = accent, words = inkOnTint(accent))
+    ButtonKind.Grey -> ButtonColours(fill = surfaces.grey, words = surfaces.words)
+    ButtonKind.Plain -> ButtonColours(fill = Color.Transparent, words = accent)
+}
 
 /** The colours of the light or the dark in use, for anything drawn solid. */
 val LocalApple = staticCompositionLocalOf { AppleColours.Dark }

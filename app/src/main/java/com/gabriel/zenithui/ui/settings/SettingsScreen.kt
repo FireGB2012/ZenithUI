@@ -506,22 +506,6 @@ private fun SettingsPage.icon(): ImageVector = when (this) {
     SettingsPage.About -> Icons.Rounded.Info
 }
 
-private fun SettingsPage.tile(): List<Color> = when (this) {
-    SettingsPage.Theme -> listOf(Color(0xFF8B7CFF), Color(0xFF5B8CFF))
-    SettingsPage.Home -> listOf(Color(0xFF2FC9A6), Color(0xFF1C9C8B))
-    SettingsPage.Motion -> listOf(Color(0xFFFF7AB6), Color(0xFFE2559A))
-    SettingsPage.AdvancedMotion -> listOf(Color(0xFFFF7AB6), Color(0xFFE2559A))
-    SettingsPage.Gestures -> listOf(Color(0xFFB08CFF), Color(0xFF7D5CF0))
-    SettingsPage.Apps -> listOf(Color(0xFF4FB3FF), Color(0xFF2F7FE6))
-    SettingsPage.Plus -> listOf(Color(0xFFFFD36B), Color(0xFFF5A623))
-    SettingsPage.Island -> listOf(Color(0xFF4A4A58), Color(0xFF0E0E14))
-    SettingsPage.Looks -> listOf(Color(0xFF6BD6FF), Color(0xFF7C6CFF))
-    SettingsPage.Aura -> listOf(Color(0xFFFF9F5A), Color(0xFFFF6A4D))
-    SettingsPage.Account -> listOf(Color(0xFFC77DFF), Color(0xFF9D4EDD))
-    SettingsPage.Backup -> listOf(Color(0xFF7BC96F), Color(0xFF4CA65A))
-    SettingsPage.About -> listOf(Color(0xFF9AA3B2), Color(0xFF6B7384))
-}
-
 /** How a group is set right now, in a line: what the first page is for. */
 private fun summary(page: SettingsPage, settings: ZenithSettings, plus: PlusStatus, isHome: Boolean, signed: Signed?): String = when (page) {
     SettingsPage.Theme -> {

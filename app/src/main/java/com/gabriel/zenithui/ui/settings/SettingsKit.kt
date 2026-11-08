@@ -208,7 +208,7 @@ internal fun Note(text: String, modifier: Modifier = Modifier) {
  * the new one.
  */
 @Composable
-internal fun NavRow(icon: ImageVector, tile: List<Color>, title: String, summary: String, onClick: () -> Unit) {
+internal fun NavRow(icon: ImageVector, tile: Color, title: String, summary: String, onClick: () -> Unit) {
     val palette = LocalPalette.current
     val touch = remember { MutableInteractionSource() }
     val pressed by touch.collectIsPressedAsState()
@@ -233,7 +233,7 @@ internal fun NavRow(icon: ImageVector, tile: List<Color>, title: String, summary
                     rotationZ = -9f * lean.value
                 }
                 .clip(RoundedCornerShape(11.dp))
-                .background(Brush.linearGradient(tile)),
+                .background(tile),
             contentAlignment = Alignment.Center,
         ) {
             Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
@@ -514,6 +514,40 @@ internal fun PillSlider(
             )
         }
     }
+}
+
+/**
+ * Where a slider's knob is drawn for a value, and which value is under a finger. As on an iPhone
+ * the knob never hangs over the ends of its track: its middle travels from a knob's radius inside
+ * one end to a knob's radius inside the other, and a touch is read along that same stretch, so the
+ * knob lands under the finger. Widths are in pixels.
+ */
+internal object SliderGeometry {
+
+    /** The middle of the knob, [fraction] of the way along a track [width] across. */
+    fun knobCentre(fraction: Float, width: Float, knob: Float): Float {
+        val travel = width - knob
+        if (travel <= 0f) return width / 2f
+        return knob / 2f + travel * fraction.coerceIn(0f, 1f)
+    }
+
+    /** How far along, 0 to 1, a touch at [x] puts the knob. */
+    fun fractionAt(x: Float, width: Float, knob: Float): Float {
+        val travel = width - knob
+        if (travel <= 0f) return 0f
+        return ((x - knob / 2f) / travel).coerceIn(0f, 1f)
+    }
+
+    /** How far along [range] a [value] is, 0 to 1. */
+    fun fraction(value: Float, range: ClosedFloatingPointRange<Float>): Float {
+        val span = range.endInclusive - range.start
+        if (span <= 0f) return 0f
+        return ((value - range.start) / span).coerceIn(0f, 1f)
+    }
+
+    /** The value [fraction] of the way along [range]. */
+    fun value(fraction: Float, range: ClosedFloatingPointRange<Float>): Float =
+        range.start + (range.endInclusive - range.start) * fraction.coerceIn(0f, 1f)
 }
 
 /**

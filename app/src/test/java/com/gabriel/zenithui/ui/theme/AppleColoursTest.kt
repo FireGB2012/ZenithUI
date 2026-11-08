@@ -1,6 +1,7 @@
 package com.gabriel.zenithui.ui.theme
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.luminance
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -78,6 +79,71 @@ class AppleColoursTest {
         val stands = contrast(Color.White, under)
         assertTrue("$stands", stands in 4.5f..4.65f)
         assertTrue(under.luminance() < pale.luminance())
+    }
+
+    @Test
+    fun `words and second lines stand four and a half to one on a pressed row and in the search field`() {
+        for (s in both) {
+            val grounds = listOf(
+                "a pressed row" to s.pressed,
+                "the field on the page" to s.field.compositeOver(s.page),
+                "the field on a card" to s.field.compositeOver(s.card),
+            )
+            for ((name, ground) in grounds) {
+                assertTrue("words on $name, dark=${s.dark}", contrast(s.words, ground) >= 4.5f)
+                assertTrue("second line on $name, dark=${s.dark}", contrast(s.secondary, ground) >= 4.5f)
+            }
+        }
+    }
+
+    @Test
+    fun `words stand four and a half to one on the segmented control's pill`() {
+        for (s in both) {
+            assertTrue("dark=${s.dark}", contrast(s.words, s.pill) >= 4.5f)
+        }
+    }
+
+    @Test
+    fun `a main button is the accent, its words standing three to one on it, for every palette`() {
+        // Three, not four and a half: Apple's own white on its blue is four to one, and these
+        // words are large and heavy.
+        for (palette in every) {
+            for (dark in listOf(true, false)) {
+                val s = AppleColours.of(dark)
+                val accent = AppleColours.accent(palette, dark)
+                val main = AppleColours.button(ButtonKind.Main, accent, s)
+                assertEquals(accent, main.fill)
+                assertTrue("${palette.id} dark=$dark", contrast(main.words, main.fill) >= 3f)
+            }
+        }
+    }
+
+    @Test
+    fun `a grey button's words stand four and a half to one on it, over a card and over the page`() {
+        for (s in both) {
+            val grey = AppleColours.button(ButtonKind.Grey, AppleColours.accent(Palettes.Frost, s.dark), s)
+            for (ground in listOf(s.card, s.page)) {
+                assertTrue("dark=${s.dark}", contrast(grey.words, grey.fill.compositeOver(ground)) >= 4.5f)
+            }
+        }
+    }
+
+    @Test
+    fun `a plain button is the accent's words with nothing behind them`() {
+        for (s in both) {
+            val accent = AppleColours.accent(Palettes.Frost, s.dark)
+            val plain = AppleColours.button(ButtonKind.Plain, accent, s)
+            assertEquals(accent, plain.words)
+            assertEquals(0f, plain.fill.alpha, 0f)
+        }
+    }
+
+    @Test
+    fun `words that undo something stand three to one on a card and on the page`() {
+        for (s in both) {
+            assertTrue("card, dark=${s.dark}", contrast(s.danger, s.card) >= 3f)
+            assertTrue("page, dark=${s.dark}", contrast(s.danger, s.page) >= 3f)
+        }
     }
 
     @Test

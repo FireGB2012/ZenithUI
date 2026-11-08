@@ -65,7 +65,7 @@ import com.gabriel.zenithui.data.ROW_UNITS
 import com.gabriel.zenithui.data.SettingsStore
 import com.gabriel.zenithui.data.ShortcutCell
 import com.gabriel.zenithui.data.ZenithWidgetHost
-import com.gabriel.zenithui.ui.common.GlassButton
+import com.gabriel.zenithui.ui.common.ZenithButton
 import com.gabriel.zenithui.ui.common.LocalMotionLevel
 import com.gabriel.zenithui.ui.common.Motion
 import com.gabriel.zenithui.ui.common.MotionLevel
@@ -328,8 +328,8 @@ private fun PinCard(card: Card, shape: Shape, closing: Boolean, onGone: () -> Un
                 }
                 Spacer(Modifier.height(20.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    GlassButton(text = "Not now", onClick = { shown.targetState = false }, modifier = Modifier.weight(1f))
-                    GlassButton(
+                    ZenithButton(text = "Not now", onClick = { shown.targetState = false }, modifier = Modifier.weight(1f))
+                    ZenithButton(
                         text = "Add",
                         filled = true,
                         onClick = { if (card.add()) shown.targetState = false },

@@ -59,8 +59,8 @@ import com.gabriel.zenithui.data.CalendarAccess
 import com.gabriel.zenithui.data.CalendarEvent
 import com.gabriel.zenithui.data.CalendarRepository
 import com.gabriel.zenithui.data.findActivity
-import com.gabriel.zenithui.ui.common.GlassButton
-import com.gabriel.zenithui.ui.common.GlassButtonStyle
+import com.gabriel.zenithui.ui.common.ZenithButton
+import com.gabriel.zenithui.ui.theme.ButtonKind
 import com.gabriel.zenithui.ui.theme.GlassMotion
 import com.gabriel.zenithui.ui.common.appearIn
 import com.gabriel.zenithui.ui.common.pressBounce
@@ -304,7 +304,7 @@ private fun CalendarOffer(
         }
         Spacer(Modifier.height(10.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
-            GlassButton(text = action, onClick = onAction, style = GlassButtonStyle.Clear, motion = GlassMotion.Lean)
+            ZenithButton(text = action, onClick = onAction, kind = ButtonKind.Grey)
             Spacer(Modifier.width(8.dp))
             Text(
                 text = "Not now",

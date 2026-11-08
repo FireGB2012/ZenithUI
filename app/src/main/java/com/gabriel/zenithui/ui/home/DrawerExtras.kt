@@ -70,7 +70,7 @@ import com.gabriel.zenithui.data.DrawerTab
 import com.gabriel.zenithui.data.SettingsLinks
 import com.gabriel.zenithui.data.Units
 import com.gabriel.zenithui.ui.common.AppIcon
-import com.gabriel.zenithui.ui.common.GlassButton
+import com.gabriel.zenithui.ui.common.ZenithButton
 import com.gabriel.zenithui.ui.common.LocalMotionLevel
 import com.gabriel.zenithui.ui.common.Motion
 import com.gabriel.zenithui.ui.common.SectionLabel
@@ -457,8 +457,8 @@ fun DrawerTabSheet(
         }
         Spacer(Modifier.height(10.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            if (onDelete != null) GlassButton(text = "Remove tab", onClick = onDelete, modifier = Modifier.weight(1f))
-            GlassButton(
+            if (onDelete != null) ZenithButton(text = "Remove tab", onClick = onDelete, modifier = Modifier.weight(1f))
+            ZenithButton(
                 text = if (tab == null) "Make tab" else "Save",
                 filled = true,
                 enabled = name.isNotBlank(),

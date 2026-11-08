@@ -57,7 +57,7 @@ import com.gabriel.zenithui.data.AppInfo
 import com.gabriel.zenithui.data.HomeItem
 import com.gabriel.zenithui.data.LayoutBuilder
 import com.gabriel.zenithui.data.ZenithSettings
-import com.gabriel.zenithui.ui.common.GlassButton
+import com.gabriel.zenithui.ui.common.ZenithButton
 import com.gabriel.zenithui.ui.common.LocalMotionLevel
 import com.gabriel.zenithui.ui.common.Motion
 import com.gabriel.zenithui.ui.common.appearIn
@@ -155,8 +155,8 @@ fun PageOverview(
                         )
                         Spacer(Modifier.height(12.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            GlassButton(text = "Keep it", onClick = { asking = null }, modifier = Modifier.weight(1f))
-                            GlassButton(text = "Take it away", filled = true, onClick = {
+                            ZenithButton(text = "Keep it", onClick = { asking = null }, modifier = Modifier.weight(1f))
+                            ZenithButton(text = "Take it away", filled = true, onClick = {
                                 onRemove(page)
                                 asking = null
                             }, modifier = Modifier.weight(1f))

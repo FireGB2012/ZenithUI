@@ -55,7 +55,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.gabriel.zenithui.data.Place
 import com.gabriel.zenithui.data.WorldClocks
-import com.gabriel.zenithui.ui.common.GlassButton
+import com.gabriel.zenithui.ui.common.ZenithButton
 import com.gabriel.zenithui.ui.common.LocalMotionLevel
 import com.gabriel.zenithui.ui.common.SectionLabel
 import com.gabriel.zenithui.ui.common.appearIn
@@ -267,10 +267,10 @@ fun CountdownSheet(
         }
         Row(Modifier.padding(top = 6.dp)) {
             if (day > 0) {
-                GlassButton(text = "Clear", onClick = onClear, modifier = Modifier.weight(1f))
+                ZenithButton(text = "Clear", onClick = onClear, modifier = Modifier.weight(1f))
                 Spacer(Modifier.width(10.dp))
             }
-            GlassButton(
+            ZenithButton(
                 text = "Count down",
                 filled = true,
                 enabled = state.selectedDateMillis != null,

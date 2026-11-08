@@ -54,7 +54,7 @@ import com.gabriel.zenithui.R
 import com.gabriel.zenithui.data.DayParts
 import com.gabriel.zenithui.data.GlassTuning
 import com.gabriel.zenithui.data.LookSchedule
-import com.gabriel.zenithui.ui.common.GlassButton
+import com.gabriel.zenithui.ui.common.ZenithButton
 import com.gabriel.zenithui.ui.common.LocalMotionLevel
 import com.gabriel.zenithui.ui.common.SectionLabel
 import com.gabriel.zenithui.ui.common.appearIn
@@ -141,7 +141,7 @@ fun GlassStudioSheet(visible: Boolean, tuning: GlassTuning, onChange: (GlassTuni
             }
         }
         Spacer(Modifier.height(12.dp))
-        GlassButton(text = "Reset to Zenith's glass", enabled = !tuning.isDefault, onClick = { onChange(GlassTuning()) }, modifier = Modifier.fillMaxWidth())
+        ZenithButton(text = "Reset to Zenith's glass", enabled = !tuning.isDefault, onClick = { onChange(GlassTuning()) }, modifier = Modifier.fillMaxWidth())
     }
 }
 
@@ -259,7 +259,7 @@ fun DayPaletteSheet(
             }
         }
         Spacer(Modifier.height(10.dp))
-        GlassButton(text = "Turn it off", enabled = chosen.isNotEmpty(), onClick = { onChange(emptyMap()) }, modifier = Modifier.fillMaxWidth())
+        ZenithButton(text = "Turn it off", enabled = chosen.isNotEmpty(), onClick = { onChange(emptyMap()) }, modifier = Modifier.fillMaxWidth())
     }
 }
 
@@ -334,7 +334,7 @@ fun WidgetColourSheet(visible: Boolean, current: Long, onPick: (Long) -> Unit, o
             }
         }
         Spacer(Modifier.height(12.dp))
-        GlassButton(text = "Done", filled = true, onClick = onDismiss, modifier = Modifier.fillMaxWidth())
+        ZenithButton(text = "Done", filled = true, onClick = onDismiss, modifier = Modifier.fillMaxWidth())
     }
 }
 

@@ -74,7 +74,7 @@ import com.gabriel.zenithui.data.AppInfo
 import com.gabriel.zenithui.data.Plus
 import com.gabriel.zenithui.data.PlusStatus
 import com.gabriel.zenithui.data.ZenithSettings
-import com.gabriel.zenithui.ui.common.GlassButton
+import com.gabriel.zenithui.ui.common.ZenithButton
 import com.gabriel.zenithui.ui.common.SectionLabel
 import com.gabriel.zenithui.ui.common.AppIcon
 import com.gabriel.zenithui.ui.common.LocalMotionLevel
@@ -150,7 +150,7 @@ fun PlusSheet(
 
             if (!status.lifetime) {
                 if (status.trialAvailable) {
-                    GlassButton(
+                    ZenithButton(
                         text = "Start my ${Plus.TRIAL_DAYS} free days",
                         onClick = onStartTrial,
                         filled = true,
@@ -218,7 +218,7 @@ fun PlusSheet(
                             digitsOnly = false,
                             modifier = Modifier.shake(refusals),
                         )
-                        GlassButton(
+                        ZenithButton(
                             text = "Redeem",
                             onClick = {
                                 val ok = onRedeem(code)
@@ -544,7 +544,7 @@ fun ThemeMakerSheet(
                 enter = unfoldIn(LocalMotionLevel.current.reduced),
                 exit = unfoldOut(LocalMotionLevel.current.reduced),
             ) {
-                GlassButton(
+                ZenithButton(
                     text = "Use my theme",
                     onClick = { onChange { it.copy(paletteId = Palettes.CUSTOM) } },
                     modifier = Modifier.fillMaxWidth(),
@@ -725,7 +725,7 @@ fun HiddenAppsSheet(
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text("Enter your PIN to see the list.", color = palette.onGlassMuted, fontSize = 13.sp)
                     PinField(value = entry, onChange = { entry = it }, modifier = Modifier.shake(refusals))
-                    GlassButton(
+                    ZenithButton(
                         text = "Unlock",
                         onClick = {
                             if (entry == settings.hiddenPin) {
@@ -757,7 +757,7 @@ fun HiddenAppsSheet(
                             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                 PinField(value = entry, onChange = { entry = it })
                                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    GlassButton(
+                                    ZenithButton(
                                         text = if (entry.isBlank()) "Remove PIN" else "Save PIN",
                                         onClick = {
                                             onSetPin(entry)

@@ -94,7 +94,7 @@ first three parts. Sheets, the drawer and "Add to home screen" are step 4.
 
 ### Part 5: the buttons
 
-- [ ] `ZenithButton` (Main with the Jelly squish, Grey, Plain); every `GlassButton` moved over;
+- [x] `ZenithButton` (Main with the Jelly squish, Grey, Plain); every `GlassButton` moved over;
   `PrimaryButton` and `QuietButton` drawn by it.
 
 ### Part 6: check and ship

@@ -42,13 +42,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.gabriel.zenithui.ui.common.pressBounce
-import com.gabriel.zenithui.ui.theme.GlassMaterial
-import com.gabriel.zenithui.ui.theme.GlassMotion
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.ZenithShapes
-import com.gabriel.zenithui.ui.theme.glass
-import com.gabriel.zenithui.ui.theme.inkOnTint
 import kotlinx.coroutines.delay
+import com.gabriel.zenithui.ui.theme.ButtonKind
+import com.gabriel.zenithui.ui.common.ZenithButton
 
 /** How far a piece of a screen travels as it arrives, and the beat between neighbours. */
 private val RISE_DISTANCE = 14.dp
@@ -133,56 +131,19 @@ fun Lede(text: String, modifier: Modifier = Modifier) {
 }
 
 /**
- * The one button that moves you on: a pill of the accent's tinted glass, bending the wallpaper at
- * its rim, that squishes under a finger and wobbles back, its label swapping in place when what it
- * will do changes. The glass draws its own rim and sheen.
+ * The one button that moves you on, full width: Apple's main button, a solid pill of the accent
+ * that squishes under a finger and wobbles back, its label swapping in place when what it will do
+ * changes ([ZenithButton]).
  */
 @Composable
 fun PrimaryButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    val palette = LocalPalette.current
-    val fill by animateColorAsState(palette.accent, tween(420), label = "buttonFill")
-    // Dark text on anything lighter than a mid tone: white on Sunset's orange was hard to read.
-    val ink = inkOnTint(fill)
-    Box(
-        modifier
-            .fillMaxWidth()
-            .height(56.dp)
-            .glass(
-                ZenithShapes.pill,
-                tint = fill,
-                material = GlassMaterial.Clear,
-                tinted = true,
-                motion = GlassMotion.Jelly,
-            )
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        AnimatedContent(
-            targetState = text,
-            transitionSpec = { fadeIn(tween(200, delayMillis = 60)).togetherWith(fadeOut(tween(120))) },
-            label = "buttonLabel",
-        ) { label ->
-            Text(label, color = ink, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, letterSpacing = (-0.2).sp)
-        }
-    }
+    ZenithButton(text = text, onClick = onClick, modifier = modifier.fillMaxWidth(), kind = ButtonKind.Main)
 }
 
-/** The quiet way out: plain text, full width, easy to hit. */
+/** The quiet way out, full width and easy to hit: words in the accent, as an iPhone's "Not Now" is. */
 @Composable
 fun QuietButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    Text(
-        text = text,
-        color = LocalPalette.current.onGlass.copy(alpha = 0.72f),
-        fontSize = 15.sp,
-        fontWeight = FontWeight.Medium,
-        textAlign = TextAlign.Center,
-        modifier = modifier
-            .fillMaxWidth()
-            .pressBounce(0.97f)
-            .clip(RoundedCornerShape(18.dp))
-            .clickable(onClick = onClick)
-            .padding(vertical = 14.dp),
-    )
+    ZenithButton(text = text, onClick = onClick, modifier = modifier.fillMaxWidth(), kind = ButtonKind.Plain)
 }
 
 /** Where you are in setup: a few short marks, the current one longer and lit. */

@@ -72,6 +72,19 @@ import com.gabriel.zenithui.ui.theme.glass
 import com.gabriel.zenithui.ui.theme.inkOnTint
 import kotlin.math.cos
 import kotlin.math.sin
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.semantics.Role
+import com.gabriel.zenithui.ui.theme.AppleColours
+import com.gabriel.zenithui.ui.theme.ButtonKind
+import com.gabriel.zenithui.ui.theme.button
+import com.gabriel.zenithui.ui.theme.glassPress
 
 val LocalIconLoader = staticCompositionLocalOf<IconLoader> { error("IconLoader not provided") }
 
@@ -364,63 +377,72 @@ private fun PlainIcon(key: String, label: String, size: Dp, px: Int, shape: Shap
     }
 }
 
+/**
+ * A button as an iPhone draws one, in one of its three kinds ([ButtonKind]): the main one (Continue,
+ * Set wallpaper, Done) a solid pill of the accent, its words in the ink the accent needs, that
+ * squishes under a finger and wobbles back (Jelly); a second choice (Not now, Keep it, Clear) a
+ * grey pill that gives a little (Flex); a small action words in the accent, that dim while held.
+ * When what it says changes, the words cross-fade where they stand; when the palette changes, its
+ * colour moves to the new one.
+ */
 @Composable
-fun GlassButton(
+fun ZenithButton(
     text: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
-    /** The button that does the thing: tinted glass. Kept for older callers; [style] says the same. */
+    /** The button that does the thing. Kept for older callers; [kind] says the same. */
     filled: Boolean = false,
+    kind: ButtonKind = if (filled) ButtonKind.Main else ButtonKind.Grey,
     leading: (@Composable () -> Unit)? = null,
-    style: GlassButtonStyle = if (filled) GlassButtonStyle.Tinted else GlassButtonStyle.Regular,
-    motion: GlassMotion = if (style == GlassButtonStyle.Tinted) GlassMotion.Jelly else GlassMotion.Flex,
 ) {
-    val palette = LocalPalette.current
-    val contentAlpha = if (enabled) 1f else 0.4f
-    val tinted = style == GlassButtonStyle.Tinted
+    val colours = AppleColours.button(kind, LocalPalette.current.accent, LocalApple.current)
+    val fill by animateColorAsState(colours.fill, tween(420), label = "buttonFill")
+    val words by animateColorAsState(colours.words, tween(420), label = "buttonWords")
+    val plain = kind == ButtonKind.Plain
+    val touch = remember { MutableInteractionSource() }
+    val pressed by touch.collectIsPressedAsState()
     Box(
         modifier = modifier
-            .height(56.dp)
-            .graphicsLayer { alpha = contentAlpha }
-            .glass(
-                ZenithShapes.pill,
-                tint = if (tinted) palette.accent else Color.Unspecified,
-                strength = if (tinted) 1f else 0.9f,
-                material = if (style == GlassButtonStyle.Regular) GlassMaterial.Regular else GlassMaterial.Clear,
-                tinted = tinted,
-                motion = motion,
-                pressEnabled = enabled,
+            .then(if (plain) Modifier.heightIn(min = 44.dp) else Modifier.height(54.dp))
+            .graphicsLayer { alpha = (if (enabled) 1f else 0.4f) * (if (plain && pressed) 0.4f else 1f) }
+            .then(
+                when (kind) {
+                    ButtonKind.Main -> Modifier.glassPress(GlassMotion.Jelly, enabled)
+                    ButtonKind.Grey -> Modifier.glassPress(GlassMotion.Flex, enabled)
+                    ButtonKind.Plain -> Modifier
+                }
             )
-            .clickable(enabled = enabled, onClick = onClick),
+            .clip(ZenithShapes.pill)
+            .background(fill)
+            .clickable(interactionSource = touch, indication = null, enabled = enabled, role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        val contentColor = if (tinted) inkOnTint(palette.accent) else palette.onGlass
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
-            modifier = Modifier.padding(horizontal = 28.dp),
+            modifier = Modifier.padding(horizontal = if (plain) 12.dp else 26.dp),
         ) {
-            CompositionLocalProvider(LocalContentColor provides contentColor) {
+            CompositionLocalProvider(LocalContentColor provides words) {
                 leading?.invoke()
-                Text(
-                    text = text,
-                    color = contentColor,
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 16.sp,
-                    textAlign = TextAlign.Center,
-                )
+                AnimatedContent(
+                    targetState = text,
+                    transitionSpec = { fadeIn(tween(200, delayMillis = 60)).togetherWith(fadeOut(tween(120))) },
+                    label = "buttonWords",
+                ) { label ->
+                    Text(
+                        text = label,
+                        color = words,
+                        fontWeight = if (plain) FontWeight.Medium else FontWeight.SemiBold,
+                        fontSize = if (plain) 16.sp else 17.sp,
+                        letterSpacing = (-0.2).sp,
+                        textAlign = TextAlign.Center,
+                    )
+                }
             }
         }
     }
 }
-
-/**
- * The three glasses a [GlassButton] is made of. Regular frosts what is behind it, for buttons in
- * sheets; Clear only mists it, for a button over the wallpaper or the dark; Tinted is the accent's
- * glass, for the one that does the thing.
- */
-enum class GlassButtonStyle { Regular, Clear, Tinted }
 
 /** The heading over a block of a page: small capitals, spaced out, in the muted ink. */
 @Composable

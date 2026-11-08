@@ -124,7 +124,7 @@ import com.gabriel.zenithui.data.StackCell
 import com.gabriel.zenithui.data.LockService
 import com.gabriel.zenithui.data.SystemPanels
 import com.gabriel.zenithui.data.Torch
-import com.gabriel.zenithui.ui.common.GlassButton
+import com.gabriel.zenithui.ui.common.ZenithButton
 import com.gabriel.zenithui.ui.common.staggerDelay
 import kotlinx.coroutines.flow.map
 import com.gabriel.zenithui.data.DropPlanner
@@ -2952,8 +2952,8 @@ private fun LockHelperSheet(visible: Boolean, onOpen: () -> Unit, onDismiss: () 
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             modifier = Modifier.appearIn(delayMillis = staggerDelay(2), riseFrom = 18f),
         ) {
-            GlassButton(text = "Not now", onClick = onDismiss, modifier = Modifier.weight(1f))
-            GlassButton(
+            ZenithButton(text = "Not now", onClick = onDismiss, modifier = Modifier.weight(1f))
+            ZenithButton(
                 text = "Open settings",
                 filled = true,
                 onClick = {

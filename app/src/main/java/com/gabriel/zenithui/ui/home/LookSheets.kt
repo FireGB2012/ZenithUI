@@ -59,7 +59,7 @@ import androidx.compose.ui.unit.sp
 import com.gabriel.zenithui.data.Look
 import com.gabriel.zenithui.data.LookRule
 import com.gabriel.zenithui.data.LookSchedule
-import com.gabriel.zenithui.ui.common.GlassButton
+import com.gabriel.zenithui.ui.common.ZenithButton
 import com.gabriel.zenithui.ui.common.LocalMotionLevel
 import com.gabriel.zenithui.ui.common.SectionLabel
 import com.gabriel.zenithui.ui.common.appearIn
@@ -111,7 +111,7 @@ fun LookNameSheet(visible: Boolean, title: String, initial: String, action: Stri
     ZenithSheet(visible = visible, onDismiss = onDismiss, title = title) {
         LineField(name, "Its name: Night, Work, Summer", { name = it.take(30) })
         Spacer(Modifier.height(16.dp))
-        GlassButton(text = action, filled = true, enabled = name.isNotBlank(), onClick = { onSave(name) }, modifier = Modifier.fillMaxWidth())
+        ZenithButton(text = action, filled = true, enabled = name.isNotBlank(), onClick = { onSave(name) }, modifier = Modifier.fillMaxWidth())
     }
 }
 
@@ -305,7 +305,7 @@ fun LookRuleSheet(visible: Boolean, looks: List<Look>, onAdd: (LookRule) -> Unit
             modifier = Modifier.padding(horizontal = 6.dp),
         )
         Spacer(Modifier.height(16.dp))
-        GlassButton(
+        ZenithButton(
             text = "Add",
             filled = true,
             enabled = chosen != null && start != end,
@@ -367,7 +367,7 @@ fun LookCodeSheet(visible: Boolean, initial: String, open: suspend (String) -> S
             Text(problem.orEmpty(), color = Color(0xFFFF6B6B), fontSize = 13.sp, modifier = Modifier.padding(horizontal = 6.dp, vertical = 8.dp))
         }
         Spacer(Modifier.height(16.dp))
-        GlassButton(
+        ZenithButton(
             text = if (opening) "Opening…" else "Open",
             filled = true,
             enabled = !opening && code.count { it.isLetterOrDigit() } >= 6,

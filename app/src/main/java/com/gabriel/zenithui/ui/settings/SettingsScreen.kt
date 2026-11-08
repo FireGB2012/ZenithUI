@@ -1,5 +1,9 @@
 package com.gabriel.zenithui.ui.settings
 
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material.icons.rounded.Cancel
+import com.gabriel.zenithui.ui.theme.LocalApple
 import android.app.role.RoleManager
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
@@ -16,7 +20,6 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -38,7 +41,6 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.Animation
 import androidx.compose.material.icons.rounded.Apps
 import androidx.compose.material.icons.rounded.AutoAwesome
@@ -66,7 +68,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.SolidColor
@@ -91,12 +92,10 @@ import com.gabriel.zenithui.ui.common.LargeTitle
 import com.gabriel.zenithui.ui.common.LocalMotionLevel
 import com.gabriel.zenithui.ui.common.Motion
 import com.gabriel.zenithui.ui.common.PAGE_GONE_MS
-import com.gabriel.zenithui.ui.common.SectionLabel
 import com.gabriel.zenithui.ui.common.TITLE_GONE_PX
 import com.gabriel.zenithui.ui.common.appearIn
 import com.gabriel.zenithui.ui.common.popIn
 import com.gabriel.zenithui.ui.common.popOut
-import com.gabriel.zenithui.ui.common.pressBounce
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.LocalZenithFont
 import com.gabriel.zenithui.ui.theme.Palettes
@@ -276,6 +275,8 @@ fun SettingsScreen(
                         else -> "groups"
                     },
                     LocalSettingsHighlight provides if (current == null) null else highlight,
+                    // A page's rows take the colour of the group it is, as its row on the first page has.
+                    LocalGroupTile provides current?.tile(),
                 ) {
                     when (current) {
                         null -> Root(settings, plus, actions.account, query, onQuery = { query = it }, onOpen = ::open)
@@ -357,9 +358,9 @@ private fun Root(
 private fun Groups(settings: ZenithSettings, plus: PlusStatus, account: AccountActions?, onOpen: (SettingsPage, String?) -> Unit) {
     val context = LocalContext.current
     val isHome = remember { context.getSystemService(RoleManager::class.java)?.isRoleHeld(RoleManager.ROLE_HOME) == true }
-    // Looks and feel; what you own; the phone itself. Each block is headed with what it holds and
-    // stands further from the next than its rows do from each other, so the page reads as three
-    // and the eye can go straight to one. A heading rises in with its block.
+    // Looks and feel; what you own; the phone itself. Each block is a card of its own with its name
+    // over it, and stands further from the next than its rows do from each other, so the page reads
+    // as three and the eye can go straight to one. A name rises in with its card.
     listOf(
         "Look and feel" to listOf(SettingsPage.Theme, SettingsPage.Home, SettingsPage.Motion, SettingsPage.Gestures, SettingsPage.Apps),
         // The account is only there in a build with a server to keep it on.
@@ -367,24 +368,16 @@ private fun Groups(settings: ZenithSettings, plus: PlusStatus, account: AccountA
             listOfNotNull(SettingsPage.Plus, SettingsPage.Island, SettingsPage.Looks, SettingsPage.Aura, SettingsPage.Account.takeIf { account != null }),
         "Backup and help" to listOf(SettingsPage.Backup, SettingsPage.About),
     ).forEachIndexed { block, (heading, pages) ->
-        Column(
-            Modifier
-                .riseIn(block + 1)
-                .padding(top = if (block == 0) 2.dp else 10.dp),
-        ) {
-            // Over the tiles of its rows, not over the edge of the group.
-            SectionLabel(heading, Modifier.padding(start = 14.dp, bottom = 8.dp))
-            Group {
-                pages.forEachIndexed { index, page ->
-                    if (index > 0) GroupDivider()
-                    NavRow(
-                        icon = page.icon(),
-                        tile = page.tile(),
-                        title = page.title,
-                        summary = summary(page, settings, plus, isHome, account?.signed),
-                        onClick = { onOpen(page, null) },
-                    )
-                }
+        Section(header = heading, rise = block + 1) {
+            pages.forEachIndexed { index, page ->
+                if (index > 0) GroupDivider()
+                NavRow(
+                    icon = page.icon(),
+                    tile = page.tile(),
+                    title = page.title,
+                    summary = summary(page, settings, plus, isHome, account?.signed),
+                    onClick = { onOpen(page, null) },
+                )
             }
         }
     }
@@ -397,7 +390,7 @@ private fun Results(query: String, server: Boolean, onOpen: (SettingsPage, Strin
         Note("Nothing in Settings is called “${query.trim()}”.", Modifier.padding(top = 6.dp))
         return
     }
-    Group {
+    Section {
         found.forEachIndexed { index, entry ->
             // A result that was already there stays put as you type on; a new one rises in.
             key(entry.id) {
@@ -410,38 +403,36 @@ private fun Results(query: String, server: Boolean, onOpen: (SettingsPage, Strin
     }
 }
 
+/**
+ * The search field at the head of Settings, as an iPhone's: a grey rounded field with a magnifying
+ * glass and "Search" in grey, and once something is typed, a grey round button that clears it.
+ */
 @Composable
 private fun SearchField(query: String, onQuery: (String) -> Unit, modifier: Modifier = Modifier) {
+    val apple = LocalApple.current
     val palette = LocalPalette.current
     val reduced = LocalMotionLevel.current.reduced
-    var focused by remember { mutableStateOf(false) }
-    // In use, the box is ringed in the accent and its glass lights up.
-    val ring by animateColorAsState(if (focused) palette.accent.copy(alpha = 0.75f) else Color.Transparent, tween(220), label = "searchRing")
-    val lens by animateColorAsState(if (focused) palette.accent else palette.onGlassMuted, tween(220), label = "searchLens")
     Row(
         modifier
             .fillMaxWidth()
-            .height(46.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .background(palette.onGlass.copy(alpha = 0.08f))
-            .border(1.5.dp, ring, RoundedCornerShape(16.dp))
-            .padding(horizontal = 14.dp),
+            .height(40.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(apple.field)
+            .padding(start = 10.dp, end = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(Icons.Rounded.Search, contentDescription = null, tint = lens, modifier = Modifier.size(20.dp))
-        Spacer(Modifier.width(10.dp))
+        Icon(Icons.Rounded.Search, contentDescription = null, tint = apple.secondary, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(7.dp))
         Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
-            if (query.isEmpty()) Text("Search settings", color = palette.onGlassMuted, fontSize = 15.sp)
+            if (query.isEmpty()) Text("Search", color = apple.secondary, fontSize = 16.sp)
             BasicTextField(
                 value = query,
                 onValueChange = onQuery,
                 singleLine = true,
-                textStyle = TextStyle(fontFamily = LocalZenithFont.current, color = palette.onGlass, fontSize = 15.sp),
+                textStyle = TextStyle(fontFamily = LocalZenithFont.current, color = apple.words, fontSize = 16.sp),
                 cursorBrush = SolidColor(palette.accent),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .onFocusChanged { focused = it.isFocused },
+                modifier = Modifier.fillMaxWidth(),
             )
         }
         AnimatedVisibility(
@@ -450,44 +441,41 @@ private fun SearchField(query: String, onQuery: (String) -> Unit, modifier: Modi
             exit = popOut(reduced, millis = 100),
         ) {
             Icon(
-                Icons.Rounded.Close,
+                Icons.Rounded.Cancel,
                 contentDescription = "Clear search",
-                tint = palette.onGlassMuted,
+                tint = apple.secondary,
                 modifier = Modifier
-                    .size(26.dp)
+                    .size(30.dp)
                     .clip(CircleShape)
                     .clickable { onQuery("") }
-                    .padding(3.dp),
+                    .padding(5.dp),
             )
         }
     }
 }
 
-/** One thing a search found: what it is called, and the page it is on. */
+/** One thing a search found: what it is called, the page it is on in grey, and a chevron. */
 @Composable
 private fun ResultRow(entry: SettingsEntry, onClick: () -> Unit) {
-    val palette = LocalPalette.current
+    val apple = LocalApple.current
+    val touch = remember { MutableInteractionSource() }
     Row(
         Modifier
             .fillMaxWidth()
-            .pressBounce(0.98f)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .rowPress(touch)
+            .clickable(interactionSource = touch, indication = null, onClick = onClick)
+            .heightIn(min = 48.dp)
+            .padding(start = 16.dp, end = 10.dp, top = 10.dp, bottom = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
-            Text(entry.title, color = palette.onGlass, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+            Text(entry.title, color = apple.words, fontSize = 16.sp)
             // A group that is its own sheet needs no "in": the title already says where it goes.
             if (!entry.page.opensSheet && entry.title != entry.page.title) {
-                Text(entry.page.title, color = palette.onGlassMuted, fontSize = 13.sp)
+                Text(entry.page.title, color = apple.secondary, fontSize = 14.sp)
             }
         }
-        Icon(
-            Icons.AutoMirrored.Rounded.KeyboardArrowRight,
-            contentDescription = null,
-            tint = palette.onGlass.copy(alpha = 0.35f),
-            modifier = Modifier.size(22.dp),
-        )
+        Chevron()
     }
 }
 

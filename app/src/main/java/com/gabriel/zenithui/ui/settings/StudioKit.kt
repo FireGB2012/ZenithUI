@@ -39,19 +39,22 @@ import androidx.compose.ui.unit.sp
 import com.gabriel.zenithui.ui.common.appearIn
 import com.gabriel.zenithui.ui.common.pressBounce
 import com.gabriel.zenithui.ui.common.rememberTick
+import com.gabriel.zenithui.ui.theme.LocalApple
 import com.gabriel.zenithui.ui.theme.LocalPalette
+import com.gabriel.zenithui.ui.theme.inkOnTint
 import com.gabriel.zenithui.ui.theme.NumberFont
 import com.gabriel.zenithui.ui.theme.ZenithFonts
 import kotlinx.coroutines.launch
 
 /**
- * One typeface to choose: a tile showing [sample] set in it, its name under it. The chosen one
- * is ringed and its tile fills with the accent, the way a palette dot is ringed; the tiles pop up
- * one after another as the page arrives.
+ * One typeface to choose: a grey tile showing [sample] set in it, its name under it. The chosen
+ * one is ringed in the accent and its tile takes a little of it, as Apple marks a choice; the
+ * tiles pop up one after another as the page arrives.
  */
 @Composable
 private fun FontTile(name: String, sample: String, family: FontFamily, weight: FontWeight, selected: Boolean, turn: Int, onClick: () -> Unit) {
     val palette = LocalPalette.current
+    val apple = LocalApple.current
     val tick = rememberTick()
     val arrival = LocalSettingsRise.current
     val pop = if (arrival != null) {
@@ -59,8 +62,8 @@ private fun FontTile(name: String, sample: String, family: FontFamily, weight: F
     } else {
         Modifier
     }
-    val ring by animateColorAsState(if (selected) palette.onGlass else Color.Transparent, tween(220), label = "fontRing")
-    val fill by animateColorAsState(if (selected) palette.accent.copy(alpha = 0.22f) else palette.onGlass.copy(alpha = 0.07f), tween(220), label = "fontFill")
+    val ring by animateColorAsState(if (selected) palette.accent else Color.Transparent, tween(220), label = "fontRing")
+    val fill by animateColorAsState(if (selected) palette.accent.copy(alpha = 0.16f) else apple.field, tween(220), label = "fontFill")
     val inset by animateDpAsState(if (selected) 4.dp else 0.dp, spring(dampingRatio = 0.7f, stiffness = 420f), label = "fontInset")
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -82,12 +85,12 @@ private fun FontTile(name: String, sample: String, family: FontFamily, weight: F
                 .background(fill),
             contentAlignment = Alignment.Center,
         ) {
-            Text(sample, color = palette.onGlass, fontFamily = family, fontWeight = weight, fontSize = 20.sp, maxLines = 1)
+            Text(sample, color = apple.words, fontFamily = family, fontWeight = weight, fontSize = 20.sp, maxLines = 1)
         }
         Spacer(Modifier.height(6.dp))
         Text(
             name,
-            color = if (selected) palette.onGlass else palette.onGlassMuted,
+            color = if (selected) apple.words else apple.secondary,
             fontSize = 12.sp,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
             maxLines = 1,
@@ -152,6 +155,7 @@ internal fun PageTurnChoice(selected: String, onSelect: (String) -> Unit) {
 @Composable
 private fun PageTurnTile(style: String, name: String, selected: Boolean, turn: Int, onClick: () -> Unit) {
     val palette = LocalPalette.current
+    val apple = LocalApple.current
     val tick = rememberTick()
     val reduced = com.gabriel.zenithui.ui.common.LocalMotionLevel.current.reduced
     val scope = androidx.compose.runtime.rememberCoroutineScope()
@@ -163,8 +167,8 @@ private fun PageTurnTile(style: String, name: String, selected: Boolean, turn: I
     } else {
         Modifier
     }
-    val ring by animateColorAsState(if (selected) palette.onGlass else Color.Transparent, tween(220), label = "turnRing")
-    val fill by animateColorAsState(if (selected) palette.accent.copy(alpha = 0.22f) else palette.onGlass.copy(alpha = 0.07f), tween(220), label = "turnFill")
+    val ring by animateColorAsState(if (selected) palette.accent else Color.Transparent, tween(220), label = "turnRing")
+    val fill by animateColorAsState(if (selected) palette.accent.copy(alpha = 0.16f) else apple.field, tween(220), label = "turnFill")
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
@@ -192,8 +196,8 @@ private fun PageTurnTile(style: String, name: String, selected: Boolean, turn: I
                 .background(fill),
             contentAlignment = Alignment.Center,
         ) {
-            val page = palette.onGlass.copy(alpha = 0.22f)
-            val dot = palette.accent.copy(alpha = 0.9f)
+            val page = apple.words.copy(alpha = 0.18f)
+            val dot = palette.accent
             for (which in 0..1) {
                 Box(
                     Modifier
@@ -216,14 +220,14 @@ private fun PageTurnTile(style: String, name: String, selected: Boolean, turn: I
                         .background(page),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Box(Modifier.size(9.dp).clip(RoundedCornerShape(3.dp)).background(if (which == 0) dot else palette.onGlass.copy(alpha = 0.6f)))
+                    Box(Modifier.size(9.dp).clip(RoundedCornerShape(3.dp)).background(if (which == 0) dot else apple.secondary))
                 }
             }
         }
         Spacer(Modifier.height(6.dp))
         Text(
             name,
-            color = if (selected) palette.onGlass else palette.onGlassMuted,
+            color = if (selected) apple.words else apple.secondary,
             fontSize = 12.sp,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
             maxLines = 1,
@@ -234,13 +238,14 @@ private fun PageTurnTile(style: String, name: String, selected: Boolean, turn: I
 private const val REST_TURN = 0.38f
 
 /**
- * A choice among more options than a segmented row has room for: pills that wrap onto a second
- * line, the chosen one filling with the accent.
+ * A choice among more options than a segmented row has room for: Apple's grey capsules that wrap
+ * onto a second line, the chosen one filling with the accent, its words in the ink it needs.
  */
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 internal fun ChoiceChips(options: List<Pair<String, String>>, selected: String, onSelect: (String) -> Unit) {
     val palette = LocalPalette.current
+    val apple = LocalApple.current
     val tick = rememberTick()
     androidx.compose.foundation.layout.FlowRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -248,10 +253,10 @@ internal fun ChoiceChips(options: List<Pair<String, String>>, selected: String, 
     ) {
         options.forEach { (id, label) ->
             val on = id == selected
-            val fill by animateColorAsState(if (on) palette.accent else palette.onGlass.copy(alpha = 0.08f), tween(220), label = "chipFill")
+            val fill by animateColorAsState(if (on) palette.accent else apple.grey, tween(220), label = "chipFill")
             Text(
                 label,
-                color = if (on) Color(0xFF0A0B12) else palette.onGlass,
+                color = if (on) inkOnTint(palette.accent) else apple.words,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Medium,
                 modifier = Modifier

@@ -1,9 +1,11 @@
 package com.gabriel.zenithui.ui.settings
 
+import com.gabriel.zenithui.ui.theme.LocalApple
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -84,7 +86,7 @@ internal fun LooksOptions(settings: ZenithSettings, plus: PlusStatus, looks: Lis
     val firstLooks = remember { looks.map { it.id }.toSet() }
     val firstRules = remember { settings.lookRules.toSet() }
     val growing = if (reduced) Modifier else Modifier.animateContentSize(spring(dampingRatio = 0.86f, stiffness = 240f))
-    Group(rise = 0) {
+    Section(rise = 0) {
         Spot("lookSave") {
             ActionRow(
                 icon = if (plus.active) Icons.Rounded.AddCircleOutline else Icons.Rounded.Lock,
@@ -95,12 +97,12 @@ internal fun LooksOptions(settings: ZenithSettings, plus: PlusStatus, looks: Lis
         }
     }
     if (looks.isNotEmpty()) {
-        Group(rise = 1) {
+        Section(rise = 1) {
             Column(growing) {
                 looks.forEachIndexed { index, look ->
                     key(look.id) {
                         Column(if (look.id in firstLooks) Modifier else Modifier.appearIn(riseFrom = 14f, gentle = true)) {
-                            if (index > 0) GroupDivider()
+                            if (index > 0) GroupDivider(inset = LOOK_TEXT_INSET)
                             LookRow(look, inUse = settings.activeLook == look.id, onPut = { actions.put(look) }, onMenu = { actions.menu(look) })
                         }
                     }
@@ -108,28 +110,28 @@ internal fun LooksOptions(settings: ZenithSettings, plus: PlusStatus, looks: Lis
             }
         }
     }
-    Group(rise = 2) {
+    Section(
+        header = "Schedule",
+        footer = when {
+            settings.lookRules.isEmpty() -> "A Look can come on by itself: a Work look on weekdays, a Night look after ten."
+            !plus.active -> "Kept, but resting: the schedule switches Looks while you have Plus."
+            else -> "Each comes on as its time begins, and when you come home during it."
+        },
+        rise = 2,
+    ) {
         Spot("lookSchedule") {
             Column(growing) {
-                Column(Modifier.padding(start = 14.dp, end = 14.dp, top = 14.dp)) {
-                    Caption("Schedule")
-                    Spacer(Modifier.padding(top = 4.dp))
-                    Note(
-                        when {
-                            settings.lookRules.isEmpty() -> "A Look can come on by itself: a Work look on weekdays, a Night look after ten."
-                            !plus.active -> "Kept, but resting: the schedule switches Looks while you have Plus."
-                            else -> "Each comes on as its time begins, and when you come home during it."
-                        },
-                    )
-                }
                 settings.lookRules.forEachIndexed { index, rule ->
                     key(rule) {
-                        ScheduleRow(
-                            name = looks.firstOrNull { it.id == rule.lookId }?.name ?: "A Look that has gone",
-                            rule = rule,
-                            arriving = rule !in firstRules,
-                            onRemove = { actions.removeRule(index) },
-                        )
+                        Column {
+                            ScheduleRow(
+                                name = looks.firstOrNull { it.id == rule.lookId }?.name ?: "A Look that has gone",
+                                rule = rule,
+                                arriving = rule !in firstRules,
+                                onRemove = { actions.removeRule(index) },
+                            )
+                            GroupDivider(inset = SCHEDULE_TEXT_INSET)
+                        }
                     }
                 }
                 ActionRow(
@@ -142,7 +144,7 @@ internal fun LooksOptions(settings: ZenithSettings, plus: PlusStatus, looks: Lis
         }
     }
     if (actions.server) {
-        Group(rise = 3) {
+        Section(rise = 3) {
             Column(growing) {
                 Spot("lookCode") {
                     ActionRow(
@@ -186,40 +188,46 @@ internal fun LooksOptions(settings: ZenithSettings, plus: PlusStatus, looks: Lis
     }
     Note(
         "A Look keeps everything you see, and nothing of yours: not your name, your notes or lists, your hidden apps, Aura or Plus.",
-        Modifier.riseIn(4).padding(horizontal = 14.dp),
+        Modifier.riseIn(4).padding(start = 12.dp, end = 12.dp, top = 4.dp),
     )
 }
+
+/** Where the words of a schedule row start, and so its hairline: 16 + 20 + 14. */
+private val SCHEDULE_TEXT_INSET = 50.dp
+
+/** Where the words of a Look's row start, past its three dots: 16 + 44 + 12. */
+private val LOOK_TEXT_INSET = 72.dp
 
 /** One time on the schedule: the Look, its hours and days, and a way to take it away. */
 @Composable
 private fun ScheduleRow(name: String, rule: LookRule, arriving: Boolean, onRemove: () -> Unit) {
-    val palette = LocalPalette.current
+    val apple = LocalApple.current
     Row(
         Modifier
             .then(if (arriving) Modifier.appearIn(riseFrom = 14f, gentle = true) else Modifier)
             .fillMaxWidth()
-            .padding(horizontal = 14.dp, vertical = 8.dp),
+            .padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(Icons.Rounded.Schedule, contentDescription = null, tint = palette.onGlassMuted, modifier = Modifier.size(18.dp))
-        Spacer(Modifier.width(12.dp))
+        Icon(Icons.Rounded.Schedule, contentDescription = null, tint = apple.secondary, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
-            Text(name, color = palette.onGlass, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+            Text(name, color = apple.words, fontSize = 16.sp)
             Text(
                 "${LookSchedule.clock(rule.start)}–${LookSchedule.clock(rule.end)} · ${LookSchedule.days(rule.days)}",
-                color = palette.onGlassMuted,
-                fontSize = 13.sp,
+                color = apple.secondary,
+                fontSize = 14.sp,
             )
         }
         Box(
             Modifier
-                .size(34.dp)
+                .size(40.dp)
                 .pressBounce()
                 .clip(CircleShape)
                 .clickable(onClick = onRemove),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Rounded.Close, contentDescription = "Take this time away", tint = palette.onGlassMuted, modifier = Modifier.size(18.dp))
+            Icon(Icons.Rounded.Close, contentDescription = "Take this time away", tint = apple.secondary, modifier = Modifier.size(18.dp))
         }
     }
 }
@@ -228,14 +236,16 @@ private fun ScheduleRow(name: String, rule: LookRule, arriving: Boolean, onRemov
 @Composable
 private fun LookRow(look: Look, inUse: Boolean, onPut: () -> Unit, onMenu: () -> Unit) {
     val palette = LocalPalette.current
+    val apple = LocalApple.current
+    val touch = remember { MutableInteractionSource() }
     // The palette it is in, your own one included: read from what the Look keeps.
     val its = remember(look) { Palettes.resolve(Looks.apply(ZenithSettings(), look).first) }
     Row(
         Modifier
             .fillMaxWidth()
-            .pressBounce(0.98f)
-            .clickable(onClick = onPut)
-            .padding(horizontal = 14.dp, vertical = 12.dp),
+            .rowPress(touch)
+            .clickable(interactionSource = touch, indication = null, onClick = onPut)
+            .padding(start = 16.dp, end = 8.dp, top = 10.dp, bottom = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.size(width = 44.dp, height = 28.dp)) {
@@ -252,18 +262,18 @@ private fun LookRow(look: Look, inUse: Boolean, onPut: () -> Unit, onMenu: () ->
         }
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
-            Text(look.name, color = palette.onGlass, fontSize = 16.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(if (inUse) "On now" else "Tap to put it on", color = if (inUse) palette.accent else palette.onGlassMuted, fontSize = 13.sp)
+            Text(look.name, color = apple.words, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(if (inUse) "On now" else "Tap to put it on", color = if (inUse) palette.accent else apple.secondary, fontSize = 14.sp)
         }
         Box(
             Modifier
-                .size(38.dp)
+                .size(40.dp)
                 .pressBounce()
                 .clip(CircleShape)
                 .clickable(onClick = onMenu),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Rounded.MoreHoriz, contentDescription = "More for ${look.name}", tint = palette.onGlassMuted, modifier = Modifier.size(20.dp))
+            Icon(Icons.Rounded.MoreHoriz, contentDescription = "More for ${look.name}", tint = palette.accent, modifier = Modifier.size(22.dp))
         }
     }
 }

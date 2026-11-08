@@ -91,24 +91,28 @@ internal fun AdvancedMotionOptions(settings: ZenithSettings, actions: SettingsAc
         MotionPreview(tuning)
     }
     if (settings.motion == "reduced") {
-        Note("Animations are set to Reduced, so apps open and close plainly whatever is chosen here. Set them to Full to see it.")
+        Note(
+            "Animations are set to Reduced, so apps open and close plainly whatever is chosen here. Set them to Full to see it.",
+            Modifier.padding(horizontal = 12.dp),
+        )
     }
 
-    Group(rise = 1) {
+    Section(
+        header = "Animation style",
+        footer = if (tuning.custom) "${preset.detail} With your own changes on top." else preset.detail,
+        rise = 1,
+    ) {
         Spot("motionStyle") {
-            Column(Modifier.padding(14.dp)) {
-                Caption("Animation style")
-                Spacer(Modifier.height(10.dp))
+            ControlRow {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     AnimationPreset.entries.forEach { option ->
                         StyleChip(option.label, selected = option == preset) { set(AnimationTuning.of(option)) }
                     }
                 }
-                Spacer(Modifier.height(10.dp))
-                Note(if (tuning.custom) "${preset.detail} With your own changes on top." else preset.detail)
             }
         }
-        GroupDivider(inset = 16.dp)
+    }
+    Section(rise = 2) {
         Spot("motionSpeed") {
             TuneSlider(
                 title = "Speed",
@@ -124,14 +128,10 @@ internal fun AdvancedMotionOptions(settings: ZenithSettings, actions: SettingsAc
     }
 
     TuneGroup.entries.forEachIndexed { index, group ->
-        Group(rise = index + 2) {
+        Section(header = group.title, footer = group.note, rise = index + 3) {
             Spot(group.spot()) {
-                Column(Modifier.padding(start = 14.dp, end = 14.dp, top = 14.dp, bottom = 4.dp)) {
-                    Caption(group.title)
-                    Spacer(Modifier.height(4.dp))
-                    Note(group.note)
-                }
-                Tune.entries.filter { it.group == group }.forEach { tune ->
+                Tune.entries.filter { it.group == group }.forEachIndexed { at, tune ->
+                    if (at > 0) GroupDivider(inset = ROW_INSET)
                     TuneSlider(
                         title = tune.title,
                         value = tuning[tune],
@@ -143,7 +143,6 @@ internal fun AdvancedMotionOptions(settings: ZenithSettings, actions: SettingsAc
                         onStep = { steps -> set(tuning.nudged(tune, steps)) },
                     )
                 }
-                Spacer(Modifier.height(6.dp))
             }
         }
     }
@@ -156,7 +155,7 @@ internal fun AdvancedMotionOptions(settings: ZenithSettings, actions: SettingsAc
         enter = unfoldIn(LocalMotionLevel.current.reduced),
         exit = unfoldOut(LocalMotionLevel.current.reduced),
     ) {
-        Group {
+        Section {
             ActionRow(
                 icon = Icons.Rounded.RestartAlt,
                 title = "Back to Zenith's own",
@@ -177,17 +176,17 @@ private fun hundredths(value: Float): String {
     return "${all / 100}.${(all % 100).toString().padStart(2, '0')}"
 }
 
-/** One of the named sets of numbers. */
+/** One of the named sets of numbers: Apple's grey capsule, the accent when it is the one chosen. */
 @Composable
 private fun StyleChip(label: String, selected: Boolean, onClick: () -> Unit) {
     val palette = LocalPalette.current
+    val apple = com.gabriel.zenithui.ui.theme.LocalApple.current
     val tick = rememberTick()
     // The colour moves from the style that was chosen to the one that is, rather than one chip
     // going out and another coming on.
-    val fill by animateColorAsState(if (selected) palette.accent.copy(alpha = 0.9f) else Color.Transparent, tween(220), label = "styleFill")
-    val rim by animateColorAsState(palette.onGlass.copy(alpha = if (selected) 0f else 0.18f), tween(220), label = "styleRim")
+    val fill by animateColorAsState(if (selected) palette.accent else apple.grey, tween(220), label = "styleFill")
     val ink by animateColorAsState(
-        if (selected) (if (palette.dark) Color(0xFF0A0B12) else Color.White) else palette.onGlass,
+        if (selected) com.gabriel.zenithui.ui.theme.inkOnTint(palette.accent) else apple.words,
         tween(220),
         label = "styleInk",
     )
@@ -197,7 +196,6 @@ private fun StyleChip(label: String, selected: Boolean, onClick: () -> Unit) {
             .pressBounce(0.94f)
             .clip(RoundedCornerShape(50))
             .background(fill)
-            .border(1.dp, rim, RoundedCornerShape(50))
             .clickable {
                 if (!selected) tick()
                 onClick()
@@ -224,8 +222,8 @@ private fun TuneSlider(
     onChange: (Float) -> Unit,
     onStep: (Int) -> Unit,
 ) {
-    Column(Modifier.padding(horizontal = 14.dp, vertical = 7.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+    Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
+        Row(verticalAlignment = Alignment.Bottom) {
             PillSlider(
                 label = title,
                 value = value,
@@ -247,13 +245,14 @@ private fun TuneSlider(
 @Composable
 private fun StepButton(icon: ImageVector, says: String, enabled: Boolean, onClick: () -> Unit) {
     val palette = LocalPalette.current
+    val apple = com.gabriel.zenithui.ui.theme.LocalApple.current
     val tick = rememberTick()
     Box(
         Modifier
             .size(40.dp)
             .pressBounce(0.88f, enabled = enabled)
             .clip(CircleShape)
-            .background(palette.onGlass.copy(alpha = if (enabled) 0.10f else 0.04f))
+            .background(if (enabled) apple.grey else apple.field)
             .clickable(enabled = enabled, onClickLabel = says) {
                 tick()
                 onClick()

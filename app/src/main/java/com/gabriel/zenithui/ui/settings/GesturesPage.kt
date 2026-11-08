@@ -32,7 +32,7 @@ import com.gabriel.zenithui.data.ZenithSettings
 @Composable
 internal fun GestureOptions(settings: ZenithSettings, preview: SettingsPreview, actions: SettingsActions) {
     val helperOn by LockService.on.collectAsState()
-    Group(rise = 0) {
+    Section(rise = 0) {
         Gestures.ids.forEachIndexed { index, id ->
             if (index > 0) GroupDivider()
             Spot("gesture_$id") {
@@ -47,7 +47,10 @@ internal fun GestureOptions(settings: ZenithSettings, preview: SettingsPreview, 
             }
         }
     }
-    Group(rise = 1) {
+    Section(
+        footer = "Swipe up always opens your apps, and holding an empty spot always opens Customise, whatever is chosen here.",
+        rise = 1,
+    ) {
         Spot("lockHelper") {
             ActionRow(
                 icon = if (helperOn) Icons.Rounded.Lock else Icons.Rounded.LockOpen,
@@ -58,10 +61,6 @@ internal fun GestureOptions(settings: ZenithSettings, preview: SettingsPreview, 
             )
         }
     }
-    Note(
-        "Swipe up always opens your apps, and holding an empty spot always opens Customise, whatever is chosen here.",
-        Modifier.riseIn(2).padding(horizontal = 14.dp),
-    )
 }
 
 /** What an app or shortcut a gesture opens is called. */

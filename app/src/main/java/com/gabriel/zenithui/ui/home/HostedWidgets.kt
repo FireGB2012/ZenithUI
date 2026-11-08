@@ -84,6 +84,7 @@ import com.gabriel.zenithui.ui.theme.solidCard
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import com.gabriel.zenithui.ui.settings.rowPress
 
 /** The host other apps' widgets are drawn through, for whatever on the home screen draws one. */
 val LocalWidgetHost = staticCompositionLocalOf<AppWidgetHost?> { null }
@@ -373,32 +374,35 @@ fun HostedWidgetPicker(
     }
     var open by remember { mutableStateOf<String?>(null) }
 
+    // An iPhone's grouped list: the name over the card, what it is for in grey, an app to a row.
+    val apple = com.gabriel.zenithui.ui.theme.LocalApple.current
     Column(modifier) {
-        SectionLabel("From your apps", Modifier.padding(start = 4.dp, bottom = 6.dp))
+        com.gabriel.zenithui.ui.settings.GroupName("From your apps")
         Text(
             "Widgets from the apps on your phone, drawn by those apps, on Zenith's grid.",
-            color = palette.onGlassMuted,
+            color = apple.secondary,
             fontSize = 13.sp,
             lineHeight = 18.sp,
-            modifier = Modifier.padding(start = 4.dp, end = 4.dp, bottom = 10.dp),
+            modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
         )
         if (groups.isEmpty()) {
-            Text("No app on this phone offers a widget.", color = palette.onGlassMuted, fontSize = 13.sp, modifier = Modifier.padding(4.dp))
+            Text("No app on this phone offers a widget.", color = apple.secondary, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
         }
-        Column(
-            Modifier
-                .clip(RoundedCornerShape(24.dp))
-                .background(palette.onGlass.copy(alpha = 0.06f)),
-        ) {
+        Column(Modifier.solidCard(com.gabriel.zenithui.ui.theme.CardKind.Grouped)) {
             groups.forEachIndexed { index, group ->
+              androidx.compose.runtime.key(group.packageName) {
                 val expanded = open == group.packageName
                 val turn by animateFloatAsState(if (expanded) 180f else 0f, if (reduced) tween(Motion.REDUCED_MS) else Motion.snappy(), label = "providerTurn")
+                val touch = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                // From under the app's icon, as an iPhone's hairlines run: 16 + 34 + 12.
+                if (index > 0) com.gabriel.zenithui.ui.settings.GroupDivider(inset = 62.dp)
                 Row(
                     Modifier
                         .fillMaxWidth()
                         .appearIn(delayMillis = staggerDelay(index), riseFrom = 16f, gentle = true)
-                        .clickable { open = if (expanded) null else group.packageName }
-                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                        .rowPress(touch)
+                        .clickable(interactionSource = touch, indication = null) { open = if (expanded) null else group.packageName }
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     val key = remember(group.packageName) {
@@ -408,25 +412,26 @@ fun HostedWidgetPicker(
                     else Spacer(Modifier.size(34.dp))
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
-                        Text(group.app, color = palette.onGlass, fontSize = 15.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(group.app, color = apple.words, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text(
                             if (group.providers.size == 1) "1 widget" else "${group.providers.size} widgets",
-                            color = palette.onGlassMuted,
-                            fontSize = 12.sp,
+                            color = apple.secondary,
+                            fontSize = 14.sp,
                         )
                     }
-                    Icon(Icons.Rounded.ExpandMore, contentDescription = null, tint = palette.onGlassMuted, modifier = Modifier.graphicsLayer { rotationZ = turn })
+                    Icon(Icons.Rounded.ExpandMore, contentDescription = null, tint = apple.faint, modifier = Modifier.graphicsLayer { rotationZ = turn })
                 }
                 androidx.compose.animation.AnimatedVisibility(visible = expanded, enter = unfoldIn(reduced), exit = unfoldOut(reduced)) {
                     LazyRow(
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(start = 14.dp, end = 14.dp, bottom = 14.dp),
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(start = 16.dp, end = 16.dp, bottom = 14.dp),
                     ) {
                         items(group.providers, key = { it.provider.flattenToString() }) { info ->
                             ProviderCard(info, cellDp, rowDp, columns, rows) { onPick(info) }
                         }
                     }
                 }
+              }
             }
         }
     }
@@ -435,7 +440,7 @@ fun HostedWidgetPicker(
 /** One widget to choose: its picture on a little well, its name, and how many cells it takes here. */
 @Composable
 private fun ProviderCard(info: AppWidgetProviderInfo, cellDp: Float, rowDp: Float, columns: Int, rows: Int, onClick: () -> Unit) {
-    val palette = LocalPalette.current
+    val apple = com.gabriel.zenithui.ui.theme.LocalApple.current
     val context = LocalContext.current
     val name = remember(info) { runCatching { info.loadLabel(context.packageManager) }.getOrDefault("Widget") }
     val (spanX, spanY) = remember(info, cellDp, rowDp, columns, rows) {
@@ -456,13 +461,13 @@ private fun ProviderCard(info: AppWidgetProviderInfo, cellDp: Float, rowDp: Floa
                 .fillMaxWidth()
                 .height(110.dp)
                 .clip(RoundedCornerShape(16.dp))
-                .background(palette.onGlass.copy(alpha = 0.08f)),
+                .background(apple.field),
             contentAlignment = Alignment.Center,
         ) {
             WidgetPicture(info)
         }
         Spacer(Modifier.height(6.dp))
-        Text(name, color = palette.onGlass, fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Text("$spanX × ${spanY / com.gabriel.zenithui.data.ROW_UNITS}", color = palette.onGlassMuted, fontSize = 12.sp)
+        Text(name, color = apple.words, fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text("$spanX × ${spanY / com.gabriel.zenithui.data.ROW_UNITS}", color = apple.secondary, fontSize = 12.sp)
     }
 }

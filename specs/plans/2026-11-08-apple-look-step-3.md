@@ -87,10 +87,10 @@ first three parts. Sheets, the drawer and "Add to home screen" are step 4.
 
 ### Part 4: the pages
 
-- [ ] Settings' first page: the search field, group names, tiles.
-- [ ] Theme, Home, Motion, Advanced animation, Gestures, Apps, Island, Looks, Aura, Account, Backup
+- [x] Settings' first page: the search field, group names, tiles.
+- [x] Theme, Home, Motion, Advanced animation, Gestures, Apps, Island, Looks, Aura, Account, Backup
   and About in Sections; `StudioKit` tiles and chips; nothing left of glass on a Settings page.
-- [ ] The widget gallery and the showcase, plain.
+- [x] The widget gallery and the showcase, plain.
 
 ### Part 5: the buttons
 

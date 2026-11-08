@@ -91,7 +91,7 @@ import com.gabriel.zenithui.ui.theme.LocalZenithFont
 import com.gabriel.zenithui.ui.theme.Palettes
 import com.gabriel.zenithui.ui.theme.ZenithPalette
 import com.gabriel.zenithui.ui.theme.ZenithShapes
-import com.gabriel.zenithui.ui.theme.glass
+import com.gabriel.zenithui.ui.theme.LocalApple
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 import androidx.compose.runtime.rememberCoroutineScope
@@ -118,7 +118,7 @@ internal fun AuraOptions(settings: ZenithSettings, actions: SettingsActions, onA
     }
 
     Spot("auraThemes") {
-        Caption("Themes to unlock", Modifier.riseIn(2).padding(top = 6.dp, bottom = 10.dp))
+        GroupName("Themes to unlock", Modifier.riseIn(2).padding(top = 18.dp))
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             AuraThemes.all.forEachIndexed { index, theme ->
                 ThemeCard(
@@ -291,7 +291,12 @@ private fun Counted(balance: Int, value: () -> Float) {
 private fun StreakLadder(streak: Int) {
     val palette = LocalPalette.current
     val arrival = LocalSettingsRise.current
-    Group(padding = 14.dp, rise = 1) {
+    Section(
+        footer = "Open Zenith once a day to keep the streak. Each day in a row is worth more, up to ${Aura.MAX_DAILY}. " +
+            "Miss a day and it starts again — nothing else is lost.",
+        rise = 1,
+    ) {
+      Column(Modifier.padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Rounded.LocalFireDepartment, contentDescription = null, tint = palette.accent, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
@@ -321,11 +326,7 @@ private fun StreakLadder(streak: Int) {
                 )
             }
         }
-        Spacer(Modifier.height(12.dp))
-        Note(
-            "Open Zenith once a day to keep the streak. Each day in a row is worth more, up to ${Aura.MAX_DAILY}. " +
-                "Miss a day and it starts again — nothing else is lost.",
-        )
+      }
     }
 }
 
@@ -599,16 +600,13 @@ private fun ThemeCard(
 @Composable
 private fun CodesNeedAccount(modifier: Modifier, onAccount: () -> Unit) {
     val palette = LocalPalette.current
-    Column(modifier) {
-        Group(padding = 16.dp) {
-            Caption("Aura codes")
-            Spacer(Modifier.height(10.dp))
+    Section(header = "Aura codes", modifier = modifier) {
+        Column(Modifier.padding(16.dp)) {
             Text(
                 "With a Zenith account you get a code to give to friends. Each one who uses it gets " +
                     "${Aura.REFERRAL_REWARD} aura, and so do you. An account is also how you use a code a friend gave you.",
                 color = palette.onGlass,
-                fontSize = 14.sp,
-                modifier = Modifier.padding(horizontal = 4.dp),
+                fontSize = 15.sp,
             )
             Spacer(Modifier.height(14.dp))
             PrimaryButton(text = "Sign in or create an account", onClick = onAccount)
@@ -637,10 +635,25 @@ private fun YourCode(code: String, account: Account?, modifier: Modifier) {
         copies++
     }
 
-    Column(modifier) {
-        Group(padding = 16.dp) {
-            Caption("Your code")
-            Spacer(Modifier.height(10.dp))
+    // What the code is for, under its card.
+    val about = if (account == null) {
+        // Said plainly, because the alternative is people wondering why nothing arrived.
+        "Give this to someone setting up Zenith and they get ${Aura.REFERRAL_REWARD} aura. Zenith has no account and " +
+            "no server, so it cannot tell when your code is used — you are not paid for handing it out."
+    } else {
+        val used = when {
+            account.referralCap > 0 && account.referrals >= account.referralCap ->
+                "All ${account.referralCap} have: it still gives a friend aura, but no more comes to you."
+            account.referrals == 0 -> "Nobody has used it yet."
+            account.referrals == 1 -> "One friend has used it."
+            else -> "${account.referrals} friends have used it."
+        }
+        "Give this to someone with a Zenith account. When they put it in they get ${Aura.REFERRAL_REWARD} aura, and so do you" +
+            (if (account.referralCap > 0) ", for up to ${account.referralCap} friends. " else ". ") + used
+    }
+
+    Section(header = "Your code", footer = about, modifier = modifier) {
+        Column(Modifier.padding(16.dp)) {
             Text(
                 text = code.ifEmpty { "······" },
                 color = palette.accent,
@@ -651,8 +664,8 @@ private fun YourCode(code: String, account: Account?, modifier: Modifier) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .pressBounce(0.97f)
-                    .clip(ZenithShapes.card)
-                    .background(palette.onGlass.copy(alpha = 0.06f))
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(LocalApple.current.field)
                     .clickable { copy() }
                     .padding(vertical = 16.dp),
             )
@@ -680,40 +693,21 @@ private fun YourCode(code: String, account: Account?, modifier: Modifier) {
                     }
                 }
             }
-            Spacer(Modifier.height(12.dp))
-            if (account == null) {
-                // Said plainly, because the alternative is people wondering why nothing arrived.
-                Note(
-                    "Give this to someone setting up Zenith and they get ${Aura.REFERRAL_REWARD} aura. Zenith has no account and " +
-                        "no server, so it cannot tell when your code is used — you are not paid for handing it out.",
-                )
-            } else {
-                val used = when {
-                    account.referralCap > 0 && account.referrals >= account.referralCap ->
-                        "All ${account.referralCap} have: it still gives a friend aura, but no more comes to you."
-                    account.referrals == 0 -> "Nobody has used it yet."
-                    account.referrals == 1 -> "One friend has used it."
-                    else -> "${account.referrals} friends have used it."
-                }
-                Note(
-                    "Give this to someone with a Zenith account. When they put it in they get ${Aura.REFERRAL_REWARD} aura, and so do you" +
-                        (if (account.referralCap > 0) ", for up to ${account.referralCap} friends. " else ". ") + used,
-                )
-            }
         }
     }
 }
 
+/** Copy or Share under the code: one of Apple's grey buttons, its symbol before its words. */
 @Composable
 private fun CodeButton(icon: ImageVector, label: String, modifier: Modifier, onClick: () -> Unit) {
-    val palette = LocalPalette.current
+    val apple = LocalApple.current
     val reduced = LocalMotionLevel.current.reduced
     Row(
         modifier
             .height(46.dp)
             .pressBounce(0.95f)
             .clip(ZenithShapes.pill)
-            .background(palette.onGlass.copy(alpha = 0.09f))
+            .background(apple.grey)
             .clickable(onClick = onClick),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
@@ -724,9 +718,9 @@ private fun CodeButton(icon: ImageVector, label: String, modifier: Modifier, onC
             label = "codeButton",
         ) { (image, words) ->
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(image, contentDescription = null, tint = palette.onGlass, modifier = Modifier.size(17.dp))
+                Icon(image, contentDescription = null, tint = apple.words, modifier = Modifier.size(17.dp))
                 Spacer(Modifier.width(8.dp))
-                Text(words, color = palette.onGlass, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                Text(words, color = apple.words, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
             }
         }
     }
@@ -747,8 +741,12 @@ private fun Redeem(redeemed: String, modifier: Modifier, onRedeem: suspend (Stri
     var refusal by remember { mutableStateOf<String?>(null) }
     var refusals by remember { mutableIntStateOf(0) }
 
-    Column(modifier) {
-        Group(padding = 16.dp) {
+    Section(
+        header = if (redeemed.isEmpty()) "Someone gave you one?" else null,
+        footer = if (redeemed.isEmpty()) refusal else null,
+        modifier = modifier,
+    ) {
+        Column(Modifier.padding(16.dp)) {
             if (redeemed.isNotEmpty()) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Rounded.AutoAwesome, contentDescription = null, tint = palette.accent, modifier = Modifier.size(17.dp))
@@ -760,12 +758,10 @@ private fun Redeem(redeemed: String, modifier: Modifier, onRedeem: suspend (Stri
                             "Code $redeemed redeemed: ${Aura.REFERRAL_REWARD} aura added."
                         },
                         color = palette.onGlass,
-                        fontSize = 14.sp,
+                        fontSize = 15.sp,
                     )
                 }
             } else {
-                Caption("Someone gave you one?")
-                Spacer(Modifier.height(10.dp))
                 AuraCodeField(
                     value = code,
                     onChange = {
@@ -793,13 +789,6 @@ private fun Redeem(redeemed: String, modifier: Modifier, onRedeem: suspend (Stri
                         }
                     },
                 )
-                AnimatedVisibility(
-                    visible = refusal != null,
-                    enter = unfoldIn(reduced),
-                    exit = unfoldOut(reduced),
-                ) {
-                    Note(refusal.orEmpty(), Modifier.padding(top = 10.dp))
-                }
             }
         }
     }
@@ -823,10 +812,12 @@ private fun AuraCodeField(value: String, onChange: (String) -> Unit, modifier: M
         cursorBrush = Brush.linearGradient(listOf(palette.accent, palette.accent)),
         modifier = modifier,
         decorationBox = { inner ->
+            // Apple's grey field: there is no glass on a solid page.
             Box(
                 Modifier
                     .fillMaxWidth()
-                    .glass(ZenithShapes.pill, strength = 0.8f)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(LocalApple.current.field)
                     .padding(vertical = 14.dp),
                 contentAlignment = Alignment.Center,
             ) {

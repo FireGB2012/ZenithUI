@@ -64,7 +64,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -107,14 +106,11 @@ import com.gabriel.zenithui.ui.common.unfoldOut
 import com.gabriel.zenithui.ui.common.wordsChange
 import com.gabriel.zenithui.ui.onboarding.PrimaryButton
 import com.gabriel.zenithui.ui.onboarding.Segmented
-import com.gabriel.zenithui.ui.theme.GlassMaterial
-import com.gabriel.zenithui.ui.theme.LocalBackdrop
-import com.gabriel.zenithui.ui.theme.LocalPalette
-import com.gabriel.zenithui.ui.theme.glass
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.min
+import com.gabriel.zenithui.ui.theme.LocalApple
 
 /**
  * The widgets, as a page of their own: every one of them drawn for real, in your theme, on your
@@ -243,7 +239,6 @@ private fun Gallery(
     arrive: Boolean,
     onPick: (WidgetSpec, WidgetSize, Offset) -> Unit,
 ) {
-    val palette = LocalPalette.current
     val density = LocalDensity.current
     // Four of them at their ordinary size, two to a row; the toggles at their widest across the
     // foot. Every card shows a size its showcase offers, and the showcase opens on that size.
@@ -265,7 +260,7 @@ private fun Gallery(
             } else {
                 "Each one is live. Tap it to see its sizes and add it."
             },
-            color = palette.onGlassMuted,
+            color = LocalApple.current.secondary,
             fontSize = 15.sp,
             lineHeight = 21.sp,
             modifier = Modifier
@@ -359,7 +354,10 @@ private fun Modifier.arriving(arrive: Boolean, turn: Int, card: Boolean = false)
         .placedAgainWith { progress.value }
 }
 
-/** One widget in the gallery: itself, live, on the wallpaper, with its name underneath. */
+/**
+ * One widget in the gallery, as the iPhone's gallery shows one: itself, live, standing on the page,
+ * with its name and how many sizes it comes in under it.
+ */
 @Composable
 private fun WidgetCard(
     spec: WidgetSpec,
@@ -372,45 +370,41 @@ private fun WidgetCard(
     modifier: Modifier,
     onPick: (WidgetSpec, WidgetSize, Offset) -> Unit,
 ) {
-    val palette = LocalPalette.current
+    val apple = LocalApple.current
     val centre = remember { arrayOf(Offset.Zero) }
     val real = realSize(geometry, size, settings.columns)
     Column(
         modifier
             .pressBounce(0.97f)
             .onGloballyPositioned { centre[0] = it.boundsInRoot().center }
-            .clip(RoundedCornerShape(26.dp))
-            .background(palette.onGlass.copy(alpha = 0.06f))
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
-            ) { onPick(spec, size, centre[0]) }
-            .padding(10.dp),
+            ) { onPick(spec, size, centre[0]) },
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         BoxWithConstraints(
             Modifier
                 .fillMaxWidth()
-                .height(wellHeight)
-                .wallpaperWell(RoundedCornerShape(16.dp))
-                .padding(10.dp),
+                .height(wellHeight),
             contentAlignment = Alignment.Center,
         ) {
-            // Its real size, or as near as the card has room for.
+            // Its real size, or as near as the room it has allows.
             val fit = min(1f, min(maxWidth / real.width, maxHeight / real.height))
             LiveWidget(spec, real, fit, settings)
         }
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(8.dp))
         AnimatedContent(
             targetState = spec.title,
             transitionSpec = { fadeIn(tween(220, delayMillis = 60)).togetherWith(fadeOut(tween(120))) },
             modifier = Modifier.padding(horizontal = 4.dp),
             label = "widgetCardName",
         ) { name ->
-            Text(name, color = palette.onGlass, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(name, color = apple.words, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         Text(
             if (sizes == 1) "1 size" else "$sizes sizes",
-            color = palette.onGlassMuted,
+            color = apple.secondary,
             fontSize = 13.sp,
             modifier = Modifier.padding(start = 4.dp, end = 4.dp, top = 1.dp, bottom = 2.dp),
         )
@@ -443,7 +437,7 @@ private fun Showcase(
     onAdd: (type: String, spanX: Int, spanY: Int) -> Boolean,
     onAdded: () -> Unit,
 ) {
-    val palette = LocalPalette.current
+    val apple = LocalApple.current
     val haptics = rememberHaptics()
     val reduced = LocalMotionLevel.current.reduced
     val density = LocalDensity.current
@@ -558,7 +552,7 @@ private fun Showcase(
                 ) {
                     Text(
                         "${size.name}  \u00B7  ${size.spanX} \u00D7 ${size.rows}",
-                        color = palette.onGlass,
+                        color = apple.words,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.SemiBold,
                     )
@@ -566,7 +560,7 @@ private fun Showcase(
                         Spacer(Modifier.height(4.dp))
                         Text(
                             note,
-                            color = palette.onGlassMuted,
+                            color = apple.secondary,
                             fontSize = 14.sp,
                             lineHeight = 20.sp,
                             textAlign = TextAlign.Center,
@@ -583,7 +577,7 @@ private fun Showcase(
                 ) { words ->
                     Text(
                         words,
-                        color = palette.onGlassMuted,
+                        color = apple.secondary,
                         fontSize = 15.sp,
                         lineHeight = 22.sp,
                         textAlign = TextAlign.Center,
@@ -612,7 +606,7 @@ private fun Showcase(
                 ) {
                     Text(
                         "No page has room for it at this size. Try a smaller one, or free up some space.",
-                        color = palette.onGlass,
+                        color = apple.words,
                         fontSize = 14.sp,
                         lineHeight = 20.sp,
                         textAlign = TextAlign.Center,
@@ -624,7 +618,7 @@ private fun Showcase(
                 Spacer(Modifier.height(12.dp))
                 Text(
                     "Once it is on the page you can pull it to any size you like.",
-                    color = palette.onGlassMuted,
+                    color = apple.secondary,
                     fontSize = 13.sp,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth(),
@@ -635,7 +629,7 @@ private fun Showcase(
     }
 }
 
-/** The row of sizes, on a stretch of the wallpaper [width] across. */
+/** The row of sizes, standing on the page, [width] across. */
 @Composable
 private fun Stage(
     spec: WidgetSpec,
@@ -656,8 +650,7 @@ private fun Stage(
         modifier = Modifier
             .padding(horizontal = STAGE_INSET)
             .fillMaxWidth()
-            .height(real.maxOf { it.height } * scale + STAGE_MARGIN * 2)
-            .wallpaperWell(RoundedCornerShape(30.dp)),
+            .height(real.maxOf { it.height } * scale + STAGE_MARGIN * 2),
         contentPadding = PaddingValues(start = (width - real.first().width * scale) / 2, end = (width - real.last().width * scale) / 2),
         horizontalArrangement = Arrangement.spacedBy(STAGE_GAP),
         verticalAlignment = Alignment.CenterVertically,
@@ -694,11 +687,11 @@ private fun Stage(
 
 /**
  * The sizes by name, each over the room it takes on the page ([SizeShape]), so they can be told
- * apart before any of them is looked at. A pill lies under the size in the middle of the stage and
- * goes with the stage as it is pulled, stretching towards the next size on the way and drawing
- * itself up there, as the pill of a row of options does; that size's shape lights up in the
- * accent. A tap on a name brings its size to the middle. All of it is drawn from [position], so
- * following a finger composes nothing again.
+ * apart before any of them is looked at. They sit on a grey track, as the options of Apple's
+ * segmented control do, and a raised pill lies under the size in the middle of the stage. It goes
+ * with the stage as it is pulled, stretching towards the next size on the way and drawing itself
+ * up there; that size's shape lights up in the accent. A tap on a name brings its size to the
+ * middle. All of it is drawn from [position], so following a finger composes nothing again.
  */
 @Composable
 private fun SizePicker(
@@ -711,20 +704,24 @@ private fun SizePicker(
     onPick: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val palette = LocalPalette.current
-    val pill = palette.onGlass.copy(alpha = 0.1f)
+    val apple = LocalApple.current
+    val track = apple.field
+    val pill = apple.pill
     val tallest = sizes.maxOf { it.rows }
     Row(
         modifier
             .fillMaxWidth()
             .drawBehind {
-                val each = size.width / sizes.size
+                val corner = CornerRadius(16.dp.toPx())
+                drawRoundRect(color = track, cornerRadius = corner)
+                val inset = 3.dp.toPx()
+                val each = (size.width - inset * 2) / sizes.size
                 val (from, to) = PageEffects.pillSpan(position(), sizes.size)
                 drawRoundRect(
                     color = pill,
-                    topLeft = Offset(from * each, 0f),
-                    size = Size((to - from) * each, size.height),
-                    cornerRadius = CornerRadius(16.dp.toPx()),
+                    topLeft = Offset(inset + from * each, inset),
+                    size = Size((to - from) * each, size.height - inset * 2),
+                    cornerRadius = CornerRadius(13.dp.toPx()),
                 )
             },
     ) {
@@ -754,7 +751,7 @@ private fun SizePicker(
                 Spacer(Modifier.height(7.dp))
                 Text(
                     size.name,
-                    color = palette.onGlass,
+                    color = apple.words,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Medium,
                     maxLines = 1,
@@ -853,19 +850,6 @@ private val STAGE_GAP = 14.dp
 private val STAGE_REACH = 230.dp
 
 // ------------------------------------------------------------------------------- a live widget
-
-/**
- * What a widget is shown on: the wallpaper itself, seen through the page as through a window, so
- * a preview sits on what it will sit on at home and its glass bends the same picture. Where
- * Zenith has no copy of the wallpaper to show, a dark plate, which anything reads on.
- */
-@Composable
-private fun Modifier.wallpaperWell(shape: Shape): Modifier =
-    if (LocalBackdrop.current != null) {
-        glass(shape, strength = 0.6f, material = GlassMaterial.Clear, shadow = false)
-    } else {
-        clip(shape).background(Color.Black.copy(alpha = 0.3f))
-    }
 
 /**
  * The size a widget of [size] is on the home page. A widget lays itself out differently for each

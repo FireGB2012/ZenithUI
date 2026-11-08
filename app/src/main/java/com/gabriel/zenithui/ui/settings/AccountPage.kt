@@ -1,5 +1,7 @@
 package com.gabriel.zenithui.ui.settings
 
+import androidx.compose.foundation.layout.heightIn
+import com.gabriel.zenithui.ui.theme.LocalApple
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
@@ -149,7 +151,7 @@ internal fun AccountOptions(actions: SettingsActions) {
 
 @Composable
 private fun SignedOut(account: AccountActions, scope: CoroutineScope, said: String?, onSaid: (String?) -> Unit) {
-    val palette = LocalPalette.current
+    val apple = LocalApple.current
     val context = LocalContext.current
     // The keyboard is put away, and the box keeps the focus: taking the focus away as well would
     // hand it, on a phone with real keys, to the first thing on the page that can be pressed.
@@ -195,7 +197,7 @@ private fun SignedOut(account: AccountActions, scope: CoroutineScope, said: Stri
     Note(
         "An account makes your Aura code count for real and, with Zenith Plus, keeps a backup of your home screen. " +
             "Without one, nothing leaves this phone.",
-        Modifier.riseIn(0),
+        Modifier.riseIn(0).padding(horizontal = 12.dp),
     )
     Box(Modifier.riseIn(1)) {
         Segmented(
@@ -247,20 +249,21 @@ private fun SignedOut(account: AccountActions, scope: CoroutineScope, said: Stri
             modifier = Modifier.shake(refusals),
         )
         AnimatedVisibility(visible = said != null, enter = unfoldIn(reduced), exit = unfoldOut(reduced)) {
-            Text(said.orEmpty(), color = palette.onGlass, fontSize = 13.sp, modifier = Modifier.padding(top = 12.dp, start = 4.dp, end = 4.dp))
+            Text(said.orEmpty(), color = apple.words, fontSize = 13.sp, modifier = Modifier.padding(top = 12.dp, start = 4.dp, end = 4.dp))
         }
     }
 
     if (account.googleClientId.isNotEmpty()) {
+        // One of Apple's grey buttons, with Google's G before the words.
         Row(
             Modifier
                 .riseIn(3)
+                .padding(top = 12.dp)
                 .fillMaxWidth()
                 .height(50.dp)
                 .pressBounce(0.97f)
                 .clip(ZenithShapes.pill)
-                .background(palette.onGlass.copy(alpha = 0.09f))
-                .border(1.dp, palette.onGlass.copy(alpha = 0.12f), ZenithShapes.pill)
+                .background(apple.grey)
                 .clickable {
                     if (busy) return@clickable
                     keyboard?.hide()
@@ -281,7 +284,7 @@ private fun SignedOut(account: AccountActions, scope: CoroutineScope, said: Stri
         ) {
             GoogleMark()
             Spacer(Modifier.width(10.dp))
-            Text("Continue with Google", color = palette.onGlass, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+            Text("Continue with Google", color = apple.words, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
         }
     }
 }
@@ -295,8 +298,8 @@ private fun GoogleMark() {
 }
 
 /**
- * A box to type a username or a password in. In use it is ringed in the accent, like the search
- * box; a password is dots until the eye at its end is tapped.
+ * A box to type a username or a password in: Apple's grey field, the hint in grey until something
+ * is typed; a password is dots until the eye at its end is tapped.
  */
 @Composable
 private fun AccountField(
@@ -308,28 +311,26 @@ private fun AccountField(
     onAction: () -> Unit = {},
 ) {
     val palette = LocalPalette.current
-    var focused by remember { mutableStateOf(false) }
+    val apple = LocalApple.current
     var shown by remember { mutableStateOf(false) }
-    val ring by animateColorAsState(if (focused) palette.accent.copy(alpha = 0.75f) else Color.Transparent, tween(220), label = "fieldRing")
     Row(
         Modifier
             .fillMaxWidth()
-            .height(50.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .background(palette.onGlass.copy(alpha = 0.08f))
-            .border(1.5.dp, ring, RoundedCornerShape(16.dp))
-            .padding(start = 16.dp, end = if (secret) 6.dp else 16.dp),
+            .height(48.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(apple.field)
+            .padding(start = 14.dp, end = if (secret) 6.dp else 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
             if (value.isEmpty()) {
-                Text(hint, color = palette.onGlassMuted, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(hint, color = apple.secondary, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             BasicTextField(
                 value = value,
                 onValueChange = onChange,
                 singleLine = true,
-                textStyle = TextStyle(fontFamily = LocalZenithFont.current, color = palette.onGlass, fontSize = 15.sp),
+                textStyle = TextStyle(fontFamily = LocalZenithFont.current, color = apple.words, fontSize = 16.sp),
                 cursorBrush = SolidColor(palette.accent),
                 visualTransformation = if (secret && !shown) PasswordVisualTransformation() else VisualTransformation.None,
                 keyboardOptions = KeyboardOptions(
@@ -342,7 +343,6 @@ private fun AccountField(
                 keyboardActions = KeyboardActions(onDone = { onAction() }),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .onFocusChanged { focused = it.isFocused }
                     // The hint is drawn behind the box, not in it, so a screen reader is told what the box is for.
                     .semantics { contentDescription = hint },
             )
@@ -366,7 +366,7 @@ private fun AccountField(
                     Icon(
                         if (open) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
                         contentDescription = if (open) "Hide password" else "Show password",
-                        tint = palette.onGlassMuted,
+                        tint = apple.secondary,
                         modifier = Modifier.size(20.dp),
                     )
                 }
@@ -380,6 +380,7 @@ private fun AccountField(
 @Composable
 private fun SignedIn(signed: Signed, account: AccountActions, scope: CoroutineScope, said: String?, onSaid: (String?) -> Unit) {
     val palette = LocalPalette.current
+    val apple = LocalApple.current
     val context = LocalContext.current
     // The keyboard is put away, and the box keeps the focus: taking the focus away as well would
     // hand it, on a phone with real keys, to the first thing on the page that can be pressed.
@@ -407,30 +408,29 @@ private fun SignedIn(signed: Signed, account: AccountActions, scope: CoroutineSc
             }
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
-                Text(name, color = palette.onGlass, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(if (signed.account.google) "Signed in with Google" else "Zenith account", color = palette.onGlassMuted, fontSize = 13.sp)
+                Text(name, color = apple.words, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(if (signed.account.google) "Signed in with Google" else "Zenith account", color = apple.secondary, fontSize = 14.sp)
             }
         }
     }
 
-    Group(padding = 16.dp, rise = 1) {
+    Section(
+        footer = "Each friend who uses your code gets ${Aura.REFERRAL_REWARD} aura, and so do you. " +
+            "A backup is saved from Backup & reset, with Zenith Plus.",
+        rise = 1,
+    ) {
         Held("Aura code", signed.account.code)
-        Spacer(Modifier.height(12.dp))
+        GroupDivider(inset = ROW_INSET)
         Held(
             "Friends who used it",
             if (signed.account.referralCap > 0) "${signed.account.referrals} of ${signed.account.referralCap}" else "${signed.account.referrals}",
         )
-        Spacer(Modifier.height(12.dp))
+        GroupDivider(inset = ROW_INSET)
         Held("Backup", signed.account.backupAt?.let { "Saved ${moment(it)}" } ?: "None yet")
-        Spacer(Modifier.height(12.dp))
-        Note(
-            "Each friend who uses your code gets ${Aura.REFERRAL_REWARD} aura, and so do you. " +
-                "A backup is saved from Backup & reset, with Zenith Plus.",
-        )
     }
 
     var leaving by remember { mutableStateOf(false) }
-    Group(rise = 2) {
+    Section(rise = 2) {
         ActionRow(
             icon = Icons.AutoMirrored.Rounded.Logout,
             title = if (leaving) "Signing out…" else "Sign out",
@@ -457,7 +457,7 @@ private fun SignedIn(signed: Signed, account: AccountActions, scope: CoroutineSc
     var busy by remember { mutableStateOf(false) }
     var refusals by remember { mutableIntStateOf(0) }
     Spot("accountDelete") {
-        Group(rise = 3) {
+        Section(rise = 3) {
             ActionRow(
                 icon = Icons.Rounded.DeleteForever,
                 title = when {
@@ -492,7 +492,7 @@ private fun SignedIn(signed: Signed, account: AccountActions, scope: CoroutineSc
                 }
             }
             AnimatedVisibility(visible = deleting, enter = unfoldIn(reduced), exit = unfoldOut(reduced)) {
-                Column(Modifier.padding(start = 14.dp, end = 14.dp, bottom = 14.dp)) {
+                Column(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 14.dp)) {
                     Note("The account, its Aura code and its backup are deleted from Zenith's server, at once and for good. Nothing on this phone changes.")
                     if (!signed.account.google) {
                         Spacer(Modifier.height(10.dp))
@@ -510,7 +510,7 @@ private fun SignedIn(signed: Signed, account: AccountActions, scope: CoroutineSc
                     }
                     if (said != null) {
                         Spacer(Modifier.height(10.dp))
-                        Text(said, color = palette.onGlass, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 4.dp))
+                        Text(said, color = apple.words, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 4.dp))
                     }
                 }
             }
@@ -518,14 +518,20 @@ private fun SignedIn(signed: Signed, account: AccountActions, scope: CoroutineSc
     }
 }
 
-/** One thing the account holds: what it is, and its value at the end of the line. */
+/** One thing the account holds, as an iPhone lists a value: what it is, and its value in grey at the end of the row. */
 @Composable
 private fun Held(what: String, value: String) {
-    val palette = LocalPalette.current
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(what, color = palette.onGlassMuted, fontSize = 14.sp, modifier = Modifier.weight(1f))
+    val apple = LocalApple.current
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(what, color = apple.words, fontSize = 16.sp, modifier = Modifier.weight(1f))
         Spacer(Modifier.width(12.dp))
-        Text(value, color = palette.onGlass, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(value, color = apple.secondary, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 

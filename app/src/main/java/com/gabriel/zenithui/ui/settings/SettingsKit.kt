@@ -97,6 +97,8 @@ import com.gabriel.zenithui.ui.common.popOut
 import com.gabriel.zenithui.ui.common.pressBounce
 import com.gabriel.zenithui.ui.common.rememberTick
 import com.gabriel.zenithui.ui.common.rollOver
+import com.gabriel.zenithui.ui.common.unfoldIn
+import com.gabriel.zenithui.ui.common.unfoldOut
 import com.gabriel.zenithui.ui.common.wordsChange
 import com.gabriel.zenithui.ui.theme.CardKind
 import com.gabriel.zenithui.ui.theme.LocalApple
@@ -172,7 +174,9 @@ private val PLAIN_TILE = Color(0xFF8E8E93)
 /**
  * A group of rows as an iPhone sets them out: [header], the group's name, small and grey above
  * it; the rows on a solid card; and [footer], what the choice in it means, in grey under the card.
- * With [rise], it is the block that many down its page and rises in after the ones above it.
+ * A footer that comes or goes unfolds and folds away. Sections stand further apart than the rows
+ * in them, so a page reads as its groups. With [rise], it is the block that many down its page and
+ * rises in after the ones above it.
  */
 @Composable
 internal fun Section(
@@ -182,14 +186,42 @@ internal fun Section(
     rise: Int? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    val reduced = LocalMotionLevel.current.reduced
+    // The last words it had, to fold away with rather than an empty line. Not state: it is only
+    // read as the footer is composed.
+    val lastFooter = remember { arrayOf(footer) }
+    if (footer != null) lastFooter[0] = footer
     Column(
         modifier
             .fillMaxWidth()
-            .then(if (rise != null) Modifier.riseIn(rise) else Modifier),
+            .then(if (rise != null) Modifier.riseIn(rise) else Modifier)
+            .padding(top = 12.dp),
     ) {
         if (header != null) GroupName(header)
         Column(Modifier.fillMaxWidth().solidCard(CardKind.Grouped), content = content)
-        if (footer != null) Note(footer, Modifier.padding(start = 12.dp, end = 12.dp, top = 7.dp))
+        AnimatedVisibility(visible = footer != null, enter = unfoldIn(reduced), exit = unfoldOut(reduced)) {
+            Note(lastFooter[0].orEmpty(), Modifier.padding(start = 12.dp, end = 12.dp, top = 7.dp))
+        }
+    }
+}
+
+/**
+ * A control that is not a row of its own, inside a card: a segmented control, a slider, a row of
+ * tiles to choose from. [title], when it has one, stands above it in the words' colour, as the name
+ * of a row does.
+ */
+@Composable
+internal fun ControlRow(title: String? = null, content: @Composable ColumnScope.() -> Unit) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+    ) {
+        if (title != null) {
+            Text(title, color = LocalApple.current.words, fontSize = 16.sp)
+            Spacer(Modifier.height(10.dp))
+        }
+        content()
     }
 }
 

@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.PowerManager
 import android.provider.Settings
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
@@ -20,10 +21,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.HelpOutline
 import androidx.compose.material.icons.rounded.AutoFixHigh
 import androidx.compose.material.icons.rounded.BatteryChargingFull
+import androidx.compose.material.icons.rounded.CloudDownload
+import androidx.compose.material.icons.rounded.CloudUpload
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.PrivacyTip
 import androidx.compose.material.icons.rounded.RestartAlt
 import androidx.compose.material.icons.rounded.Restore
@@ -33,12 +37,14 @@ import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material.icons.rounded.WbTwilight
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -56,31 +62,27 @@ import com.gabriel.zenithui.data.IconShapes
 import com.gabriel.zenithui.data.IconStyles
 import com.gabriel.zenithui.data.LabelSizes
 import com.gabriel.zenithui.data.NotificationDots
-import androidx.compose.material.icons.rounded.NotificationsActive
-import androidx.compose.runtime.DisposableEffect
 import com.gabriel.zenithui.data.PlusStatus
 import com.gabriel.zenithui.data.WallStyle
 import com.gabriel.zenithui.data.ZenithSettings
 import com.gabriel.zenithui.ui.common.LocalMotionLevel
+import com.gabriel.zenithui.ui.common.rememberHaptics
 import com.gabriel.zenithui.ui.common.shake
+import com.gabriel.zenithui.ui.common.unfoldIn
+import com.gabriel.zenithui.ui.common.unfoldOut
 import com.gabriel.zenithui.ui.onboarding.PhonePreview
 import com.gabriel.zenithui.ui.onboarding.Segmented
 import com.gabriel.zenithui.ui.theme.Palettes
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.withContext
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.material.icons.rounded.CloudDownload
-import androidx.compose.material.icons.rounded.CloudUpload
-import androidx.compose.runtime.rememberCoroutineScope
-import com.gabriel.zenithui.ui.common.rememberHaptics
-import com.gabriel.zenithui.ui.common.unfoldIn
-import com.gabriel.zenithui.ui.common.unfoldOut
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
-// What is on each page of Settings. Every option sits in a Spot named after its entry in the
-// SettingsCatalog, which is how a search result finds its row; every block says how far down the
-// page it is, which is the order the blocks rise in as the page arrives.
+// What is on each page of Settings, set out as an iPhone sets out its own: Sections of rows on
+// solid cards, a choice's name over its card and what it means under it. Every option sits in a
+// Spot named after its entry in the SettingsCatalog, which is how a search result finds its row;
+// every block says how far down the page it is, which is the order the blocks rise in as the page
+// arrives. A hairline between two rows starts where the words of the row above it start.
 
 /**
  * Your own home screen, small: the same code that draws the real one, so a change made below is
@@ -145,28 +147,26 @@ internal fun ThemeOptions(settings: ZenithSettings, plus: PlusStatus, preview: S
     val design = WallStyle.byName(settings.wallpaperStyle)
 
     MiniPhone(settings, preview)
-    Group(rise = 1) {
+    Section(
+        header = "Colour",
+        footer = when {
+            settings.paletteId != Palettes.WALLPAPER -> "Colours the switches, the buttons, the highlights and Zenith's own wallpapers."
+            design != null -> "The colours of the last photo you had as wallpaper. With a photo up, they follow it."
+            else -> "Taken from your wallpaper, and changed along with it."
+        },
+        rise = 1,
+    ) {
         Spot("palette") {
-            Column(Modifier.padding(14.dp)) {
-                Caption("Colour")
-                Spacer(Modifier.height(12.dp))
+            ControlRow {
                 PaletteGrid(
                     options = options,
                     selectedId = settings.paletteId,
                     onSelect = { option -> change { it.copy(paletteId = option.id) } },
                     onMake = actions.themeMaker,
                 )
-                Spacer(Modifier.height(10.dp))
-                Note(
-                    when {
-                        settings.paletteId != Palettes.WALLPAPER -> "Colours the glass, the highlights and Zenith's own wallpapers."
-                        design != null -> "The colours of the last photo you had as wallpaper. With a photo up, they follow it."
-                        else -> "Taken from your wallpaper, and changed along with it."
-                    }
-                )
             }
         }
-        GroupDivider()
+        GroupDivider(inset = ROW_INSET)
         Spot("dayPalettes") {
             ActionRow(
                 icon = if (plus.active) Icons.Rounded.WbTwilight else Icons.Rounded.Lock,
@@ -183,47 +183,40 @@ internal fun ThemeOptions(settings: ZenithSettings, plus: PlusStatus, preview: S
             )
         }
     }
-    Group(rise = 2) {
+    Section(
+        header = "Light or dark",
+        footer = when (settings.appearance) {
+            "auto" -> "Follows the phone: light by day and dark at night, if the phone is set that way."
+            "light" -> "Pale panels and dark words, whatever the phone is set to."
+            else -> "Dark panels and white words, whatever the phone is set to."
+        },
+        rise = 2,
+    ) {
         Spot("appearance") {
-            Column(Modifier.padding(14.dp)) {
-                Caption("Light or dark")
-                Spacer(Modifier.height(10.dp))
+            ControlRow {
                 Segmented(
                     options = listOf("auto" to "Auto", "light" to "Light", "dark" to "Dark"),
                     selected = settings.appearance,
                     onSelect = { value -> change { it.copy(appearance = value) } },
                 )
-                Spacer(Modifier.height(8.dp))
-                Note(
-                    when (settings.appearance) {
-                        "auto" -> "Follows the phone: light by day and dark at night, if the phone is set that way."
-                        "light" -> "Pale panels and dark words, whatever the phone is set to."
-                        else -> "Dark panels and white words, whatever the phone is set to."
-                    }
-                )
             }
         }
     }
-    Group(rise = 3) {
+    Section(header = "Font", rise = 3) {
         Spot("font") {
-            Column(Modifier.padding(start = 14.dp, end = 14.dp, top = 14.dp, bottom = 10.dp)) {
-                Caption("Font")
-                Spacer(Modifier.height(10.dp))
+            ControlRow {
                 FontChoice(settings.font) { id -> change { it.copy(font = id) } }
             }
         }
-        GroupDivider(inset = 16.dp)
+    }
+    Section(header = "Numbers", footer = "The clocks, the battery, the countdown and the weather.", rise = 4) {
         Spot("numberFont") {
-            Column(Modifier.padding(14.dp)) {
-                Caption("Numbers")
-                Spacer(Modifier.height(10.dp))
+            ControlRow {
                 NumberFontChoice(settings.numberFont, settings.font) { id -> change { it.copy(numberFont = id) } }
-                Spacer(Modifier.height(8.dp))
-                Note("The clocks, the battery, the countdown and the weather.")
             }
         }
     }
-    Group(rise = 4) {
+    Section(rise = 5) {
         Spot("wallpaper") {
             ActionRow(
                 icon = Icons.Rounded.Image,
@@ -245,34 +238,30 @@ internal fun ThemeOptions(settings: ZenithSettings, plus: PlusStatus, preview: S
             ) { value -> change { it.copy(wallpaperFollow = value) } }
         }
     }
-    Group(rise = 5) {
+    Section(footer = "How strongly panels bend and catch the light. Lower is flatter and calmer.", rise = 6) {
         Spot("glass") {
-            Column(Modifier.padding(14.dp)) {
+            ControlRow {
                 PillSlider(
                     label = "Glass",
                     value = settings.glass,
                     range = 0.2f..1.2f,
                     display = "${(settings.glass * 100).toInt()}%",
                 ) { value -> change { it.copy(glass = value) } }
-                Spacer(Modifier.height(8.dp))
-                Note("How strongly panels bend and catch the light. Lower is flatter and calmer.")
             }
         }
-        GroupDivider(inset = 16.dp)
+    }
+    Section(header = "Glass panels", footer = GlassBody.byId(settings.glassBody).detail, rise = 7) {
         Spot("glassBody") {
-            Column(Modifier.padding(14.dp)) {
-                Caption("Glass panels")
-                Spacer(Modifier.height(10.dp))
+            ControlRow {
                 Segmented(
                     options = GlassBody.entries.map { it.id to it.label },
                     selected = GlassBody.byId(settings.glassBody).id,
                     onSelect = { value -> change { it.copy(glassBody = value) } },
                 )
-                Spacer(Modifier.height(8.dp))
-                Note(GlassBody.byId(settings.glassBody).detail)
             }
         }
-        GroupDivider(inset = 16.dp)
+    }
+    Section(rise = 8) {
         Spot("tiltShine") {
             ToggleRow(
                 title = "Tilt shine",
@@ -280,7 +269,7 @@ internal fun ThemeOptions(settings: ZenithSettings, plus: PlusStatus, preview: S
                 checked = settings.glassShine,
             ) { value -> change { it.copy(glassShine = value) } }
         }
-        GroupDivider()
+        GroupDivider(inset = ROW_INSET)
         Spot("glassStudio") {
             ActionRow(
                 icon = if (plus.active) Icons.Rounded.Tune else Icons.Rounded.Lock,
@@ -309,14 +298,26 @@ internal fun HomeOptions(settings: ZenithSettings, plus: PlusStatus, preview: Se
     var tidied by remember { mutableStateOf<Int?>(null) }
     /** How many times it has been run: the wand turns once for each. */
     var tidies by remember { mutableIntStateOf(0) }
+    val custom = settings.gridDensity == GridDensity.CUSTOM
+    // For a preset, how many cells that works out to depends on the screen, so it is reported,
+    // not chosen.
+    val counts = "${settings.columns} across, ${settings.rows} down"
+    val allowed = rememberNotificationAccess()
+    val dots = Badges.of(settings.badges)
 
     MiniPhone(settings, preview)
-    Group(rise = 1) {
+    Section(
+        header = "Grid",
+        footer = when {
+            custom -> "Your own grid: $counts. Icons size themselves to fit, and anything left without room moves to the closest free spot."
+            settings.gridDensity == GridDensity.Compact.id -> "Smaller cells, so more fits on a page: $counts on this screen."
+            settings.gridDensity == GridDensity.Roomy.id -> "Larger cells with more room round each icon: $counts on this screen."
+            else -> "$counts on this screen. Icons size themselves to fit."
+        },
+        rise = 1,
+    ) {
         Spot("grid") {
-            Column(Modifier.padding(14.dp)) {
-                Caption("Grid")
-                Spacer(Modifier.height(10.dp))
-                val custom = settings.gridDensity == GridDensity.CUSTOM
+            ControlRow {
                 Segmented(
                     options = GridDensity.entries.map { it.id to it.label } + (GridDensity.CUSTOM to "Custom"),
                     selected = if (custom) GridDensity.CUSTOM else GridDensity.byId(settings.gridDensity).id,
@@ -332,41 +333,28 @@ internal fun HomeOptions(settings: ZenithSettings, plus: PlusStatus, preview: Se
                         }
                     },
                 )
-                // The two numbers of a grid of your own open out under the choice, and fold away
-                // again when one of Zenith's is chosen instead.
-                AnimatedVisibility(visible = custom, enter = unfoldIn(reduced), exit = unfoldOut(reduced)) {
-                    Column {
-                        Spacer(Modifier.height(10.dp))
-                        // Set straight onto the page as well as kept: the grid follows the finger
-                        // rather than the moment the screen is next measured.
-                        StepperRow("Columns", settings.columns, GridDensity.columnChoices(preview.screenWidth.value)) { n ->
-                            change { it.copy(gridColumns = n, columns = n) }
-                        }
-                        StepperRow("Rows", settings.rows, GridDensity.rowChoices(preview.screenHeight.value)) { n ->
-                            change { it.copy(gridRows = n, rows = n) }
-                        }
+            }
+            // The two numbers of a grid of your own open out under the choice, and fold away
+            // again when one of Zenith's is chosen instead.
+            AnimatedVisibility(visible = custom, enter = unfoldIn(reduced), exit = unfoldOut(reduced)) {
+                Column {
+                    // Set straight onto the page as well as kept: the grid follows the finger
+                    // rather than the moment the screen is next measured.
+                    GroupDivider(inset = ROW_INSET)
+                    StepperRow("Columns", settings.columns, GridDensity.columnChoices(preview.screenWidth.value)) { n ->
+                        change { it.copy(gridColumns = n, columns = n) }
+                    }
+                    GroupDivider(inset = ROW_INSET)
+                    StepperRow("Rows", settings.rows, GridDensity.rowChoices(preview.screenHeight.value)) { n ->
+                        change { it.copy(gridRows = n, rows = n) }
                     }
                 }
-                Spacer(Modifier.height(8.dp))
-                // For a preset, how many cells that works out to depends on the screen, so it is
-                // reported, not chosen.
-                val counts = "${settings.columns} across, ${settings.rows} down"
-                Note(
-                    when {
-                        custom -> "Your own grid: $counts. Icons size themselves to fit, and anything left without room moves to the closest free spot."
-                        settings.gridDensity == GridDensity.Compact.id -> "Smaller cells, so more fits on a page: $counts on this screen."
-                        settings.gridDensity == GridDensity.Roomy.id -> "Larger cells with more room round each icon: $counts on this screen."
-                        else -> "$counts on this screen. Icons size themselves to fit."
-                    }
-                )
             }
         }
     }
-    Group(rise = 2) {
+    Section(header = "Icon shape", footer = "The outline every app icon and folder is cut to.", rise = 2) {
         Spot("iconShape") {
-            Column(Modifier.padding(14.dp)) {
-                Caption("Icon shape")
-                Spacer(Modifier.height(12.dp))
+            ControlRow {
                 IconShapes.ids.chunked(4).forEachIndexed { line, ids ->
                     if (line > 0) Spacer(Modifier.height(12.dp))
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -375,37 +363,35 @@ internal fun HomeOptions(settings: ZenithSettings, plus: PlusStatus, preview: Se
                         }
                     }
                 }
-                Spacer(Modifier.height(10.dp))
-                Note("The outline every app icon and folder is cut to.")
             }
         }
-        GroupDivider(inset = 16.dp)
+    }
+    Section(
+        header = "Icon style",
+        footer = IconStyles.detail(settings.iconStyle) +
+            if (settings.iconStyle != IconStyles.ORIGINAL) " An icon you chose for an app stays as you chose it." else "",
+        rise = 3,
+    ) {
         Spot("iconStyle") {
-            Column(Modifier.padding(14.dp)) {
-                Caption("Icon style")
-                Spacer(Modifier.height(10.dp))
+            ControlRow {
                 Segmented(
                     options = IconStyles.ids.map { it to IconStyles.label(it) },
                     selected = IconStyles.of(settings.iconStyle),
                     onSelect = { value -> change { it.copy(iconStyle = value) } },
                 )
-                Spacer(Modifier.height(8.dp))
-                Note(IconStyles.detail(settings.iconStyle) + if (settings.iconStyle != IconStyles.ORIGINAL) " An icon you chose for an app stays as you chose it." else "")
             }
         }
     }
-    Group(rise = 3) {
+    Section(rise = 4) {
         Spot("labels") {
             ToggleRow("Labels", "App names under the icons", settings.showLabels) { value -> change { it.copy(showLabels = value) } }
         }
         // How the names look opens out under the switch, and folds away with the names.
         AnimatedVisibility(visible = settings.showLabels, enter = unfoldIn(reduced), exit = unfoldOut(reduced)) {
             Column {
-                GroupDivider(inset = 16.dp)
+                GroupDivider(inset = ROW_INSET)
                 Spot("labelSize") {
-                    Column(Modifier.padding(14.dp)) {
-                        Caption("Name size")
-                        Spacer(Modifier.height(10.dp))
+                    ControlRow(title = "Name size") {
                         Segmented(
                             options = LabelSizes.ids.map { it to LabelSizes.label(it) },
                             selected = LabelSizes.of(settings.labelSize),
@@ -413,7 +399,7 @@ internal fun HomeOptions(settings: ZenithSettings, plus: PlusStatus, preview: Se
                         )
                     }
                 }
-                GroupDivider(inset = 16.dp)
+                GroupDivider(inset = ROW_INSET)
                 Spot("labelShadow") {
                     ToggleRow("Name shadow", "A soft shadow under the names, for a busy wallpaper", settings.labelShadow) { value ->
                         change { it.copy(labelShadow = value) }
@@ -421,7 +407,19 @@ internal fun HomeOptions(settings: ZenithSettings, plus: PlusStatus, preview: Se
                 }
             }
         }
-        GroupDivider(inset = 16.dp)
+    }
+    Section(
+        footer = if (settings.showDock) {
+            when (settings.dockStyle) {
+                "floating" -> "A pill of glass that hugs its icons, however few."
+                "none" -> "The icons on the wallpaper, with nothing behind them."
+                else -> "A bar of glass the width of the page."
+            }
+        } else {
+            null
+        },
+        rise = 5,
+    ) {
         Spot("dock") {
             ToggleRow(
                 "Dock",
@@ -429,55 +427,47 @@ internal fun HomeOptions(settings: ZenithSettings, plus: PlusStatus, preview: Se
                 settings.showDock,
             ) { value -> change { it.copy(showDock = value) } }
         }
-        AnimatedVisibility(visible = settings.showDock, enter = unfoldIn(LocalMotionLevel.current.reduced), exit = unfoldOut(LocalMotionLevel.current.reduced)) {
-            Spot("dockStyle") {
-                Column(Modifier.padding(start = 14.dp, end = 14.dp, bottom = 14.dp)) {
-                    Segmented(
-                        options = listOf("glass" to "Glass bar", "floating" to "Floating", "none" to "Icons only"),
-                        selected = settings.dockStyle,
-                        onSelect = { value -> change { it.copy(dockStyle = value) } },
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Note(
-                        when (settings.dockStyle) {
-                            "floating" -> "A pill of glass that hugs its icons, however few."
-                            "none" -> "The icons on the wallpaper, with nothing behind them."
-                            else -> "A bar of glass the width of the page."
-                        }
-                    )
+        AnimatedVisibility(visible = settings.showDock, enter = unfoldIn(reduced), exit = unfoldOut(reduced)) {
+            Column {
+                GroupDivider(inset = ROW_INSET)
+                Spot("dockStyle") {
+                    ControlRow {
+                        Segmented(
+                            options = listOf("glass" to "Glass bar", "floating" to "Floating", "none" to "Icons only"),
+                            selected = settings.dockStyle,
+                            onSelect = { value -> change { it.copy(dockStyle = value) } },
+                        )
+                    }
                 }
             }
         }
-        GroupDivider(inset = 16.dp)
+    }
+    Section(rise = 6) {
         Spot("searchBar") {
             ToggleRow("Search bar", "Above the dock, for your apps and the web", settings.searchBar) { value -> change { it.copy(searchBar = value) } }
         }
     }
-    Group(rise = 4) {
+    Section(
+        header = "Notification dots",
+        footer = when {
+            dots == Badges.OFF -> "No dots on icons."
+            !allowed -> "Android has to let Zenith see notifications first."
+            dots == Badges.COUNT -> "A dot with how many are waiting, on the app's icon and on its folder."
+            else -> "A dot on an app, and on its folder, while it has something to read."
+        },
+        rise = 7,
+    ) {
         Spot("badges") {
-            val allowed = rememberNotificationAccess()
-            val dots = Badges.of(settings.badges)
-            Column(Modifier.padding(14.dp)) {
-                Caption("Notification dots")
-                Spacer(Modifier.height(10.dp))
+            ControlRow {
                 Segmented(
                     options = Badges.ids.map { it to Badges.label(it) },
                     selected = dots,
                     onSelect = { value -> change { it.copy(badges = value) } },
                 )
-                Spacer(Modifier.height(8.dp))
-                Note(
-                    when {
-                        dots == Badges.OFF -> "No dots on icons."
-                        !allowed -> "Android has to let Zenith see notifications first."
-                        dots == Badges.COUNT -> "A dot with how many are waiting, on the app's icon and on its folder."
-                        else -> "A dot on an app, and on its folder, while it has something to read."
-                    }
-                )
             }
             AnimatedVisibility(visible = dots != Badges.OFF && !allowed, enter = unfoldIn(reduced), exit = unfoldOut(reduced)) {
                 Column {
-                    GroupDivider(inset = 16.dp)
+                    GroupDivider(inset = ROW_INSET)
                     ActionRow(
                         icon = Icons.Rounded.NotificationsActive,
                         title = "Let Zenith see notifications",
@@ -488,11 +478,20 @@ internal fun HomeOptions(settings: ZenithSettings, plus: PlusStatus, preview: Se
             }
         }
     }
-    Group(rise = 5) {
+    Section(
+        header = "Top of the page",
+        footer = when (settings.header) {
+            HomeHeader.GREETING -> "A greeting for the time of day, with your name, above the first row."
+            HomeHeader.OFF -> "Nothing is written above the first row."
+            HomeHeader.CLOCK -> "A large clock in the numbers' font, the date under it."
+            HomeHeader.DATE -> "The day and the date, large."
+            HomeHeader.GLANCE -> "The date, and the weather where the Weather widget is set to."
+            else -> "Your name, small, above the first row."
+        },
+        rise = 8,
+    ) {
         Spot("header") {
-            Column(Modifier.padding(14.dp)) {
-                Caption("Top of the page")
-                Spacer(Modifier.height(10.dp))
+            ControlRow {
                 ChoiceChips(
                     options = listOf(
                         HomeHeader.NAME to "Name", HomeHeader.GREETING to "Greeting", HomeHeader.CLOCK to "Clock",
@@ -501,61 +500,49 @@ internal fun HomeOptions(settings: ZenithSettings, plus: PlusStatus, preview: Se
                     selected = settings.header,
                     onSelect = { value -> change { it.copy(header = value) } },
                 )
-                Spacer(Modifier.height(8.dp))
-                Note(
-                    when (settings.header) {
-                        HomeHeader.GREETING -> "A greeting for the time of day, with your name, above the first row."
-                        HomeHeader.OFF -> "Nothing is written above the first row."
-                        HomeHeader.CLOCK -> "A large clock in the numbers' font, the date under it."
-                        HomeHeader.DATE -> "The day and the date, large."
-                        HomeHeader.GLANCE -> "The date, and the weather where the Weather widget is set to."
-                        else -> "Your name, small, above the first row."
-                    }
-                )
             }
         }
-        GroupDivider(inset = 16.dp)
+    }
+    Section(
+        header = "Which page you are on",
+        footer = when (settings.indicator) {
+            "line" -> "A short bar gliding along a line as the pages turn."
+            "numbers" -> "The page's number, out of how many there are."
+            "none" -> "Nothing. Pinch out for every page at once."
+            else -> "A dot for each page; the one in view stretches."
+        },
+        rise = 9,
+    ) {
         Spot("indicator") {
-            Column(Modifier.padding(14.dp)) {
-                Caption("Which page you are on")
-                Spacer(Modifier.height(10.dp))
+            ControlRow {
                 Segmented(
                     options = listOf("dots" to "Dots", "line" to "Line", "numbers" to "Numbers", "none" to "None"),
                     selected = settings.indicator,
                     onSelect = { value -> change { it.copy(indicator = value) } },
                 )
-                Spacer(Modifier.height(8.dp))
-                Note(
-                    when (settings.indicator) {
-                        "line" -> "A short bar gliding along a line as the pages turn."
-                        "numbers" -> "The page's number, out of how many there are."
-                        "none" -> "Nothing. Pinch out for every page at once."
-                        else -> "A dot for each page; the one in view stretches."
-                    }
-                )
             }
         }
-        GroupDivider(inset = 16.dp)
+    }
+    Section(
+        header = "Folders",
+        footer = when (settings.folderStyle) {
+            "stack" -> "The first three apps fanned like cards. A folder's own colour is in its menu."
+            "cover" -> "The first app large, the next two small at its corner."
+            else -> "Four apps, two by two. A folder's own colour is in its menu."
+        },
+        rise = 10,
+    ) {
         Spot("folderStyle") {
-            Column(Modifier.padding(14.dp)) {
-                Caption("Folders")
-                Spacer(Modifier.height(10.dp))
+            ControlRow {
                 Segmented(
                     options = listOf("grid" to "Grid", "stack" to "Stack", "cover" to "Cover"),
                     selected = settings.folderStyle,
                     onSelect = { value -> change { it.copy(folderStyle = value) } },
                 )
-                Spacer(Modifier.height(8.dp))
-                Note(
-                    when (settings.folderStyle) {
-                        "stack" -> "The first three apps fanned like cards. A folder's own colour is in its menu."
-                        "cover" -> "The first app large, the next two small at its corner."
-                        else -> "Four apps, two by two. A folder's own colour is in its menu."
-                    }
-                )
             }
         }
-        GroupDivider()
+    }
+    Section(rise = 11) {
         Spot("lockLayout") {
             ToggleRow(
                 "Lock layout",
@@ -563,7 +550,7 @@ internal fun HomeOptions(settings: ZenithSettings, plus: PlusStatus, preview: Se
                 settings.lockLayout,
             ) { value -> change { it.copy(lockLayout = value) } }
         }
-        GroupDivider()
+        GroupDivider(inset = ROW_INSET)
         Spot("hideStatusBar") {
             ToggleRow(
                 "Hide the status bar",
@@ -572,7 +559,7 @@ internal fun HomeOptions(settings: ZenithSettings, plus: PlusStatus, preview: Se
             ) { value -> change { it.copy(hideStatusBar = value) } }
         }
     }
-    Group(rise = 6) {
+    Section(rise = 12) {
         Spot("freeform") {
             ToggleRow(
                 title = "Free placement",
@@ -582,7 +569,7 @@ internal fun HomeOptions(settings: ZenithSettings, plus: PlusStatus, preview: Se
                 onChange = actions.freeform,
             )
         }
-        GroupDivider(inset = 16.dp)
+        GroupDivider(inset = ROW_INSET)
         Spot("tidy") {
             ActionRow(
                 icon = Icons.Rounded.AutoFixHigh,
@@ -601,20 +588,17 @@ internal fun HomeOptions(settings: ZenithSettings, plus: PlusStatus, preview: Se
             }
         }
     }
-    Group(rise = 7) {
+    Section(
+        header = "Icon pack",
+        footer = "Redraws your apps' icons in a set from an icon pack app." +
+            if (packs.isEmpty()) " Install any Nova or ADW compatible icon pack and it shows up here." else "",
+        rise = 13,
+    ) {
         Spot("iconPack") {
-            Caption("Icon pack", Modifier.padding(start = 12.dp, top = 14.dp, bottom = 2.dp))
-            Note("Redraws your apps' icons in a set from an icon pack app.", Modifier.padding(start = 12.dp, end = 12.dp, bottom = 4.dp))
             ChoiceRow("System icons", selected = settings.iconPack.isEmpty()) { change { it.copy(iconPack = "") } }
             packs.forEach { pack ->
-                GroupDivider(inset = 52.dp)
+                GroupDivider(inset = ROW_INSET)
                 ChoiceRow(pack.label, selected = settings.iconPack == pack.packageName) { change { it.copy(iconPack = pack.packageName) } }
-            }
-            if (packs.isEmpty()) {
-                Note(
-                    "Install any Nova or ADW compatible icon pack and it shows up here.",
-                    Modifier.padding(start = 12.dp, end = 12.dp, bottom = 14.dp),
-                )
             }
         }
     }
@@ -642,131 +626,122 @@ private fun rememberNotificationAccess(): Boolean {
 @Composable
 internal fun MotionOptions(settings: ZenithSettings, actions: SettingsActions, onAdvanced: () -> Unit) {
     val change = actions.change
-    Group(rise = 0) {
+    Section(
+        header = "Animations",
+        footer = if (settings.motion == "reduced") {
+            "Quick fades in place of springs. Nothing flies in, jiggles or tilts."
+        } else {
+            "Everything moves. The phone's own Remove animations switch still turns it down."
+        },
+        rise = 0,
+    ) {
         Spot("animations") {
-            Column(Modifier.padding(14.dp)) {
-                Caption("Animations")
-                Spacer(Modifier.height(10.dp))
+            ControlRow {
                 Segmented(
                     options = listOf("full" to "Full", "reduced" to "Reduced"),
                     selected = if (settings.motion == "reduced") "reduced" else "full",
                     onSelect = { value -> change { it.copy(motion = value) } },
                 )
-                Spacer(Modifier.height(8.dp))
-                Note(
-                    if (settings.motion == "reduced") {
-                        "Quick fades in place of springs. Nothing flies in, jiggles or tilts."
-                    } else {
-                        "Everything moves. The phone's own Remove animations switch still turns it down."
-                    }
-                )
             }
         }
     }
-    Group(rise = 1) {
+    Section(
+        header = "Opening apps",
+        footer = if (settings.openAnimation == "glass") {
+            "The icon grows into grey glass over a frosted home screen."
+        } else {
+            "The icon grows into a card in its own colour."
+        },
+        rise = 1,
+    ) {
         Spot("openAnimation") {
-            Column(Modifier.padding(14.dp)) {
-                Caption("Opening apps")
-                Spacer(Modifier.height(10.dp))
+            ControlRow {
                 Segmented(
                     options = listOf("colour" to "Colour", "glass" to "Liquid glass"),
                     selected = settings.openAnimation,
                     onSelect = { value -> change { it.copy(openAnimation = value) } },
                 )
-                Spacer(Modifier.height(8.dp))
-                Note(
-                    if (settings.openAnimation == "glass") {
-                        "The icon grows into grey glass over a frosted home screen."
-                    } else {
-                        "The icon grows into a card in its own colour."
-                    }
-                )
             }
         }
     }
-    Group(rise = 2) {
+    Section(
+        header = "Page swipe",
+        footer = when (settings.pageEffect) {
+            "slide" -> "Pages move side by side, nothing else."
+            "cube" -> "Pages turn about the edge they share, like the sides of a box."
+            "stack" -> "The page you leave shrinks and fades under the next."
+            "carousel" -> "Pages go round as on a turntable, each turning to face you."
+            "wheel" -> "Pages swing round a great wheel under the screen."
+            "flip" -> "A page turns over where it stands, the next on its back."
+            "fold" -> "Pages fold in at the crease between them, like a leaflet."
+            else -> "Pages tilt back a little as they pass."
+        },
+        rise = 2,
+    ) {
         Spot("pageEffect") {
-            Column(Modifier.padding(14.dp)) {
-                Caption("Page swipe")
-                Spacer(Modifier.height(10.dp))
+            ControlRow {
                 PageTurnChoice(settings.pageEffect) { value -> change { it.copy(pageEffect = value) } }
-                Spacer(Modifier.height(8.dp))
-                Note(
-                    when (settings.pageEffect) {
-                        "slide" -> "Pages move side by side, nothing else."
-                        "cube" -> "Pages turn about the edge they share, like the sides of a box."
-                        "stack" -> "The page you leave shrinks and fades under the next."
-                        "carousel" -> "Pages go round as on a turntable, each turning to face you."
-                        "wheel" -> "Pages swing round a great wheel under the screen."
-                        "flip" -> "A page turns over where it stands, the next on its back."
-                        "fold" -> "Pages fold in at the crease between them, like a leaflet."
-                        else -> "Pages tilt back a little as they pass."
-                    }
-                )
             }
         }
-        GroupDivider(inset = 16.dp)
+    }
+    Section(
+        header = "Coming home",
+        footer = when (settings.arrival) {
+            "below" -> "Everything rises into place, the foot of the page first."
+            "cascade" -> "Everything drops in, a column at a time from the left."
+            else -> "Everything comes in from round the middle, the middle first."
+        },
+        rise = 3,
+    ) {
         Spot("arrival") {
-            Column(Modifier.padding(14.dp)) {
-                Caption("Coming home")
-                Spacer(Modifier.height(10.dp))
+            ControlRow {
                 Segmented(
                     options = listOf("middle" to "Middle", "below" to "Below", "cascade" to "Cascade"),
                     selected = settings.arrival,
                     onSelect = { value -> change { it.copy(arrival = value) } },
                 )
-                Spacer(Modifier.height(8.dp))
-                Note(
-                    when (settings.arrival) {
-                        "below" -> "Everything rises into place, the foot of the page first."
-                        "cascade" -> "Everything drops in, a column at a time from the left."
-                        else -> "Everything comes in from round the middle, the middle first."
-                    }
-                )
             }
         }
-        GroupDivider(inset = 16.dp)
+    }
+    Section(
+        header = "Opening the drawer",
+        footer = when (settings.drawerArrival) {
+            "grow" -> "It grows up out of the foot of the screen as you swipe."
+            "glass" -> "It clears into view where it is, like glass."
+            else -> "It slides up from the foot of the screen under your finger."
+        },
+        rise = 4,
+    ) {
         Spot("drawerArrival") {
-            Column(Modifier.padding(14.dp)) {
-                Caption("Opening the drawer")
-                Spacer(Modifier.height(10.dp))
+            ControlRow {
                 Segmented(
                     options = listOf("rise" to "Rise", "grow" to "Grow", "glass" to "Glass"),
                     selected = settings.drawerArrival,
                     onSelect = { value -> change { it.copy(drawerArrival = value) } },
                 )
-                Spacer(Modifier.height(8.dp))
-                Note(
-                    when (settings.drawerArrival) {
-                        "grow" -> "It grows up out of the foot of the screen as you swipe."
-                        "glass" -> "It clears into view where it is, like glass."
-                        else -> "It slides up from the foot of the screen under your finger."
-                    }
-                )
             }
         }
-        GroupDivider(inset = 16.dp)
+    }
+    Section(
+        header = "Pressing",
+        footer = when (settings.press) {
+            "squish" -> "What you press gives like something soft, and wobbles back."
+            "ripple" -> "Light spreads across what you press, out from your finger."
+            else -> "What you press dips under your finger and springs back."
+        },
+        rise = 5,
+    ) {
         Spot("press") {
-            Column(Modifier.padding(14.dp)) {
-                Caption("Pressing")
-                Spacer(Modifier.height(10.dp))
+            ControlRow {
                 Segmented(
                     options = listOf("bounce" to "Bounce", "squish" to "Squish", "ripple" to "Ripple"),
                     selected = settings.press,
                     onSelect = { value -> change { it.copy(press = value) } },
                 )
-                Spacer(Modifier.height(8.dp))
-                Note(
-                    when (settings.press) {
-                        "squish" -> "What you press gives like something soft, and wobbles back."
-                        "ripple" -> "Light spreads across what you press, out from your finger."
-                        else -> "What you press dips under your finger and springs back."
-                    }
-                )
             }
         }
     }
-    Group(rise = 3) {
+    Section(rise = 6) {
         Spot("haptics") {
             ToggleRow(
                 title = "Haptics",
@@ -775,7 +750,7 @@ internal fun MotionOptions(settings: ZenithSettings, actions: SettingsActions, o
             ) { value -> change { it.copy(haptics = value) } }
         }
     }
-    Group(rise = 4) {
+    Section(rise = 7) {
         Spot("advancedMotion") {
             val style = AnimationPreset.byId(settings.animation.preset).label
             ActionRow(
@@ -792,63 +767,58 @@ internal fun MotionOptions(settings: ZenithSettings, actions: SettingsActions, o
 @Composable
 internal fun AppsOptions(settings: ZenithSettings, plus: PlusStatus, actions: SettingsActions) {
     val change = actions.change
-    Group(rise = 0) {
+    Section(
+        header = "Swipe up for",
+        footer = if (settings.appsView == "library") {
+            "Swipe left past your last page. Suggestions, recently added, then folders by kind."
+        } else {
+            "Every app in one list, A to Z."
+        },
+        rise = 0,
+    ) {
         Spot("appsView") {
-            Column(Modifier.padding(14.dp)) {
-                Caption("Swipe up for")
-                Spacer(Modifier.height(10.dp))
+            ControlRow {
                 Segmented(
                     options = listOf("drawer" to "App drawer", "library" to "App Library"),
                     selected = settings.appsView,
                     onSelect = { value -> change { it.copy(appsView = value) } },
                 )
-                Spacer(Modifier.height(8.dp))
-                Note(
-                    if (settings.appsView == "library") {
-                        "Swipe left past your last page. Suggestions, recently added, then folders by kind."
-                    } else {
-                        "Every app in one list, A to Z."
-                    }
-                )
             }
         }
     }
-    Group(rise = 1) {
+    Section(header = "Order", footer = DrawerSort.detail(settings.drawerSort), rise = 1) {
         Spot("drawerSort") {
-            Column(Modifier.padding(14.dp)) {
-                Caption("Order")
-                Spacer(Modifier.height(10.dp))
+            ControlRow {
                 Segmented(
                     options = DrawerSort.ids.map { it to DrawerSort.short(it) },
                     selected = DrawerSort.of(settings.drawerSort),
                     onSelect = { value -> change { it.copy(drawerSort = value) } },
                 )
-                Spacer(Modifier.height(8.dp))
-                Note(DrawerSort.detail(settings.drawerSort))
             }
         }
-        GroupDivider(inset = 16.dp)
+    }
+    Section(
+        header = "Columns",
+        footer = if (settings.drawerColumns <= 0) {
+            "As many across as the home screen: ${settings.columns}."
+        } else {
+            "${settings.drawerColumns} apps across, whatever the home screen has."
+        },
+        rise = 2,
+    ) {
         Spot("drawerColumns") {
-            Column(Modifier.padding(14.dp)) {
-                Caption("Columns")
-                Spacer(Modifier.height(10.dp))
+            ControlRow {
                 Segmented(
                     options = listOf("0" to "Auto", "3" to "3", "4" to "4", "5" to "5", "6" to "6"),
                     selected = settings.drawerColumns.coerceIn(0, 6).toString().let { if (it == "1" || it == "2") "0" else it },
                     onSelect = { value -> change { it.copy(drawerColumns = value.toInt()) } },
                 )
-                Spacer(Modifier.height(8.dp))
-                Note(
-                    if (settings.drawerColumns <= 0) "As many across as the home screen: ${settings.columns}."
-                    else "${settings.drawerColumns} apps across, whatever the home screen has."
-                )
             }
         }
-        GroupDivider(inset = 16.dp)
+    }
+    Section(header = "Tabs", rise = 3) {
         Spot("drawerTabs") {
-            Column(Modifier.padding(14.dp)) {
-                Caption("Tabs")
-                Spacer(Modifier.height(6.dp))
+            ControlRow {
                 Note(
                     when (val n = settings.drawerTabs.size) {
                         0 -> "Make one with the + along the top of the drawer: Games, Work, Friends. Hold a tab to change it."
@@ -859,7 +829,7 @@ internal fun AppsOptions(settings: ZenithSettings, plus: PlusStatus, actions: Se
             }
         }
     }
-    Group(rise = 2) {
+    Section(rise = 4) {
         Spot("hiddenApps") {
             ActionRow(
                 icon = if (plus.active) Icons.Rounded.VisibilityOff else Icons.Rounded.Lock,
@@ -878,7 +848,7 @@ internal fun AppsOptions(settings: ZenithSettings, plus: PlusStatus, actions: Se
 @Composable
 internal fun BackupOptions(plus: PlusStatus, actions: SettingsActions, onClose: () -> Unit, onAccount: () -> Unit) {
     val locked = !plus.active
-    Group(rise = 0) {
+    Section(footer = if (locked) "Backing up and restoring come with Zenith Plus." else null, rise = 0) {
         Spot("backup") {
             ActionRow(
                 icon = if (locked) Icons.Rounded.Lock else Icons.Rounded.Save,
@@ -897,7 +867,6 @@ internal fun BackupOptions(plus: PlusStatus, actions: SettingsActions, onClose: 
             )
         }
     }
-    if (locked) Note("Backing up and restoring come with Zenith Plus.", Modifier.riseIn(1).padding(horizontal = 4.dp))
 
     val account = actions.account
     if (account != null) CloudBackup(locked, account, onPlus = actions.plus, onAccount = onAccount)
@@ -913,7 +882,7 @@ internal fun BackupOptions(plus: PlusStatus, actions: SettingsActions, onClose: 
             armed = false
         }
     }
-    Group(rise = if (account != null) 3 else 2) {
+    Section(rise = if (account != null) 3 else 2) {
         Spot("reset") {
             ActionRow(
                 icon = Icons.Rounded.RestartAlt,
@@ -942,7 +911,6 @@ internal fun BackupOptions(plus: PlusStatus, actions: SettingsActions, onClose: 
 private fun CloudBackup(locked: Boolean, account: AccountActions, onPlus: () -> Unit, onAccount: () -> Unit) {
     val scope = rememberCoroutineScope()
     val haptics = rememberHaptics()
-    val reduced = LocalMotionLevel.current.reduced
     val signed = account.signed
     val savedAt = signed?.account?.backupAt
     /** "up" or "down" while the server is being talked to. */
@@ -974,74 +942,68 @@ private fun CloudBackup(locked: Boolean, account: AccountActions, onPlus: () -> 
         else -> true
     }
 
-    Column(Modifier.riseIn(2)) {
-        Caption("In your Zenith account", Modifier.padding(top = 6.dp, bottom = 10.dp))
-        Group {
-            Spot("cloudBackup") {
-                ActionRow(
-                    icon = if (locked) Icons.Rounded.Lock else Icons.Rounded.CloudUpload,
-                    title = if (working == "up") "Backing up\u2026" else "Back up to your account",
-                    subtitle = when {
-                        signed == null -> "Sign in to your account first"
-                        savedAt != null -> "Last saved ${moment(savedAt)}"
-                        else -> "Nothing saved there yet"
-                    },
-                    spin = sent,
-                ) {
-                    if (!ready()) return@ActionRow
-                    working = "up"
-                    said = null
-                    scope.launch {
-                        val refused = try {
-                            account.backUp()
-                        } finally {
-                            working = null
-                        }
-                        said = refused ?: "Your home screen is saved in your account."
-                        if (refused == null) {
-                            sent++
-                            haptics.confirm()
-                        }
+    Section(header = "In your Zenith account", footer = said, rise = 2) {
+        Spot("cloudBackup") {
+            ActionRow(
+                icon = if (locked) Icons.Rounded.Lock else Icons.Rounded.CloudUpload,
+                title = if (working == "up") "Backing up…" else "Back up to your account",
+                subtitle = when {
+                    signed == null -> "Sign in to your account first"
+                    savedAt != null -> "Last saved ${moment(savedAt)}"
+                    else -> "Nothing saved there yet"
+                },
+                spin = sent,
+            ) {
+                if (!ready()) return@ActionRow
+                working = "up"
+                said = null
+                scope.launch {
+                    val refused = try {
+                        account.backUp()
+                    } finally {
+                        working = null
                     }
-                }
-            }
-            GroupDivider()
-            Spot("cloudRestore") {
-                ActionRow(
-                    icon = if (locked) Icons.Rounded.Lock else Icons.Rounded.CloudDownload,
-                    title = when {
-                        working == "down" -> "Restoring\u2026"
-                        armed -> "Tap again to restore"
-                        else -> "Restore from your account"
-                    },
-                    subtitle = if (armed) "Your layout and settings will be replaced" else "Replaces your current layout",
-                    spin = fetched,
-                ) {
-                    if (!ready()) return@ActionRow
-                    if (!armed) {
-                        armed = true
-                        said = null
-                        return@ActionRow
-                    }
-                    armed = false
-                    working = "down"
-                    scope.launch {
-                        val refused = try {
-                            account.restore()
-                        } finally {
-                            working = null
-                        }
-                        said = refused ?: "Your home screen is back as it was saved."
-                        if (refused == null) {
-                            fetched++
-                            haptics.confirm()
-                        }
+                    said = refused ?: "Your home screen is saved in your account."
+                    if (refused == null) {
+                        sent++
+                        haptics.confirm()
                     }
                 }
             }
         }
-        AnimatedVisibility(visible = said != null, enter = unfoldIn(reduced), exit = unfoldOut(reduced)) {
-            Note(said.orEmpty(), Modifier.padding(top = 10.dp))
+        GroupDivider()
+        Spot("cloudRestore") {
+            ActionRow(
+                icon = if (locked) Icons.Rounded.Lock else Icons.Rounded.CloudDownload,
+                title = when {
+                    working == "down" -> "Restoring…"
+                    armed -> "Tap again to restore"
+                    else -> "Restore from your account"
+                },
+                subtitle = if (armed) "Your layout and settings will be replaced" else "Replaces your current layout",
+                spin = fetched,
+            ) {
+                if (!ready()) return@ActionRow
+                if (!armed) {
+                    armed = true
+                    said = null
+                    return@ActionRow
+                }
+                armed = false
+                working = "down"
+                scope.launch {
+                    val refused = try {
+                        account.restore()
+                    } finally {
+                        working = null
+                    }
+                    said = refused ?: "Your home screen is back as it was saved."
+                    if (refused == null) {
+                        fetched++
+                        haptics.confirm()
+                    }
+                }
+            }
         }
     }
 }
@@ -1058,7 +1020,7 @@ internal fun AboutOptions(actions: SettingsActions) {
         runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull().orEmpty()
     }
 
-    Group(rise = 0) {
+    Section(rise = 0) {
         Spot("defaultHome") {
             ActionRow(
                 icon = Icons.Rounded.Home,
@@ -1090,7 +1052,7 @@ internal fun AboutOptions(actions: SettingsActions) {
             }
         }
     }
-    Group(rise = 1) {
+    Section(rise = 1) {
         Spot("help") {
             ActionRow(
                 icon = Icons.AutoMirrored.Rounded.HelpOutline,

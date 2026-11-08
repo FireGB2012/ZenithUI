@@ -98,7 +98,7 @@ internal fun IslandOptions(settings: ZenithSettings, plus: PlusStatus, actions: 
     }
 
     Box(Modifier.riseIn(0)) { IslandPreview(island) }
-    Group(rise = 1) {
+    Section(rise = 1) {
         Spot("island") {
             ToggleRow(
                 title = "Island",
@@ -120,7 +120,7 @@ internal fun IslandOptions(settings: ZenithSettings, plus: PlusStatus, actions: 
         }
         AnimatedVisibility(visible = island.on && plus.active && !overApps, enter = unfoldIn(reduced), exit = unfoldOut(reduced)) {
             Column {
-                GroupDivider()
+                GroupDivider(inset = ROW_INSET)
                 ActionRow(
                     icon = Icons.Rounded.Layers,
                     title = "Let it show over other apps",
@@ -131,7 +131,7 @@ internal fun IslandOptions(settings: ZenithSettings, plus: PlusStatus, actions: 
         }
         AnimatedVisibility(visible = island.on && (island.music || island.live || island.notifications) && !listening, enter = unfoldIn(reduced), exit = unfoldOut(reduced)) {
             Column {
-                GroupDivider()
+                GroupDivider(inset = ROW_INSET)
                 ActionRow(
                     icon = Icons.Rounded.NotificationsActive,
                     title = "Let it see notifications",
@@ -141,36 +141,34 @@ internal fun IslandOptions(settings: ZenithSettings, plus: PlusStatus, actions: 
             }
         }
     }
-    Group(rise = 2) {
+    Section(header = "What it shows", rise = 2) {
         Spot("islandShows") {
-            Column(Modifier.padding(start = 14.dp, end = 14.dp, top = 14.dp)) { Caption("What it shows") }
             ToggleRow("Music", "The cover, and bars in its colour. Tap for the song", island.music) { on -> change { it.copy(music = on) } }
-            GroupDivider()
+            GroupDivider(inset = ROW_INSET)
             ToggleRow("Calls and timers", "A call's time in green, a timer counting in orange", island.live) { on -> change { it.copy(live = on) } }
-            GroupDivider()
+            GroupDivider(inset = ROW_INSET)
             ToggleRow("Notifications", "The app and who it is from. Tap to read it", island.notifications) { on -> change { it.copy(notifications = on) } }
-            GroupDivider()
+            GroupDivider(inset = ROW_INSET)
             ToggleRow("Charger", "How full, for a moment as you plug in", island.charging) { on -> change { it.copy(charging = on) } }
-            GroupDivider()
+            GroupDivider(inset = ROW_INSET)
             ToggleRow("Ring and silent", "For a moment, as you change it", island.ringer) { on -> change { it.copy(ringer = on) } }
         }
     }
-    Group(rise = 3) {
+    Section(rise = 3) {
         Spot("islandAlways") {
             ToggleRow("Always show it", "A small pill round the camera, even with nothing going on", island.always) { on -> change { it.copy(always = on) } }
         }
     }
-    Group(rise = 4) {
+    Section(
+        footer = "It only shows what the phone's own music and notifications already show. Nothing is kept, and nothing leaves the phone.",
+        rise = 4,
+    ) {
         Spot("islandWhen") {
             ToggleRow("Out of the way in full screen", "A video or a game has the whole screen to itself", island.hideFullScreen) { on -> change { it.copy(hideFullScreen = on) } }
-            GroupDivider()
+            GroupDivider(inset = ROW_INSET)
             ToggleRow("Out of the way sideways", "While the phone is on its side", island.hideSideways) { on -> change { it.copy(hideSideways = on) } }
         }
     }
-    Note(
-        "It only shows what the phone's own music and notifications already show. Nothing is kept, and nothing leaves the phone.",
-        Modifier.riseIn(5).padding(horizontal = 14.dp),
-    )
 }
 
 /**
@@ -346,15 +344,16 @@ private fun IslandPreview(island: IslandSettings) {
     }
 }
 
-/** A button under the preview: lit while what it stands for is going on. */
+/** A button under the preview, one of Apple's grey capsules: the accent while what it stands for is going on. */
 @Composable
 private fun DemoChip(label: String, on: Boolean, onClick: () -> Unit) {
     val palette = LocalPalette.current
+    val apple = com.gabriel.zenithui.ui.theme.LocalApple.current
     val tick = rememberTick()
-    val fill by animateColorAsState(if (on) palette.accent else palette.onGlass.copy(alpha = 0.08f), tween(220), label = "demoChip")
+    val fill by animateColorAsState(if (on) palette.accent else apple.grey, tween(220), label = "demoChip")
     Text(
         label,
-        color = if (on) Color(0xFF0A0B12) else palette.onGlass,
+        color = if (on) com.gabriel.zenithui.ui.theme.inkOnTint(palette.accent) else apple.words,
         fontSize = 14.sp,
         fontWeight = FontWeight.Medium,
         modifier = Modifier

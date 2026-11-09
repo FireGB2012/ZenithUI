@@ -77,8 +77,12 @@ setting), no page dots (the `indicator` setting), no full-width search bar (the 
 setting). Those settings stay stored and readable for old backups and Looks; the new home screen
 simply does not draw them *(my call)*.
 
-- **Grid.** Four columns, as on an iPhone, with rows spaced like an iPhone's, a row a little taller
-  than a column is wide, so a 2×2 widget comes out nearly square: a new grid setting, `four`, beside Compact,
+- **Grid.** Four columns, as on an iPhone, with rows spaced like an iPhone's: a row is never more than
+  1.09 times as tall as a column is wide (98 pt to 90 on an iPhone 15 Pro). On a tall phone the grid
+  stands at the top and the room it does not need is left under its last row, above Search, as an
+  iPhone leaves it. Widgets on this grid reach a few dp past their icons at the sides, as an iPhone's
+  do, so a 2×2 widget is exactly square and Medium and Large keep an iPhone's proportions (found on the
+  emulator: filling the page made rows 1.17 columns and widgets a tenth taller than square). It is a new grid setting, `four`, beside Compact,
   Balanced, Roomy and Custom. A new install gets it. A phone that already has Zenith is asked once
   (see "Phones that already have Zenith"). The existing grid settings keep their numbers, since
   changing a preset would rearrange every home screen that uses it the next time Zenith starts. On a

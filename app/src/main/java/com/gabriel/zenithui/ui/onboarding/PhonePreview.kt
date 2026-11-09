@@ -286,8 +286,11 @@ private fun MiniHome(
                         .fillMaxWidth()
                         .padding(horizontal = 12.dp, vertical = 4.dp)
                 ) {
-                    val geometry = remember(constraints.maxWidth, constraints.maxHeight, settings.columns, settings.rows, density.density, settings.showLabels) {
-                        HomeGeometry(constraints.maxWidth, constraints.maxHeight, settings.columns, settings.rows, density.density, settings.showLabels)
+                    val geometry = remember(constraints.maxWidth, constraints.maxHeight, settings.columns, settings.rows, density.density, settings.showLabels, settings.gridDensity) {
+                        HomeGeometry(
+                            constraints.maxWidth, constraints.maxHeight, settings.columns, settings.rows, density.density, settings.showLabels,
+                            rowRatio = HomeGeometry.rowRatioFor(settings.gridDensity, settings.columns),
+                        )
                     }
                     val cellWidth = with(density) { geometry.cellWidth.toDp() }
                     val cellHeight = with(density) { geometry.unitHeight.toDp() }

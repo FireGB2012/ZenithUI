@@ -395,8 +395,11 @@ fun HomePage(
     // Everything on the page stands on the wallpaper, so its names are white, whatever the palette.
     OnWallpaper {
     BoxWithConstraints(modifier.fillMaxSize()) {
-        val geometry = remember(constraints.maxWidth, constraints.maxHeight, settings.columns, settings.rows, density.density, settings.showLabels) {
-            HomeGeometry(constraints.maxWidth, constraints.maxHeight, settings.columns, settings.rows, density.density, settings.showLabels)
+        val geometry = remember(constraints.maxWidth, constraints.maxHeight, settings.columns, settings.rows, density.density, settings.showLabels, settings.gridDensity) {
+            HomeGeometry(
+                constraints.maxWidth, constraints.maxHeight, settings.columns, settings.rows, density.density, settings.showLabels,
+                rowRatio = HomeGeometry.rowRatioFor(settings.gridDensity, settings.columns),
+            )
         }
         val cellWidthPx = geometry.cellWidth.toFloat()
         // One cell is a row unit tall; an icon spans ROW_UNITS of them.
@@ -1429,8 +1432,11 @@ private fun BoxScope.ResizeFrame(
     // The spans are read live: the gesture below outlives every size it passes through.
     val live by rememberUpdatedState(item)
     val isApp = item is AppCell
-    val side = geometry.sideInset.toFloat()
-    val sideEnd = geometry.sideInsetEnd.toFloat()
+    // A widget on the iPhone grid stands a little wider than the icons above it
+    // (HomeGeometry.widgetReach), and its outline with it.
+    val reach = if (isApp) 0f else geometry.widgetReach.toFloat()
+    val side = geometry.sideInset.toFloat() - reach
+    val sideEnd = geometry.sideInsetEnd.toFloat() - reach
     val topInset = geometry.topInset.toFloat()
     // A widget ends where its last row's icons end, with its name in the strip under it.
     val underWidget = geometry.underWidget.toFloat()

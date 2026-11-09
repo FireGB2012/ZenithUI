@@ -23,11 +23,14 @@ class HomeGeometryTest {
     private val pixel = HomeGeometry(width = 1016, height = 1724, columns = 4, rows = 5, density = 2.625f, showLabels = true)
 
     /**
-     * The Pixel 10a on the iPhone grid, 4 by 6, at 2.625 px per dp: a page as wide as its 1080 px
-     * (411 dp) screen, and as tall as its 2424 px (923 dp) less the 230 dp, 604 px, that the
-     * status bar, the Search band and the dock take.
+     * The Pixel 10a's page on the iPhone grid, 4 by 6, at 2.625 px per dp, as the emulator measured
+     * it: its 1080 px screen less the page margins, 1017 px, and the 1785 px (680 dp) of its 2424
+     * that the status bar, the Search band and the dock leave.
      */
-    private val four = HomeGeometry(width = 1080, height = 1820, columns = 4, rows = 6, density = 2.625f, showLabels = true)
+    private val iphone = HomeGeometry(
+        width = 1017, height = 1785, columns = 4, rows = 6, density = 2.625f, showLabels = true,
+        rowRatio = HomeGeometry.IPHONE_ROW_RATIO,
+    )
 
     @Test
     fun `every cell is the same size and the spare pixels are shared between the edges`() = everyPage { g ->
@@ -106,12 +109,80 @@ class HomeGeometryTest {
     }
 
     @Test
-    fun `a 2x2 widget on the four grid is within a tenth of square`() {
-        // A row on the Pixel 10a's iPhone grid is about 1.12 times a column, as an iPhone's is...
-        assertEquals(1.12f, four.rowHeight.toFloat() / four.cellWidth, 0.01f)
-        // ...so a widget two icons across and two down comes out nearly square.
-        val small = four.widgetFrame(2, 2 * ROW_UNITS)
-        assertEquals(1f, small.height.toFloat() / small.width, 0.1f)
+    fun `on the iPhone grid a row is no taller than an iPhone's, a little over a column`() {
+        // The page could give each of its six rows 297 px, 1.17 columns; an iPhone's rows are 1.09.
+        assertEquals(254, iphone.cellWidth)
+        assertEquals((254 * HomeGeometry.IPHONE_ROW_RATIO).roundToInt(), iphone.rowHeight)
+        assertEquals(1.09f, iphone.rowHeight.toFloat() / iphone.cellWidth, 0.01f)
+    }
+
+    @Test
+    fun `the iPhone grid sits at the top of the page with the room it does not need above Search`() {
+        assertEquals(0, iphone.originY)
+        assertEquals(iphone.rowHeight * 6, iphone.gridHeight)
+        // 123 px, 47 dp, all of it under the last row, as an iPhone leaves it above its Search.
+        assertEquals(1785 - 6 * iphone.rowHeight, iphone.height - iphone.gridHeight - iphone.originY)
+        assertTrue(iphone.height - iphone.gridHeight > 100)
+    }
+
+    @Test
+    fun `a 2x2 widget on the iPhone grid is square, as an iPhone's Small is`() {
+        val small = iphone.widgetFrame(2, 2 * ROW_UNITS)
+        assertTrue("${small.width} x ${small.height}", abs(small.width - small.height) <= 1)
+        // Medium and Large come out in an iPhone's proportions too: 338 x 158 and 338 x 354 pt.
+        val medium = iphone.widgetFrame(4, 2 * ROW_UNITS)
+        assertEquals(338f / 158f, medium.width.toFloat() / medium.height, 0.05f)
+        val large = iphone.widgetFrame(4, 4 * ROW_UNITS)
+        assertEquals(354f / 338f, large.height.toFloat() / large.width, 0.03f)
+    }
+
+    @Test
+    fun `an iPhone widget reaches a few dp past its icons at the sides and stays in its cells`() {
+        val reach = iphone.widgetReach
+        // Half of what a row is taller than a column: 11 px, about 4 dp, as an iPhone's widgets
+        // stand a little wider than the icons above them.
+        assertEquals((iphone.rowHeight - iphone.cellWidth) / 2, reach)
+        assertTrue(reach in 1..(6 * 2.625f).toInt())
+        for (spanX in 1..4) for (rows in 1..6) {
+            val frame = iphone.widgetFrame(spanX, rows * ROW_UNITS)
+            assertEquals(iphone.iconFrame.left - reach, frame.left)
+            assertEquals((spanX - 1) * iphone.cellWidth + iphone.iconFrame.right + reach, frame.right)
+            assertTrue(frame.left >= 0 && frame.right <= spanX * iphone.cellWidth)
+            // Its name is as wide as it, in the strip the icons' names are in.
+            val name = iphone.widgetNameStrip(spanX, rows * ROW_UNITS)
+            assertEquals(frame.left, name.left)
+            assertEquals(frame.right, name.right)
+            assertEquals((rows - 1) * iphone.rowHeight + iphone.iconFrame.bottom, name.top)
+        }
+    }
+
+    @Test
+    fun `a page too short for iPhone rows keeps the rows it has, shared out as always`() {
+        // A 360 x 740 dp phone's page: the rows it can hold are already shorter than an iPhone's.
+        val short = HomeGeometry(
+            width = 882, height = 1300, columns = 4, rows = 6, density = 2.625f, showLabels = true,
+            rowRatio = HomeGeometry.IPHONE_ROW_RATIO,
+        )
+        assertEquals(1300 / 6, short.rowHeight)
+        assertTrue(short.height - short.gridHeight - short.originY * 2 in 0..1)
+        // Its rows are not taller than its columns, so its widgets reach no further than their icons.
+        assertEquals(0, short.widgetReach)
+    }
+
+    @Test
+    fun `only the iPhone grid on a phone asks for iPhone rows`() {
+        assertEquals(HomeGeometry.IPHONE_ROW_RATIO, HomeGeometry.rowRatioFor("four", 4), 0f)
+        // On a tablet "four" is Balanced, with Balanced's columns and rows.
+        assertEquals(0f, HomeGeometry.rowRatioFor("four", 6), 0f)
+        for (id in listOf("compact", "balanced", "roomy", "custom", "")) {
+            assertEquals(0f, HomeGeometry.rowRatioFor(id, 4), 0f)
+        }
+    }
+
+    @Test
+    fun `every other grid fills its page and its widgets end at their icons`() = everyPage { g ->
+        assertEquals(0, g.widgetReach)
+        assertEquals(g.height / g.rows, g.rowHeight)
     }
 
     @Test
@@ -278,9 +349,9 @@ class HomeGeometryTest {
 
     @Test
     fun `icons are about two thirds of a cell, between 52 and 68 dp`() {
-        // As on an iPhone, 0.64 of a column: 65.8 dp of the Pixel 10a's 102.9 dp columns...
-        assertEquals(0.64f * four.cellWidth / four.density, four.iconDp, 0.001f)
-        assertEquals(173, four.icon)
+        // As on an iPhone, 0.64 of a column: 61.9 dp of the Pixel 10a's 96.8 dp columns...
+        assertEquals(0.64f * iphone.cellWidth / iphone.density, iphone.iconDp, 0.001f)
+        assertEquals(163, iphone.icon)
         // ...and never less than 52 dp or more than 68...
         assertEquals(52f, HomeGeometry.iconSizeDp(70f, 131f, showLabels = true), 0.001f)
         assertEquals(68f, HomeGeometry.iconSizeDp(120f, 180f, showLabels = true), 0.001f)

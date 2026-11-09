@@ -16,6 +16,10 @@ data class PxRect(val left: Int, val top: Int, val right: Int, val bottom: Int) 
  * Every cell is the same whole number of pixels wide and every row the same number tall. Pixels
  * left over when the page does not divide evenly are shared between the outer edges ([originX],
  * [originY]) rather than making some cells a pixel bigger than their neighbours.
+ *
+ * The iPhone grid ([rowRatio]) is the exception: its rows are never taller than an iPhone's, so on
+ * a tall phone it stands at the top of the page, as an iPhone's does, and the room it does not need
+ * is left under its last row, above Search.
  */
 class HomeGeometry(
     /** The page area in pixels: the screen less the page's own margins. */
@@ -26,11 +30,21 @@ class HomeGeometry(
     /** Pixels per dp. */
     val density: Float,
     val showLabels: Boolean,
+    /**
+     * The tallest a row may be, as a multiple of a column's width, or 0 for as tall as the page
+     * allows. The iPhone grid passes [IPHONE_ROW_RATIO] ([rowRatioFor]).
+     */
+    val rowRatio: Float = 0f,
 ) {
     // A page always has at least one column and one row: a saved value of nothing, from a damaged
     // backup, must not stop the home screen from being drawn at all.
     val cellWidth: Int = width / columns.coerceAtLeast(1)
-    val rowHeight: Int = height / rows.coerceAtLeast(1)
+
+    /** As tall as the page allows a row to be. */
+    private val fullRow: Int = height / rows.coerceAtLeast(1)
+
+    val rowHeight: Int =
+        if (rowRatio > 0f) minOf(fullRow, (cellWidth * rowRatio).roundToInt()).coerceAtLeast(1) else fullRow
 
     /** A row unit, a quarter of a row. Only free placement puts anything between rows. */
     val unitHeight: Float = rowHeight / ROW_UNITS.toFloat()
@@ -38,9 +52,12 @@ class HomeGeometry(
     val gridWidth: Int = cellWidth * columns
     val gridHeight: Int = rowHeight * rows
 
-    /** The grid's top left corner inside the page area. */
+    /**
+     * The grid's top left corner inside the page area. Rows kept to an iPhone's height stand at
+     * the top, with what is left under them.
+     */
     val originX: Int = (width - gridWidth) / 2
-    val originY: Int = (height - gridHeight) / 2
+    val originY: Int = if (rowHeight < fullRow) 0 else (height - gridHeight) / 2
 
     /** The icon size in dp, as it is handed to an icon, and the pixels that comes to. */
     val iconDp: Float = iconSizeDp(cellWidth / density, rowHeight / density, showLabels)
@@ -68,6 +85,16 @@ class HomeGeometry(
     /** Where an icon is drawn inside its own cell. */
     val iconFrame: PxRect = PxRect(sideInset, topInset, sideInset + icon, topInset + icon)
 
+    /**
+     * How far a widget on the iPhone grid reaches past the icons at its sides: half of what a row
+     * is taller than a column is wide, a few dp, as an iPhone's widgets stand a little wider than
+     * the icons above them. That makes one two icons across and two down exactly square, as an
+     * iPhone's Small is, and Medium and Large come out in an iPhone's proportions too. On every
+     * other grid widgets end at their icons' edges, so this is nothing.
+     */
+    val widgetReach: Int =
+        if (rowRatio > 0f) ((rowHeight - cellWidth) / 2).coerceIn(0, minOf(sideInset, sideInsetEnd)) else 0
+
     /** The page's left line, the left edge of the first column's icons, from the grid's left edge. */
     val leftLine: Int get() = sideInset
 
@@ -77,18 +104,19 @@ class HomeGeometry(
     /**
      * Where a widget [spanX] columns wide and [spanY] row units tall is drawn inside the cells it
      * covers: from the left edge of the icon in its first column to the right edge of the icon in
-     * its last, and from the top of the icons in its first row to the bottom of the icons in its
-     * last, as on an iPhone. Its name goes under it in the strip the icons beside it have theirs in
-     * ([widgetNameStrip]). One shorter than a row, which only free placement allows, keeps its
-     * whole height.
+     * its last (and on the iPhone grid [widgetReach] further each side), and from the top of the
+     * icons in its first row to the bottom of the icons in its last, as on an iPhone. Its name goes
+     * under it in the strip the icons beside it have theirs in ([widgetNameStrip]). One shorter
+     * than a row, which only free placement allows, keeps its whole height.
      */
     fun widgetFrame(spanX: Int, spanY: Int): PxRect {
         val bottom = (spanY * unitHeight).roundToInt()
-        val right = spanX * cellWidth - sideInsetEnd
+        val left = sideInset - widgetReach
+        val right = spanX * cellWidth - sideInsetEnd + widgetReach
         return if (spanY >= ROW_UNITS) {
-            PxRect(sideInset, topInset, right, bottom - underWidget)
+            PxRect(left, topInset, right, bottom - underWidget)
         } else {
-            PxRect(sideInset, 0, right, bottom)
+            PxRect(left, 0, right, bottom)
         }
     }
 
@@ -160,6 +188,21 @@ class HomeGeometry(
     companion object {
         /** The height of the strip an 11sp label sits in, in dp. */
         const val LABEL_DP = 20f
+
+        /**
+         * How tall an iPhone's rows are against how wide its columns are: 98 pt to 90 on an
+         * iPhone 15 Pro, 106 to 97 on a Pro Max, from the sizes of its widgets. A taller phone
+         * leaves the room under its last row rather than spreading the rows apart.
+         */
+        const val IPHONE_ROW_RATIO = 1.09f
+
+        /**
+         * The [rowRatio] for a page on grid [gridDensity] with [columns] columns: an iPhone's on the
+         * iPhone grid, as it is on a phone, and nothing otherwise, so every other grid fills its page
+         * as it always has. On a tablet the iPhone grid is Balanced, with more than four columns.
+         */
+        fun rowRatioFor(gridDensity: String, columns: Int): Float =
+            if (gridDensity == GridDensity.Four.id && columns == GridDensity.BASE_COLUMNS) IPHONE_ROW_RATIO else 0f
 
         /**
          * The band the Search pill sits in, between the page and the dock, in dp. Like the dock it

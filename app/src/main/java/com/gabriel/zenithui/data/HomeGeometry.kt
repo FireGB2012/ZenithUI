@@ -137,17 +137,34 @@ class HomeGeometry(
         if (count > columns && count > 0) minOf(icon, (gridWidth / count * DOCK_FILL).toInt()) else icon
 
     /**
-     * The left edge of dock icon [index] of [count], from the grid's left edge. The dock's bar is
-     * as wide as the grid however many apps it holds, as on an iPhone, and the apps share it out
-     * equally, each in the middle of its share. With one app for each column a share is a column,
-     * so every icon is under the icons above it; with fewer they spread across the bar, and with
-     * more they close up.
+     * The left edge of dock icon [index] of [count], from the grid's left edge. However many apps a
+     * dock across the screen holds, as on an iPhone, they share out the grid's width equally, each
+     * in the middle of its share, and its slab of glass stands a little wider round them. With one
+     * app for each column a share is a column, so every icon is under the icons above it; with
+     * fewer they spread across the dock, and with more they close up.
      */
     fun dockIconLeft(index: Int, count: Int): Int {
         // One for each column: on the page's own lines exactly, with no rounding of its own.
         if (count == columns) return sideInset + index * cellWidth
         val share = gridWidth.toFloat() / count.coerceAtLeast(1)
         return ((index + 0.5f) * share - dockIcon(count) / 2f).roundToInt()
+    }
+
+    /**
+     * The left edge of dock icon [index] of [count] from the left edge of the screen, for a dock in
+     * [style] on a screen [screenWidthPx] wide with this page centred above it, as the home screen
+     * and its previews lay the page out. A dock across the screen has its apps where [dockIconLeft]
+     * puts them under the page, so with one for each column each is under the icons above it. A
+     * floating dock that closes up round fewer than four ([dockHugs]) has them side by side in the
+     * middle of its slab, as far apart as a full slab's four and with the margin above and below
+     * them at its ends too.
+     */
+    fun dockIconX(style: String, index: Int, count: Int, screenWidthPx: Int): Int {
+        if (!dockHugs(style, count)) return (screenWidthPx - width) / 2 + originX + dockIconLeft(index, count)
+        val icon = dockIcon(count)
+        val slab = dockSlabWidth(style, count, screenWidthPx, icon, density)
+        val margin = dockMargin(icon, density)
+        return (screenWidthPx - slab) / 2 + margin + index * dockPitch(screenWidthPx, icon, density)
     }
 
     companion object {
@@ -179,6 +196,47 @@ class HomeGeometry(
 
         /** The corners of every widget, whatever its size, in dp. */
         const val WIDGET_CORNER_DP = 22f
+
+        /** A full dock: four apps, one under each column of the iPhone grid. */
+        const val DOCK_APPS = 4
+
+        /**
+         * Whether a dock in [style] closes up round its [icons] rather than spanning the screen: a
+         * floating one with fewer than a full dock's four. An empty one keeps its whole width, which
+         * the words asking for an app need.
+         */
+        fun dockHugs(style: String, icons: Int): Boolean = style == "floating" && icons in 1 until DOCK_APPS
+
+        /**
+         * How wide the dock's slab of glass is, in pixels, on a screen [screenWidthPx] wide. Glass
+         * spans the screen less [DOCK_SIDE_INSET_DP] each side however many apps it holds, as on an
+         * iPhone. Floating is the same slab until it has fewer than four apps, when it closes up round
+         * them ([dockHugs]): [iconPx] each, as far apart as a full slab's four, with the margin above
+         * and below them at its ends too. Icons only ("none") draws no glass, and this is then the
+         * row its icons stand in, the same as Glass. Nothing is ever wider than Glass.
+         */
+        fun dockSlabWidth(style: String, icons: Int, screenWidthPx: Int, iconPx: Int, density: Float): Int {
+            val full = fullSlab(screenWidthPx, density)
+            if (!dockHugs(style, icons)) return full
+            val hug = 2 * dockMargin(iconPx, density) + iconPx + (icons - 1) * dockPitch(screenWidthPx, iconPx, density)
+            return hug.coerceAtMost(full)
+        }
+
+        /** The slab across the screen, less its inset each side. */
+        private fun fullSlab(screenWidthPx: Int, density: Float): Int =
+            (screenWidthPx - 2 * (DOCK_SIDE_INSET_DP * density).roundToInt()).coerceAtLeast(0)
+
+        /** Above and below the dock's icons inside its slab, and at the ends of a slab that hugs them. */
+        private fun dockMargin(iconPx: Int, density: Float): Int =
+            (((DOCK_HEIGHT_DP * density).roundToInt() - iconPx) / 2).coerceAtLeast(0)
+
+        /**
+         * From one dock icon's left edge to the next's in a slab that hugs them: the spacing a full
+         * slab's four would have with the same margin at its ends as above and below them, so a
+         * floating dock grows by the same step for each app it takes, up to the full slab.
+         */
+        private fun dockPitch(screenWidthPx: Int, iconPx: Int, density: Float): Int =
+            ((fullSlab(screenWidthPx, density) - 2 * dockMargin(iconPx, density) - iconPx) / (DOCK_APPS - 1)).coerceAtLeast(0)
 
         /** How much of its share of an over-full dock an icon may take, leaving the rest as gaps. */
         private const val DOCK_FILL = 0.9f

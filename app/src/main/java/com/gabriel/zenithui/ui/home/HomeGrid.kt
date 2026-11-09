@@ -8,6 +8,7 @@ import androidx.compose.animation.core.FastOutLinearInEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.VectorConverter
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateIntAsState
 import androidx.compose.animation.core.animateIntOffsetAsState
 import androidx.compose.animation.core.AnimationSpec
 import androidx.compose.animation.core.snap
@@ -19,7 +20,6 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.zIndex
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
@@ -88,6 +88,7 @@ import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
@@ -97,6 +98,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.material3.Text
+import androidx.compose.material3.LocalTextStyle
 import com.gabriel.zenithui.data.AppCell
 import com.gabriel.zenithui.data.AppInfo
 import com.gabriel.zenithui.data.DropPlanner
@@ -120,10 +122,12 @@ import com.gabriel.zenithui.ui.common.LocalMotionLevel
 import com.gabriel.zenithui.ui.common.Motion
 import com.gabriel.zenithui.ui.common.appearIn
 import com.gabriel.zenithui.ui.common.launchOrigin
+import com.gabriel.zenithui.ui.common.labelShadow
 import com.gabriel.zenithui.ui.common.pressBounce
 import com.gabriel.zenithui.ui.common.staggerDelay
 import com.gabriel.zenithui.ui.theme.GlassMaterial
 import com.gabriel.zenithui.ui.theme.LocalPalette
+import com.gabriel.zenithui.ui.theme.PressLight
 import com.gabriel.zenithui.ui.theme.ZenithShapes
 import com.gabriel.zenithui.ui.theme.glass
 import androidx.compose.ui.unit.round
@@ -1873,11 +1877,17 @@ internal class SlotArrangement(private val lefts: List<Int>) : Arrangement.Horiz
 }
 
 /**
- * The dock. Apps arrive by being dragged onto it from the home screen, and once there they are
- * rearranged the same way: hold one, slide it along and the others make room; lift it up off the
- * bar and it goes back to the home screen. Holding without moving still opens the app's menu.
- * Its bar is always as wide as the page, and its apps share it out equally: with one for each
- * column, each stands under the icons above it.
+ * The dock: a slab of clear glass floating just in from the edges of the screen, its corners as
+ * round as an iPhone's, with apps on it and no names under them. Apps arrive by being dragged onto
+ * it from the home screen, and once there they are rearranged the same way: hold one, slide it
+ * along and the others make room; lift it up off the dock and it goes back to the home screen.
+ * Holding without moving still opens the app's menu. Something carried over it from the page makes
+ * it swell a little, to say that letting go there puts it in.
+ *
+ * Glass and Floating are both the slab. Across the screen, its apps share out the page's width, so
+ * with one for each column each stands under the icons above it; Floating closes up round fewer
+ * than four. Icons only puts the apps on the wallpaper with no glass behind them. See
+ * [HomeGeometry.dockSlabWidth] and [HomeGeometry.dockIconX].
  */
 @Composable
 fun DockBar(
@@ -1891,20 +1901,29 @@ fun DockBar(
     onReorder: (from: Int, to: Int) -> Unit,
     /** An app was lifted off the dock and let go, the middle of its icon at this point on screen. */
     onDragOut: (key: String, iconCentre: Offset) -> Unit,
+    /**
+     * Where something carried from the page is let go into the dock, on screen: the slab across the
+     * screen whatever the style, so a floating dock closed up round its apps takes a drop anywhere
+     * along it, as it always has.
+     */
     onBounds: (Rect) -> Unit,
     animateEntrance: Boolean = false,
     /** The page's geometry: the dock stands on the same columns and its icons are the same size. */
     geometry: HomeGeometry? = null,
     modifier: Modifier = Modifier,
+    /**
+     * Reads whatever moves the dock with a layer, such as its arrival, so the wallpaper in its glass
+     * stays where it is on screen while the dock moves.
+     */
+    tracking: (() -> Unit)? = null,
 ) {
-    val palette = LocalPalette.current
     val haptics = LocalHapticFeedback.current
     val reduced = LocalMotionLevel.current.reduced
     // The apps that have had their entrance. One put in the dock later rises into it once; one
     // that was taken out and comes back rises in again.
     val known = remember { if (animateEntrance) HashSet<String>() else keys.toHashSet() }
     known.retainAll(keys.toSet())
-    // Where each app was last seen: how far along the bar, how far off its line, and how big.
+    // Where each app was last seen: how far along the dock, how far off its line, and how big.
     // An app whose place changes — the others closing up round a gap, one more coming in, the one
     // in your hand let go — starts from here and settles to where it now belongs, so nothing in
     // the dock is ever in one place and then in another.
@@ -1913,23 +1932,20 @@ fun DockBar(
     /** How many times each app has been let go, so that being put down is always a fresh start. */
     val drops = remember { HashMap<String, Int>() }
     val density = LocalDensity.current
-    // The page's icon size, or a little smaller when more apps than columns have to share the bar.
-    val iconSize = geometry?.let { with(density) { it.dockIcon(keys.size).toDp() } } ?: STANDARD_ICON_SIZE
-    val iconSizePx = with(density) { iconSize.toPx() }
-    // The bar is the width of the page's grid whatever it holds; where each icon stands in it is
-    // HomeGeometry.dockIconLeft. Before a page has been measured there is no geometry, and the
-    // icons are simply spread out.
-    val arrangement = remember(geometry, keys.size) {
-        if (geometry == null || keys.isEmpty()) {
-            null
-        } else {
-            SlotArrangement(List(keys.size) { geometry.dockIconLeft(it, keys.size) })
-        }
-    }
+    val style = settings.dockStyle
+    // The page's icon size, or a little smaller when more apps than columns have to share the dock.
+    val iconPx = geometry?.dockIcon(keys.size) ?: with(density) { STANDARD_ICON_SIZE.roundToPx() }
+    val iconSize = with(density) { iconPx.toDp() }
+    val iconSizePx = iconPx.toFloat()
+    // Closed up round fewer than four, the apps stand somewhere other than across the screen, and
+    // going from one to the other is a move like any other, seen from where they were.
+    val hugs = HomeGeometry.dockHugs(style, keys.size)
+    // Icons only has no glass.
+    val paned = style != "none"
 
-    // Where the bar is on screen, and, for when no page has been measured yet and there are no
-    // lines to go by, where each icon was found standing.
-    var barAt by remember { mutableStateOf(Rect.Zero) }
+    // Where the dock's place is on screen, the whole width and as tall as the slab, and, for when
+    // no page has been measured yet and there are no lines to go by, where each icon was found.
+    var placeAt by remember { mutableStateOf(Rect.Zero) }
     val measured = remember { androidx.compose.runtime.mutableStateMapOf<Int, Rect>() }
     var draggingIndex by remember { mutableStateOf<Int?>(null) }
     var dragOffset by remember { mutableStateOf(Offset.Zero) }
@@ -1939,260 +1955,310 @@ fun DockBar(
     // The gesture below is set up once and outlives recompositions, so everything it asks at the
     // moment of release is read from live state through these, never from values captured then.
     val currentKeys by rememberUpdatedState(keys)
-    val currentGeometry by rememberUpdatedState(geometry)
+    val currentIconPx by rememberUpdatedState(iconPx)
     val currentOnReorder by rememberUpdatedState(onReorder)
     val currentOnDragOut by rememberUpdatedState(onDragOut)
     val currentOnLongPress by rememberUpdatedState(onLongPress)
 
-    /**
-     * Where icon [index] belongs on screen. Worked out from the bar and the page's lines, not
-     * measured from the icon: an icon is often somewhere else, on its way to its place, and where
-     * it happens to be drawn must never feed back into where it belongs.
-     */
-    fun slotOf(index: Int): Rect? {
-        val lines = currentGeometry
-        val bar = barAt
-        if (lines == null || bar.isEmpty) return measured[index]
-        val count = currentKeys.size
-        val side = lines.dockIcon(count).toFloat()
-        val left = bar.left + lines.dockIconLeft(index, count)
-        val top = bar.top + (bar.height - side) / 2f
-        return Rect(left, top, left + side, top + side)
-    }
+    // Something carried over it from the page: it swells a little, read only while drawing. It
+    // used to wear an accent rim as well; the swell alone says it.
+    val swell = animateFloatAsState(if (highlight) 1f else 0f, tween(220), label = "dockSwell")
+    // The finger's light in the slab. The apps stand over the slab rather than in it, so one carried
+    // up off the dock is not cut off at its edge; the light is driven from the whole dock instead of
+    // by a touch of the slab's own, so it still comes up under an app as it is pressed.
+    val lightScope = rememberCoroutineScope()
+    val light = remember { PressLight(lightScope) }
 
-    /** Carried far enough up to leave the dock. */
-    fun liftedNow(): Boolean = draggingIndex != null && dragOffset.y < -iconSizePx * 1.2f
-
-    /** The index the carried icon would take if let go now. */
-    fun targetNow(): Int? {
-        val carriedFrom = draggingIndex ?: return null
-        if (liftedNow()) return carriedFrom
-        val carried = (slotOf(carriedFrom)?.center?.x ?: 0f) + dragOffset.x
-        return currentKeys.indices.count { it != carriedFrom && (slotOf(it)?.center?.x ?: 0f) < carried }
-    }
-
-    val from = draggingIndex
-    val spacing = if (keys.size > 1) {
-        val a = slotOf(0)
-        val b = slotOf(1)
-        if (a != null && b != null) b.center.x - a.center.x else iconSizePx
-    } else {
-        iconSizePx
-    }
-    val lifted = liftedNow()
-    val target = targetNow()
-
-    val rim by animateFloatAsState(if (highlight) 1f else 0f, tween(220), label = "dockRim")
-    // The floating pill's ends, eased as icons come and go so the pill grows and shrinks round them.
-    val pillPad = with(density) { 12.dp.toPx() }
-    val pillTarget = currentGeometry?.let { lines ->
-        val count = keys.size
-        if (count == 0) null else {
-            val side = lines.dockIcon(count).toFloat()
-            (lines.dockIconLeft(0, count) - pillPad) to (lines.dockIconLeft(count - 1, count) + side + pillPad)
+    BoxWithConstraints(
+        modifier
+            .fillMaxWidth()
+            .height(HomeGeometry.DOCK_HEIGHT_DP.dp)
+            // Found before the dock is given its layer, so that swelling for something carried over
+            // it does not move its own lines, nor the place that takes a drop.
+            .onGloballyPositioned { coords ->
+                val at = coords.boundsInRoot()
+                placeAt = at
+                // The slab across the screen, its inset in from each side scaled as the home
+                // screen is when it is found.
+                val width = coords.size.width
+                val slab = HomeGeometry.dockSlabWidth("glass", 0, width, 0, density.density)
+                val inset = if (width > 0) (width - slab) / 2f * at.width / width else 0f
+                onBounds(Rect(at.left + inset, at.top, at.right - inset, at.bottom))
+            },
+    ) {
+        val wide = constraints.maxWidth
+        val currentWide by rememberUpdatedState(wide)
+        // Where each app stands, from the screen's left edge. Before a page has been measured there
+        // are no lines to go by, and the apps are simply spread out.
+        val lefts = remember(geometry, style, keys.size, wide) {
+            geometry?.let { g -> List(keys.size) { g.dockIconX(style, it, keys.size, wide) } }
         }
-    }
-    val pillLeft by animateFloatAsState(pillTarget?.first ?: 0f, spring(dampingRatio = 0.8f, stiffness = 380f), label = "pillLeft")
-    val pillRight by animateFloatAsState(pillTarget?.second ?: 0f, spring(dampingRatio = 0.8f, stiffness = 380f), label = "pillRight")
-    val dockPill = remember(pillLeft, pillRight, pillTarget == null) {
-        if (pillTarget == null) ZenithShapes.panel else androidx.compose.foundation.shape.GenericShape { size, _ ->
-            val left = pillLeft.coerceIn(0f, size.width)
-            val right = pillRight.coerceIn(left, size.width)
-            addRoundRect(androidx.compose.ui.geometry.RoundRect(left, 0f, right, size.height, androidx.compose.ui.geometry.CornerRadius(size.height / 2f)))
-        }
-    }
+        val currentLefts by rememberUpdatedState(lefts)
+        val arrangement = remember(lefts) { lefts?.let { SlotArrangement(it) } }
+        // The slab grows and shrinks round its apps as they come and go, or as its style changes.
+        // Read while laying out, so that it lays the slab out again and recomposes nothing.
+        val slab = animateIntAsState(
+            targetValue = HomeGeometry.dockSlabWidth(style, keys.size, wide, iconPx, density.density),
+            animationSpec = if (reduced) snap() else spring(dampingRatio = 0.8f, stiffness = 380f),
+            label = "dockSlab",
+        )
 
-    Box(modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier
-                .then(if (geometry != null) Modifier.padding(start = with(density) { geometry.originX.toDp() }) else Modifier)
-                // Found before the bar is given its layer, so that swelling for something carried
-                // over it does not move the bar's own lines.
-                .onGloballyPositioned {
-                    val at = it.boundsInRoot()
-                    barAt = at
-                    onBounds(at)
-                }
-                .then(
-                    if (geometry != null) {
-                        // Its height comes from the grid, not from its icons: see HomeGeometry.dockHeight.
-                        Modifier.size(with(density) { geometry.gridWidth.toDp() }, with(density) { geometry.dockHeight.toDp() })
-                    } else {
-                        Modifier.fillMaxWidth()
-                    }
-                )
+        /**
+         * Where icon [index] belongs on screen. Worked out from the dock's place and the page's
+         * lines, not measured from the icon: an icon is often somewhere else, on its way to its
+         * place, and where it happens to be drawn must never feed back into where it belongs.
+         */
+        fun slotOf(index: Int): Rect? {
+            val place = placeAt
+            val left = currentLefts?.getOrNull(index)
+            if (left == null || place.isEmpty) return measured[index]
+            val side = currentIconPx.toFloat()
+            val top = place.top + (place.height - side) / 2f
+            return Rect(place.left + left, top, place.left + left + side, top + side)
+        }
+
+        /** Carried far enough up to leave the dock. */
+        fun liftedNow(): Boolean = draggingIndex != null && dragOffset.y < -iconSizePx * 1.2f
+
+        /** The index the carried icon would take if let go now. */
+        fun targetNow(): Int? {
+            val carriedFrom = draggingIndex ?: return null
+            if (liftedNow()) return carriedFrom
+            val carried = (slotOf(carriedFrom)?.center?.x ?: 0f) + dragOffset.x
+            return currentKeys.indices.count { it != carriedFrom && (slotOf(it)?.center?.x ?: 0f) < carried }
+        }
+
+        val from = draggingIndex
+        val spacing = if (keys.size > 1) {
+            val a = slotOf(0)
+            val b = slotOf(1)
+            if (a != null && b != null) b.center.x - a.center.x else iconSizePx
+        } else {
+            iconSizePx
+        }
+        val lifted = liftedNow()
+        val target = targetNow()
+
+        Box(
+            Modifier
+                .fillMaxSize()
                 .graphicsLayer {
-                    val grow = 1f + 0.03f * rim
+                    val grow = 1f + 0.03f * swell.value
                     scaleX = grow
                     scaleY = grow
                 }
                 .then(
-                    when (settings.dockStyle) {
-                        // Icons only, on the wallpaper.
-                        "none" -> Modifier
-                        // A pill hugging the icons there are, not the whole width.
-                        "floating" -> Modifier.glass(dockPill, strength = 1.15f, material = GlassMaterial.Clear, interactive = true)
-                        else -> Modifier.glass(ZenithShapes.panel, strength = 1.15f, material = GlassMaterial.Clear, interactive = true)
-                    }
-                )
-                .then(
-                    if (rim > 0.01f) {
-                        Modifier.border(2.dp, palette.accent.copy(alpha = 0.85f * rim), if (settings.dockStyle == "floating") dockPill else ZenithShapes.panel)
+                    if (paned) {
+                        Modifier.lightsPane(light) { at ->
+                            // From the dock's place onto the slab, which stands in the middle of it.
+                            val width = slab.value
+                            val x = at.x - (currentWide - width) / 2f
+                            if (x in 0f..width.toFloat()) Offset(x, at.y) else null
+                        }
                     } else {
                         Modifier
                     }
-                )
-                // Before a page has been measured the bar simply wraps its icons with the usual margin.
-                .then(if (geometry == null) Modifier.padding(vertical = 12.dp) else Modifier),
-            horizontalArrangement = when {
-                keys.isEmpty() -> Arrangement.Center
-                arrangement != null -> arrangement
-                else -> Arrangement.SpaceEvenly
-            },
-            verticalAlignment = Alignment.CenterVertically,
+                ),
         ) {
-            if (keys.isEmpty()) {
-                Text(
-                    text = if (highlight) "Let go to add it" else "Drag an app here to add it to the dock",
-                    color = palette.onGlassMuted,
-                    fontSize = 12.sp,
-                    modifier = Modifier.padding(vertical = 10.dp),
-                )
-            }
-            keys.forEachIndexed { index, key ->
-                // What it remembers belongs to this app, in this place, among this many, since it
-                // was last put down. When any of those changes it starts again from where it was
-                // last seen: see seenAt.
-                androidx.compose.runtime.key(key, index, keys.size, drops[key] ?: 0) {
-                val isCarried = index == from
-                // Neighbours step aside to show where the carried icon will land.
-                val shift = when {
-                    from == null || target == null || isCarried -> 0f
-                    from < target && index in (from + 1)..target -> -spacing
-                    from > target && index in target until from -> spacing
-                    else -> 0f
-                }
-                val shiftAnimated by animateFloatAsState(shift, spring(dampingRatio = 0.75f, stiffness = 400f), label = "dockShift")
-                // Picked up, it comes off the bar and rocks once, like anything else that is lifted.
-                val lift by animateFloatAsState(
-                    targetValue = if (isCarried) DOCK_LIFT else 1f,
-                    animationSpec = if (reduced) snap() else Motion.lift(),
-                    label = "dockLift",
-                )
-                val fresh = remember { known.add(key) }
-                val left = geometry?.dockIconLeft(index, keys.size)
-                // Out of its place by this much as it starts, and bigger by this much.
-                val astray = remember {
-                    val was = seenAt[key]
-                    if (was == null || left == null || reduced) floatArrayOf(0f, 0f, 1f) else floatArrayOf(was[0] - left, was[1], was[2])
-                }
-                val cameDown = astray[2] > 1.001f
-                val settle = remember { Animatable(if (astray[0] == 0f && astray[1] == 0f && !cameDown) 0f else 1f) }
-                LaunchedEffect(Unit) {
-                    if (settle.value != 0f) settle.animateTo(0f, Motion.drop())
-                }
-
+            if (paned) {
                 Box(
                     Modifier
-                        .then(
-                            if (fresh) {
-                                Modifier.appearIn(delayMillis = 90 + staggerDelay(index), riseFrom = 26f)
-                            } else {
-                                Modifier
-                            }
-                        )
-                        // The one just put down settles over its neighbours, not under them.
-                        .zIndex(if (isCarried || cameDown) 1f else 0f)
-                        .onGloballyPositioned { coords ->
-                            if (geometry == null && draggingIndex == null) measured[index] = coords.boundsInRoot()
+                        .align(Alignment.Center)
+                        .layout { measurable, constraints ->
+                            val width = slab.value.coerceIn(0, constraints.maxWidth)
+                            val placeable = measurable.measure(Constraints.fixed(width, constraints.maxHeight))
+                            layout(width, constraints.maxHeight) { placeable.place(0, 0) }
                         }
-                        .graphicsLayer {
-                            val back = settle.value
-                            val x = (if (isCarried) dragOffset.x else shiftAnimated) + astray[0] * back
-                            val y = (if (isCarried) dragOffset.y else 0f) + astray[1] * back
-                            val grown = lift * (1f + (astray[2] - 1f) * back)
-                            translationX = x
-                            translationY = y
-                            scaleX = grown
-                            scaleY = grown
-                            if (left != null) {
-                                val seen = seenAt.getOrPut(key) { FloatArray(3) }
-                                seen[0] = left + x
-                                seen[1] = y
-                                seen[2] = grown
-                            }
-                        }
-                        .launchOrigin(key)
-                        .pointerInput(key) {
-                            detectTapGestures(
-                                onPress = { suppressTap = false },
-                                onTap = { if (!suppressTap) onOpen(key) },
-                            )
-                        }
-                        .pointerInput(key, index, settings.lockLayout) {
-                            detectDragGesturesAfterLongPress(
-                                onDragStart = { local ->
-                                    suppressTap = true
-                                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    grabRoot = (slotOf(index)?.topLeft ?: Offset.Zero) + local
-                                    dragOffset = Offset.Zero
-                                    // Locked, a hold only ever opens the menu.
-                                    if (!settings.lockLayout) draggingIndex = index
-                                },
-                                onDrag = { change, amount ->
-                                    change.consume()
-                                    if (!settings.lockLayout) dragOffset += amount
-                                },
-                                onDragEnd = {
-                                    val moved = dragOffset.getDistance()
-                                    val start = draggingIndex
-                                    val end = targetNow()
-                                    when {
-                                        // Held still: that is a long press, so show the menu.
-                                        moved < iconSizePx * 0.25f -> currentOnLongPress(key)
-                                        liftedNow() -> currentOnDragOut(key, (slotOf(index)?.center ?: grabRoot) + dragOffset)
-                                        start != null && end != null && end != start -> currentOnReorder(start, end)
-                                    }
-                                    // Put down: from where it was let go it settles into its place.
-                                    // How far it was carried is left as it is until the next
-                                    // pick-up clears it. Clearing it here would draw the icon back
-                                    // in its old place for a moment, and that, not where it was
-                                    // let go, is what it would then be seen to start from.
-                                    drops[key] = (drops[key] ?: 0) + 1
-                                    draggingIndex = null
-                                },
-                                onDragCancel = {
-                                    // Also what a gesture hears as its icon is taken out from
-                                    // under it, long after it was put down: that is not a drop.
-                                    if (draggingIndex == index) {
-                                        drops[key] = (drops[key] ?: 0) + 1
-                                        draggingIndex = null
-                                    }
-                                },
-                            )
-                        },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    AppIcon(
-                        key = key,
-                        label = appsByKey[key]?.label ?: "",
-                        size = iconSize,
-                        shape = ZenithShapes.forIconShape(settings.iconShape),
-                        badge = true,
-                        modifier = Modifier
-                            .launchOrigin(key)
-                            .pressBounce()
-                            .graphicsLayer {
-                                // A dock app that has just been closed lands back into its place.
-                                val landing = AppLanding.scaleFor(key)
-                                scaleX = landing
-                                scaleY = landing
-                                alpha = (if (isCarried && lifted) 0.75f else 1f) * AppLanding.alphaFor(key)
-                            },
+                        .glass(
+                            RoundedCornerShape(HomeGeometry.DOCK_CORNER_DP.dp),
+                            strength = 1.15f,
+                            material = GlassMaterial.Clear,
+                            interactive = true,
+                            light = light,
+                            tracking = tracking,
+                        ),
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxSize(),
+                horizontalArrangement = when {
+                    keys.isEmpty() -> Arrangement.Center
+                    arrangement != null -> arrangement
+                    else -> Arrangement.SpaceEvenly
+                },
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (keys.isEmpty()) {
+                    // White, with the soft shadow the names on the wallpaper have, as Search's word
+                    // is: it stands on clear glass that only mists the wallpaper, or on the wallpaper.
+                    Text(
+                        text = if (highlight) "Let go to add it" else "Drag an app here to add it to the dock",
+                        color = Color.White.copy(alpha = 0.85f),
+                        fontSize = 12.sp,
+                        style = LocalTextStyle.current.merge(
+                            TextStyle(shadow = labelShadow(onWallpaper = true, legacyShadow = false, density = density.density))
+                        ),
+                        modifier = Modifier.padding(vertical = 10.dp),
                     )
                 }
+                keys.forEachIndexed { index, key ->
+                    // What it remembers belongs to this app, in this place, among this many, closed up
+                    // or not, since it was last put down. When any of those changes it starts again
+                    // from where it was last seen: see seenAt.
+                    androidx.compose.runtime.key(key, index, keys.size, drops[key] ?: 0, hugs) {
+                    val isCarried = index == from
+                    // Neighbours step aside to show where the carried icon will land.
+                    val shift = when {
+                        from == null || target == null || isCarried -> 0f
+                        from < target && index in (from + 1)..target -> -spacing
+                        from > target && index in target until from -> spacing
+                        else -> 0f
+                    }
+                    val shiftAnimated by animateFloatAsState(shift, spring(dampingRatio = 0.75f, stiffness = 400f), label = "dockShift")
+                    // Picked up, it comes off the dock and rocks once, like anything else that is lifted.
+                    val lift by animateFloatAsState(
+                        targetValue = if (isCarried) DOCK_LIFT else 1f,
+                        animationSpec = if (reduced) snap() else Motion.lift(),
+                        label = "dockLift",
+                    )
+                    val fresh = remember { known.add(key) }
+                    val left = lefts?.getOrNull(index)
+                    // Out of its place by this much as it starts, and bigger by this much.
+                    val astray = remember {
+                        val was = seenAt[key]
+                        if (was == null || left == null || reduced) floatArrayOf(0f, 0f, 1f) else floatArrayOf(was[0] - left, was[1], was[2])
+                    }
+                    val cameDown = astray[2] > 1.001f
+                    val settle = remember { Animatable(if (astray[0] == 0f && astray[1] == 0f && !cameDown) 0f else 1f) }
+                    LaunchedEffect(Unit) {
+                        if (settle.value != 0f) settle.animateTo(0f, Motion.drop())
+                    }
+
+                    Box(
+                        Modifier
+                            .then(
+                                if (fresh) {
+                                    Modifier.appearIn(delayMillis = 90 + staggerDelay(index), riseFrom = 26f)
+                                } else {
+                                    Modifier
+                                }
+                            )
+                            // The one just put down settles over its neighbours, not under them.
+                            .zIndex(if (isCarried || cameDown) 1f else 0f)
+                            .onGloballyPositioned { coords ->
+                                if (lefts == null && draggingIndex == null) measured[index] = coords.boundsInRoot()
+                            }
+                            .graphicsLayer {
+                                val back = settle.value
+                                val x = (if (isCarried) dragOffset.x else shiftAnimated) + astray[0] * back
+                                val y = (if (isCarried) dragOffset.y else 0f) + astray[1] * back
+                                val grown = lift * (1f + (astray[2] - 1f) * back)
+                                translationX = x
+                                translationY = y
+                                scaleX = grown
+                                scaleY = grown
+                                if (left != null) {
+                                    val seen = seenAt.getOrPut(key) { FloatArray(3) }
+                                    seen[0] = left + x
+                                    seen[1] = y
+                                    seen[2] = grown
+                                }
+                            }
+                            .launchOrigin(key)
+                            .pointerInput(key) {
+                                detectTapGestures(
+                                    onPress = { suppressTap = false },
+                                    onTap = { if (!suppressTap) onOpen(key) },
+                                )
+                            }
+                            .pointerInput(key, index, settings.lockLayout) {
+                                detectDragGesturesAfterLongPress(
+                                    onDragStart = { local ->
+                                        suppressTap = true
+                                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        grabRoot = (slotOf(index)?.topLeft ?: Offset.Zero) + local
+                                        dragOffset = Offset.Zero
+                                        // Locked, a hold only ever opens the menu.
+                                        if (!settings.lockLayout) draggingIndex = index
+                                    },
+                                    onDrag = { change, amount ->
+                                        change.consume()
+                                        if (!settings.lockLayout) dragOffset += amount
+                                    },
+                                    onDragEnd = {
+                                        val moved = dragOffset.getDistance()
+                                        val start = draggingIndex
+                                        val end = targetNow()
+                                        when {
+                                            // Held still: that is a long press, so show the menu.
+                                            moved < iconSizePx * 0.25f -> currentOnLongPress(key)
+                                            liftedNow() -> currentOnDragOut(key, (slotOf(index)?.center ?: grabRoot) + dragOffset)
+                                            start != null && end != null && end != start -> currentOnReorder(start, end)
+                                        }
+                                        // Put down: from where it was let go it settles into its place.
+                                        // How far it was carried is left as it is until the next
+                                        // pick-up clears it. Clearing it here would draw the icon back
+                                        // in its old place for a moment, and that, not where it was
+                                        // let go, is what it would then be seen to start from.
+                                        drops[key] = (drops[key] ?: 0) + 1
+                                        draggingIndex = null
+                                    },
+                                    onDragCancel = {
+                                        // Also what a gesture hears as its icon is taken out from
+                                        // under it, long after it was put down: that is not a drop.
+                                        if (draggingIndex == index) {
+                                            drops[key] = (drops[key] ?: 0) + 1
+                                            draggingIndex = null
+                                        }
+                                    },
+                                )
+                            },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        AppIcon(
+                            key = key,
+                            label = appsByKey[key]?.label ?: "",
+                            size = iconSize,
+                            shape = ZenithShapes.forIconShape(settings.iconShape),
+                            badge = true,
+                            modifier = Modifier
+                                .launchOrigin(key)
+                                .pressBounce()
+                                .graphicsLayer {
+                                    // A dock app that has just been closed lands back into its place.
+                                    val landing = AppLanding.scaleFor(key)
+                                    scaleX = landing
+                                    scaleY = landing
+                                    alpha = (if (isCarried && lifted) 0.75f else 1f) * AppLanding.alphaFor(key)
+                                },
+                        )
+                    }
+                    }
                 }
             }
+        }
+    }
+}
+
+/**
+ * Lights [light]'s pane under a finger anywhere in this, as an interactive pane lights itself, for
+ * a pane with things standing over it that take the finger first: the dock's slab, under its apps.
+ * [onPane] turns a point here into one on the pane, or null where the pane is not. It watches the
+ * finger without taking it, so taps, holds and drags still belong to whatever is pressed.
+ */
+private fun Modifier.lightsPane(light: PressLight, onPane: (Offset) -> Offset?): Modifier = pointerInput(light) {
+    awaitEachGesture {
+        val down = awaitFirstDown(requireUnconsumed = false)
+        val at = onPane(down.position) ?: return@awaitEachGesture
+        light.press(at)
+        try {
+            while (true) {
+                val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
+                if (!change.pressed) break
+                onPane(change.position)?.let { light.at = it }
+            }
+        } finally {
+            light.release()
         }
     }
 }

@@ -1703,11 +1703,15 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                             }
                         },
                         onBounds = { dockBounds = it },
+                        // It spans the screen and stands its slab in from the edges itself, its apps
+                        // still under the page's columns.
                         modifier = room
                             .arriving({ arrivalClock.value }, { arrivalDepth.floatValue }, distance = 1f, from = 56.dp, style = settings.arrival)
-                            .padding(horizontal = PAGE_MARGIN)
                             .navigationBarsPadding()
                             .padding(bottom = 10.dp),
+                        // It arrives moved on a layer, so its glass reads the clock that moves it and
+                        // keeps the wallpaper in place behind it, as Search's does.
+                        tracking = { arrivalClock.value },
                     ) else {
                         // Without the dock the pages reach down to the gesture bar instead.
                         Spacer(room.navigationBarsPadding().height(10.dp))

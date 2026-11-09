@@ -207,6 +207,84 @@ class HomeGeometryTest {
         assertTrue(HomeGeometry.SEARCH_PILL_HEIGHT_DP < HomeGeometry.SEARCH_BAND_DP)
     }
 
+    /** Three phones: the Pixel 10a, a small one and a large one, each screen's width and density. */
+    private val screens = listOf(1080 to 2.625f, 720 to 2f, 1440 to 3.5f)
+
+    @Test
+    fun `the glass dock spans the screen less its insets`() {
+        for ((screen, density) in screens) {
+            val icon = (65.8f * density).roundToInt()
+            val inset = (10f * density).roundToInt()
+            // However many apps it holds, as on an iPhone.
+            for (icons in 0..6) {
+                assertEquals(screen - 2 * inset, HomeGeometry.dockSlabWidth("glass", icons, screen, icon, density))
+            }
+        }
+    }
+
+    @Test
+    fun `a floating dock hugs fewer than four icons`() {
+        for ((screen, density) in screens) {
+            val icon = (65.8f * density).roundToInt()
+            val glass = HomeGeometry.dockSlabWidth("glass", 4, screen, icon, density)
+            fun floating(icons: Int) = HomeGeometry.dockSlabWidth("floating", icons, screen, icon, density)
+            // With fewer than four it closes up round them, and grows with each one more...
+            assertTrue(floating(2) < floating(4))
+            assertTrue(floating(1) < floating(2) && floating(2) < floating(3) && floating(3) < floating(4))
+            // ...and it is never wider than the glass dock. A full one is the glass dock, and so is an
+            // empty one, which needs the room for the words asking for an app.
+            for (icons in 0..6) assertTrue(floating(icons) <= glass)
+            assertEquals(glass, floating(4))
+            assertEquals(glass, floating(0))
+            // Icons only draws no pane: this is the row its icons stand in, the glass dock's.
+            for (icons in 0..6) assertEquals(glass, HomeGeometry.dockSlabWidth("none", icons, screen, icon, density))
+        }
+    }
+
+    @Test
+    fun `a dock across the screen stands its apps under the page's columns`() = everyPage { g ->
+        // The home screen and its previews centre the page on the screen, 12 dp in from each side.
+        val screen = g.width + 2 * (12f * g.density).roundToInt()
+        val pageLeft = (screen - g.width) / 2 + g.originX
+        // Floating closes up round fewer than four, so it only spans the screen with four or more.
+        val styles = if (g.columns >= HomeGeometry.DOCK_APPS) listOf("glass", "none", "floating") else listOf("glass", "none")
+        for (style in styles) {
+            // One for each column: on screen, each is under the icons above it...
+            for (index in 0 until g.columns) {
+                assertEquals(pageLeft + index * g.cellWidth + g.iconFrame.left, g.dockIconX(style, index, g.columns, screen))
+            }
+        }
+        // ...and with fewer, the glass dock and Icons only share the page's width out between them as before.
+        for (count in 1 until g.columns) for (index in 0 until count) {
+            assertEquals(pageLeft + g.dockIconLeft(index, count), g.dockIconX("glass", index, count, screen))
+            assertEquals(pageLeft + g.dockIconLeft(index, count), g.dockIconX("none", index, count, screen))
+        }
+    }
+
+    @Test
+    fun `a floating dock closes up round fewer than four apps, with an even margin all round`() {
+        // The Pixel 10a's iPhone grid as the home screen lays it out, 32 px in from each side.
+        val g = HomeGeometry(width = 1080 - 2 * 32, height = 1820, columns = 4, rows = 6, density = 2.625f, showLabels = true)
+        val margin = ((HomeGeometry.DOCK_HEIGHT_DP * g.density).roundToInt() - g.icon) / 2
+        val gaps = HashSet<Int>()
+        for (count in 1..3) {
+            val slab = HomeGeometry.dockSlabWidth("floating", count, 1080, g.dockIcon(count), g.density)
+            val slabLeft = (1080 - slab) / 2
+            val lefts = (0 until count).map { g.dockIconX("floating", it, count, 1080) }
+            // Its ends are as far from its apps as its top and bottom are, give or take a pixel...
+            assertEquals(margin.toFloat(), (lefts.first() - slabLeft).toFloat(), 1f)
+            assertEquals(margin.toFloat(), (slabLeft + slab - lefts.last() - g.icon).toFloat(), 1f)
+            // ...and its apps stand side by side, never touching, as far apart however many there are.
+            lefts.zipWithNext().forEach { (a, b) ->
+                assertTrue(b - a > g.icon)
+                gaps += b - a
+            }
+        }
+        assertEquals(1, gaps.size)
+        // A full floating dock is the glass dock, its apps under the columns.
+        for (index in 0 until 4) assertEquals(g.dockIconX("glass", index, 4, 1080), g.dockIconX("floating", index, 4, 1080))
+    }
+
     @Test
     fun `the page's left and right lines are the outer icon edges`() = everyPage { g ->
         assertEquals(g.iconFrame.left, g.leftLine)

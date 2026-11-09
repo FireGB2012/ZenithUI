@@ -58,6 +58,11 @@ import com.gabriel.zenithui.ui.common.pressBounce
 import com.gabriel.zenithui.ui.theme.Palettes
 import com.gabriel.zenithui.ui.theme.ZenithPalette
 import com.gabriel.zenithui.ui.theme.LocalApple
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.material3.LocalTextStyle
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.rememberTextMeasurer
 
 /** The widgets on offer, in the order they are worth trying, with short everyday names. */
 private val WIDGET_CHOICES = listOf(
@@ -355,16 +360,29 @@ private fun HomeControls(
             .padding(bottom = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            WIDGET_CHOICES.chunked(3).forEach { row ->
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    row.forEach { (type, label) ->
-                        ChoiceChip(
-                            label = label,
-                            selected = type in selected,
-                            onClick = { onToggle(type) },
-                            modifier = Modifier.weight(1f),
-                        )
+        // As many chips to a row as the widest name fits in, so with big text a name never breaks
+        // in the middle of a word: three, then two, then one.
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            val gap = 10.dp
+            val style = LocalTextStyle.current.merge(ChipLabel)
+            val measurer = rememberTextMeasurer()
+            val density = LocalDensity.current
+            val perRow = remember(maxWidth, style, density) {
+                val widest = WIDGET_CHOICES.maxOf { (_, label) -> measurer.measure(label, style).size.width }
+                with(density) { chipsPerRow(maxWidth.toPx(), gap.toPx(), CHIP_INSET.toPx(), widest.toFloat()) }
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(gap)) {
+                WIDGET_CHOICES.chunked(perRow).forEach { row ->
+                    // The chips in a row stand as tall as the tallest of them.
+                    Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(gap)) {
+                        row.forEach { (type, label) ->
+                            ChoiceChip(
+                                label = label,
+                                selected = type in selected,
+                                onClick = { onToggle(type) },
+                                modifier = Modifier.weight(1f).fillMaxHeight(),
+                            )
+                        }
                     }
                 }
             }

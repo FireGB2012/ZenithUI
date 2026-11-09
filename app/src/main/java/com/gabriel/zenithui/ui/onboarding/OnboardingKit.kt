@@ -45,9 +45,13 @@ import kotlinx.coroutines.delay
 import com.gabriel.zenithui.ui.theme.ButtonKind
 import com.gabriel.zenithui.ui.common.ZenithButton
 import com.gabriel.zenithui.ui.theme.LocalApple
-import com.gabriel.zenithui.ui.theme.inkOnTint
+import com.gabriel.zenithui.ui.theme.AppleColours
+import com.gabriel.zenithui.ui.theme.chosen
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.TextStyle
 
 /** How far a piece of a screen travels as it arrives, and the beat between neighbours. */
 private val RISE_DISTANCE = 14.dp
@@ -178,34 +182,58 @@ fun StepMarks(current: Int, total: Int, modifier: Modifier = Modifier) {
     }
 }
 
+/** A choice chip's name: one size and one weight, on or off, so ticking it never moves the name. */
+internal val ChipLabel = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Medium)
+
+/** The room a choice chip keeps either side of its name. */
+internal val CHIP_INSET = 8.dp
+
+/**
+ * How many choice chips stand in a row: as many as the widest name fits in, up to [most], so with
+ * big text a name never breaks in the middle of a word. Widths are in pixels; [inset] is the room a
+ * chip keeps either side of its name. A row or a name not measured yet keeps the [most].
+ */
+internal fun chipsPerRow(rowWidth: Float, gap: Float, inset: Float, widest: Float, most: Int = 3): Int {
+    if (rowWidth <= 0f || widest <= 0f) return most
+    for (count in most downTo 2) {
+        val chip = (rowWidth - gap * (count - 1)) / count
+        if (chip - inset * 2 >= widest) return count
+    }
+    return 1
+}
+
 /**
  * A choice you can turn on and off, as Apple's chips are: Apple's grey when off, filled with the
- * accent when on, its words in the ink the accent needs. To TalkBack it is a box to tick.
+ * accent when on, its words in the ink the accent needs, taken only as deep as they need to be read
+ * ([chosen]). With big text a name that will not fit wraps and the chip grows to hold it. To
+ * TalkBack it is a box to tick.
  */
 @Composable
 fun ChoiceChip(label: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val apple = LocalApple.current
-    val accent = LocalPalette.current.accent
+    val on = AppleColours.chosen(LocalPalette.current.accent)
     val fill by animateColorAsState(
-        if (selected) accent else apple.field,
+        if (selected) on.fill else apple.field,
         tween(220),
         label = "chipFill",
     )
     val ink by animateColorAsState(
-        if (selected) inkOnTint(accent) else apple.words,
+        if (selected) on.words else apple.words,
         tween(220),
         label = "chipInk",
     )
     Box(
         modifier
-            .height(44.dp)
+            .heightIn(min = 44.dp)
             .pressBounce(0.94f)
-            .clip(RoundedCornerShape(50))
+            // A capsule at 44; a chip grown taller keeps its rounded ends clear of its name.
+            .clip(RoundedCornerShape(22.dp))
             .background(fill)
-            .toggleable(value = selected, role = Role.Checkbox, onValueChange = { onClick() }),
+            .toggleable(value = selected, role = Role.Checkbox, onValueChange = { onClick() })
+            .padding(horizontal = CHIP_INSET, vertical = 6.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(label, color = ink, fontSize = 15.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium)
+        Text(label, color = ink, style = LocalTextStyle.current.merge(ChipLabel), textAlign = TextAlign.Center)
     }
 }
 

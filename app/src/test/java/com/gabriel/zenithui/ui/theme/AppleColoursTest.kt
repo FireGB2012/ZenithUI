@@ -13,6 +13,34 @@ class AppleColoursTest {
     private val both = listOf(AppleColours.Light, AppleColours.Dark)
 
     @Test
+    fun `a chip that is on stands its words four and a half to one, for every palette, light and dark`() {
+        // A chip's words are a line of text, not a main button's large and heavy ones.
+        for (palette in every) {
+            for (dark in listOf(true, false)) {
+                val on = AppleColours.chosen(AppleColours.accent(palette, dark))
+                assertTrue("${palette.id} dark=$dark", contrast(on.words, on.fill) >= WORDS_CONTRAST)
+            }
+        }
+    }
+
+    @Test
+    fun `a chip that is on is the accent, taken only as deep as white words on it need`() {
+        // Near-black on a pale accent stands already: the chip is the accent itself.
+        val pale = Color(0xFFFFB86B)
+        assertEquals(pale, AppleColours.chosen(pale).fill)
+        assertEquals(inkOnTint(pale), AppleColours.chosen(pale).words)
+        // White on Apple's blue is only four to one: the same blue, a touch deeper.
+        val blue = Color(0xFF0A84FF)
+        val on = AppleColours.chosen(blue)
+        assertEquals(Color.White, on.words)
+        assertEquals(AppleColours.underWhite(blue), on.fill)
+        assertTrue(contrast(Color.White, on.fill) in 4.5f..4.65f)
+        // A deep one is left as it is.
+        val deep = Color(0xFF1B2C55)
+        assertEquals(deep, AppleColours.chosen(deep).fill)
+    }
+
+    @Test
     fun `words and second lines stand four and a half to one on the page and on every card`() {
         for (s in both) {
             for (ground in listOf(s.page, s.card, s.raised)) {

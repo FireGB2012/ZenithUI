@@ -48,22 +48,48 @@ Spec: `specs/2026-11-04-apple-look-design.md`, "4. Setup, wallpapers and Aura": 
 
 ### Part 1: the rule, test first
 
-- [ ] `AppleColoursTest`: the plain page is white in the light and black in the dark, a step up on a
+- [x] `AppleColoursTest`: the plain page is white in the light and black in the dark, a step up on a
   sheet; words, second lines and the accent stand on it, and words in Apple's grey field on it.
-- [ ] `AppleSurfaces.plain`.
+- [x] `AppleSurfaces.plain`.
 
 ### Part 2: setup
 
-- [ ] The plain page in place of the lights, fading at the hand-off; the lights, the wave and
+- [x] The plain page in place of the lights, fading at the hand-off; the lights, the wave and
   `AuroraBackdrop` deleted; the hello words keep their flowing colour on a clock of their own.
-- [ ] Back as an accent chevron; the step marks, titles and every line in Apple's words.
-- [ ] The name field Apple's grey; the colour swatches ringed in the words' colour; the widget
+- [x] Back as an accent chevron; the step marks, titles and every line in Apple's words.
+- [x] The name field Apple's grey; the colour swatches ringed in the words' colour; the widget
   choices Apple's chips; the phone without its halo.
-- [ ] Plus on a solid sheet, a step up from the page, its features on a card; the quick tips' symbols
+- [x] Plus on a solid sheet, a step up from the page, its features on a card; the quick tips' symbols
   in the accent with nothing glass behind them.
 
 ### Part 3: check and ship
 
-- [ ] A review of the step from more than one angle, each finding checked against the code.
-- [ ] README; build and every unit test; setup from the hello to the hand-off on a throwaway
+- [x] A review of the step from more than one angle, each finding checked against the code.
+- [x] README; build and every unit test; setup from the hello to the hand-off on a throwaway
   emulator, light and dark; commit and push to `apple-look`.
+
+## What the review found
+
+Three reviewers (the design, behaviour kept, Compose and accessibility), each finding then checked
+against the code by another.
+
+- **Fixed:** a ticked widget chip's white words stood only 3.4 to 4 to 1 on the accent (Frost's blue
+  in the dark, and Aurora, Sunset, Sakura and Graphite in the light), under the 4.5 to 1 words need;
+  the old chip had been black and white. `AppleColours.chosen` takes a chip's fill only as deep as
+  white words need, keeping its colour, so Frost's chips are a touch deeper than its blue; near-black
+  on a pale accent already stands. A test holds it for every palette, light and dark. Main buttons
+  keep their own rule from step 3 (three to one, for large and heavy words).
+- **Fixed:** with big text a chip's name wrapped and was cut off by the chip, and could break the
+  moment it was ticked, since only a ticked name was bold. A chip now grows to hold its name, keeps
+  one weight on or off, and a row holds only as many chips as the widest name fits: three, then two,
+  then one (`chipsPerRow`, with a test). At 180% and 200% text the six chips stand two to a row.
+- **Fixed:** Back showed nothing when a keyboard came to it. It is ringed in the accent while it has
+  the focus, as an iPhone's Full Keyboard Access does; a touch still only dims it.
+- **Not changed:** picking Light or Dark turns the page at once rather than easing it. Settings has
+  done the same since step 3, the design does not ask for an ease, and turning the page and its words
+  together keeps the words readable the whole time.
+
+Seen while checking, older than this step and left for their own piece of work: the segmented control
+(here, in Settings and in sheets) keeps one line at a fixed height, so at 180% text and above its
+words are cut off; Continue, the swatches and the segmented control show nothing when a keyboard comes
+to them; the chips elsewhere (Settings, the drawer, sheets) still put white words on the accent itself.

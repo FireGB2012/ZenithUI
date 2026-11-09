@@ -176,6 +176,17 @@ fun AppleColours.button(kind: ButtonKind, accent: Color, surfaces: AppleSurfaces
 }
 
 /**
+ * A chip that is on, as Apple's are: filled with the accent, its words in the ink the accent needs
+ * ([inkOnTint]). A chip's words are a line of text, not a main button's large and heavy ones, so
+ * where they are white and would not stand four and a half to one, the fill goes only as deep as
+ * they need ([underWhite]), keeping its colour.
+ */
+fun AppleColours.chosen(accent: Color): ButtonColours {
+    val fill = if (inkOnTint(accent) == Color.White) underWhite(accent) else accent
+    return ButtonColours(fill = fill, words = inkOnTint(fill))
+}
+
+/**
  * Apple's colours a step up, for a sheet standing solid over a page of its own (Settings, the
  * gallery) rather than as glass over the wallpaper, as an iPhone's sheets do. In the dark everything
  * is a shade lighter, so the sheet stands off the black page under it and its cards off the sheet;

@@ -101,6 +101,8 @@ import androidx.compose.runtime.CompositionLocalProvider
 import com.gabriel.zenithui.ui.theme.LocalApple
 import com.gabriel.zenithui.ui.theme.elevated
 import com.gabriel.zenithui.ui.theme.CardKind
+import androidx.compose.foundation.border
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 
 /**
  * Onboarding is a form, not a canvas: past this width the eye has to travel too far between a
@@ -588,10 +590,14 @@ private fun TopBar(visible: Boolean, progress: Int, onBack: () -> Unit) {
                 // Apple's Back: a chevron and the word in the accent, dimming while it is held.
                 val touch = remember { MutableInteractionSource() }
                 val pressed by touch.collectIsPressedAsState()
+                val focused by touch.collectIsFocusedAsState()
                 Row(
                     Modifier
                         .heightIn(min = 48.dp)
                         .clip(RoundedCornerShape(10.dp))
+                        // A keyboard that has come to Back rings it in the accent, as an iPhone's
+                        // Full Keyboard Access does: with no ripple, nothing else would show it.
+                        .then(if (focused) Modifier.border(2.dp, accent, RoundedCornerShape(10.dp)) else Modifier)
                         .clickable(interactionSource = touch, indication = null, role = Role.Button, onClick = onBack)
                         .graphicsLayer { alpha = if (pressed) 0.35f else 1f }
                         .padding(start = 2.dp, end = 10.dp),

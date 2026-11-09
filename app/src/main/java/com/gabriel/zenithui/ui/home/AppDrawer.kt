@@ -66,7 +66,6 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
@@ -104,15 +103,30 @@ import com.gabriel.zenithui.ui.common.popOut
 import com.gabriel.zenithui.ui.common.pressBounce
 import com.gabriel.zenithui.ui.common.rollOver
 import com.gabriel.zenithui.ui.common.staggerDelay
-import com.gabriel.zenithui.ui.theme.GlassMaterial
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.ZenithShapes
 import com.gabriel.zenithui.ui.theme.glass
 import kotlin.math.roundToInt
+import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.semantics.Role
+import androidx.compose.material.icons.rounded.Cancel
+import com.gabriel.zenithui.ui.theme.LocalApple
+import com.gabriel.zenithui.ui.theme.inkOnTint
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.runtime.CompositionLocalProvider
+import com.gabriel.zenithui.ui.theme.LocalOnGlass
+import com.gabriel.zenithui.ui.theme.AppleSurfaces
+import com.gabriel.zenithui.ui.common.LocalIconsOnPlate
+import com.gabriel.zenithui.ui.settings.quietWords
 
 /**
- * The app drawer. The list scrolls at the top, the single-line search bar sits at the bottom
- * where your thumb already is, and anything the apps do not answer goes to Google.
+ * The app drawer, on a frosted blur of the wallpaper as the iPhone's App Library is, with nothing
+ * of the theme washed over it. The list scrolls at the top, the search field sits at the bottom in
+ * Apple's grey where your thumb already is, and anything the apps do not answer goes to Google.
+ * What stands on it (tabs, buttons, the library's plates, what a search finds) is grey or solid,
+ * never glass of its own.
  */
 @Composable
 fun AppDrawer(
@@ -145,6 +159,7 @@ fun AppDrawer(
     onCopy: (String) -> Unit = {},
 ) {
     val palette = LocalPalette.current
+    val apple = LocalApple.current
     val context = LocalContext.current
     val reduced = LocalMotionLevel.current.reduced
     var query by remember { mutableStateOf("") }
@@ -289,368 +304,348 @@ fun AppDrawer(
                 state = rememberDraggableState { delta -> onDrag(delta) },
                 onDragStopped = { velocity -> onDragStopped(-velocity) },
             )
-            .background(
-                Brush.verticalGradient(
-                    listOf(
-                        palette.backdrop.first().copy(alpha = 0.30f),
-                        palette.backdrop.last().copy(alpha = 0.80f),
-                    )
-                )
-            )
             // A tap anywhere that is not an app puts the keyboard away, as it does on iOS.
             .pointerInput(Unit) { detectTapGestures { focusManager.clearFocus() } },
     ) {
-        Column(
+        // A frosted blur of the wallpaper, as the iPhone's App Library is, with nothing of the
+        // theme washed over it. It fills the screen, so it has no rim and casts no shadow, and it
+        // covers the home screen, so it is never see-through, wallpaper or none. It is a layer of
+        // its own, kept as a picture: scrolling the apps or typing a search does not draw it again.
+        Box(
             Modifier
-                .fillMaxSize()
-                .statusBarsPadding()
-                .navigationBarsPadding()
-                .imePadding(),
-        ) {
-            // The grab handle only makes sense for a sheet that is pulled down to close.
-            if (horizontal) Spacer(Modifier.height(13.dp)) else Box(
+                .matchParentSize()
+                .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+                .glass(RectangleShape, border = false, shadow = false, solid = DRAWER_BODY)
+        )
+        // What stands on it stands on glass: grey words take the glass's grey (a card's words stay
+        // a card's), and no icon is a pane of glass of its own.
+        CompositionLocalProvider(LocalOnGlass provides true, LocalIconsOnPlate provides true) {
+            Column(
                 Modifier
-                    .align(Alignment.CenterHorizontally)
-                    .padding(top = 8.dp)
-                    .width(44.dp)
-                    .height(5.dp)
-                    .clip(RoundedCornerShape(50))
-                    .background(palette.onGlass.copy(alpha = 0.30f))
-            )
-
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .draggable(
-                        orientation = if (horizontal) Orientation.Horizontal else Orientation.Vertical,
-                        state = rememberDraggableState { delta -> onDrag(delta) },
-                        onDragStopped = { velocity -> onDragStopped(-velocity) },
-                    )
-                    .padding(horizontal = 26.dp, vertical = 14.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                    .fillMaxSize()
+                    .statusBarsPadding()
+                    .navigationBarsPadding()
+                    .imePadding(),
             ) {
-                Column(Modifier.weight(1f)) {
-                    // The name of where you are turns over as that changes: into a group, back
-                    // out of it, into what a search found.
-                    AnimatedContent(
-                        targetState = when {
-                            query.isNotBlank() -> "Results"
-                            shownGroup != null -> shownGroup.name
-                            groups != null -> "App Library"
-                            else -> "All apps"
-                        },
-                        transitionSpec = { rollOver(reduced) },
-                        label = "drawerTitle",
-                    ) { name ->
-                        Text(
-                            text = name,
-                            color = palette.onGlass,
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                    }
-                    // Fewer apps than there were, and the count rolls down; more, and it rolls up.
-                    AnimatedContent(
-                        targetState = filtered.size,
-                        transitionSpec = { rollOver(reduced, down = targetState < initialState) },
-                        label = "count",
-                    ) { count ->
-                        Text(
-                            text = "$count apps",
-                            color = palette.onGlassMuted,
-                            fontSize = 12.sp,
-                        )
-                    }
-                }
-                Box(
+                // The grabber only makes sense for a sheet that is pulled down to close; it is a sheet's.
+                if (horizontal) Spacer(Modifier.height(13.dp)) else Box(
                     Modifier
-                        .size(38.dp)
-                        .pressBounce(0.88f)
-                        .glass(RoundedCornerShape(percent = 50), strength = 0.9f, material = GlassMaterial.Clear)
-                        .clickable { if (shownGroup != null) openGroup = null else onDismiss() },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    // A cross to close, an arrow to go back: one turns into the other where it stands.
-                    AnimatedContent(
-                        targetState = shownGroup != null,
-                        transitionSpec = { popIn(reduced, from = 0.4f, millis = 180).togetherWith(popOut(reduced, to = 0.4f)) },
-                        label = "drawerWayOut",
-                    ) { back ->
-                        Icon(
-                            imageVector = if (back) Icons.AutoMirrored.Rounded.ArrowBack else Icons.Rounded.Close,
-                            contentDescription = if (back) "Back to App Library" else "Close",
-                            tint = palette.onGlass,
-                            modifier = Modifier.size(18.dp),
+                        .align(Alignment.CenterHorizontally)
+                        .padding(top = 8.dp)
+                        .width(36.dp)
+                        .height(5.dp)
+                        .clip(RoundedCornerShape(50))
+                        .background(apple.faint)
+                )
+
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .draggable(
+                            orientation = if (horizontal) Orientation.Horizontal else Orientation.Vertical,
+                            state = rememberDraggableState { delta -> onDrag(delta) },
+                            onDragStopped = { velocity -> onDragStopped(-velocity) },
                         )
+                        .padding(horizontal = 26.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        // The name of where you are turns over as that changes: into a group, back
+                        // out of it, into what a search found.
+                        AnimatedContent(
+                            targetState = when {
+                                query.isNotBlank() -> "Results"
+                                shownGroup != null -> shownGroup.name
+                                groups != null -> "App Library"
+                                else -> "All apps"
+                            },
+                            transitionSpec = { rollOver(reduced) },
+                            label = "drawerTitle",
+                        ) { name ->
+                            Text(
+                                text = name,
+                                color = palette.onGlass,
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                        }
+                        // Fewer apps than there were, and the count rolls down; more, and it rolls up.
+                        AnimatedContent(
+                            targetState = filtered.size,
+                            transitionSpec = { rollOver(reduced, down = targetState < initialState) },
+                            label = "count",
+                        ) { count ->
+                            Text(
+                                text = "$count apps",
+                                color = palette.onGlassMuted,
+                                fontSize = 12.sp,
+                            )
+                        }
+                    }
+                    // Apple's round grey button, as a sheet's X is; its room to be touched is wider.
+                    Box(
+                        Modifier
+                            .size(44.dp)
+                            .pressBounce(0.88f)
+                            .clip(CircleShape)
+                            .clickable(role = Role.Button) { if (shownGroup != null) openGroup = null else onDismiss() },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Box(
+                            Modifier
+                                .size(32.dp)
+                                .clip(CircleShape)
+                                .background(apple.field),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            // A cross to close, an arrow to go back: one turns into the other where it stands.
+                            AnimatedContent(
+                                targetState = shownGroup != null,
+                                transitionSpec = { popIn(reduced, from = 0.4f, millis = 180).togetherWith(popOut(reduced, to = 0.4f)) },
+                                label = "drawerWayOut",
+                            ) { back ->
+                                Icon(
+                                    imageVector = if (back) Icons.AutoMirrored.Rounded.ArrowBack else Icons.Rounded.Close,
+                                    contentDescription = if (back) "Back to App Library" else "Close",
+                                    tint = apple.secondary,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                            }
+                        }
                     }
                 }
-            }
 
-            // The tabs, in the drawer rather than the library, and put away while searching.
-            AnimatedVisibility(
-                visible = groups == null && query.isBlank(),
-                enter = com.gabriel.zenithui.ui.common.unfoldIn(reduced),
-                exit = com.gabriel.zenithui.ui.common.unfoldOut(reduced),
-            ) {
-                DrawerTabs(
-                    tabs = tabs,
-                    hasWork = workApps.isNotEmpty(),
-                    chosen = tab,
-                    onChoose = {
-                        tab = it
-                        scope.launch { gridState.scrollToItem(0) }
-                    },
-                    onNew = onNewTab,
-                    onEdit = onEditTab,
-                    modifier = Modifier.padding(bottom = 8.dp),
-                )
-            }
-
-            BoxWithConstraints(Modifier.weight(1f)) {
-                val viewportPx = constraints.maxHeight.toFloat()
-                // How many rows of apps the drawer shows at once, and one over: every one of them
-                // rises in as it opens, not only the top few.
-                val rowsOnShow = (maxHeight / DRAWER_ROW).toInt() + 2
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(if (shelves) 2 else columns),
-                    state = gridState,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        // Pulling the list past its top closes a sheet from below; one from the
-                        // side closes with a sideways swipe instead.
-                        .then(if (horizontal) Modifier else Modifier.nestedScroll(nestedScroll)),
-                    contentPadding = PaddingValues(horizontal = if (shelves) 22.dp else 16.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(if (shelves) 18.dp else 0.dp),
-                    verticalArrangement = Arrangement.spacedBy(18.dp),
+                // The tabs, in the drawer rather than the library, and put away while searching.
+                AnimatedVisibility(
+                    visible = groups == null && query.isBlank(),
+                    enter = com.gabriel.zenithui.ui.common.unfoldIn(reduced),
+                    exit = com.gabriel.zenithui.ui.common.unfoldOut(reduced),
                 ) {
-                    if (shelves && groups != null) {
-                        itemsIndexed(groups, key = { _, group -> "group:${group.name}" }) { index, group ->
-                            LibraryCard(
-                                group = group,
-                                settings = settings,
-                                onOpen = onOpen,
-                                onLongPress = {
-                                    focusManager.clearFocus()
-                                    onLongPress(it)
-                                },
-                                onExpand = { openGroup = group.name },
-                                modifier = Modifier
+                    DrawerTabs(
+                        tabs = tabs,
+                        hasWork = workApps.isNotEmpty(),
+                        chosen = tab,
+                        onChoose = {
+                            tab = it
+                            scope.launch { gridState.scrollToItem(0) }
+                        },
+                        onNew = onNewTab,
+                        onEdit = onEditTab,
+                        modifier = Modifier.padding(bottom = 8.dp),
+                    )
+                }
+
+                BoxWithConstraints(Modifier.weight(1f)) {
+                    val viewportPx = constraints.maxHeight.toFloat()
+                    // How many rows of apps the drawer shows at once, and one over: every one of them
+                    // rises in as it opens, not only the top few.
+                    val rowsOnShow = (maxHeight / DRAWER_ROW).toInt() + 2
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(if (shelves) 2 else columns),
+                        state = gridState,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            // Pulling the list past its top closes a sheet from below; one from the
+                            // side closes with a sideways swipe instead.
+                            .then(if (horizontal) Modifier else Modifier.nestedScroll(nestedScroll)),
+                        contentPadding = PaddingValues(horizontal = if (shelves) 22.dp else 16.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(if (shelves) 18.dp else 0.dp),
+                        verticalArrangement = Arrangement.spacedBy(18.dp),
+                    ) {
+                        if (shelves && groups != null) {
+                            itemsIndexed(groups, key = { _, group -> "group:${group.name}" }) { index, group ->
+                                LibraryCard(
+                                    group = group,
+                                    settings = settings,
+                                    onOpen = onOpen,
+                                    onLongPress = {
+                                        focusManager.clearFocus()
+                                        onLongPress(it)
+                                    },
+                                    onExpand = { openGroup = group.name },
+                                    modifier = Modifier
+                                        .animateItem()
+                                        .then(
+                                            if (index < rowsOnShow * 2 && gridState.firstVisibleItemIndex == 0) {
+                                                Modifier.appearIn(delayMillis = staggerDelay(index), riseFrom = 26f, replay = opening)
+                                            } else {
+                                                Modifier
+                                            }
+                                        ),
+                                )
+                            }
+                        } else {
+                        // What a search finds that is not an app, above the apps it finds.
+                        if (query.isNotBlank()) {
+                            item(key = "answers", span = { GridItemSpan(maxLineSpan) }) {
+                                SearchAnswers(query = query, shortcuts = shortcuts, onCopy = onCopy, onSetting = onSetting, onShortcut = onShortcut)
+                            }
+                            // Nothing to open: said under what the search did find, never over it.
+                            if (filtered.isEmpty()) {
+                                item(key = "none", span = { GridItemSpan(maxLineSpan) }) {
+                                    NoAppsMatch(query = query, onSearchWeb = { searchWeb() })
+                                }
+                            }
+                        }
+                        itemsIndexed(filtered, key = { _, app -> app.key }) { index, app ->
+                            // The whole first screenful is staggered in, a row at a time from the top
+                            // and from left to right along each. Anything composed while you are
+                            // scrolling must land at once, or the list appears to lag behind.
+                            val stagger = index < columns * rowsOnShow && gridState.firstVisibleItemIndex == 0
+                            val turn = (index / columns) * ROW_TURN_MS + (index % columns) * ICON_TURN_MS
+                            // Scroll-linked motion: an icon dissolves and shrinks as it slides past
+                            // the top or bottom edge, and is left alone once it is fully in view.
+                            var itemTop by remember { mutableFloatStateOf(0f) }
+                            var itemHeight by remember { mutableFloatStateOf(1f) }
+                            Box(
+                                Modifier
                                     .animateItem()
                                     .then(
-                                        if (index < rowsOnShow * 2 && gridState.firstVisibleItemIndex == 0) {
-                                            Modifier.appearIn(delayMillis = staggerDelay(index), riseFrom = 26f, replay = opening)
+                                        if (stagger) {
+                                            Modifier.appearIn(delayMillis = turn, riseFrom = 26f, replay = opening)
                                         } else {
                                             Modifier
                                         }
-                                    ),
-                            )
-                        }
-                    } else {
-                    // What a search finds that is not an app, above the apps it finds.
-                    if (query.isNotBlank()) {
-                        item(key = "answers", span = { GridItemSpan(maxLineSpan) }) {
-                            SearchAnswers(query = query, shortcuts = shortcuts, onCopy = onCopy, onSetting = onSetting, onShortcut = onShortcut)
-                        }
-                    }
-                    itemsIndexed(filtered, key = { _, app -> app.key }) { index, app ->
-                        // The whole first screenful is staggered in, a row at a time from the top
-                        // and from left to right along each. Anything composed while you are
-                        // scrolling must land at once, or the list appears to lag behind.
-                        val stagger = index < columns * rowsOnShow && gridState.firstVisibleItemIndex == 0
-                        val turn = (index / columns) * ROW_TURN_MS + (index % columns) * ICON_TURN_MS
-                        // Scroll-linked motion: an icon dissolves and shrinks as it slides past
-                        // the top or bottom edge, and is left alone once it is fully in view.
-                        var itemTop by remember { mutableFloatStateOf(0f) }
-                        var itemHeight by remember { mutableFloatStateOf(1f) }
-                        Box(
-                            Modifier
-                                .animateItem()
-                                .then(
-                                    if (stagger) {
-                                        Modifier.appearIn(delayMillis = turn, riseFrom = 26f, replay = opening)
-                                    } else {
-                                        Modifier
-                                    }
-                                )
-                                .onPlaced { coords ->
-                                    itemTop = coords.positionInParent().y
-                                    itemHeight = coords.size.height.toFloat().coerceAtLeast(1f)
-                                }
-                                .graphicsLayer {
-                                    val clippedTop = (-itemTop).coerceAtLeast(0f)
-                                    val clippedBottom =
-                                        (itemTop + itemHeight - viewportPx).coerceAtLeast(0f)
-                                    val hidden = (maxOf(clippedTop, clippedBottom) / itemHeight)
-                                        .coerceIn(0f, 1f)
-                                    val visible = 1f - hidden
-                                    alpha = visible
-                                    val edgeScale = 0.78f + 0.22f * visible
-                                    scaleX = edgeScale
-                                    scaleY = edgeScale
-                                    transformOrigin = TransformOrigin(0.5f, if (itemTop < 0f) 1f else 0f)
-                                }
-                                .launchOrigin(app.key)
-                                .pointerInput(app.key) {
-                                    detectTapGestures(
-                                        onTap = { onOpen(app.key) },
-                                        onLongPress = {
-                                            focusManager.clearFocus()
-                                            onLongPress(app)
-                                        },
                                     )
-                                },
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            AppTile(
-                                key = app.key,
-                                label = app.label,
-                                iconSize = STANDARD_ICON_SIZE,
-                                showLabel = true,
-                                shape = ZenithShapes.forIconShape(settings.iconShape),
-                                badge = true,
-                                onGlass = true,
-                            )
-                        }
-                    }
-                    }
-                }
-
-                FastScroller(
-                    sections = sections,
-                    onJump = { index -> scope.launch { gridState.scrollToItem(index) } },
-                    modifier = Modifier
-                        .align(Alignment.CenterEnd)
-                        .padding(vertical = 12.dp),
-                )
-
-                if (filtered.isEmpty() && query.isNotBlank()) {
-                    Column(
-                        Modifier
-                            .align(Alignment.TopCenter)
-                            .appearIn(fromScale = 0.97f, riseFrom = 22f, gentle = true)
-                            .padding(horizontal = 20.dp, vertical = 24.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        Text(
-                            text = "No apps match “${query.trim()}”",
-                            color = palette.onGlassMuted,
-                            fontSize = 14.sp,
-                        )
-                        Spacer(Modifier.height(14.dp))
-                        Row(
-                            Modifier
-                                .appearIn(fromScale = 0.9f)
-                                .pressBounce(0.95f)
-                                .glass(ZenithShapes.pill, strength = 1f, material = GlassMaterial.Clear)
-                                .clickable { searchWeb() }
-                                .padding(horizontal = 20.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Icon(
-                                Icons.Rounded.TravelExplore,
-                                contentDescription = null,
-                                tint = palette.accent,
-                                modifier = Modifier.size(18.dp),
-                            )
-                            Spacer(Modifier.width(10.dp))
-                            Text(
-                                text = "Search Google for “${query.trim()}”",
-                                color = palette.onGlass,
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Medium,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                    }
-                }
-            }
-
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 18.dp, vertical = 10.dp)
-                    .height(46.dp)
-                    .glass(ZenithShapes.pill, strength = 1.1f)
-                    .padding(start = 16.dp, end = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                val lens by animateColorAsState(if (searching) palette.accent else palette.onGlassMuted, tween(220), label = "drawerLens")
-                Icon(
-                    Icons.Rounded.Search,
-                    contentDescription = null,
-                    tint = lens,
-                    modifier = Modifier.size(17.dp),
-                )
-                Spacer(Modifier.width(10.dp))
-                BasicTextField(
-                    value = query,
-                    onValueChange = { query = it.replace("\n", "") },
-                    singleLine = true,
-                    maxLines = 1,
-                    textStyle = TextStyle(fontFamily = LocalZenithFont.current, color = palette.onGlass, fontSize = 15.sp),
-                    cursorBrush = SolidColor(palette.accent),
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
-                    keyboardActions = KeyboardActions(
-                        onGo = {
-                            val first = filtered.firstOrNull()
-                            if (first != null) onOpen(first.key) else searchWeb()
-                        },
-                    ),
-                    interactionSource = remember { MutableInteractionSource() },
-                    modifier = Modifier
-                        .weight(1f)
-                        .focusRequester(focusRequester)
-                        .onFocusChanged { searching = it.isFocused },
-                    decorationBox = { inner ->
-                        Box(contentAlignment = Alignment.CenterStart) {
-                            if (query.isEmpty()) {
-                                Text(
-                                    "Search apps or the web",
-                                    color = palette.onGlass.copy(alpha = 0.35f),
-                                    fontSize = 15.sp,
-                                    maxLines = 1,
+                                    .onPlaced { coords ->
+                                        itemTop = coords.positionInParent().y
+                                        itemHeight = coords.size.height.toFloat().coerceAtLeast(1f)
+                                    }
+                                    .graphicsLayer {
+                                        val clippedTop = (-itemTop).coerceAtLeast(0f)
+                                        val clippedBottom =
+                                            (itemTop + itemHeight - viewportPx).coerceAtLeast(0f)
+                                        val hidden = (maxOf(clippedTop, clippedBottom) / itemHeight)
+                                            .coerceIn(0f, 1f)
+                                        val visible = 1f - hidden
+                                        alpha = visible
+                                        val edgeScale = 0.78f + 0.22f * visible
+                                        scaleX = edgeScale
+                                        scaleY = edgeScale
+                                        transformOrigin = TransformOrigin(0.5f, if (itemTop < 0f) 1f else 0f)
+                                    }
+                                    .launchOrigin(app.key)
+                                    .pointerInput(app.key) {
+                                        detectTapGestures(
+                                            onTap = { onOpen(app.key) },
+                                            onLongPress = {
+                                                focusManager.clearFocus()
+                                                onLongPress(app)
+                                            },
+                                        )
+                                    },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                AppTile(
+                                    key = app.key,
+                                    label = app.label,
+                                    iconSize = STANDARD_ICON_SIZE,
+                                    showLabel = true,
+                                    shape = ZenithShapes.forIconShape(settings.iconShape),
+                                    badge = true,
+                                    onGlass = true,
                                 )
                             }
-                            inner()
                         }
-                    },
-                )
-                // Something typed: a way to clear it and a way to take it to the web open out
-                // beside it, and close up again when the box is empty.
-                AnimatedVisibility(
-                    visible = query.isNotEmpty(),
-                    enter = popIn(reduced) + expandHorizontally(),
-                    exit = popOut(reduced) + shrinkHorizontally(),
+                        }
+                    }
+
+                    FastScroller(
+                        sections = sections,
+                        onJump = { index -> scope.launch { gridState.scrollToItem(index) } },
+                        modifier = Modifier
+                            .align(Alignment.CenterEnd)
+                            .padding(vertical = 12.dp),
+                    )
+
+                }
+
+                // The search, at the foot by the thumb, in Apple's grey: a rounded field, not glass.
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 10.dp)
+                        .height(44.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(apple.field)
+                        .padding(start = 12.dp, end = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            Modifier
-                                .size(26.dp)
-                                .pressBounce(0.85f)
-                                .clip(RoundedCornerShape(percent = 50))
-                                .background(palette.onGlass.copy(alpha = 0.12f))
-                                .clickable { query = "" },
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(Icons.Rounded.Close, contentDescription = "Clear", tint = palette.onGlass, modifier = Modifier.size(13.dp))
-                        }
-                        Spacer(Modifier.width(6.dp))
-                        Box(
-                            Modifier
-                                .size(38.dp)
-                                .pressBounce(0.88f)
-                                .clip(RoundedCornerShape(percent = 50))
-                                .background(palette.accent)
-                                .clickable { searchWeb() },
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(
-                                Icons.Rounded.TravelExplore,
-                                contentDescription = "Search the web",
-                                tint = androidx.compose.ui.graphics.Color(0xFF0A0B12),
-                                modifier = Modifier.size(18.dp),
-                            )
+                    val lens by animateColorAsState(if (searching) palette.accent else quietWords(), tween(220), label = "drawerLens")
+                    Icon(
+                        Icons.Rounded.Search,
+                        contentDescription = null,
+                        tint = lens,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    BasicTextField(
+                        value = query,
+                        onValueChange = { query = it.replace("\n", "") },
+                        singleLine = true,
+                        maxLines = 1,
+                        textStyle = TextStyle(fontFamily = LocalZenithFont.current, color = apple.words, fontSize = 16.sp),
+                        cursorBrush = SolidColor(palette.accent),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
+                        keyboardActions = KeyboardActions(
+                            onGo = {
+                                val first = filtered.firstOrNull()
+                                if (first != null) onOpen(first.key) else searchWeb()
+                            },
+                        ),
+                        interactionSource = remember { MutableInteractionSource() },
+                        modifier = Modifier
+                            .weight(1f)
+                            .focusRequester(focusRequester)
+                            .onFocusChanged { searching = it.isFocused },
+                        decorationBox = { inner ->
+                            Box(contentAlignment = Alignment.CenterStart) {
+                                if (query.isEmpty()) {
+                                    Text(
+                                        "Search apps or the web",
+                                        color = quietWords(),
+                                        fontSize = 16.sp,
+                                        maxLines = 1,
+                                    )
+                                }
+                                inner()
+                            }
+                        },
+                    )
+                    // Something typed: Apple's round clear button, and a way to take it to the web, open
+                    // out beside it, and close up again when the box is empty.
+                    AnimatedVisibility(
+                        visible = query.isNotEmpty(),
+                        enter = popIn(reduced) + expandHorizontally(),
+                        exit = popOut(reduced) + shrinkHorizontally(),
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            // Apple's round clear button, with a finger's room round it.
+                            Box(
+                                Modifier
+                                    .size(44.dp)
+                                    .clip(CircleShape)
+                                    .clickable(role = Role.Button) { query = "" },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(Icons.Rounded.Cancel, contentDescription = "Clear", tint = quietWords(), modifier = Modifier.size(20.dp))
+                            }
+                            Box(
+                                Modifier
+                                    .size(36.dp)
+                                    .pressBounce(0.88f)
+                                    .clip(CircleShape)
+                                    .background(palette.accent)
+                                    .clickable(role = Role.Button) { searchWeb() },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    Icons.Rounded.TravelExplore,
+                                    contentDescription = "Search the web",
+                                    tint = inkOnTint(palette.accent),
+                                    modifier = Modifier.size(18.dp),
+                                )
+                            }
                         }
                     }
                 }
@@ -659,8 +654,70 @@ fun AppDrawer(
     }
 }
 
+/**
+ * What the drawer says when no app matches a search, under whatever else the search found: that
+ * nothing matched, and Apple's grey button that takes the words to Google.
+ */
+@Composable
+private fun NoAppsMatch(query: String, onSearchWeb: () -> Unit) {
+    val apple = LocalApple.current
+    val palette = LocalPalette.current
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .appearIn(fromScale = 0.97f, riseFrom = 22f, gentle = true)
+            .padding(horizontal = 20.dp, vertical = 24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(
+            text = "No apps match “${query.trim()}”",
+            color = palette.onGlassMuted,
+            fontSize = 14.sp,
+        )
+        Spacer(Modifier.height(14.dp))
+        // Apple's grey button: on the drawer's glass nothing is glass of its own.
+        Row(
+            Modifier
+                .appearIn(fromScale = 0.9f)
+                .pressBounce(0.95f)
+                .clip(ZenithShapes.pill)
+                .background(apple.grey)
+                .clickable(role = Role.Button, onClick = onSearchWeb)
+                .padding(horizontal = 20.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                Icons.Rounded.TravelExplore,
+                contentDescription = null,
+                tint = palette.accent,
+                modifier = Modifier.size(18.dp),
+            )
+            Spacer(Modifier.width(10.dp))
+            Text(
+                text = "Search Google for “${query.trim()}”",
+                color = apple.words,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
 /** The least room a row of apps takes in the drawer: an icon, its name and the gap under it. */
 private val DRAWER_ROW = 96.dp
+
+/** How much body the drawer's frosted glass has: a covering pane's (see `COVERING_BODY`). */
+private const val DRAWER_BODY = 0.65f
+
+/**
+ * The plate a library group stands on, as the App Library's are: a little lighter than the frost
+ * round it. In the dark a lift of white over the frost; in the light Apple's white card, which a
+ * see-through white would vanish against on a drawer that is near white already. Never glass,
+ * which on the drawer's glass would be a hole through to the wallpaper; nothing of the theme in it.
+ */
+private fun libraryPlate(apple: AppleSurfaces): Color = if (apple.dark) Color.White.copy(alpha = 0.10f) else apple.card
 
 /** How long after the row above a row of apps sets off as the drawer opens, and each icon after the one beside it. */
 private const val ROW_TURN_MS = 46
@@ -694,7 +751,8 @@ private fun LibraryCard(
             Modifier
                 .fillMaxWidth()
                 .aspectRatio(1f)
-                .glass(RoundedCornerShape(26.dp), strength = 0.9f, material = GlassMaterial.Clear)
+                .clip(RoundedCornerShape(26.dp))
+                .background(libraryPlate(LocalApple.current))
                 .padding(12.dp),
         ) {
             val gap = 10.dp
@@ -752,7 +810,6 @@ private fun MiniStack(
     shape: androidx.compose.ui.graphics.Shape,
     onClick: () -> Unit,
 ) {
-    val palette = LocalPalette.current
     val gap = 4.dp
     val inset = 5.dp
     val small = (size - inset * 2 - gap) / 2
@@ -761,8 +818,8 @@ private fun MiniStack(
             .size(size)
             .pressBounce(0.92f)
             .clip(RoundedCornerShape(16.dp))
-            .background(palette.onGlass.copy(alpha = 0.08f))
-            .clickable(onClick = onClick)
+            .background(LocalApple.current.field)
+            .clickable(role = Role.Button, onClickLabel = "Open the group", onClick = onClick)
             .padding(inset),
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(gap)) {

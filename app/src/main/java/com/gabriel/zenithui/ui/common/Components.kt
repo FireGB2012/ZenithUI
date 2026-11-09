@@ -201,6 +201,13 @@ fun IconLabel(text: String, modifier: Modifier = Modifier, textAlign: TextAlign?
 
 private val LABEL_SHADOW = TextStyle(shadow = Shadow(Color.Black.copy(alpha = 0.6f), Offset(0f, 1.5f), 7f))
 
+/**
+ * True where an app's icon must never be a pane of glass of its own: anywhere in a sheet, on its
+ * glass or on its cards, and on a page of its own. Glass shows the wallpaper, so there it would be
+ * a hole; a Glass-style icon gets a pale plate instead, as it does inside a folder.
+ */
+val LocalIconsOnPlate = staticCompositionLocalOf { false }
+
 @Composable
 fun AppIcon(
     key: String,
@@ -244,14 +251,16 @@ private fun StyledIcon(key: String, label: String, px: Int, shape: Shape, style:
     }
     val appear by animateFloatAsState(if (glyph != null) 1f else 0f, tween(340), label = "glyphFade")
     val glass = style == IconStyles.GLASS
+    val plate = onGlass || LocalIconsOnPlate.current
     val ink = when {
         glass -> palette.onGlass
         palette.dark -> lerp(palette.accent, Color.White, 0.42f)
         else -> lerp(palette.accent, Color.Black, 0.38f)
     }
     val tile = when {
-        // Glass inside glass would show the wallpaper through a hole in it: a pale plate instead.
-        glass && onGlass -> Modifier.clip(shape).background(palette.onGlass.copy(alpha = 0.12f))
+        // Glass inside glass, or on a card or a page, would show the wallpaper through a hole in
+        // it: a pale plate instead.
+        glass && plate -> Modifier.clip(shape).background(palette.onGlass.copy(alpha = 0.12f))
         glass -> Modifier.glass(shape, strength = 1.2f, material = GlassMaterial.Clear)
         palette.dark -> Modifier.clip(shape).background(lerp(Color(0xFF14151B), palette.accent, 0.22f))
         else -> Modifier.clip(shape).background(lerp(Color.White, palette.accent, 0.18f))

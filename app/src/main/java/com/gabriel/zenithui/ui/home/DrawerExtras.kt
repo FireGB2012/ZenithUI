@@ -11,6 +11,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,16 +21,16 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
@@ -49,13 +50,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -81,12 +80,24 @@ import com.gabriel.zenithui.ui.common.pressBounce
 import com.gabriel.zenithui.ui.common.rememberHaptics
 import com.gabriel.zenithui.ui.common.rollOver
 import com.gabriel.zenithui.ui.common.staggerDelay
-import com.gabriel.zenithui.ui.theme.GlassMaterial
+import com.gabriel.zenithui.ui.settings.CardRows
+import com.gabriel.zenithui.ui.settings.FieldBox
+import com.gabriel.zenithui.ui.settings.GroupDivider
+import com.gabriel.zenithui.ui.settings.Section
+import com.gabriel.zenithui.ui.settings.rowPress
+import com.gabriel.zenithui.ui.theme.ButtonKind
+import com.gabriel.zenithui.ui.theme.LocalApple
 import com.gabriel.zenithui.ui.theme.LocalPalette
-import com.gabriel.zenithui.ui.theme.LocalZenithFont
-import com.gabriel.zenithui.ui.theme.glass
+import com.gabriel.zenithui.ui.theme.inkOnTint
+import com.gabriel.zenithui.ui.theme.solidCard
 import kotlin.math.abs
 import kotlin.math.roundToInt
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.onLongClick
 
 /** A drawer tab, as the row of pills shows it: All, one you made, or Work. */
 sealed interface TabChoice {
@@ -97,8 +108,8 @@ sealed interface TabChoice {
 
 /**
  * The tabs along the top of the drawer: All, the ones you made, Work on a phone with a work
- * profile, and a + to make another. The pill of the one chosen fills with the accent; a tab you
- * made is changed with a long press.
+ * profile, and a + to make another. They are Apple's grey capsules, and the one chosen fills with
+ * the accent; a tab you made is changed with a long press.
  */
 @Composable
 fun DrawerTabs(
@@ -110,6 +121,7 @@ fun DrawerTabs(
     onEdit: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val apple = LocalApple.current
     LazyRow(
         modifier,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -121,16 +133,24 @@ fun DrawerTabs(
         }
         if (hasWork) item(key = "work") { TabPill("Work", chosen == TabChoice.Work, icon = Icons.Rounded.Work) { onChoose(TabChoice.Work) } }
         if (tabs.size < DrawerTab.MOST) item(key = "new") {
+            // A finger's room round the grey circle.
             Box(
                 Modifier
-                    .size(34.dp)
+                    .size(44.dp)
                     .pressBounce(0.9f)
                     .clip(CircleShape)
-                    .background(LocalPalette.current.onGlass.copy(alpha = 0.08f))
-                    .clickable(onClick = onNew),
+                    .clickable(role = Role.Button, onClick = onNew),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Rounded.Add, contentDescription = "New tab", tint = LocalPalette.current.onGlassMuted, modifier = Modifier.size(18.dp))
+                Box(
+                    Modifier
+                        .size(34.dp)
+                        .clip(CircleShape)
+                        .background(apple.field),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(Icons.Rounded.Add, contentDescription = "New tab", tint = apple.words, modifier = Modifier.size(18.dp))
+                }
             }
         }
     }
@@ -144,15 +164,15 @@ private fun TabPill(
     onLongPress: (() -> Unit)? = null,
     onClick: () -> Unit,
 ) {
-    val palette = LocalPalette.current
-    val fill by animateColorAsState(if (selected) palette.accent else palette.onGlass.copy(alpha = 0.08f), tween(220), label = "tabFill")
-    val ink by animateColorAsState(if (selected) Color(0xFF0A0B12) else palette.onGlass, tween(220), label = "tabInk")
-    Row(
+    val apple = LocalApple.current
+    val accent = LocalPalette.current.accent
+    val fill by animateColorAsState(if (selected) accent else apple.field, tween(220), label = "tabFill")
+    val ink by animateColorAsState(if (selected) inkOnTint(accent) else apple.words, tween(220), label = "tabInk")
+    // A finger's room above and below the capsule, and a tab to TalkBack: chosen or not, opened at a
+    // tap, changed with a long press.
+    Box(
         Modifier
-            .height(34.dp)
-            .pressBounce(0.94f)
-            .clip(RoundedCornerShape(50))
-            .background(fill)
+            .heightIn(min = 44.dp)
             .pointerInput(onLongPress) {
                 val held = onLongPress
                 detectTapGestures(
@@ -160,22 +180,38 @@ private fun TabPill(
                     onLongPress = if (held == null) null else { _: androidx.compose.ui.geometry.Offset -> held() },
                 )
             }
-            .padding(horizontal = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .semantics(mergeDescendants = true) {
+                role = Role.Tab
+                this.selected = selected
+                this.onClick(label = null) { onClick(); true }
+                val held = onLongPress
+                if (held != null) onLongClick(label = "Change tab") { held(); true }
+            },
+        contentAlignment = Alignment.Center,
     ) {
-        if (icon != null) {
-            Icon(icon, contentDescription = null, tint = ink, modifier = Modifier.size(15.dp))
-            Spacer(Modifier.width(6.dp))
+        Row(
+            Modifier
+                .height(34.dp)
+                .pressBounce(0.94f)
+                .clip(RoundedCornerShape(50))
+                .background(fill)
+                .padding(horizontal = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (icon != null) {
+                Icon(icon, contentDescription = null, tint = ink, modifier = Modifier.size(15.dp))
+                Spacer(Modifier.width(6.dp))
+            }
+            Text(label, color = ink, fontSize = 14.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium, maxLines = 1)
         }
-        Text(label, color = ink, fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1)
     }
 }
 
 /**
  * The drawer's index down its right edge, for an A to Z list long enough to need one: drag along
- * it, and a lens of glass beside the finger says which letter it is on while the list jumps there,
- * with a tick at each letter. The letters near the finger swell out towards it, as the dock of a
- * Mac does, so the one under it can be seen round the thumb.
+ * it, and a round solid bubble beside the finger says which letter it is on while the list jumps
+ * there, with a tick at each letter. The letters near the finger swell out towards it, as the dock
+ * of a Mac does, so the one under it can be seen round the thumb.
  */
 @Composable
 fun FastScroller(
@@ -186,6 +222,7 @@ fun FastScroller(
 ) {
     if (sections.size < 2) return
     val palette = LocalPalette.current
+    val apple = LocalApple.current
     val reduced = LocalMotionLevel.current.reduced
     val haptics = rememberHaptics()
     var held by remember { mutableStateOf<Int?>(null) }
@@ -252,13 +289,15 @@ fun FastScroller(
             visible = held != null,
             enter = popIn(reduced, from = 0.4f, millis = 160),
             exit = popOut(reduced, to = 0.4f),
-            // Placed, not drawn moved, so its glass shows what is really behind it.
             modifier = Modifier.offset { IntOffset((-76).dp.roundToPx(), (fingerY - 30.dp.toPx()).roundToInt()) },
         ) {
+            // Solid, as anything standing on the drawer's glass is, and lifted off it a little.
             Box(
                 Modifier
                     .size(60.dp)
-                    .glass(CircleShape, strength = 1.3f, material = GlassMaterial.Clear),
+                    .shadow(10.dp, CircleShape)
+                    .clip(CircleShape)
+                    .background(apple.card),
                 contentAlignment = Alignment.Center,
             ) {
                 AnimatedContent(
@@ -266,7 +305,7 @@ fun FastScroller(
                     transitionSpec = { rollOver(reduced, down = targetState < initialState) },
                     label = "lensLetter",
                 ) { letter ->
-                    Text(letter.toString(), color = palette.onGlass, fontSize = 28.sp, fontWeight = FontWeight.SemiBold)
+                    Text(letter.toString(), color = apple.words, fontSize = 28.sp, fontWeight = FontWeight.SemiBold)
                 }
             }
         }
@@ -277,9 +316,9 @@ fun FastScroller(
 fun indexLetter(label: String): Char = label.trim().firstOrNull()?.uppercaseChar()?.takeIf { it.isLetter() } ?: '#'
 
 /**
- * What a search finds besides apps, at the top of the results: the answer to a sum, a conversion,
- * Android's settings by name, and apps' shortcuts. Each is a section of its own, rising in as it
- * appears; a sum's answer and a conversion turn over as the typing changes them.
+ * What a search finds besides apps, at the top of the results, each on a card of its own: the
+ * answer to a sum or a conversion, Android's settings by name, and apps' shortcuts. Each rises in
+ * as it appears; a sum's answer and a conversion turn over as the typing changes them.
  */
 @Composable
 fun SearchAnswers(
@@ -290,6 +329,7 @@ fun SearchAnswers(
     onShortcut: (AppShortcut) -> Unit,
 ) {
     val palette = LocalPalette.current
+    val apple = LocalApple.current
     val reduced = LocalMotionLevel.current.reduced
     val sum = remember(query) { Calculator.evaluate(query)?.let(Calculator::show) }
     val conversion = remember(query) { Units.convert(query) }
@@ -298,79 +338,86 @@ fun SearchAnswers(
     val shortcutsFound = remember(words, shortcuts) {
         if (words.length < 2) emptyList() else shortcuts.filter { it.label.contains(words, ignoreCase = true) }.take(4)
     }
-    Column(Modifier.fillMaxWidth().padding(horizontal = 6.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 6.dp)) {
         val answer = sum?.let { "= $it" to query.trim() } ?: conversion?.let { it.to to it.from }
         AnimatedVisibility(visible = answer != null, enter = popIn(reduced, from = 0.9f), exit = popOut(reduced, to = 0.9f)) {
             val shown = remember { arrayOf("" to "") }
             if (answer != null) shown[0] = answer
+            val touch = remember { MutableInteractionSource() }
             Row(
                 Modifier
                     .fillMaxWidth()
-                    .pressBounce(0.98f)
-                    .glass(RoundedCornerShape(22.dp), strength = 1.1f)
-                    .clickable { onCopy(shown[0].first.removePrefix("= ")) }
-                    .padding(horizontal = 18.dp, vertical = 14.dp),
+                    .solidCard()
+                    .rowPress(touch)
+                    .clickable(interactionSource = touch, indication = null, onClickLabel = "Copy") { onCopy(shown[0].first.removePrefix("= ")) }
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(if (sum != null) Icons.Rounded.Calculate else Icons.Rounded.SwapHoriz, contentDescription = null, tint = palette.accent, modifier = Modifier.size(22.dp))
                 Spacer(Modifier.width(14.dp))
                 Column(Modifier.weight(1f)) {
                     AnimatedContent(targetState = shown[0].first, transitionSpec = { rollOver(reduced) }, label = "answer") { value ->
-                        Text(value, color = palette.onGlass, fontSize = 22.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(value, color = apple.words, fontSize = 22.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
-                    Text("${shown[0].second} · tap to copy", color = palette.onGlassMuted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text("${shown[0].second} · tap to copy", color = apple.secondary, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
         }
         if (settingsFound.isNotEmpty()) {
-            Column {
-                SectionLabel("Settings", Modifier.padding(start = 10.dp, bottom = 4.dp))
-                settingsFound.forEachIndexed { index, link ->
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .appearIn(delayMillis = staggerDelay(index), riseFrom = 14f, gentle = true)
-                            .clip(RoundedCornerShape(16.dp))
-                            .clickable { onSetting(link) }
-                            .padding(horizontal = 10.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(Icons.Rounded.SettingsSuggest, contentDescription = null, tint = palette.onGlassMuted, modifier = Modifier.size(20.dp))
-                        Spacer(Modifier.width(12.dp))
-                        Text(link.title, color = palette.onGlass, fontSize = 15.sp)
+            Section(header = "Settings") {
+                CardRows {
+                    settingsFound.forEachIndexed { index, link ->
+                        AnswerRow(index = index, onClick = { onSetting(link) }) {
+                            Box(Modifier.size(30.dp), contentAlignment = Alignment.Center) {
+                                Icon(Icons.Rounded.SettingsSuggest, contentDescription = null, tint = palette.accent, modifier = Modifier.size(22.dp))
+                            }
+                            Spacer(Modifier.width(14.dp))
+                            Text(link.title, color = apple.words, fontSize = 16.sp)
+                        }
                     }
                 }
             }
         }
         if (shortcutsFound.isNotEmpty()) {
-            Column {
-                SectionLabel("Shortcuts", Modifier.padding(start = 10.dp, bottom = 4.dp))
-                shortcutsFound.forEachIndexed { index, shortcut ->
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .appearIn(delayMillis = staggerDelay(index), riseFrom = 14f, gentle = true)
-                            .clip(RoundedCornerShape(16.dp))
-                            .clickable { onShortcut(shortcut) }
-                            .padding(horizontal = 10.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        AppIcon(key = shortcut.key, label = shortcut.label, size = 28.dp)
-                        Spacer(Modifier.width(12.dp))
-                        Text(shortcut.label, color = palette.onGlass, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Section(header = "Shortcuts") {
+                CardRows {
+                    shortcutsFound.forEachIndexed { index, shortcut ->
+                        AnswerRow(index = index, onClick = { onShortcut(shortcut) }) {
+                            AppIcon(key = shortcut.key, label = shortcut.label, size = 30.dp)
+                            Spacer(Modifier.width(14.dp))
+                            Text(shortcut.label, color = apple.words, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
                     }
                 }
             }
         }
         if (answer != null || settingsFound.isNotEmpty() || shortcutsFound.isNotEmpty()) {
-            SectionLabel("Apps", Modifier.padding(start = 10.dp, top = 4.dp))
+            SectionLabel("Apps", Modifier.padding(start = 16.dp, top = 16.dp))
         }
     }
 }
 
+/** One thing a search found, on its card: rising in a beat behind the one above, and shading under a finger. */
+@Composable
+private fun AnswerRow(index: Int, onClick: () -> Unit, content: @Composable () -> Unit) {
+    val touch = remember { MutableInteractionSource() }
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .appearIn(delayMillis = staggerDelay(index), riseFrom = 14f, gentle = true)
+            .rowPress(touch)
+            .clickable(interactionSource = touch, indication = null, role = Role.Button, onClick = onClick)
+            .heightIn(min = 48.dp)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        content()
+    }
+}
+
 /**
- * Making a tab, or changing one: its name, and every app to tick into it or out of it. A tab
- * that is changed can also be taken away, which takes nothing off the phone.
+ * Making a tab, or changing one: its name, and every app to tick into it or out of it, on cards. A
+ * tab that is changed can also be taken away, which takes nothing off the phone.
  */
 @Composable
 fun DrawerTabSheet(
@@ -381,89 +428,83 @@ fun DrawerTabSheet(
     onDelete: (() -> Unit)?,
     onDismiss: () -> Unit,
 ) {
-    val palette = LocalPalette.current
     val reduced = LocalMotionLevel.current.reduced
     var name by remember(tab) { mutableStateOf(tab?.name.orEmpty()) }
     var picked by remember(tab) { mutableStateOf(tab?.keys?.toSet().orEmpty()) }
-    var focused by remember { mutableStateOf(false) }
-    val ring by animateColorAsState(if (focused) palette.accent.copy(alpha = 0.75f) else Color.Transparent, tween(220), label = "tabNameRing")
 
     ZenithSheet(visible = visible, onDismiss = onDismiss, title = if (tab == null) "New tab" else "Change tab", maxHeightFraction = 0.9f) {
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .height(44.dp)
-                .clip(RoundedCornerShape(14.dp))
-                .background(palette.onGlass.copy(alpha = 0.08f))
-                .border(1.5.dp, ring, RoundedCornerShape(14.dp))
-                .padding(horizontal = 12.dp),
-            contentAlignment = Alignment.CenterStart,
-        ) {
-            if (name.isEmpty()) Text("Its name: Games, Work, Friends", color = palette.onGlassMuted, fontSize = 15.sp)
-            BasicTextField(
-                value = name,
-                onValueChange = { name = it.take(20) },
-                singleLine = true,
-                textStyle = TextStyle(fontFamily = LocalZenithFont.current, color = palette.onGlass, fontSize = 15.sp),
-                cursorBrush = SolidColor(palette.accent),
-                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words, imeAction = ImeAction.Done),
-                modifier = Modifier.fillMaxWidth().onFocusChanged { focused = it.isFocused },
-            )
-        }
-        Spacer(Modifier.height(8.dp))
-        Text(
-            if (picked.isEmpty()) "Tick the apps that go in it." else "${picked.size} apps in it.",
-            color = palette.onGlassMuted,
-            fontSize = 13.sp,
-            modifier = Modifier.padding(horizontal = 4.dp),
+        Spacer(Modifier.height(4.dp))
+        FieldBox(
+            value = name,
+            onValueChange = { name = it.take(20) },
+            placeholder = "Its name: Games, Work, Friends",
+            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words, imeAction = ImeAction.Done),
         )
-        Spacer(Modifier.height(6.dp))
-        LazyColumn(Modifier.weight(1f, fill = false)) {
-            items(apps, key = { it.key }) { app ->
-                val on = app.key in picked
-                val fill by animateFloatAsState(if (on) 1f else 0f, if (reduced) tween(Motion.REDUCED_MS) else Motion.snappy(), label = "tabTick")
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(14.dp))
-                        .clickable { picked = if (on) picked - app.key else picked + app.key }
-                        .padding(horizontal = 8.dp, vertical = 7.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    AppIcon(key = app.key, label = app.label, size = 32.dp)
-                    Spacer(Modifier.width(12.dp))
-                    Text(app.label, color = palette.onGlass, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                    Box(
-                        Modifier
-                            .size(24.dp)
-                            .clip(CircleShape)
-                            .background(palette.accent.copy(alpha = fill))
-                            .border(1.5.dp, palette.onGlass.copy(alpha = 0.4f * (1f - fill)), CircleShape),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            Icons.Rounded.Check,
-                            contentDescription = if (on) "In the tab" else null,
-                            tint = Color(0xFF0A0B12),
-                            modifier = Modifier.size(16.dp).graphicsLayer {
-                                alpha = fill
-                                scaleX = 0.5f + 0.5f * fill
-                                scaleY = 0.5f + 0.5f * fill
-                            },
-                        )
+        // The list takes what room the sheet has left, and scrolls within it.
+        Section(
+            header = if (picked.isEmpty()) "Tick the apps that go in it" else "${picked.size} apps in it",
+            modifier = Modifier.weight(1f, fill = false),
+        ) {
+            LazyColumn(Modifier.fillMaxWidth()) {
+                itemsIndexed(apps, key = { _, app -> app.key }) { index, app ->
+                    if (index > 0) GroupDivider()
+                    TabAppRow(app = app, on = app.key in picked, reduced = reduced) {
+                        picked = if (app.key in picked) picked - app.key else picked + app.key
                     }
                 }
             }
         }
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(14.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             if (onDelete != null) ZenithButton(text = "Remove tab", onClick = onDelete, modifier = Modifier.weight(1f))
             ZenithButton(
                 text = if (tab == null) "Make tab" else "Save",
-                filled = true,
+                kind = ButtonKind.Main,
                 enabled = name.isNotBlank(),
                 onClick = { onSave(DrawerTab(name.trim(), apps.map { it.key }.filter { it in picked })) },
                 modifier = Modifier.weight(1f),
+            )
+        }
+    }
+}
+
+/** An app in a tab's list: its icon and name, and a round tick at the end, filled with the accent when it is in. */
+@Composable
+private fun TabAppRow(app: AppInfo, on: Boolean, reduced: Boolean, onFlip: () -> Unit) {
+    val apple = LocalApple.current
+    val accent = LocalPalette.current.accent
+    val touch = remember { MutableInteractionSource() }
+    val fill by animateFloatAsState(if (on) 1f else 0f, if (reduced) tween(Motion.REDUCED_MS) else Motion.snappy(), label = "tabTick")
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .rowPress(touch)
+            // A box to tick, to TalkBack too: it says whether the app is in.
+            .toggleable(value = on, interactionSource = touch, indication = null, role = Role.Checkbox) { onFlip() }
+            .padding(start = 16.dp, end = 16.dp, top = 7.dp, bottom = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        AppIcon(key = app.key, label = app.label, size = 30.dp)
+        Spacer(Modifier.width(14.dp))
+        Text(app.label, color = apple.words, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        Box(
+            Modifier
+                .size(24.dp)
+                .clip(CircleShape)
+                .background(accent.copy(alpha = fill))
+                // Empty, a ring in grey that can be seen: it is the only sign the row can be ticked.
+                .border(1.5.dp, apple.secondary.copy(alpha = apple.secondary.alpha * (1f - fill)), CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                Icons.Rounded.Check,
+                contentDescription = null,
+                tint = inkOnTint(accent),
+                modifier = Modifier.size(16.dp).graphicsLayer {
+                    alpha = fill
+                    scaleX = 0.5f + 0.5f * fill
+                    scaleY = 0.5f + 0.5f * fill
+                },
             )
         }
     }

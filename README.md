@@ -61,7 +61,9 @@ built entirely in Jetpack Compose.
   apps too.
 - **Every menu is a bottom sheet** — item menus, Customise, wallpapers. Nothing needs a second
   hand. Settings and the widget gallery are pages of their own, the full height of the screen, on
-  one shell (`ui/common/FullPage.kt`): a bar with a way back and a way out, pulled down to close.
+  one shell (`ui/common/FullPage.kt`), solid in Apple's page colour as an iPhone's Settings is: a
+  bar with Apple's Back (an accent chevron and the name of where it goes) and a round grey button
+  to close, pulled down to close.
 - **Dock** — a bar as wide as the page however many apps it holds, as on an iPhone. It takes one
   app for each column of the page, and never fewer than four, and they share the bar out equally:
   a full dock has each app under the icons above it, and a smaller one spreads across the bar
@@ -164,10 +166,11 @@ round glass button beside it for Google.
 
 **The gallery** — long-press an empty spot → **Customise** → **Widgets**
 (`ui/home/WidgetGallery.kt`). Every widget is drawn by the code that draws it on the home screen,
-at the size it is there, on a window onto your wallpaper, so what you see is what lands on the
-page. Tap one and it grows into a showcase: its sizes in a row, all to one scale — Small, Medium,
+at the size it is there, standing on the plain page as in the iPhone's gallery, with its name and
+its sizes under it, so what you see is what lands on the page. Tap one and it grows into a
+showcase: its sizes in a row, all to one scale — Small, Medium,
 Wide, Tall and Large, each fitted to the widget and to your grid (`WidgetSizes`), and each a
-different design — and one button that adds the size in the middle. Under the row the sizes are named, each over the room it takes on the page: a little
+different design — and one button that adds the size in the middle. Under the row the sizes are named, on a grey track under a raised pill, each over the room it takes on the page: a little
 grid as wide as your page, its cells filled in (`SizeShape`), so Wide is plainly the width of the
 page and Tall a row more. A tap on a name brings that size to the middle, and under it a line says
 what that size shows ("Hours over minutes, like a Lock Screen"). The lines come from
@@ -188,8 +191,8 @@ theme's backdrop, light and dark (`PaletteToneTest`).
 
 ## Other apps' widgets
 
-The gallery's **From your apps** lists every app on the phone that has widgets, A to Z; an app
-opens out to its widgets in a row, each its picture, its name and the cells it takes on this grid
+The gallery's **From your apps** lists every app on the phone that has widgets, A to Z, as an
+iPhone's grouped list; an app opens out to its widgets in a row, each its picture, its name and the cells it takes on this grid
 (`HostedWidgetPicker`). A tap puts it on the first page with room, at the size it asks for —
 Android 12's own cells where it gives them, otherwise its size in dp turned into cells and whole
 rows (`HostedSizes`). Android asks once whether Zenith may show widgets, and a widget with a set-up
@@ -215,12 +218,21 @@ own, and one left alone stands as a widget again. Eight at most.
 ## Customisation
 
 Long-press an empty spot → **Customise** → **Settings**. Settings is a page of its own, the full
-height of the screen (`ui/settings/`): a search box and ten groups, each saying how it is set
-now — Wallpaper & theme, Home screen, Motion & feel, Gestures, Apps, Zenith Plus, Looks, Aura,
-Backup & reset, About & help — and an eleventh, Account, in a build that has a server. They stand in three blocks, each
-headed with what it holds (Look and feel; Plus and Aura, or Plus, Aura and account; Backup and
-help) and set further from
-the next than its rows are from each other. A group pushes in from the side; back, the arrow or a swipe from the left edge pops it.
+height of the screen (`ui/settings/`), set out as an iPhone's Settings: Apple's grey search field
+and ten groups, each a row with a small square in a colour of its own, how it is set now in grey
+under its name, and a chevron — Wallpaper & theme, Home screen, Motion & feel, Gestures, Apps,
+Zenith Plus, Looks, Aura, Backup & reset, About & help — and an eleventh, Account, in a build that
+has a server. They stand on three solid cards, each named in small grey capitals over it (Look and
+feel; Plus and Aura, or Plus, Aura and account; Backup and help). A group pushes in from the side;
+back, Apple's Back in the bar or a swipe from the left edge pops it.
+
+On each page every choice is a card of its own (`Section`): its name over the card and what it
+means in grey under it, the rows' squares in the colour of the group, the hairlines starting under
+the words. The controls are Apple's: switches in the accent, a segmented control of a grey track
+and a raised pill, white in the light and grey in the dark, which can still be picked up and slid
+along, sliders with a thin track and a round white knob that lands under the finger
+(`SliderGeometry`), and a grey stepper. A row shades under a finger, as an iPhone's does, rather
+than bouncing. Nothing on these pages is glass.
 Search finds any option by its name or by other words for it ("dark", "vibrate", "battery"), opens
 its page and pulses the row. The Theme and Home pages start with a small live copy of your own home
 screen, drawn by the same code as the real one, so a change is seen as it is made.
@@ -397,11 +409,11 @@ far out of an opening folder each app is) and `AnimationTuning` (the numbers it 
   it is pulled, up only a little. Let go and it settles, or, past a third of its height or with a
   flick, goes. One sheet opened from another is seen going down as the new one comes up.
 - **Settings and the gallery.** Settings arrives in order — its title, the search box, then each
-  group in turn — and a row answers a press. The pill of a row of options stretches towards the
-  one that was tapped and draws itself up there; a switch's knob spreads under a finger; a number
-  rolls up or down a step; the small print under a control changes where it stands. The gallery's
-  cards come in one after another, and a widget's showcase grows out of the card that was tapped
-  and goes back into it. In the showcase the pill under the names of the sizes goes with the row
+  group in turn — and a row shades under a finger. The pill of a row of options stretches towards
+  the one that was tapped and draws itself up there; a switch's knob stretches under a finger; a
+  number rolls up or down a step; the grey footnote under a card changes where it stands. The
+  gallery's widgets come in one after another, and a widget's showcase grows out of the one that
+  was tapped and goes back into it. In the showcase the pill under the names of the sizes goes with the row
   of sizes as it is pulled, stretching towards the next on the way and drawing itself up there
   (`PageEffects.pillSpan`); that size's little grid lights up in the accent, and its name below
   slides in the way the row went.
@@ -427,14 +439,14 @@ the switch is off.
   **Pressing**: Bounce, Squish (soft, and it wobbles back), or Ripple, a ring of light from the
   finger that falls only on what was pressed. All of it gives way to plain fades with movement
   reduced.
-- **Glass under a finger** (`GlassPress`). Glass buttons move like glass, each its own way, and
-  not by the Pressing setting: the plain ones in sheets swell and light up from the fingertip
-  (Flex); the one button that moves you on, in the accent's tinted glass, squishes and wobbles
-  back (Jelly); clear glass over the wallpaper or the dark (the round search button, the bedside
-  clock's button) and the Quick Toggles swell and lean towards the finger (Lean). The pill of a
-  row of options can be picked up: it turns into a lens of clear glass that swells, follows the
-  finger along the row, stretching the faster it goes, ticks as each option comes under it, and
-  settles on the nearest, which is then the one picked. Only how they are drawn changes, and the
+- **Under a finger** (`GlassPress`). Buttons are Apple's three kinds (`ZenithButton`), and move
+  each its own way, not by the Pressing setting: the main one, a solid pill of the accent,
+  squishes and wobbles back (Jelly); a grey second choice gives a little (Flex); words in the
+  accent dim while held. Clear glass over the wallpaper (the round search button) and the Quick
+  Toggles swell and lean towards the finger (Lean). The pill of a row of options can be picked
+  up: it swells, follows the finger along the row, stretching the faster it goes, ticks as each
+  option comes under it, and settles on the nearest, which is then the one picked; it stays solid
+  the whole way. Only how they are drawn changes, and the
   wallpaper behind stays where it is on screen. With movement reduced a press is only a small
   change of size, and a lens does not stretch.
 - **Page overview** (pinch out, or any gesture set to it): every page small on a tray. Tap one to
@@ -510,9 +522,8 @@ already show, keeps nothing and sends nothing.
 pictures Apple published of it, in two finishes: **Clear** for the dock, folders and small
 controls, which only mists the wallpaper and bends it most, and **Regular** for widgets, search and
 sheets, which frosts it so text on top stays readable. A third, **Tinted** (`glass(tinted = true)`),
-is the accent's own glass, for the one button that moves you on: clear glass's bend under about
-three fifths of the accent, and with nothing readable behind it a body of the accent rather than a
-white one. Glass goes only where the wallpaper is right behind it: it shows the wallpaper, so on a
+was the accent's own glass for the one button that moves you on; that button is a solid pill of
+the accent now, as an iPhone's is, and nothing is drawn in tinted glass any more. Glass goes only where the wallpaper is right behind it: it shows the wallpaper, so on a
 page of its own it would be a hole, and there things are solid (`solidCard`, in Apple's colours:
 `AppleColours`). On Android 13+ an AGSL shader
 (`LiquidGlassShader`) draws each pane, and does three things to the wallpaper round it:

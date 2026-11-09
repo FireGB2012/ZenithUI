@@ -51,11 +51,19 @@ class IconLookTest {
     }
 
     @Test
+    fun `widget looks fall back to glass`() {
+        assertEquals("glass", WidgetLooks.of("odd"))
+        assertEquals("colour", WidgetLooks.of("colour"))
+    }
+
+    @Test
     fun `every choice has its own name, and sizes go up in order`() {
         assertEquals(IconStyles.ids.size, IconStyles.ids.map(IconStyles::label).toSet().size)
         assertEquals(Badges.ids.size, Badges.ids.map(Badges::label).toSet().size)
         assertEquals(LabelSizes.ids, LabelSizes.ids.sortedBy(LabelSizes::sp))
         IconStyles.ids.forEach { assertTrue(IconStyles.detail(it).isNotBlank()) }
+        assertEquals(listOf("Colour", "Glass"), WidgetLooks.ids.map(WidgetLooks::label))
+        WidgetLooks.ids.forEach { assertTrue(WidgetLooks.detail(it).isNotBlank()) }
     }
 
     @Test

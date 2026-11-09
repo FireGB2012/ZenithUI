@@ -55,6 +55,17 @@ class LooksTest {
     }
 
     @Test
+    fun `a Look carries the widget look but not whether the new look was offered`() {
+        assertTrue("widgetLook" in Looks.KEYS)
+        assertTrue("newLookAsked" !in Looks.KEYS)
+        // Under the names the settings are written as: a Look from a phone that has been asked
+        // changes the widgets on one that has not, and leaves the question still to be asked.
+        val (worn, _) = Looks.apply(ZenithSettings(newLookAsked = false), look(mine.copy(widgetLook = "colour", newLookAsked = true)))
+        assertEquals("colour", worn.widgetLook)
+        assertFalse(worn.newLookAsked)
+    }
+
+    @Test
     fun `a Look reads back as it was written`() {
         val written = look()
         assertEquals(written, Look.fromJson(written.toJson()))

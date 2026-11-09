@@ -66,7 +66,11 @@ object Looks {
     /** As many as are kept on the phone. */
     const val MOST = 12
 
-    /** What a Look keeps, by the names the settings are written under. */
+    /**
+     * What a Look keeps, by the names the settings are written under. Not `newLookAsked`: whether
+     * this phone has been offered the new look is about the phone, so putting a Look on neither
+     * asks the question again nor stops it being asked.
+     */
     val KEYS = listOf(
         "paletteId", "appearance", "glass", "glassPanels", "glassShine", "font", "numberFont",
         "customAccent", "customAccentAlt", "customBackdrop", "customDark",
@@ -77,7 +81,7 @@ object Looks {
         // Look saved by an older Zenith is brought up to date the way an old backup is.
         "layoutVersion",
         "iconShape", "iconPack", "iconStyle", "iconSize", "appEdits", "badges", "labelSize", "labelShadow", "showLabels",
-        "dock", "showDock", "searchBar", "header", "dockStyle", "indicator", "folderStyle", "hideStatusBar", "island",
+        "dock", "showDock", "searchBar", "header", "dockStyle", "indicator", "folderStyle", "widgetLook", "hideStatusBar", "island",
         "openAnimation", "motion", "animation", "pageEffect", "arrival", "drawerArrival", "press", "haptics", "gestures",
         "appsView", "drawerSort", "drawerColumns", "toggles",
     )

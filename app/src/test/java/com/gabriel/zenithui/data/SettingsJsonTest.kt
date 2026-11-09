@@ -88,11 +88,13 @@ class SettingsJsonTest {
         dockStyle = "floating",
         indicator = "numbers",
         folderStyle = "cover",
+        widgetLook = "colour",
         lockLayout = true,
         hideStatusBar = true,
         island = IslandSettings(on = true, live = false, always = true, hideSideways = false),
         homePrompts = 2,
         calendarDeclined = true,
+        newLookAsked = true,
         layoutVersion = 2,
         plusTrialStart = 1_700_000_000_000L,
         plusPurchased = true,
@@ -155,6 +157,14 @@ class SettingsJsonTest {
         assertEquals(LabelSizes.MEDIUM, old.labelSize)
         assertFalse(old.labelShadow)
         assertTrue(old.appEdits.isEmpty())
+    }
+
+    @Test
+    fun `settings saved before the new look read as glass widgets, not yet asked`() {
+        // A phone that already has Zenith keeps the glass widgets it had until it has been asked.
+        val old = ZenithSettings.fromJson(JSONObject("{}"))
+        assertEquals("glass", old.widgetLook)
+        assertFalse(old.newLookAsked)
     }
 
     @Test

@@ -30,6 +30,31 @@ object IconStyles {
 }
 
 /**
+ * How Zenith's own widgets are drawn. Colour is solid, each kind in colours of its own, as iOS
+ * draws its widgets: a sky for the weather, a white page for the calendar. Glass is Zenith's
+ * Liquid Glass over the wallpaper, with white words. Anything else reads as Glass, which is what
+ * the widgets were before there was a choice. Other apps' widgets draw themselves either way.
+ */
+object WidgetLooks {
+    const val COLOUR = "colour"
+    const val GLASS = "glass"
+
+    val ids = listOf(COLOUR, GLASS)
+
+    fun of(id: String): String = if (id in ids) id else GLASS
+
+    fun label(id: String): String = when (of(id)) {
+        COLOUR -> "Colour"
+        else -> "Glass"
+    }
+
+    fun detail(id: String): String = when (of(id)) {
+        COLOUR -> "Solid widgets, each in colours of its own: a sky for the weather, a white page for the calendar."
+        else -> "Widgets of clear glass over your wallpaper, with white words."
+    }
+}
+
+/**
  * Notification dots: none, a dot, or a dot with the count in it. A dot only ever says what Android
  * would badge itself — nothing ongoing, like music or a download, and nothing an app has asked
  * not to badge.

@@ -87,6 +87,11 @@ data class ZenithSettings(
     val indicator: String = "dots",
     /** How a folder shows what is in it: "grid", "stack" or "cover". */
     val folderStyle: String = "grid",
+    /**
+     * How Zenith's own widgets are drawn: colour | glass. See [WidgetLooks]. Settings saved before
+     * there was a choice have none, and read as glass: the widgets those phones already had.
+     */
+    val widgetLook: String = WidgetLooks.GLASS,
     /** Nothing on the home screen can be moved, removed or resized while this is on. */
     val lockLayout: Boolean = false,
     /** The status bar stays away on the home screen until swiped in from the top. */
@@ -149,6 +154,12 @@ data class ZenithSettings(
     val homePrompts: Int = 0,
     /** "Not now" to today's events on the bedside clock: it stops offering them until asked. */
     val calendarDeclined: Boolean = false,
+    /**
+     * Whether this phone has been asked about the new look, the iPhone home screen. The question
+     * is put once; settings saved before it was put, an old backup among them, read as not asked.
+     * Not kept in a Look: it is about this phone, not about how the home screen looks.
+     */
+    val newLookAsked: Boolean = false,
     /** 0 = rows only, 1 = rows divided into units, 2 = everything on whole rows. */
     val layoutVersion: Int = 0,
 
@@ -246,6 +257,7 @@ data class ZenithSettings(
         put("dockStyle", dockStyle)
         put("indicator", indicator)
         put("folderStyle", folderStyle)
+        put("widgetLook", widgetLook)
         put("lockLayout", lockLayout)
         put("hideStatusBar", hideStatusBar)
         put("island", island.toJson())
@@ -298,6 +310,7 @@ data class ZenithSettings(
         put("activeLook", activeLook)
         put("homePrompts", homePrompts)
         put("calendarDeclined", calendarDeclined)
+        put("newLookAsked", newLookAsked)
         put("layoutVersion", layoutVersion)
     }
 
@@ -354,6 +367,7 @@ data class ZenithSettings(
                 dockStyle = o.optString("dockStyle", d.dockStyle),
                 indicator = o.optString("indicator", d.indicator),
                 folderStyle = o.optString("folderStyle", d.folderStyle),
+                widgetLook = o.optString("widgetLook", d.widgetLook),
                 lockLayout = o.optBoolean("lockLayout", d.lockLayout),
                 hideStatusBar = o.optBoolean("hideStatusBar", d.hideStatusBar),
                 island = IslandSettings.fromJson(o.optJSONObject("island")),
@@ -419,6 +433,7 @@ data class ZenithSettings(
                 activeLook = o.optString("activeLook", d.activeLook),
                 homePrompts = o.optInt("homePrompts", d.homePrompts),
                 calendarDeclined = o.optBoolean("calendarDeclined", d.calendarDeclined),
+                newLookAsked = o.optBoolean("newLookAsked", d.newLookAsked),
                 layoutVersion = o.optInt("layoutVersion", d.layoutVersion),
             )
         }

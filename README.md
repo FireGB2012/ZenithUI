@@ -5,17 +5,30 @@ built entirely in Jetpack Compose.
 
 ## First run
 
-1. **Welcome** — animated glass mark, the four pillars, and a name field. What you type here is
-   used across the launcher ("Good afternoon, Gabriel").
-2. **Palette** — six palettes (Midnight, Aurora, Sunset, Frost, Sakura, Graphite), light/dark/auto,
-   and a Glass slider. A live phone mock updates as you choose. A new install starts on Frost, whose
-   accent is Apple's blue.
-3. **Widgets & grid** — pick the widgets for page one, the grid density (Compact 5×6, Balanced 4×5,
-   Roomy 4×4) and the icon shape.
-4. **Setup** — a 20-second progress ring. It is not a fake wait: while it fills, the launcher reads
-   every launchable activity, picks a dock from your dialer/messenger/browser/camera, groups apps
-   into folders by their declared category, places the widgets you chose and reads the wallpaper.
-   The ring lands on 100%, greets you by name and drops you on the finished home screen.
+Setup is a plain page, as an iPhone's own is: white in the light, black in the dark, with nothing
+drifting or glowing behind it and nothing glass on it (`ui/onboarding/`). The button at the foot
+never moves; only what is above it changes.
+
+1. **Hello** — "hey there", large, in the accent's colours flowing through the letters, cycling
+   through other languages (`HelloStep`). With movement reduced the words and their colour hold
+   still.
+2. **Your name** — answered in whichever language was on screen, typed in Apple's grey field. It is
+   only used to say hello ("Good afternoon, Gabriel") and stays on the phone; leaving it blank is
+   fine.
+3. **A colour** — six palettes (Midnight, Aurora, Sunset, Frost, Sakura, Graphite) and Auto, Light
+   or Dark. A new install starts on Frost, whose accent is Apple's blue. A copy of your own home
+   screen, laid out by the code that will build the real one (`PhonePreview`), changes as you
+   choose.
+4. **What goes on it** — the widgets for page one, as Apple's chips, and the grid: Compact, Balanced
+   or Roomy, which sets the size of a cell, so how many fit is your screen's business.
+5. **The build** — your home screen is put together on that phone in front of you, a piece at a
+   time with a tick you can feel for each, while the launcher places the widgets you chose and the
+   apps you will want first, and picks a dock from your dialer, messenger, browser and camera. A
+   glint runs across the phone when it is done.
+6. **Zenith Plus** — offered once, on a solid sheet over the finished phone, only while the free
+   week is really there to take, with "Not now" as easy to hit as the yes.
+7. **Three quick moves**, and then the phone grows until its screen is the screen, and the real home
+   screen takes its place in the same frame.
 
 ## Home screen
 

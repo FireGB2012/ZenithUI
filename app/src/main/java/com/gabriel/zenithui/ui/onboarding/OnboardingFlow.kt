@@ -83,6 +83,7 @@ import com.gabriel.zenithui.ZenithViewModel
 import com.gabriel.zenithui.data.GridDensity
 import com.gabriel.zenithui.data.HomeItem
 import com.gabriel.zenithui.data.LayoutBuilder
+import com.gabriel.zenithui.data.NewLook
 import com.gabriel.zenithui.data.ZenithSettings
 import com.gabriel.zenithui.data.findActivity
 import com.gabriel.zenithui.ui.common.pressBounce
@@ -156,7 +157,8 @@ fun OnboardingFlow(
     var name by rememberSaveable { mutableStateOf("") }
     var paletteId by rememberSaveable { mutableStateOf("midnight") }
     var appearance by rememberSaveable { mutableStateOf("dark") }
-    var densityId by rememberSaveable { mutableStateOf(GridDensity.Balanced.id) }
+    // Setup starts on the new look's grid, the iPhone's, which it offers first.
+    var densityId by rememberSaveable { mutableStateOf(GridDensity.Four.id) }
     val widgets = rememberSaveable(saver = WIDGET_LIST_SAVER) { mutableStateListOf("clock", "toggles") }
     var built by rememberSaveable { mutableStateOf(false) }
     // Which hello was on screen, so the name screen can answer in the same language.
@@ -191,16 +193,22 @@ fun OnboardingFlow(
         if (radius > 0) (radius / pixelsPerDp).dp else 46.dp
     }
 
-    val preview = ZenithSettings(
-        userName = name,
-        paletteId = paletteId,
-        appearance = appearance,
-        glass = 0.85f,
-        columns = columns,
-        rows = rows,
-        // Choosing the search bar puts the bar above the dock, as it will on the real home screen.
-        searchBar = "search" in widgets,
-    )
+    // The home screen setup builds, on the new look as building it saves it, so the preview is
+    // that home screen and growing it into the real one changes nothing.
+    val preview = NewLook.apply(
+        ZenithSettings(
+            userName = name,
+            paletteId = paletteId,
+            appearance = appearance,
+            glass = 0.85f,
+            columns = columns,
+            rows = rows,
+            // As building it saves it, though the home screen no longer draws a bar for it.
+            searchBar = "search" in widgets,
+        )
+    ).copy(gridDensity = gridDensity.id)
+    // And its icons are drawn in the new look's shape from the first, as that home screen's are.
+    LaunchedEffect(Unit) { viewModel.previewNewLook() }
 
     // The page the preview shows is laid out by the same code that builds the real one.
     val dock by produceState(emptyList<String>(), apps, columns) {

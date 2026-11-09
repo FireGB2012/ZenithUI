@@ -72,6 +72,9 @@ private val WIDGET_CHOICES = listOf(
     "search" to "Search",
 )
 
+/** The grids on offer: the iPhone's first, which setup starts on, then the others as they come. */
+private val GRID_CHOICES = listOf(GridDensity.Four) + GridDensity.entries.filter { it != GridDensity.Four }
+
 /** A point on screen, remembered without being state: taps read it, nothing redraws on it. */
 private class Spot {
     var centre = Offset.Zero
@@ -389,7 +392,7 @@ private fun HomeControls(
         }
         Spacer(Modifier.height(14.dp))
         Segmented(
-            options = GridDensity.entries.map { it.id to it.label },
+            options = GRID_CHOICES.map { it.id to it.label },
             selected = density.id,
             onSelect = { onDensity(GridDensity.byId(it)) },
         )

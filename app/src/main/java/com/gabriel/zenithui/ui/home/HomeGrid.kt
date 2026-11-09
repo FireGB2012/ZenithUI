@@ -85,6 +85,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
@@ -894,12 +895,13 @@ fun HomePage(
 }
 
 /**
- * [content] written on the wallpaper itself, as everything on a home page is: its names are white
- * with a soft shadow whatever the palette, as on an iPhone. The drawer and the folder panel have
- * surfaces of their own under their names, and keep the palette's ink.
+ * [content] written on the wallpaper itself, as everything on a home page is, and on the small home
+ * screens that show one: its names are white with a soft shadow whatever the palette, as on an
+ * iPhone. The drawer and the folder panel have surfaces of their own under their names, and keep
+ * the palette's ink.
  */
 @Composable
-private fun OnWallpaper(content: @Composable () -> Unit) {
+internal fun OnWallpaper(content: @Composable () -> Unit) {
     CompositionLocalProvider(LocalLabelStyle provides LocalLabelStyle.current.copy(onWallpaper = true), content = content)
 }
 
@@ -967,40 +969,56 @@ fun HomeItemContent(
 ) {
     val iconSize = geometry.iconDp.dp
     when (item) {
-        is HostedWidgetCell -> HostedWidget(
-            cell = item,
-            live = live,
-            onRestore = { onRestoreWidget(item, it) },
-            modifier = Modifier
-                .fillMaxSize()
-                .pixelFrame(geometry.widgetFrame(item.spanX, item.spanY)),
-        )
+        is HostedWidgetCell -> {
+            HostedWidget(
+                cell = item,
+                live = live,
+                onRestore = { onRestoreWidget(item, it) },
+                modifier = Modifier
+                    .fillMaxSize()
+                    .pixelFrame(geometry.widgetFrame(item.spanX, item.spanY)),
+            )
+            // Another app's widget is named after the app it comes from.
+            WidgetName(hostedName(item.provider, appsByKey), geometry.widgetNameStrip(item.spanX, item.spanY))
+        }
 
-        is StackCell -> WidgetStack(
-            stack = item,
-            modifier = Modifier
-                .fillMaxSize()
-                .pixelFrame(geometry.widgetFrame(item.spanX, item.spanY)),
-        ) { member ->
-            if (member.hosted) {
-                HostedWidget(
-                    cell = HostedWidgetCell(member.id, item.page, item.col, item.row, item.spanX, item.spanY, member.appWidgetId, member.provider),
-                    live = live,
-                    onRestore = { onRestoreWidget(item, it) },
-                    modifier = Modifier.fillMaxSize(),
-                )
-            } else {
-                ZenithWidget(
-                    type = member.type,
-                    userName = settings.userName,
-                    note = settings.note,
-                    toggles = settings.toggles,
-                    onNoteChange = onNoteChange,
-                    onSearch = onSearch,
-                    onAmbient = onAmbient,
-                    modifier = Modifier.fillMaxSize(),
-                )
+        is StackCell -> {
+            // A stack is named after whichever of its widgets is showing, as it settles on each.
+            var showing by remember { mutableIntStateOf(0) }
+            WidgetStack(
+                stack = item,
+                onShown = { showing = it },
+                modifier = Modifier
+                    .fillMaxSize()
+                    .pixelFrame(geometry.widgetFrame(item.spanX, item.spanY)),
+            ) { member ->
+                if (member.hosted) {
+                    HostedWidget(
+                        cell = HostedWidgetCell(member.id, item.page, item.col, item.row, item.spanX, item.spanY, member.appWidgetId, member.provider),
+                        live = live,
+                        onRestore = { onRestoreWidget(item, it) },
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                } else {
+                    ZenithWidget(
+                        type = member.type,
+                        userName = settings.userName,
+                        note = settings.note,
+                        toggles = settings.toggles,
+                        onNoteChange = onNoteChange,
+                        onSearch = onSearch,
+                        onAmbient = onAmbient,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
             }
+            val member = item.members.getOrNull(showing) ?: item.members.firstOrNull()
+            val name = when {
+                member == null -> Widgets.UNNAMED
+                member.hosted -> hostedName(member.provider, appsByKey)
+                else -> Widgets.shortName(member.type)
+            }
+            WidgetName(name, geometry.widgetNameStrip(item.spanX, item.spanY))
         }
 
         is AppCell -> {
@@ -1046,20 +1064,53 @@ fun HomeItemContent(
             style = settings.folderStyle,
         )
 
-        is WidgetCell -> InOwnColour(item.accent) {
-            ZenithWidget(
-                type = item.type,
-                userName = settings.userName,
-                note = settings.note,
-                toggles = settings.toggles,
-                onNoteChange = onNoteChange,
-                onSearch = onSearch,
-                onAmbient = onAmbient,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .pixelFrame(geometry.widgetFrame(item.spanX, item.spanY)),
-            )
+        is WidgetCell -> {
+            InOwnColour(item.accent) {
+                ZenithWidget(
+                    type = item.type,
+                    userName = settings.userName,
+                    note = settings.note,
+                    toggles = settings.toggles,
+                    onNoteChange = onNoteChange,
+                    onSearch = onSearch,
+                    onAmbient = onAmbient,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .pixelFrame(geometry.widgetFrame(item.spanX, item.spanY)),
+                )
+            }
+            WidgetName(Widgets.shortName(item.type), geometry.widgetNameStrip(item.spanX, item.spanY))
         }
+    }
+}
+
+/**
+ * A widget's name, written under it as an icon's is under the icon: in [strip], the strip the names
+ * of the icons in its last row are in ([HomeGeometry.widgetNameStrip]), so they read as one line.
+ * With labels off the strip is empty, and nothing is written.
+ */
+@Composable
+private fun WidgetName(name: String, strip: PxRect) {
+    if (strip.width <= 0 || strip.height <= 0) return
+    Box(Modifier.fillMaxSize().pixelFrame(strip), contentAlignment = Alignment.BottomCenter) {
+        IconLabel(name, textAlign = TextAlign.Center)
+    }
+}
+
+/**
+ * The name under another app's widget, [provider] being its flattened component name: the app it
+ * comes from as the drawer has it, or as Android has it for an app the drawer does not have.
+ */
+@Composable
+private fun hostedName(provider: String, appsByKey: Map<String, AppInfo>): String {
+    val context = LocalContext.current
+    return remember(provider, appsByKey) {
+        Widgets.hostedName(provider, appsByKey.values)
+            ?: runCatching {
+                val packages = context.packageManager
+                packages.getApplicationLabel(packages.getApplicationInfo(provider.substringBefore('/'), 0)).toString()
+            }.getOrNull()
+            ?: Widgets.UNNAMED
     }
 }
 
@@ -2060,25 +2111,7 @@ fun DockBar(
                     }
                 ),
         ) {
-            if (paned) {
-                Box(
-                    Modifier
-                        .align(Alignment.Center)
-                        .layout { measurable, constraints ->
-                            val width = slab.value.coerceIn(0, constraints.maxWidth)
-                            val placeable = measurable.measure(Constraints.fixed(width, constraints.maxHeight))
-                            layout(width, constraints.maxHeight) { placeable.place(0, 0) }
-                        }
-                        .glass(
-                            RoundedCornerShape(HomeGeometry.DOCK_CORNER_DP.dp),
-                            strength = 1.15f,
-                            material = GlassMaterial.Clear,
-                            interactive = true,
-                            light = light,
-                            tracking = tracking,
-                        ),
-                )
-            }
+            if (paned) DockSlab(width = { slab.value }, light = light, tracking = tracking)
             Row(
                 modifier = Modifier.fillMaxSize(),
                 horizontalArrangement = when {
@@ -2238,6 +2271,34 @@ fun DockBar(
             }
         }
     }
+}
+
+/**
+ * The dock's slab of clear glass, [width] pixels wide and as tall as the box it stands in the middle
+ * of: the real dock's, and the small home screens' in setup and Settings, so the two are one pane.
+ * [width] is read while laying out, so a slab growing round its apps lays itself out again and
+ * recomposes nothing. [light] is the finger's light in it, driven from outside, for a dock that can
+ * be pressed; [tracking] reads whatever moves it with a layer.
+ */
+@Composable
+internal fun BoxScope.DockSlab(width: () -> Int, light: PressLight? = null, tracking: (() -> Unit)? = null) {
+    Box(
+        Modifier
+            .align(Alignment.Center)
+            .layout { measurable, constraints ->
+                val wide = width().coerceIn(0, constraints.maxWidth)
+                val placeable = measurable.measure(Constraints.fixed(wide, constraints.maxHeight))
+                layout(wide, constraints.maxHeight) { placeable.place(0, 0) }
+            }
+            .glass(
+                RoundedCornerShape(HomeGeometry.DOCK_CORNER_DP.dp),
+                strength = 1.15f,
+                material = GlassMaterial.Clear,
+                interactive = light != null,
+                light = light,
+                tracking = tracking,
+            ),
+    )
 }
 
 /**

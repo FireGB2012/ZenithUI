@@ -427,6 +427,40 @@ object Widgets {
 
     fun byType(type: String): WidgetSpec? = all.firstOrNull { it.type == type } ?: noGlass.firstOrNull { it.type == type }
 
+    /** The name under a widget nothing better is known for. */
+    const val UNNAMED = "Widget"
+
+    /**
+     * The name written under a widget on the home screen, as an icon's name is under the icon:
+     * short, as the names under an iPhone's widgets are, rather than its title in the gallery. A
+     * "No glass" widget has the name of the widget it is a version of.
+     */
+    fun shortName(type: String): String = when (baseType(type)) {
+        Clock.type -> "Clock"
+        Battery.type -> "Battery"
+        Calendar.type -> "Calendar"
+        Notes.type -> "Notes"
+        Toggles.type -> "Controls"
+        Media.type -> "Music"
+        WorldClock.type -> "World Clock"
+        Countdown.type -> "Countdown"
+        Photos.type -> "Photos"
+        Todo.type -> "To-do"
+        Streak.type -> "Aura"
+        Weather.type -> "Weather"
+        else -> UNNAMED
+    }
+
+    /**
+     * The name under another app's widget, [provider] being its flattened component name: the
+     * name of the app it comes from, as the drawer lists it among [apps]. Null for an app the
+     * drawer does not have, such as one that is only widgets, for Android to be asked instead.
+     */
+    fun hostedName(provider: String, apps: Collection<AppInfo>): String? {
+        val packageName = provider.substringBefore('/')
+        return apps.firstOrNull { it.packageName == packageName }?.label
+    }
+
     /** The size a widget takes when first placed. [rows] is in rows; spans are in row units. */
     fun defaultSpan(spec: WidgetSpec, columns: Int, rows: Int): Pair<Int, Int> =
         clampSpan(spec, if (spec.fullWidth) columns else scaleX(spec.spanX, columns), spec.spanY, columns, rows)

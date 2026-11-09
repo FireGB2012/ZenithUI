@@ -10,8 +10,8 @@ data class PxRect(val left: Int, val top: Int, val right: Int, val bottom: Int) 
 
 /**
  * Where everything on a home page sits, in whole pixels. The page, the drop hint, the resize
- * outline, the dock, the name at the top and the search bar all ask the same object, so two edges
- * that should meet are one number rather than two roundings of it.
+ * outline, the names under widgets and the dock all ask the same object, so two edges that should
+ * meet are one number rather than two roundings of it.
  *
  * Every cell is the same whole number of pixels wide and every row the same number tall. Pixels
  * left over when the page does not divide evenly are shared between the outer edges ([originX],
@@ -119,16 +119,6 @@ class HomeGeometry(
     }
 
     /**
-     * How tall the dock's pane is: an icon as big as the columns alone would make it, with a margin
-     * above and below. It is deliberately not taken from the page's own icons. On a cramped page
-     * the icons shrink to fit their rows; a dock that shrank with them would hand the page more
-     * room, the icons would grow again, and the two would chase each other on every frame.
-     */
-    val dockHeight: Int =
-        (iconSizeDp(cellWidth / density, Float.MAX_VALUE, showLabels) * density).roundToInt() +
-            2 * (DOCK_MARGIN_DP * density).roundToInt()
-
-    /**
      * How big a dock icon is with [count] apps: the page's icon size, or smaller when there are
      * more apps than columns, so that however many there are they stand side by side inside the
      * grid without touching.
@@ -184,7 +174,9 @@ class HomeGeometry(
 
         /**
          * How tall the floating glass dock is, in dp: the biggest icon a page can have, 68 dp, with
-         * [DOCK_MARGIN_DP] above and below it. It does not follow the page, for the band's reason.
+         * 12 dp above and below it. It does not follow the page, for the band's reason: on a cramped
+         * page the icons shrink to fit their rows, and a dock that shrank with them would hand the
+         * page more room, the icons would grow again, and the two would chase each other.
          */
         const val DOCK_HEIGHT_DP = 92f
 
@@ -240,9 +232,6 @@ class HomeGeometry(
 
         /** How much of its share of an over-full dock an icon may take, leaving the rest as gaps. */
         private const val DOCK_FILL = 0.9f
-
-        /** The space above and below the icons inside the dock's pane, in dp. */
-        private const val DOCK_MARGIN_DP = 12f
 
         /**
          * How big an icon is, worked out from the cell it sits in rather than chosen: as on an

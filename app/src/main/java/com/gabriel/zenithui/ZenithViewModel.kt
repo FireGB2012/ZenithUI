@@ -31,6 +31,7 @@ import com.gabriel.zenithui.data.withId
 import com.gabriel.zenithui.data.IconLoader
 import com.gabriel.zenithui.data.LayoutBuilder
 import com.gabriel.zenithui.data.LayoutTidy
+import com.gabriel.zenithui.data.NewLook
 import com.gabriel.zenithui.data.PageGrid
 import com.gabriel.zenithui.data.occupyItem
 import com.gabriel.zenithui.data.Plus
@@ -1013,7 +1014,10 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
         val dock = repository.suggestedDock(LayoutBuilder.setupDockSize(columns))
         val items = LayoutBuilder.build(repository, installed, widgets, columns, rows, dock)
         store.update {
-            it.copy(
+            // A home screen built in setup is on the new look from the first, and is never asked
+            // about it: the iPhone's icon shape, colour widgets and the glass dock, shown. Its grid
+            // is the one picked in setup, which starts on the iPhone's.
+            NewLook.apply(it).copy(
                 userName = name.trim(),
                 paletteId = paletteId,
                 appearance = appearance,
@@ -1021,7 +1025,8 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
                 columns = columns,
                 rows = rows,
                 dock = dock,
-                // Choosing the search bar in setup switches on the bar above the dock.
+                // Choosing Search in setup is kept as it always was, for Looks and backups, though
+                // the home screen no longer draws a bar: Search is its pill, always there.
                 searchBar = Widgets.Search.type in widgets,
                 // Built just now, so already under today's rules. Without this a rerun of setup
                 // left the version behind, and the next launch upgraded the new layout as if it
@@ -1030,7 +1035,20 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
             )
         }
         store.setLayout(items)
+        // Saved here rather than through updateSettings, so the icons are told their shape here
+        // too. Setup has drawn them in it already (previewNewLook), and then this changes nothing.
+        settings.value.let { saved -> icons.configure(saved.iconPack, saved.iconShape) }
         wallpaperSource.refresh()
+    }
+
+    /**
+     * Setup shows the home screen it is about to build, which is on the new look, so its icons are
+     * drawn in the new look's shape from the first, rather than changing shape as the home screen
+     * is put together. Nothing is saved: building the home screen saves the look.
+     */
+    fun previewNewLook() {
+        val look = NewLook.apply(settings.value)
+        viewModelScope.launch { icons.configure(look.iconPack, look.iconShape) }
     }
 
     /** Set when setup has just finished, so the home screen's first appearance gets its entrance. */

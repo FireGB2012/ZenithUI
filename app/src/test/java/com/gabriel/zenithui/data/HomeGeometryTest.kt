@@ -181,25 +181,10 @@ class HomeGeometryTest {
     }
 
     @Test
-    fun `the dock is as tall however cramped the rows are`() {
-        // Six rows a pixel apart in height. The icons shrink to fit the shorter rows, and a dock
-        // that shrank with them would hand the page its pixel back, the icons would grow again,
-        // and the two would chase each other on every frame.
-        val roomier = HomeGeometry(1016, 1320, columns = 5, rows = 6, density = 2.625f, showLabels = true)
-        val tighter = HomeGeometry(1016, 1319, columns = 5, rows = 6, density = 2.625f, showLabels = true)
-        assertEquals(136, roomier.icon)
-        assertEquals(135, tighter.icon)
-        assertEquals(roomier.dockHeight, tighter.dockHeight)
-    }
-
-    @Test
-    fun `the dock has room for the page's icons and a margin above and below`() = everyPage { g ->
-        assertTrue(g.dockHeight >= g.icon + 2 * (12f * g.density).roundToInt())
-    }
-
-    @Test
     fun `the floating dock has room for the biggest icon, and the Search band for its pill`() {
-        // Neither follows the page, so they are sized for the biggest icon a page can have.
+        // Neither follows the page, so they are sized for the biggest icon a page can have. A dock
+        // that shrank with icons shrinking to fit cramped rows would hand the page more room, the
+        // icons would grow again, and the two would chase each other on every frame.
         val biggest = HomeGeometry.iconSizeDp(Float.MAX_VALUE, Float.MAX_VALUE, showLabels = true)
         assertEquals(68f, biggest, 0f)
         assertTrue(HomeGeometry.DOCK_HEIGHT_DP >= biggest + 2 * 12f)

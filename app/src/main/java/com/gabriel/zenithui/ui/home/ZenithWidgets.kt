@@ -1749,12 +1749,11 @@ private fun ColumnScope.TileText(toggle: Toggle, ink: Color, detail: Boolean) {
 
 // ---------------------------------------------------------------------- search
 
-/** The search bar that sits above the dock when it is switched on in settings. */
-@Composable
-fun HomeSearchBar(onSearch: () -> Unit, modifier: Modifier = Modifier) {
-    Box(modifier) { SearchBar(onSearch) }
-}
-
+/**
+ * A search widget in a layout saved before Search left the page: until the layout is brought up to
+ * date ([com.gabriel.zenithui.data.LayoutTidy]) it is drawn as it was, a bar, or a round button
+ * where it is too narrow for one.
+ */
 @Composable
 private fun SearchWidget(onSearch: () -> Unit) {
     BoxWithConstraints(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {

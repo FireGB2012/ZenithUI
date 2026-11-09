@@ -68,10 +68,21 @@ class IconLookTest {
 
     @Test
     fun `every icon shape has a name of its own`() {
-        assertEquals(8, IconShapes.ids.size)
+        assertEquals(9, IconShapes.ids.size)
         assertEquals(IconShapes.ids.size, IconShapes.ids.map(IconShapes::label).toSet().size)
         // The ones there before keep the names they had.
         assertEquals("Squircle", IconShapes.label("squircle"))
         assertNotEquals("Squircle", IconShapes.label("clover"))
+    }
+
+    @Test
+    fun `the iPhone's shape comes after the ones there before`() {
+        assertEquals("iphone", IconShapes.ids.last())
+        assertEquals("iPhone", IconShapes.label("iphone"))
+        // Saved icon pictures are kept under their shape's id, so the ones there before keep theirs.
+        assertEquals(
+            listOf("squircle", "circle", "rounded", "square", "pebble", "teardrop", "hexagon", "clover"),
+            IconShapes.ids.dropLast(1),
+        )
     }
 }

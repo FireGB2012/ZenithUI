@@ -15,26 +15,57 @@ import kotlin.math.cos
 import kotlin.math.pow
 import kotlin.math.sin
 
-/** A true superellipse — the continuous curve behind Zenith's icon tiles. */
-class SquircleShape(private val exponent: Float = 2.9f) : Shape {
+/**
+ * How far from the middle the edge of a unit superellipse is, [angle] radians round from straight
+ * out to the right: 1 at the middle of every side, and further towards each corner the higher the
+ * [exponent] is. An exponent of 2 is a circle, 1 all the way round; a square's corner would be the
+ * square root of 2 out.
+ */
+internal fun superellipseRadius(angle: Float, exponent: Float): Float {
+    val across = abs(cos(angle)).pow(exponent)
+    val up = abs(sin(angle)).pow(exponent)
+    return (across + up).pow(-1f / exponent)
+}
+
+/**
+ * Points round a superellipse's outline, for this shape and for the icon renderer's
+ * ([IconShapes.path]) alike, so the two agree. Enough that even the iPhone's fuller corners on the
+ * largest icon are within a tenth of a pixel of the true curve.
+ */
+internal const val SUPERELLIPSE_STEPS = 192
+
+/** Zenith's own squircle, the shape icons had before there was a choice. */
+internal const val SQUIRCLE_EXPONENT = 2.9f
+
+/**
+ * A true superellipse: the continuous curve behind Zenith's icon tiles. The higher its [exponent],
+ * the flatter its sides and the fuller its corners: Zenith's squircle is 2.9, the iPhone's 5.
+ *
+ * A data class, because the same exponent is the same outline: a shape made afresh is equal to the
+ * one before it, and never counts as a change.
+ */
+data class SquircleShape(val exponent: Float = SQUIRCLE_EXPONENT) : Shape {
     override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density): Outline {
         val path = Path()
         val rx = size.width / 2f
         val ry = size.height / 2f
-        val p = 2f / exponent
-        val steps = 96
-        for (i in 0..steps) {
-            val t = (i.toFloat() / steps) * (2f * Math.PI).toFloat()
-            val c = cos(t)
-            val s = sin(t)
-            val x = rx + rx * (if (c < 0f) -1f else 1f) * abs(c).pow(p)
-            val y = ry + ry * (if (s < 0f) -1f else 1f) * abs(s).pow(p)
+        for (i in 0..SUPERELLIPSE_STEPS) {
+            val angle = (i.toFloat() / SUPERELLIPSE_STEPS) * (2f * Math.PI).toFloat()
+            val reach = superellipseRadius(angle, exponent)
+            val x = rx + rx * reach * cos(angle)
+            val y = ry + ry * reach * sin(angle)
             if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
         }
         path.close()
         return Outline.Generic(path)
     }
 }
+
+/**
+ * The exponent the lens draws a free-form outline with: the shape's own when it is a
+ * [SquircleShape], and Zenith's squircle for any other, which is how the lens has always drawn them.
+ */
+internal fun squircleExponent(shape: Shape): Float = (shape as? SquircleShape)?.exponent ?: SQUIRCLE_EXPONENT
 
 /**
  * One of [IconShapes]' outlines as a Compose shape: the very path the icon renderer cuts pictures
@@ -58,12 +89,16 @@ object ZenithShapes {
     val pill = RoundedCornerShape(percent = 50)
     val icon = SquircleShape()
 
+    /** An iPhone's rounded square, its corners continuous: the same curve [IconShapes] cuts "iphone" icons to. */
+    private val iphone = SquircleShape(5f)
+
     private val outlines = HashMap<String, Shape>()
 
     fun forIconShape(id: String): Shape = when (id) {
         "circle" -> RoundedCornerShape(percent = 50)
         "rounded" -> RoundedCornerShape(22)
         "square" -> RoundedCornerShape(4)
+        "iphone" -> iphone
         "pebble", "teardrop", "hexagon", "clover" -> synchronized(outlines) { outlines.getOrPut(id) { IconOutlineShape(id) } }
         else -> icon
     }

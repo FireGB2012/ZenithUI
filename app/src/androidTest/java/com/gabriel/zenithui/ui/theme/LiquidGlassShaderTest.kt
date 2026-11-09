@@ -48,8 +48,9 @@ class LiquidGlassShaderTest {
             for (dark in listOf(true, false)) {
                 val look = glassLook(material, strength = 1f, solid = 0.3f, opacity = 1f, dark = dark, tint = Color(0xFF7C6CFF))
                 for (outline in outlines) {
-                    // Untouched, and with a finger's light in it.
-                    for (touch in listOf(GlassTouch.None, GlassTouch(Offset(60f, 40f), 120f, 0.8f))) {
+                    // Untouched, and with a finger's light in it; and a free-form outline drawn as
+                    // the squircle and as the iPhone's fuller one.
+                    for (touch in listOf(GlassTouch.None, GlassTouch(Offset(60f, 40f), 120f, 0.8f))) for (squircleN in listOf(SQUIRCLE_EXPONENT, 5f)) {
                         val node = RenderNode("glass").apply { setPosition(0, 0, size.width.toInt(), size.height.toInt()) }
                         val canvas = node.beginRecording()
                         try {
@@ -65,6 +66,7 @@ class LiquidGlassShaderTest {
                                 dark = dark,
                                 touch = touch,
                                 lean = Offset(0.3f, -0.2f),
+                                squircleN = squircleN,
                             )
                         } finally {
                             node.endRecording()

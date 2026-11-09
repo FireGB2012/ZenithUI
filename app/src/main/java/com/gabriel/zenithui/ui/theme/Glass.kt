@@ -192,6 +192,8 @@ fun Modifier.glass(
         .clip(shape)
         .drawWithCache {
             val outline = shape.createOutline(size, layoutDirection, this)
+            // A glass tile under the iPhone's shape gets the iPhone's rim, not the squircle's.
+            val squircleN = squircleExponent(shape)
             onDrawBehind {
                 // Position, wallpaper scroll, tilt and the finger's light are all read here, while
                 // drawing, so any of them changing repaints the glass without recomposing anything.
@@ -211,6 +213,7 @@ fun Modifier.glass(
                     dark = palette.dark,
                     touch = touch,
                     tuning = tuning,
+                    squircleN = squircleN,
                 )
             }
         }
@@ -530,6 +533,11 @@ internal fun DrawScope.drawLiquidGlass(
     touch: GlassTouch = GlassTouch.None,
     /** Where the light is, if the Glass studio has moved it or stilled it. */
     tuning: GlassTuning = GlassTuning(),
+    /**
+     * For a free-form [outline], the superellipse the lens draws it as: see [squircleExponent].
+     * Without the lens the rim is stroked along the outline itself, so it needs no telling.
+     */
+    squircleN: Float = SQUIRCLE_EXPONENT,
 ) {
     if (paneSize.width <= 0f || paneSize.height <= 0f || look.opacity <= 0f) return
     // The light sits up and to the left, and swings the other way as the phone tips.
@@ -540,7 +548,7 @@ internal fun DrawScope.drawLiquidGlass(
 
     if (canSee && lens != null && Build.VERSION.SDK_INT >= 33) {
         drawIntoCanvas {
-            lens.draw(it.nativeCanvas, paneSize, outline, origin, screen, shown, density, look, light, dark, touch, leaning)
+            lens.draw(it.nativeCanvas, paneSize, outline, origin, screen, shown, density, look, light, dark, touch, leaning, squircleN)
         }
         return
     }

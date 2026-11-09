@@ -76,6 +76,8 @@ internal class LiquidGlassShader(levels: GlassLevels) {
         touch: GlassTouch = GlassTouch.None,
         /** Which way the phone leans (see [LocalTilt]): what the rim bends and reflects slides with it. */
         lean: Offset = Offset.Zero,
+        /** The exponent of a free-form outline's superellipse: see [squircleExponent]. */
+        squircleN: Float = SQUIRCLE_EXPONENT,
     ) {
         if (size.width <= 0f || size.height <= 0f || screen.width <= 0 || screen.height <= 0) return
         // The wallpaper as Android shows it: centre-cropped to fill the screen, zoomed a little
@@ -112,6 +114,8 @@ internal class LiquidGlassShader(levels: GlassLevels) {
         // Glass materialises by bending light, not by fading: a pane on its way in bends less.
         shader.setFloatUniform("presence", look.opacity.coerceIn(0f, 1f))
         shader.setFloatUniform("touch", touch.at.x, touch.at.y, touch.reach, touch.strength)
+        // Set on every draw, whatever the outline, so a pane is never left with another pane's.
+        shader.setFloatUniform("squircleN", squircleN)
         when (outline) {
             is Outline.Rounded -> {
                 val r = outline.roundRect
@@ -123,7 +127,8 @@ internal class LiquidGlassShader(levels: GlassLevels) {
                 shader.setFloatUniform("squircle", 0f)
             }
             is Outline.Generic -> {
-                // Zenith's only free-form outline is the squircle icon tile.
+                // The free-form outlines a pane has are icon tiles, drawn as a superellipse: the
+                // squircle, or the iPhone's fuller one, as squircleN says.
                 shader.setFloatUniform("corners", 0f, 0f, 0f, 0f)
                 shader.setFloatUniform("squircle", 1f)
             }
@@ -158,6 +163,7 @@ internal class LiquidGlassShader(levels: GlassLevels) {
             uniform float2 hazeRatio;
             uniform float4 corners;
             uniform float squircle;
+            uniform float squircleN;
             uniform float density;
             uniform float refraction;
             uniform float frost;
@@ -184,7 +190,7 @@ internal class LiquidGlassShader(levels: GlassLevels) {
                 float2 p = point - halfSize;
                 if (squircle > 0.5) {
                     float2 v = abs(p) / max(halfSize, float2(1.0));
-                    float k = pow(pow(v.x, 2.9) + pow(v.y, 2.9), 1.0 / 2.9);
+                    float k = pow(pow(v.x, squircleN) + pow(v.y, squircleN), 1.0 / squircleN);
                     return (k - 1.0) * min(halfSize.x, halfSize.y);
                 }
                 float radius = p.y < 0.0

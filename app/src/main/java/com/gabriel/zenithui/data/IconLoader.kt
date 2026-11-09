@@ -19,6 +19,9 @@ import android.util.LruCache
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import com.gabriel.zenithui.ui.theme.SUPERELLIPSE_STEPS
+import com.gabriel.zenithui.ui.theme.SquircleShape
+import com.gabriel.zenithui.ui.theme.superellipseRadius
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -26,9 +29,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import kotlin.math.abs
 import kotlin.math.cos
-import kotlin.math.pow
 import kotlin.math.sin
 
 /** Builds masked, cached icon bitmaps, honouring the selected icon pack and icon shape. */
@@ -635,10 +636,14 @@ class IconLoader(context: Context, private val repo: AppRepository) {
     }
 }
 
-/** Icon masks, shared by the renderer and the Compose UI, so a tile and its picture always agree. */
+/**
+ * Icon masks, shared by the renderer and the Compose UI, so a tile and its picture always agree.
+ * Saved icon pictures are kept under a shape's id, so an id's outline never changes: a new outline
+ * is a new id, added at the end.
+ */
 object IconShapes {
 
-    val ids = listOf("squircle", "circle", "rounded", "square", "pebble", "teardrop", "hexagon", "clover")
+    val ids = listOf("squircle", "circle", "rounded", "square", "pebble", "teardrop", "hexagon", "clover", "iphone")
 
     fun label(id: String): String = when (id) {
         "circle" -> "Circle"
@@ -648,6 +653,7 @@ object IconShapes {
         "teardrop" -> "Teardrop"
         "hexagon" -> "Hexagon"
         "clover" -> "Clover"
+        "iphone" -> "iPhone"
         else -> "Squircle"
     }
 
@@ -674,6 +680,8 @@ object IconShapes {
                 corner = 0.2f,
             )
             "clover" -> clover(path, size)
+            // An iPhone's rounded square: flatter sides than the squircle's and fuller, continuous corners.
+            "iphone" -> superellipse(path, size, 5f)
             else -> superellipse(path, size, 2.9f)
         }
         return path
@@ -720,20 +728,16 @@ object IconShapes {
         path.op(Path().apply { addCircle(mid, mid, size * 0.3f, Path.Direction.CW) }, Path.Op.UNION)
     }
 
+    /** Traced point for point as [SquircleShape] traces it, so a tile and the icon cut for it are one shape. */
     private fun superellipse(path: Path, size: Float, exponent: Float) {
         val r = size / 2f
-        val steps = 96
-        val p = 2f / exponent
-        for (i in 0..steps) {
-            val t = (i.toFloat() / steps) * (2f * Math.PI).toFloat()
-            val c = cos(t)
-            val s = sin(t)
-            val x = r + r * sign(c) * abs(c).pow(p)
-            val y = r + r * sign(s) * abs(s).pow(p)
+        for (i in 0..SUPERELLIPSE_STEPS) {
+            val angle = (i.toFloat() / SUPERELLIPSE_STEPS) * (2f * Math.PI).toFloat()
+            val reach = superellipseRadius(angle, exponent)
+            val x = r + r * reach * cos(angle)
+            val y = r + r * reach * sin(angle)
             if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
         }
         path.close()
     }
-
-    private fun sign(v: Float) = if (v < 0f) -1f else 1f
 }

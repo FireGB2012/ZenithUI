@@ -204,14 +204,14 @@ internal fun ThemeOptions(settings: ZenithSettings, plus: PlusStatus, preview: S
     }
     Section(header = "Font", rise = 3) {
         Spot("font") {
-            ControlRow {
+            ControlRow(edgeToEdge = true) {
                 FontChoice(settings.font) { id -> change { it.copy(font = id) } }
             }
         }
     }
     Section(header = "Numbers", footer = "The clocks, the battery, the countdown and the weather.", rise = 4) {
         Spot("numberFont") {
-            ControlRow {
+            ControlRow(edgeToEdge = true) {
                 NumberFontChoice(settings.numberFont, settings.font) { id -> change { it.copy(numberFont = id) } }
             }
         }
@@ -679,7 +679,7 @@ internal fun MotionOptions(settings: ZenithSettings, actions: SettingsActions, o
         rise = 2,
     ) {
         Spot("pageEffect") {
-            ControlRow {
+            ControlRow(edgeToEdge = true) {
                 PageTurnChoice(settings.pageEffect) { value -> change { it.copy(pageEffect = value) } }
             }
         }

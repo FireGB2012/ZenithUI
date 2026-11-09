@@ -208,14 +208,15 @@ internal fun Section(
 /**
  * A control that is not a row of its own, inside a card: a segmented control, a slider, a row of
  * tiles to choose from. [title], when it has one, stands above it in the words' colour, as the name
- * of a row does.
+ * of a row does. [edgeToEdge] is for a row of tiles that scrolls: it runs to the card's edges and
+ * keeps its own margin inside them.
  */
 @Composable
-internal fun ControlRow(title: String? = null, content: @Composable ColumnScope.() -> Unit) {
+internal fun ControlRow(title: String? = null, edgeToEdge: Boolean = false, content: @Composable ColumnScope.() -> Unit) {
     Column(
         Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .padding(horizontal = if (edgeToEdge) 0.dp else 16.dp, vertical = 12.dp),
     ) {
         if (title != null) {
             Text(title, color = LocalApple.current.words, fontSize = 16.sp)

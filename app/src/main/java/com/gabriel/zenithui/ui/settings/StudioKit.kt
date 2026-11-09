@@ -104,7 +104,12 @@ private fun FontTile(name: String, sample: String, family: FontFamily, weight: F
 private fun TileRow(count: Int, selectedIndex: Int, tile: @Composable (Int) -> Unit) {
     val state = rememberLazyListState()
     LaunchedEffect(Unit) { if (selectedIndex > 2) state.scrollToItem((selectedIndex - 1).coerceAtLeast(0)) }
-    LazyRow(state = state, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+    // It runs to the edges of its card, the first and last tiles starting where the card's rows do.
+    LazyRow(
+        state = state,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp),
+    ) {
         itemsIndexed(List(count) { it }) { index, _ -> tile(index) }
     }
 }

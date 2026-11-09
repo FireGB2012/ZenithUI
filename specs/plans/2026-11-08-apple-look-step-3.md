@@ -99,6 +99,6 @@ first three parts. Sheets, the drawer and "Add to home screen" are step 4.
 
 ### Part 6: check and ship
 
-- [ ] README; build and every unit test; pictures in light and dark on a throwaway emulator
+- [x] README; build and every unit test; pictures in light and dark on a throwaway emulator
   (Settings' first page, Theme, Home, Motion, the gallery, a showcase, a sheet with switches and
   buttons); commit and push to `apple-look`.

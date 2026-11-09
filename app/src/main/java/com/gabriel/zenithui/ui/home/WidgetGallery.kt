@@ -472,6 +472,7 @@ private fun Showcase(
         // Every size is drawn to one scale, so they can be told apart: the largest that lets
         // the widest of them fit with a neighbour showing at each side.
         val stageWidth = maxWidth - STAGE_INSET * 2
+        val pageWidth = maxWidth
         val scale = min(
             1f,
             min((stageWidth - STAGE_PEEK * 2) / real.maxOf { it.width }, (STAGE_TALLEST - STAGE_MARGIN * 2) / real.maxOf { it.height }),
@@ -520,7 +521,9 @@ private fun Showcase(
                 spec = spec,
                 real = real,
                 scale = scale,
-                width = stageWidth,
+                // Edge to edge: a size beside the one in the middle goes off at the side of the
+                // screen, not at an edge that cannot be seen.
+                width = pageWidth,
                 strip = strip,
                 names = sizes.map { "${it.name}, ${it.spanX} by ${it.rows}" },
                 settings = settings,
@@ -648,7 +651,6 @@ private fun Stage(
     LazyRow(
         state = strip,
         modifier = Modifier
-            .padding(horizontal = STAGE_INSET)
             .fillMaxWidth()
             .height(real.maxOf { it.height } * scale + STAGE_MARGIN * 2),
         contentPadding = PaddingValues(start = (width - real.first().width * scale) / 2, end = (width - real.last().width * scale) / 2),

@@ -151,9 +151,12 @@ fun WideAppIcon(key: String, label: String, modifier: Modifier = Modifier) {
 /** How icons are drawn everywhere: one of [IconStyles]. */
 val LocalIconStyle = staticCompositionLocalOf { IconStyles.ORIGINAL }
 
-/** The names under icons: how big, and whether they have a shadow. */
+/**
+ * The names under icons: how big, whether Name shadow is on, and whether they are written on the
+ * wallpaper itself, as a home page's are, rather than on a surface of their own.
+ */
 @Immutable
-data class LabelStyle(val size: TextUnit = 11.sp, val shadow: Boolean = false)
+data class LabelStyle(val size: TextUnit = 11.sp, val shadow: Boolean = false, val onWallpaper: Boolean = false)
 
 val LocalLabelStyle = staticCompositionLocalOf { LabelStyle() }
 
@@ -166,25 +169,49 @@ data class BadgeState(val counts: Map<String, Int> = emptyMap(), val style: Stri
 
 val LocalBadges = compositionLocalOf { BadgeState() }
 
-/** An app's name under its icon, at the size and with the shadow asked for in Settings. */
+/**
+ * An app's name under its icon, at the size asked for in Settings: on the wallpaper white with a
+ * soft shadow, as on an iPhone, and anywhere else in the palette's ink with the shadow Settings
+ * asks for.
+ */
 @Composable
 fun IconLabel(text: String, modifier: Modifier = Modifier, textAlign: TextAlign? = null) {
     val palette = LocalPalette.current
     val style = LocalLabelStyle.current
+    val density = LocalDensity.current.density
     Text(
         text = text,
-        color = palette.onGlass,
+        color = labelInk(style.onWallpaper, palette.onGlass),
         fontSize = style.size,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
         textAlign = textAlign,
         fontWeight = FontWeight.Medium,
-        style = if (style.shadow) LABEL_SHADOW.copy(fontFamily = LocalZenithFont.current) else TextStyle(fontFamily = LocalZenithFont.current),
+        style = TextStyle(fontFamily = LocalZenithFont.current, shadow = labelShadow(style.onWallpaper, style.shadow, density)),
         modifier = modifier,
     )
 }
 
-private val LABEL_SHADOW = TextStyle(shadow = Shadow(Color.Black.copy(alpha = 0.6f), Offset(0f, 1.5f), 7f))
+/**
+ * The ink a name is written in. On the wallpaper it is white whatever the palette: a light
+ * palette's dark ink could not be read over a dark wallpaper. Anywhere else, the drawer and the
+ * folder panel, it is the palette's own ink, [onGlass], which their surfaces are made for.
+ */
+internal fun labelInk(onWallpaper: Boolean, onGlass: Color): Color = if (onWallpaper) Color.White else onGlass
+
+/**
+ * The shadow under a name. On the wallpaper it is always a soft one, a dp below the words and
+ * blurred across three, which keeps white words readable on a pale wallpaper without dulling them
+ * on a dark one. Anywhere else it is the one Name shadow ([legacyShadow]) has always given, or none.
+ */
+internal fun labelShadow(onWallpaper: Boolean, legacyShadow: Boolean, density: Float): Shadow? = when {
+    onWallpaper -> Shadow(Color.Black.copy(alpha = 0.45f), Offset(0f, 1f * density), 3f * density)
+    legacyShadow -> NAME_SHADOW
+    else -> null
+}
+
+/** What Name shadow puts under the names, in pixels, as it always has. */
+private val NAME_SHADOW = Shadow(Color.Black.copy(alpha = 0.6f), Offset(0f, 1.5f), 7f)
 
 @Composable
 fun AppIcon(

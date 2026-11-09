@@ -115,6 +115,7 @@ import com.gabriel.zenithui.ui.common.AppIcon
 import com.gabriel.zenithui.ui.common.IconBadge
 import com.gabriel.zenithui.ui.common.IconLabel
 import com.gabriel.zenithui.ui.common.LocalBadges
+import com.gabriel.zenithui.ui.common.LocalLabelStyle
 import com.gabriel.zenithui.ui.common.LocalMotionLevel
 import com.gabriel.zenithui.ui.common.Motion
 import com.gabriel.zenithui.ui.common.appearIn
@@ -386,6 +387,8 @@ fun HomePage(
     val departures = remember { Departures(items) }
     val haptics = LocalHapticFeedback.current
 
+    // Everything on the page stands on the wallpaper, so its names are white, whatever the palette.
+    OnWallpaper {
     BoxWithConstraints(modifier.fillMaxSize()) {
         val geometry = remember(constraints.maxWidth, constraints.maxHeight, settings.columns, settings.rows, density.density, settings.showLabels) {
             HomeGeometry(constraints.maxWidth, constraints.maxHeight, settings.columns, settings.rows, density.density, settings.showLabels)
@@ -883,6 +886,17 @@ fun HomePage(
         }
         }
     }
+    }
+}
+
+/**
+ * [content] written on the wallpaper itself, as everything on a home page is: its names are white
+ * with a soft shadow whatever the palette, as on an iPhone. The drawer and the folder panel have
+ * surfaces of their own under their names, and keep the palette's ink.
+ */
+@Composable
+private fun OnWallpaper(content: @Composable () -> Unit) {
+    CompositionLocalProvider(LocalLabelStyle provides LocalLabelStyle.current.copy(onWallpaper = true), content = content)
 }
 
 /**
@@ -1833,15 +1847,18 @@ private fun GreyCopy(
         },
         contentAlignment = Alignment.Center,
     ) {
-        HomeItemContent(
-            item = item,
-            settings = settings,
-            appsByKey = appsByKey,
-            geometry = geometry,
-            onSearch = {},
-            onNoteChange = {},
-            live = false,
-        )
+        // Carried over the page, it is still on the wallpaper, and its name is written as on the page.
+        OnWallpaper {
+            HomeItemContent(
+                item = item,
+                settings = settings,
+                appsByKey = appsByKey,
+                geometry = geometry,
+                onSearch = {},
+                onNoteChange = {},
+                live = false,
+            )
+        }
     }
 }
 

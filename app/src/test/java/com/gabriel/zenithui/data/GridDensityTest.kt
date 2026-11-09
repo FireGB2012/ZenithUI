@@ -14,11 +14,31 @@ class GridDensityTest {
         GridDensity.resolve(id, columns, rows, width, height)
 
     @Test
-    fun `the presets give the grids they always have on a phone`() {
+    fun `the old presets keep their numbers`() {
+        // Changing a preset would rearrange every home screen that uses it the next time Zenith
+        // starts, so the iPhone grid is a preset of its own rather than a change to one of these.
         assertEquals(5 to 6, grid("compact"))
         assertEquals(4 to 5, grid("balanced"))
         assertEquals(4 to 4, grid("roomy"))
         GridDensity.entries.forEach { assertEquals(it.gridFor(wide, tall), grid(it.id)) }
+    }
+
+    @Test
+    fun `four is four across with rows spaced like the columns`() {
+        // As many rows as fit in what the status bar, the Search band and the dock leave, each a
+        // little taller than a column is wide.
+        assertEquals(4 to 6, GridDensity.resolve("four", 4, 6, 411f, 923f))
+        assertEquals(4 to 6, GridDensity.resolve("four", 4, 6, 360f, 800f))
+        assertEquals(4 to 5, GridDensity.resolve("four", 4, 6, 360f, 740f))
+        assertEquals("iPhone", GridDensity.byId("four").label)
+    }
+
+    @Test
+    fun `four on a tablet is Balanced`() {
+        assertEquals(GridDensity.resolve("balanced", 4, 6, 800f, 1280f), GridDensity.resolve("four", 4, 6, 800f, 1280f))
+        // From 600 dp wide. Just under that it is still a phone, four across.
+        assertEquals(GridDensity.resolve("balanced", 4, 6, 600f, 1000f), GridDensity.resolve("four", 4, 6, 600f, 1000f))
+        assertEquals(4, GridDensity.resolve("four", 4, 6, 599f, 1000f).first)
     }
 
     @Test

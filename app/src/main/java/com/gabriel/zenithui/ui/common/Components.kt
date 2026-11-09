@@ -1,12 +1,7 @@
 package com.gabriel.zenithui.ui.common
 
 import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -35,7 +30,6 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -71,8 +65,6 @@ import com.gabriel.zenithui.ui.theme.LocalApple
 import com.gabriel.zenithui.ui.theme.LocalOnGlass
 import com.gabriel.zenithui.ui.theme.glass
 import com.gabriel.zenithui.ui.theme.inkOnTint
-import kotlin.math.cos
-import kotlin.math.sin
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.fadeIn
@@ -88,48 +80,6 @@ import com.gabriel.zenithui.ui.theme.button
 import com.gabriel.zenithui.ui.theme.glassPress
 
 val LocalIconLoader = staticCompositionLocalOf<IconLoader> { error("IconLoader not provided") }
-
-/** Slow drifting light, used behind onboarding and the app drawer. */
-@Composable
-fun AuroraBackdrop(modifier: Modifier = Modifier, intensity: Float = 1f) {
-    val palette = LocalPalette.current
-    val transition = rememberInfiniteTransition(label = "aurora")
-    val phase by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = (2.0 * Math.PI).toFloat(),
-        animationSpec = infiniteRepeatable(tween(26_000, easing = LinearEasing), RepeatMode.Restart),
-        label = "phase",
-    )
-    val accent = palette.accent
-    val accentAlt = palette.accentAlt
-    val tint = palette.glassTint
-
-    Box(
-        modifier
-            .fillMaxSize()
-            .background(Brush.verticalGradient(palette.backdrop))
-            .drawBehind {
-                val orbs = listOf(
-                    Triple(accent, Offset(0.22f + 0.10f * cos(phase), 0.16f + 0.06f * sin(phase * 1.3f)), 0.80f),
-                    Triple(accentAlt, Offset(0.86f + 0.08f * sin(phase * 0.8f), 0.36f + 0.09f * cos(phase)), 0.66f),
-                    Triple(tint, Offset(0.44f + 0.12f * cos(phase * 0.6f), 0.88f + 0.05f * sin(phase)), 0.95f),
-                )
-                orbs.forEach { (color, unit, radiusFraction) ->
-                    val center = Offset(unit.x * size.width, unit.y * size.height)
-                    val radius = radiusFraction * size.width
-                    drawCircle(
-                        brush = Brush.radialGradient(
-                            colors = listOf(color.copy(alpha = 0.32f * intensity), Color.Transparent),
-                            center = center,
-                            radius = radius,
-                        ),
-                        radius = radius,
-                        center = center,
-                    )
-                }
-            }
-    )
-}
 
 /** A super icon: the app's icon stretched to fill [modifier]'s width, as HyperOS draws them. */
 @Composable

@@ -46,7 +46,6 @@ import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.geometry.center
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
@@ -101,9 +100,10 @@ private class PhoneSpot {
  * you see here is exactly what you get, down to the curve of your phone's own screen corners.
  *
  * [shown] lets the page assemble itself: grid items first, then the dock, each counted in order.
- * [halo] is the strength of the coloured light behind it, [sweep] runs a band of light across it
- * once (0 to 1), and [zoom] grows it until it fills the whole screen (0 to 1), for the hand-off to
- * the real home screen. All three are read while drawing only.
+ * [sweep] runs a band of white light across it once (0 to 1), a glint when it is finished, and
+ * [zoom] grows it until it fills the whole screen (0 to 1), for the hand-off to the real home
+ * screen. Both are read while drawing only. Nothing glows behind it: it stands on the page with a
+ * shadow, as a phone on a table does.
  */
 @Composable
 fun PhonePreview(
@@ -117,15 +117,13 @@ fun PhonePreview(
     shown: Int,
     modifier: Modifier = Modifier,
     deviceCorner: Dp = 46.dp,
-    halo: () -> Float = { 0f },
     sweep: () -> Float = { 0f },
     zoom: () -> Float = { 0f },
 ) {
     val palette = LocalPalette.current
     val edge = palette.onGlass.copy(alpha = 0.16f)
-    val accent = palette.accent
-    // A black shadow under a pale phone reads as a smudge; a deep blue one reads as depth.
-    val shadow = if (palette.dark) Color.Black else Color(0xFF1C2B4A).copy(alpha = 0.28f)
+    // A shadow with nothing of a colour in it, lighter on the white page than on the black.
+    val shadow = if (palette.dark) Color.Black else Color.Black.copy(alpha = 0.22f)
     val sweepAlpha = if (palette.dark) 0.22f else 0.30f
     val spot = remember { PhoneSpot() }
 
@@ -137,26 +135,6 @@ fun PhonePreview(
         // lands exactly on the real screen's corner with no reshaping on the way.
         val corner = deviceCorner * scale
         val shape = RoundedCornerShape(corner)
-
-        // The light behind the phone. Drawn past its own bounds on purpose, so it has no edge.
-        Spacer(
-            Modifier
-                .matchParentSize()
-                .drawWithCache {
-                    val radius = phoneWidth.toPx() * 0.9f
-                    val glow = Brush.radialGradient(
-                        listOf(accent, accent.copy(alpha = 0f)),
-                        center = size.center,
-                        radius = radius,
-                    )
-                    onDrawBehind {
-                        val strength = halo()
-                        if (strength > 0.001f) {
-                            drawCircle(glow, radius = radius, center = center, alpha = strength.coerceIn(0f, 1f))
-                        }
-                    }
-                }
-        )
 
         // Measured here, outside the layer that moves, so the zoom always knows where it started.
         Box(

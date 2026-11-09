@@ -57,6 +57,12 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import androidx.compose.runtime.mutableDoubleStateOf
+import androidx.compose.runtime.withFrameNanos
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
+import com.gabriel.zenithui.ui.theme.LocalApple
 
 /** Hello, in a handful of languages. Danish is in there because Zenith was made in Denmark. */
 val HELLO_WORDS = listOf("hey there", "hola", "bonjour", "ciao", "hallo", "olá", "hej", "こんにちは")
@@ -72,12 +78,43 @@ fun greetingFor(index: Int, name: String): String {
 @Composable
 fun greetingColours(): List<Color> {
     val palette = LocalPalette.current
+    val ink = LocalApple.current.words
     return if (palette.dark) {
-        listOf(lerp(palette.accent, Color.White, 0.25f), lerp(palette.accentAlt, Color.White, 0.25f), Color.White)
+        listOf(lerp(palette.accent, ink, 0.25f), lerp(palette.accentAlt, ink, 0.25f), ink)
     } else {
-        val ink = palette.onGlass
         listOf(lerp(palette.accent, ink, 0.3f), lerp(palette.accentAlt, ink, 0.3f), ink)
     }
+}
+
+/**
+ * Seconds of the colour flowing through the greeting, added up a frame at a time while the words
+ * can be seen. It is only ever read while drawing, so the colour moves without recomposing anything.
+ */
+@Stable
+class GreetingClock {
+    /** Never wrapped: the words fold it into their own six seconds, so nothing ever jumps. */
+    var seconds by mutableDoubleStateOf(0.0)
+        internal set
+}
+
+@Composable
+fun rememberGreetingClock(running: Boolean): GreetingClock {
+    val clock = remember { GreetingClock() }
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(running, lifecycle) {
+        if (!running) return@LaunchedEffect
+        // Only while you can see it: colour flowing on a switched-off screen is just battery.
+        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            var last = withFrameNanos { it }
+            while (true) {
+                withFrameNanos { now ->
+                    clock.seconds += ((now - last) / 1_000_000_000.0).coerceIn(0.0, 0.1)
+                    last = now
+                }
+            }
+        }
+    }
+    return clock
 }
 
 /** A line in the greeting's colours, held still. Used to say hello again on the name screen. */
@@ -113,20 +150,21 @@ private const val SMALLEST_WORD_SP = 36
 private val WORD_PADDING = 16.dp
 
 /**
- * The first thing you see: "hey there", written large in flowing colour, cycling through other
- * languages while the light rises behind it. Nothing to fill in; the button arrives after a beat,
- * and a tap anywhere brings it sooner. Tapping the word itself moves on to the next one.
+ * The first thing you see: "hey there", written large in flowing colour on the plain page, cycling
+ * through other languages. Nothing to fill in; the button arrives after a beat, and a tap anywhere
+ * brings it sooner. Tapping the word itself moves on to the next one.
  */
 @Composable
 fun HelloStep(
     startIndex: Int,
     firstTime: Boolean,
     animate: Boolean,
-    clock: BackdropClock,
     onWord: (Int) -> Unit,
     onReady: () -> Unit,
 ) {
-    val palette = LocalPalette.current
+    val apple = LocalApple.current
+    // With movement reduced the colour holds still, as the words do.
+    val clock = rememberGreetingClock(running = animate)
     var sublineShown by remember { mutableStateOf(!firstTime || !animate) }
     val ready by rememberUpdatedState(onReady)
 
@@ -169,7 +207,7 @@ fun HelloStep(
             )
             Text(
                 text = "Welcome to Zenith.",
-                color = palette.onGlassMuted,
+                color = apple.secondary,
                 fontSize = 17.sp,
                 lineHeight = 24.sp,
                 textAlign = TextAlign.Center,
@@ -196,11 +234,11 @@ private fun GreetingWords(
     startIndex: Int,
     delayFirst: Boolean,
     animate: Boolean,
-    clock: BackdropClock,
+    clock: GreetingClock,
     onWord: (Int) -> Unit,
     onTap: () -> Unit,
 ) {
-    val palette = LocalPalette.current
+    val apple = LocalApple.current
     val density = LocalDensity.current
     val measurer = rememberTextMeasurer()
     val slots = remember { listOf(WordSlot(), WordSlot()) }
@@ -236,7 +274,7 @@ private fun GreetingWords(
     val colours = greetingColours()
     val baseStyle = TextStyle(
         fontFamily = LocalZenithFont.current,
-        color = palette.onGlass,
+        color = apple.words,
         fontWeight = FontWeight.SemiBold,
         letterSpacing = (-0.034).em,
         textAlign = TextAlign.Center,

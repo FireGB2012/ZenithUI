@@ -39,10 +39,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -85,16 +83,24 @@ import com.gabriel.zenithui.data.HomeItem
 import com.gabriel.zenithui.data.LayoutBuilder
 import com.gabriel.zenithui.data.ZenithSettings
 import com.gabriel.zenithui.data.findActivity
-import com.gabriel.zenithui.ui.common.pressBounce
 import com.gabriel.zenithui.ui.common.rememberAnimationsEnabled
 import com.gabriel.zenithui.ui.theme.LocalPalette
-import com.gabriel.zenithui.ui.theme.Palettes
 import com.gabriel.zenithui.ui.theme.ZenithTheme
-import com.gabriel.zenithui.ui.theme.glass
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.compose.material.icons.automirrored.rounded.ArrowBackIos
+import androidx.compose.material3.Text
+import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.draw.shadow
+import androidx.compose.runtime.CompositionLocalProvider
+import com.gabriel.zenithui.ui.theme.LocalApple
+import com.gabriel.zenithui.ui.theme.elevated
+import com.gabriel.zenithui.ui.theme.CardKind
 
 /**
  * Onboarding is a form, not a canvas: past this width the eye has to travel too far between a
@@ -131,9 +137,9 @@ private object Phase {
 /**
  * First run: a hello, your name, a colour, what goes on the page, and then the page itself being
  * put together in front of you — before it grows to fill the screen and becomes your home screen.
- * Soft light drifts behind all of it and follows you from step to step. The button at the bottom
- * never moves; only what is above it changes, so it feels like one place rather than a stack of
- * screens.
+ * It all happens on a plain page, as an iPhone's own setup does: white in the light, black in the
+ * dark. The button at the bottom never moves; only what is above it changes, so it feels like one
+ * place rather than a stack of screens.
  */
 @Composable
 fun OnboardingFlow(
@@ -169,8 +175,6 @@ fun OnboardingFlow(
     var lookSeen by rememberSaveable { mutableStateOf(false) }
     // Not saved: if the app is rebuilt mid hand-off, you land back on the tips and tap again.
     var finishing by remember { mutableStateOf(false) }
-    // Read once, before anything changes it: the sunrise is for the very first look only.
-    val sunrise = remember { !helloSeen && step == Steps.HELLO }
 
     // The grid you pick is a cell size; how many of them fit is the screen's business.
     val gridDensity = GridDensity.byId(densityId)
@@ -221,9 +225,8 @@ fun OnboardingFlow(
     // How many things are on the preview page. All of them, except while it is being put together.
     var shown by remember { mutableIntStateOf(Int.MAX_VALUE) }
 
-    // Drawn, never composed: the light behind the phone, the band that sweeps across it when it is
-    // finished, the fade of everything but the phone, and the phone growing into your home screen.
-    val haloBoost = remember { Animatable(1f) }
+    // Drawn, never composed: the band of light that sweeps across the phone when it is finished,
+    // the fade of everything but the phone, and the phone growing into your home screen.
     val sweep = remember { Animatable(0f) }
     val chrome = remember { Animatable(1f) }
     val zoom = remember { Animatable(0f) }
@@ -250,11 +253,7 @@ fun OnboardingFlow(
         view.performHapticFeedback(
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) HapticFeedbackConstants.CONFIRM else HapticFeedbackConstants.LONG_PRESS
         )
-        // Its own scope, so tapping on straight away does not cut the flourish off half lit.
-        scope.launch {
-            haloBoost.animateTo(3f, tween(280))
-            haloBoost.animateTo(1.2f, spring(dampingRatio = 1f, stiffness = 60f))
-        }
+        // Its own scope, so tapping on straight away does not cut the flourish off half way.
         scope.launch {
             sweep.snapTo(0f)
             sweep.animateTo(1f, tween(850, easing = FastOutSlowInEasing))
@@ -322,16 +321,7 @@ fun OnboardingFlow(
             }
         }
 
-        val clock = rememberBackdropClock(running = animate && !finishing)
-        val pulse = rememberPulse()
-        val scene = when (step) {
-            Steps.HELLO -> BackdropScene.Hello
-            Steps.NAME -> BackdropScene.Name
-            Steps.BUILD -> if (built) BackdropScene.Stage else BackdropScene.Build
-            Steps.PLUS -> BackdropScene.Plus
-            else -> BackdropScene.Stage
-        }
-        val restHalo = if (palette.dark) 0.18f else 0.12f
+        val apple = LocalApple.current
         val plusOpen = step == Steps.PLUS
         // If Plus is bought while the sheet is up (or turns out to be owned), the pitch just goes.
         LaunchedEffect(offerPlus) {
@@ -341,12 +331,13 @@ fun OnboardingFlow(
         val recede = animateFloatAsState(if (plusOpen) 0.94f else 1f, spring(dampingRatio = 0.92f, stiffness = 190f), label = "recede")
 
         Box(Modifier.fillMaxSize()) {
-            OnboardingBackdrop(
-                scene = scene,
-                clock = clock,
-                pulse = pulse,
-                sunrise = sunrise,
-                modifier = Modifier.graphicsLayer { alpha = ((1f - zoom.value) / 0.4f).coerceIn(0f, 1f) },
+            // A plain page, as an iPhone's setup is. Over the last stretch of the hand-off it fades,
+            // so the real wallpaper is already there when the phone lands as your home screen.
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .graphicsLayer { alpha = ((1f - zoom.value) / 0.4f).coerceIn(0f, 1f) }
+                    .background(apple.plain)
             )
 
             Column(
@@ -401,7 +392,6 @@ fun OnboardingFlow(
                             startIndex = greeting,
                             firstTime = !helloSeen,
                             animate = animate,
-                            clock = clock,
                             // Frozen once you move on, so the name screen answers in the
                             // language you left on, not the one that came up as it faded.
                             onWord = { if (step == Steps.HELLO) greeting = it },
@@ -441,17 +431,10 @@ fun OnboardingFlow(
                                 density = gridDensity,
                                 playIntro = !lookSeen,
                                 deviceCorner = deviceCorner,
-                                onPalette = { id, origin ->
-                                    paletteId = id
-                                    scope.launch { pulse.fire(origin, Palettes.byId(id).accent) }
-                                },
-                                onAppearance = { mode, origin ->
-                                    appearance = mode
-                                    scope.launch { pulse.fire(origin, Palettes.byId(paletteId).accent) }
-                                },
+                                onPalette = { id -> paletteId = id },
+                                onAppearance = { mode -> appearance = mode },
                                 onToggleWidget = { type -> if (type in widgets) widgets.remove(type) else widgets.add(type) },
                                 onDensity = { densityId = it.id },
-                                halo = { restHalo * haloBoost.value * chrome.value },
                                 sweep = { sweep.value },
                                 zoom = { zoom.value },
                                 chrome = { chrome.value },
@@ -526,7 +509,8 @@ fun OnboardingFlow(
                 Box(
                     Modifier
                         .fillMaxSize()
-                        .background(if (palette.dark) Color.Black.copy(alpha = 0.40f) else Color(0xFF0B1A33).copy(alpha = 0.16f))
+                        // The page dims as it does behind every sheet.
+                        .background(Color.Black.copy(alpha = 0.35f))
                         // Takes the touches, so the button underneath cannot be pressed through it.
                         .pointerInput(Unit) { detectTapGestures { } },
                 )
@@ -538,29 +522,37 @@ fun OnboardingFlow(
                     fadeIn(tween(160)),
                 exit = slideOutVertically(tween(240, easing = FastOutLinearInEasing)) { it } + fadeOut(tween(240)),
             ) {
-                PlusSheet(
-                    status = plus,
-                    onTry = {
-                        // The sheet is still under your finger as it slides away: answer once.
-                        if (step == Steps.PLUS) {
-                            step = Steps.TIPS
-                            // Play shows its own sheet once the trial subscription exists; until
-                            // then the week is counted on the device.
-                            viewModel.startTrialViaPlayOrLocally(context.findActivity())
-                        }
-                    },
-                    onNotNow = { if (step == Steps.PLUS) step = Steps.TIPS },
-                    modifier = Modifier
-                        .widthIn(max = FORM_MAX_WIDTH)
-                        .fillMaxWidth()
-                        .heightIn(max = screenHeight * 0.88f)
-                        .glass(RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp), strength = 1.1f, solid = 1.2f)
-                        .semantics {
-                            paneTitle = "Zenith Plus"
-                            isTraversalGroup = true
-                        }
-                        .navigationBarsPadding(),
-                )
+                // On the sheet, Apple's colours a step up: the page under it is the plain one.
+                CompositionLocalProvider(LocalApple provides apple.elevated()) {
+                    PlusSheet(
+                        status = plus,
+                        onTry = {
+                            // The sheet is still under your finger as it slides away: answer once.
+                            if (step == Steps.PLUS) {
+                                step = Steps.TIPS
+                                // Play shows its own sheet once the trial subscription exists; until
+                                // then the week is counted on the device.
+                                viewModel.startTrialViaPlayOrLocally(context.findActivity())
+                            }
+                        },
+                        onNotNow = { if (step == Steps.PLUS) step = Steps.TIPS },
+                        modifier = Modifier
+                            .widthIn(max = FORM_MAX_WIDTH)
+                            .fillMaxWidth()
+                            .heightIn(max = screenHeight * 0.88f)
+                            // Solid, as a sheet over a page of its own is: glass would be a hole through
+                            // the page to the wallpaper.
+                            .shadow(16.dp, CardKind.Sheet.shape, clip = false)
+                            .clip(CardKind.Sheet.shape)
+                            // Apple's grouped grey a step up, so the cards on it stand off it.
+                            .background(apple.elevated().page)
+                            .semantics {
+                                paneTitle = "Zenith Plus"
+                                isTraversalGroup = true
+                            }
+                            .navigationBarsPadding(),
+                    )
+                }
             }
 
             // Nothing takes a touch while the phone is growing into your home screen.
@@ -581,7 +573,7 @@ fun OnboardingFlow(
 
 @Composable
 private fun TopBar(visible: Boolean, progress: Int, onBack: () -> Unit) {
-    val palette = LocalPalette.current
+    val accent = LocalPalette.current.accent
     // Always the same height, shown or not, so nothing below it shifts between steps.
     Row(
         Modifier
@@ -590,30 +582,23 @@ private fun TopBar(visible: Boolean, progress: Int, onBack: () -> Unit) {
             .padding(horizontal = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+        Box(Modifier.heightIn(min = 48.dp), contentAlignment = Alignment.CenterStart) {
             // Called by its full name: inside this Row the Row-scoped overload would be picked.
             androidx.compose.animation.AnimatedVisibility(visible = visible, enter = fadeIn(tween(200)), exit = fadeOut(tween(140))) {
-                Box(
+                // Apple's Back: a chevron and the word in the accent, dimming while it is held.
+                val touch = remember { MutableInteractionSource() }
+                val pressed by touch.collectIsPressedAsState()
+                Row(
                     Modifier
-                        .size(48.dp)
-                        .pressBounce(0.9f)
-                        .clip(CircleShape)
-                        .clickable(onClick = onBack),
-                    contentAlignment = Alignment.Center,
+                        .heightIn(min = 48.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable(interactionSource = touch, indication = null, role = Role.Button, onClick = onBack)
+                        .graphicsLayer { alpha = if (pressed) 0.35f else 1f }
+                        .padding(start = 2.dp, end = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Box(
-                        Modifier
-                            .size(40.dp)
-                            .glass(CircleShape, strength = 0.9f),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            Icons.AutoMirrored.Rounded.ArrowBack,
-                            contentDescription = "Back",
-                            tint = palette.onGlass.copy(alpha = 0.85f),
-                            modifier = Modifier.size(20.dp),
-                        )
-                    }
+                    Icon(Icons.AutoMirrored.Rounded.ArrowBackIos, contentDescription = null, tint = accent, modifier = Modifier.size(20.dp))
+                    Text("Back", color = accent, fontSize = 17.sp)
                 }
             }
         }

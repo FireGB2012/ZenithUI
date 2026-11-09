@@ -34,13 +34,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.layout.boundsInRoot
-import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -58,9 +55,9 @@ import com.gabriel.zenithui.data.GridDensity
 import com.gabriel.zenithui.data.HomeItem
 import com.gabriel.zenithui.data.ZenithSettings
 import com.gabriel.zenithui.ui.common.pressBounce
-import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.Palettes
 import com.gabriel.zenithui.ui.theme.ZenithPalette
+import com.gabriel.zenithui.ui.theme.LocalApple
 
 /** The widgets on offer, in the order they are worth trying, with short everyday names. */
 private val WIDGET_CHOICES = listOf(
@@ -71,11 +68,6 @@ private val WIDGET_CHOICES = listOf(
     "notes" to "Note",
     "search" to "Search",
 )
-
-/** A point on screen, remembered without being state: taps read it, nothing redraws on it. */
-private class Spot {
-    var centre = Offset.Zero
-}
 
 /**
  * Everything from picking a colour to the last tips happens on one stage with your phone in the
@@ -101,11 +93,10 @@ fun StudioStep(
     density: GridDensity,
     playIntro: Boolean,
     deviceCorner: Dp,
-    onPalette: (String, Offset) -> Unit,
-    onAppearance: (String, Offset) -> Unit,
+    onPalette: (String) -> Unit,
+    onAppearance: (String) -> Unit,
     onToggleWidget: (String) -> Unit,
     onDensity: (GridDensity) -> Unit,
-    halo: () -> Float,
     sweep: () -> Float,
     zoom: () -> Float,
     chrome: () -> Float,
@@ -179,7 +170,6 @@ fun StudioStep(
             screenHeight = screenHeight,
             shown = shown,
             deviceCorner = deviceCorner,
-            halo = halo,
             sweep = sweep,
             zoom = zoom,
             modifier = Modifier
@@ -236,11 +226,10 @@ private const val NO_CONTROLS = -1
 private fun LookControls(
     paletteId: String,
     appearance: String,
-    onPalette: (String, Offset) -> Unit,
-    onAppearance: (String, Offset) -> Unit,
+    onPalette: (String) -> Unit,
+    onAppearance: (String) -> Unit,
 ) {
-    val palette = LocalPalette.current
-    val segment = remember { Spot() }
+    val apple = LocalApple.current
     Column(
         Modifier
             .fillMaxWidth()
@@ -267,7 +256,7 @@ private fun LookControls(
                         option = option,
                         selected = option.id == paletteId,
                         size = swatch,
-                        onPick = { origin -> onPalette(option.id, origin) },
+                        onPick = { onPalette(option.id) },
                     )
                 }
             }
@@ -284,8 +273,8 @@ private fun LookControls(
             val picked = Palettes.byId(id)
             Text(
                 text = buildAnnotatedString {
-                    withStyle(SpanStyle(color = palette.onGlass, fontWeight = FontWeight.SemiBold)) { append(picked.name) }
-                    withStyle(SpanStyle(color = palette.onGlassMuted)) { append("  ·  ${picked.tagline}") }
+                    withStyle(SpanStyle(color = apple.words, fontWeight = FontWeight.SemiBold)) { append(picked.name) }
+                    withStyle(SpanStyle(color = apple.secondary)) { append("  ·  ${picked.tagline}") }
                 },
                 fontSize = 13.sp,
                 lineHeight = 18.sp,
@@ -296,37 +285,30 @@ private fun LookControls(
             )
         }
         Spacer(Modifier.height(16.dp))
-        Box(
-            Modifier
-                .padding(horizontal = 24.dp)
-                .onGloballyPositioned { segment.centre = it.boundsInRoot().center },
-        ) {
+        Box(Modifier.padding(horizontal = 24.dp)) {
             Segmented(
                 options = listOf("auto" to "Auto", "light" to "Light", "dark" to "Dark"),
                 selected = appearance,
-                onSelect = { onAppearance(it, segment.centre) },
+                onSelect = { onAppearance(it) },
             )
         }
     }
 }
 
 /**
- * One colour to pick: a round swatch of the palette's two accents, ringed when chosen. The ring
- * pops in with a little overshoot, and the tap tells the backdrop where to start its colour wave.
+ * One colour to pick: a round swatch of the palette's two accents, ringed in the words' colour when
+ * chosen. The ring pops in with a little overshoot.
  */
 @Composable
-private fun Swatch(option: ZenithPalette, selected: Boolean, size: Dp, onPick: (Offset) -> Unit) {
-    val palette = LocalPalette.current
-    val ringColour = palette.onGlass
+private fun Swatch(option: ZenithPalette, selected: Boolean, size: Dp, onPick: () -> Unit) {
+    val ringColour = LocalApple.current.words
     val ring = remember { Animatable(if (selected) 1f else 0f) }
     LaunchedEffect(selected) {
         ring.animateTo(if (selected) 1f else 0f, spring(dampingRatio = 0.6f, stiffness = 500f))
     }
-    val spot = remember { Spot() }
     Box(
         Modifier
             .size(size)
-            .onGloballyPositioned { spot.centre = it.boundsInRoot().center }
             .pressBounce(0.92f)
             // No ripple: the squeeze is the feedback, and a square ripple would fight the circle.
             .selectable(
@@ -334,7 +316,7 @@ private fun Swatch(option: ZenithPalette, selected: Boolean, size: Dp, onPick: (
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
                 role = Role.RadioButton,
-                onClick = { onPick(spot.centre) },
+                onClick = onPick,
             )
             .semantics { contentDescription = option.name }
             .drawBehind {
@@ -365,7 +347,7 @@ private fun HomeControls(
     onToggle: (String) -> Unit,
     onDensity: (GridDensity) -> Unit,
 ) {
-    val palette = LocalPalette.current
+    val apple = LocalApple.current
     Column(
         Modifier
             .fillMaxWidth()
@@ -396,7 +378,7 @@ private fun HomeControls(
         Spacer(Modifier.height(10.dp))
         Text(
             text = "$columns across, $rows down. You can change this later.",
-            color = palette.onGlassMuted,
+            color = apple.secondary,
             fontSize = 12.sp,
             textAlign = TextAlign.Center,
         )

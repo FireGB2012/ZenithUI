@@ -10,8 +10,6 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,7 +31,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalDensity
@@ -47,6 +44,10 @@ import com.gabriel.zenithui.ui.theme.ZenithShapes
 import kotlinx.coroutines.delay
 import com.gabriel.zenithui.ui.theme.ButtonKind
 import com.gabriel.zenithui.ui.common.ZenithButton
+import com.gabriel.zenithui.ui.theme.LocalApple
+import com.gabriel.zenithui.ui.theme.inkOnTint
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.Role
 
 /** How far a piece of a screen travels as it arrives, and the beat between neighbours. */
 private val RISE_DISTANCE = 14.dp
@@ -94,7 +95,7 @@ fun Modifier.reveal(visible: Boolean): Modifier = composed {
 fun Eyebrow(text: String, modifier: Modifier = Modifier) {
     Text(
         text = text,
-        color = LocalPalette.current.onGlassMuted,
+        color = LocalApple.current.secondary,
         fontSize = 15.sp,
         lineHeight = 20.sp,
         fontWeight = FontWeight.Medium,
@@ -108,7 +109,7 @@ fun Eyebrow(text: String, modifier: Modifier = Modifier) {
 fun Headline(text: String, modifier: Modifier = Modifier) {
     Text(
         text = text,
-        color = LocalPalette.current.onGlass,
+        color = LocalApple.current.words,
         fontSize = 34.sp,
         lineHeight = 40.sp,
         fontWeight = FontWeight.SemiBold,
@@ -122,7 +123,7 @@ fun Headline(text: String, modifier: Modifier = Modifier) {
 fun Lede(text: String, modifier: Modifier = Modifier) {
     Text(
         text = text,
-        color = LocalPalette.current.onGlassMuted,
+        color = LocalApple.current.secondary,
         fontSize = 16.sp,
         lineHeight = 23.sp,
         textAlign = TextAlign.Center,
@@ -146,10 +147,10 @@ fun QuietButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier
     ZenithButton(text = text, onClick = onClick, modifier = modifier.fillMaxWidth(), kind = ButtonKind.Plain)
 }
 
-/** Where you are in setup: a few short marks, the current one longer and lit. */
+/** Where you are in setup: a few short marks in the words' colour, the current one longer and full. */
 @Composable
 fun StepMarks(current: Int, total: Int, modifier: Modifier = Modifier) {
-    val palette = LocalPalette.current
+    val words = LocalApple.current.words
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
         repeat(total) { index ->
             val width by animateDpAsState(
@@ -159,9 +160,9 @@ fun StepMarks(current: Int, total: Int, modifier: Modifier = Modifier) {
             )
             val color by animateColorAsState(
                 when {
-                    index == current -> palette.onGlass
-                    index < current -> palette.onGlass.copy(alpha = 0.45f)
-                    else -> palette.onGlass.copy(alpha = 0.18f)
+                    index == current -> words
+                    index < current -> words.copy(alpha = 0.45f)
+                    else -> words.copy(alpha = 0.18f)
                 },
                 tween(300),
                 label = "markColor",
@@ -177,36 +178,34 @@ fun StepMarks(current: Int, total: Int, modifier: Modifier = Modifier) {
     }
 }
 
-/** A choice you can turn on and off: filled when on, a hairline outline when off. */
+/**
+ * A choice you can turn on and off, as Apple's chips are: Apple's grey when off, filled with the
+ * accent when on, its words in the ink the accent needs. To TalkBack it is a box to tick.
+ */
 @Composable
 fun ChoiceChip(label: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    val palette = LocalPalette.current
+    val apple = LocalApple.current
+    val accent = LocalPalette.current.accent
     val fill by animateColorAsState(
-        if (selected) palette.onGlass else Color.Transparent,
+        if (selected) accent else apple.field,
         tween(220),
         label = "chipFill",
     )
     val ink by animateColorAsState(
-        if (selected) (if (palette.dark) Color(0xFF0B0C10) else Color.White) else palette.onGlass.copy(alpha = 0.78f),
+        if (selected) inkOnTint(accent) else apple.words,
         tween(220),
         label = "chipInk",
     )
-    val outline by animateColorAsState(
-        if (selected) Color.Transparent else palette.onGlass.copy(alpha = 0.22f),
-        tween(220),
-        label = "chipOutline",
-    )
     Box(
         modifier
-            .height(42.dp)
+            .height(44.dp)
             .pressBounce(0.94f)
             .clip(RoundedCornerShape(50))
             .background(fill)
-            .border(1.dp, outline, RoundedCornerShape(50))
-            .clickable(onClick = onClick),
+            .toggleable(value = selected, role = Role.Checkbox, onValueChange = { onClick() }),
         contentAlignment = Alignment.Center,
     ) {
-        Text(label, color = ink, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+        Text(label, color = ink, fontSize = 15.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium)
     }
 }
 

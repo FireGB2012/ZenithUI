@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -30,16 +29,20 @@ import com.gabriel.zenithui.data.Plus
 import com.gabriel.zenithui.data.PlusStatus
 import com.gabriel.zenithui.ui.home.FEATURE_ICONS
 import com.gabriel.zenithui.ui.theme.LocalPalette
-import com.gabriel.zenithui.ui.theme.ZenithShapes
-import com.gabriel.zenithui.ui.theme.glass
+import com.gabriel.zenithui.ui.theme.LocalApple
+import com.gabriel.zenithui.ui.theme.inkOnTint
+import com.gabriel.zenithui.ui.theme.solidCard
+import com.gabriel.zenithui.ui.settings.CardRows
 
 /**
- * The only time Zenith asks for anything, and it asks once, in a sheet over your finished phone.
- * What Plus adds, the price in full before you tap, and a "Not now" as easy to hit as the yes.
+ * The only time Zenith asks for anything, and it asks once, on a solid sheet over your finished
+ * phone: what Plus adds, on a card, the price in full before you tap, and a "Not now" as easy to hit
+ * as the yes.
  */
 @Composable
 fun PlusSheet(status: PlusStatus, onTry: () -> Unit, onNotNow: () -> Unit, modifier: Modifier = Modifier) {
-    val palette = LocalPalette.current
+    val apple = LocalApple.current
+    val accent = LocalPalette.current.accent
     // Only the story scrolls. The price and both answers stay pinned at the bottom, so on a small
     // screen or with big text "Not now" is never hidden below the fold.
     Column(
@@ -52,29 +55,32 @@ fun PlusSheet(status: PlusStatus, onTry: () -> Unit, onNotNow: () -> Unit, modif
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(8.dp))
+            // A sheet's grabber.
             Box(
                 Modifier
-                    .size(width = 36.dp, height = 4.dp)
+                    .size(width = 36.dp, height = 5.dp)
                     .clip(RoundedCornerShape(50))
-                    .background(palette.onGlass.copy(alpha = 0.25f))
+                    .background(apple.faint)
             )
             Spacer(Modifier.height(20.dp))
+            // Plus's symbol in the ink of the accent, on a square of it, as an app's own icon is.
             Box(
                 Modifier
                     .size(56.dp)
                     .rise(0)
-                    .glass(CircleShape, strength = 1.1f),
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(accent),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Rounded.AutoAwesome, contentDescription = null, tint = palette.accent, modifier = Modifier.size(26.dp))
+                Icon(Icons.Rounded.AutoAwesome, contentDescription = null, tint = inkOnTint(accent), modifier = Modifier.size(28.dp))
             }
             Spacer(Modifier.height(14.dp))
             Eyebrow("Zenith Plus", Modifier.rise(1))
             Spacer(Modifier.height(6.dp))
             Text(
                 text = "A few extras,\nfree for ${Plus.TRIAL_DAYS} days.",
-                color = palette.onGlass,
+                color = apple.words,
                 fontSize = 28.sp,
                 lineHeight = 34.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -86,42 +92,35 @@ fun PlusSheet(status: PlusStatus, onTry: () -> Unit, onNotNow: () -> Unit, modif
             Lede("Your home screen works exactly the same without it.", Modifier.rise(3))
             Spacer(Modifier.height(20.dp))
 
-            Column(
+            // What it adds, on a card of rows, each with its symbol in the accent.
+            Box(
                 Modifier
                     .fillMaxWidth()
                     .rise(4)
-                    .glass(ZenithShapes.card, strength = 0.9f)
-                    .padding(16.dp),
+                    .solidCard(),
             ) {
-                Plus.FEATURES.forEachIndexed { index, (title, body) ->
-                    if (index > 0) {
-                        Box(
+                CardRows {
+                    Plus.FEATURES.forEachIndexed { index, (title, body) ->
+                        Row(
                             Modifier
-                                .padding(vertical = 12.dp)
                                 .fillMaxWidth()
-                                .height(1.dp)
-                                .background(palette.onGlass.copy(alpha = 0.08f))
-                        )
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            Modifier
-                                .size(36.dp)
-                                .glass(ZenithShapes.tile, strength = 1f),
-                            contentAlignment = Alignment.Center,
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Icon(
-                                FEATURE_ICONS.getOrElse(index) { Icons.Rounded.AutoAwesome },
-                                contentDescription = null,
-                                tint = palette.accent,
-                                modifier = Modifier.size(18.dp),
-                            )
-                        }
-                        Spacer(Modifier.width(14.dp))
-                        Column {
-                            Text(title, color = palette.onGlass, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                            Spacer(Modifier.height(2.dp))
-                            Text(body, color = palette.onGlassMuted, fontSize = 14.sp, lineHeight = 20.sp)
+                            Box(Modifier.size(30.dp), contentAlignment = Alignment.Center) {
+                                Icon(
+                                    FEATURE_ICONS.getOrElse(index) { Icons.Rounded.AutoAwesome },
+                                    contentDescription = null,
+                                    tint = accent,
+                                    modifier = Modifier.size(22.dp),
+                                )
+                            }
+                            Spacer(Modifier.width(14.dp))
+                            Column {
+                                Text(title, color = apple.words, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                                Spacer(Modifier.height(2.dp))
+                                Text(body, color = apple.secondary, fontSize = 14.sp, lineHeight = 20.sp)
+                            }
                         }
                     }
                 }
@@ -139,7 +138,7 @@ fun PlusSheet(status: PlusStatus, onTry: () -> Unit, onNotNow: () -> Unit, modif
                 "Free for ${Plus.TRIAL_DAYS} days, no card needed. After that it is " +
                     "${status.monthlyPrice} a month, or ${status.lifetimePrice} once."
             },
-            color = palette.onGlassMuted,
+            color = apple.secondary,
             fontSize = 12.sp,
             lineHeight = 17.sp,
             textAlign = TextAlign.Center,

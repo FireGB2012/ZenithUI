@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Apps
@@ -39,18 +38,18 @@ import androidx.compose.ui.unit.sp
 import com.gabriel.zenithui.ui.common.appearIn
 import com.gabriel.zenithui.ui.common.staggerDelay
 import com.gabriel.zenithui.ui.theme.LocalPalette
-import com.gabriel.zenithui.ui.theme.glass
 import com.gabriel.zenithui.ui.settings.Section
 import com.gabriel.zenithui.ui.settings.CardRows
 import com.gabriel.zenithui.ui.theme.LocalApple
 
 /**
- * The last stop of setup, under the finished phone: the three moves that unlock everything else.
- * The full list lives in Customise, under How it works, where [TipList] shows it.
+ * The last stop of setup, under the finished phone: the three moves that unlock everything else,
+ * each with its symbol in the accent, as an iPhone lists what is new. The full list lives in
+ * Customise, under How it works, where [TipList] shows it.
  */
 @Composable
 fun QuickTips(play: Boolean) {
-    val palette = LocalPalette.current
+    val apple = LocalApple.current
     Column(
         Modifier
             .fillMaxWidth()
@@ -63,7 +62,7 @@ fun QuickTips(play: Boolean) {
         QuickTip(Icons.Rounded.Wallpaper, "Hold an empty spot", "for wallpaper, widgets and settings.", order = 2, play = play)
         Text(
             "The rest is in Customise, under How it works.",
-            color = palette.onGlassMuted,
+            color = apple.secondary,
             fontSize = 12.sp,
             lineHeight = 17.sp,
             textAlign = TextAlign.Center,
@@ -77,22 +76,18 @@ fun QuickTips(play: Boolean) {
 
 @Composable
 private fun QuickTip(icon: ImageVector, lead: String, rest: String, order: Int, play: Boolean) {
-    val palette = LocalPalette.current
+    val apple = LocalApple.current
     Row(Modifier.fillMaxWidth().rise(order, play), verticalAlignment = Alignment.CenterVertically) {
-        Box(
-            Modifier
-                .size(40.dp)
-                .glass(CircleShape, strength = 0.9f),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(icon, contentDescription = null, tint = palette.accent, modifier = Modifier.size(20.dp))
+        // The symbol on the page itself: on a page of its own nothing is glass.
+        Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
+            Icon(icon, contentDescription = null, tint = LocalPalette.current.accent, modifier = Modifier.size(28.dp))
         }
         Spacer(Modifier.width(14.dp))
         Text(
             text = buildAnnotatedString {
-                withStyle(SpanStyle(color = palette.onGlass, fontWeight = FontWeight.SemiBold)) { append(lead) }
+                withStyle(SpanStyle(color = apple.words, fontWeight = FontWeight.SemiBold)) { append(lead) }
                 append(" ")
-                withStyle(SpanStyle(color = palette.onGlassMuted)) { append(rest) }
+                withStyle(SpanStyle(color = apple.secondary)) { append(rest) }
             },
             fontSize = 15.sp,
             lineHeight = 21.sp,

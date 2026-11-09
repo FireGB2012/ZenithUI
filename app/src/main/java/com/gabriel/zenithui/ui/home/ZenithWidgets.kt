@@ -41,10 +41,12 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
@@ -120,6 +122,7 @@ import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -139,9 +142,14 @@ import com.gabriel.zenithui.ui.common.pressBounce
 import com.gabriel.zenithui.ui.common.rememberTick
 import com.gabriel.zenithui.ui.common.shake
 import com.gabriel.zenithui.ui.settings.Toggle as OnOffSwitch
+import com.gabriel.zenithui.ui.settings.CardRows
+import com.gabriel.zenithui.ui.settings.Note
+import com.gabriel.zenithui.ui.settings.Section
+import com.gabriel.zenithui.ui.settings.rowPress
 import com.gabriel.zenithui.ui.theme.GlassMaterial
 import com.gabriel.zenithui.ui.theme.GlassMotion
 import com.gabriel.zenithui.ui.theme.glassPress
+import com.gabriel.zenithui.ui.theme.LocalApple
 import com.gabriel.zenithui.ui.theme.LocalNumberFont
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.LocalZenithFont
@@ -1240,8 +1248,9 @@ private fun TogglesWidget(form: WidgetForm, chosen: List<String>, width: Dp, hei
 }
 
 /**
- * Where you choose what the Quick Toggles widget shows. The widget rearranges itself to fit
- * whatever it holds, at whatever size it is, so any mix works.
+ * Where you choose what the Quick Toggles widget shows: every control it can hold, as the rows of
+ * one card, each with a switch. The widget rearranges itself to fit whatever it holds, at whatever
+ * size it is, so any mix works.
  */
 @Composable
 fun TogglesSheet(
@@ -1250,22 +1259,24 @@ fun TogglesSheet(
     onChange: (List<String>) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val palette = LocalPalette.current
     ZenithSheet(visible = visible, onDismiss = onDismiss, title = "Quick Toggles") {
-        Text(
+        // Read before the list, so it stands above it on the glass, in the glass's own grey.
+        Note(
             "Choose what the widget shows. It rearranges itself to fit, whatever its size.",
-            color = palette.onGlassMuted,
-            fontSize = 12.sp,
+            Modifier.padding(horizontal = 12.dp),
         )
-        Spacer(Modifier.height(8.dp))
         Column(Modifier.verticalScroll(rememberScrollState())) {
-            TOGGLE_OPTIONS.forEach { option ->
-                val on = option.id in selected
-                ToggleChoice(option, on) {
-                    val next = if (on) selected - option.id else selected + option.id
-                    // Always at least one control, and always in the catalogue's order.
-                    if (next.isNotEmpty()) onChange(TOGGLE_OPTIONS.map { it.id }.filter { it in next })
-                    next.isNotEmpty()
+            Section {
+                CardRows {
+                    TOGGLE_OPTIONS.forEach { option ->
+                        val on = option.id in selected
+                        ToggleChoice(option, on) {
+                            val next = if (on) selected - option.id else selected + option.id
+                            // Always at least one control, and always in the catalogue's order.
+                            if (next.isNotEmpty()) onChange(TOGGLE_OPTIONS.map { it.id }.filter { it in next })
+                            next.isNotEmpty()
+                        }
+                    }
                 }
             }
         }
@@ -1273,24 +1284,28 @@ fun TogglesSheet(
 }
 
 /**
- * One control the widget could show. Chosen, its disc takes the accent, and gives a small bounce
- * as it does; the switch beside it is the one Settings has, worked by the whole row. [onFlip]
+ * One control the widget could show, as a row of the card: its symbol on a disc, its name and in
+ * grey what it does, and the switch Settings has, worked by the whole row. Chosen, the disc fills
+ * with the accent, its symbol in the ink the accent needs, and gives a small bounce as it does;
+ * let go, it is Apple's grey again. Under a finger the row shades, as an iPhone's rows do. [onFlip]
  * answers whether it was flipped: the last one left cannot be taken away, and shakes its head.
  */
 @Composable
 private fun ToggleChoice(option: ToggleOption, on: Boolean, onFlip: () -> Boolean) {
-    val palette = LocalPalette.current
+    val apple = LocalApple.current
+    val accent = LocalPalette.current.accent
     val tick = rememberTick()
     val reduced = LocalMotionLevel.current.reduced
     val touch = remember { MutableInteractionSource() }
     val pressed by touch.collectIsPressedAsState()
     var refused by remember { mutableIntStateOf(0) }
+    // Off, the disc is Apple's grey for something standing on a card: the card-on-a-card grey.
     val disc by animateColorAsState(
-        targetValue = if (on) palette.accent.copy(alpha = 0.9f) else palette.onGlass.copy(alpha = 0.10f),
+        targetValue = if (on) accent else apple.raised,
         animationSpec = tween(260),
         label = "choiceDisc",
     )
-    val ink by animateColorAsState(if (on) Color(0xFF0A0B12) else palette.onGlass, tween(260), label = "choiceInk")
+    val ink by animateColorAsState(if (on) inkOnTint(accent) else apple.words, tween(260), label = "choiceInk")
     // Not as the list arrives: only when this one is chosen or let go while it is on show.
     val bounce = remember { Animatable(1f) }
     val shownAs = remember { booleanArrayOf(on) }
@@ -1304,16 +1319,20 @@ private fun ToggleChoice(option: ToggleOption, on: Boolean, onFlip: () -> Boolea
     Row(
         Modifier
             .fillMaxWidth()
+            // The shade stays where the row is while what is on it shakes its head.
+            .rowPress(touch)
             .shake(refused)
-            .clickable(interactionSource = touch, indication = null) {
+            .toggleable(value = on, interactionSource = touch, indication = null, role = Role.Switch) {
                 if (onFlip()) tick() else refused++
             }
-            .padding(vertical = 8.dp),
+            .heightIn(min = 52.dp)
+            .padding(horizontal = 16.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        // As wide as a Settings row's square, so the words, and the hairline under them, line up.
         Box(
             Modifier
-                .size(38.dp)
+                .size(30.dp)
                 .graphicsLayer {
                     scaleX = bounce.value
                     scaleY = bounce.value
@@ -1322,12 +1341,12 @@ private fun ToggleChoice(option: ToggleOption, on: Boolean, onFlip: () -> Boolea
                 .background(disc),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(option.icon, contentDescription = null, tint = ink, modifier = Modifier.size(21.dp))
+            Icon(option.icon, contentDescription = null, tint = ink, modifier = Modifier.size(18.dp))
         }
-        Spacer(Modifier.width(12.dp))
+        Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
-            Text(option.label, color = palette.onGlass, fontSize = 15.sp)
-            Text(option.detail, color = palette.onGlassMuted, fontSize = 12.sp)
+            Text(option.label, color = apple.words, fontSize = 16.sp)
+            Text(option.detail, color = apple.secondary, fontSize = 14.sp)
         }
         Spacer(Modifier.width(12.dp))
         OnOffSwitch(on, pressed)

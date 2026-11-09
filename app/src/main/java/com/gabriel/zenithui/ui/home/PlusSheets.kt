@@ -7,7 +7,6 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -29,23 +28,21 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Lock
-import androidx.compose.material.icons.rounded.Redeem
 import androidx.compose.material.icons.rounded.Palette
+import androidx.compose.material.icons.rounded.Redeem
 import androidx.compose.material.icons.rounded.Restore
 import androidx.compose.material.icons.rounded.Save
 import androidx.compose.material.icons.rounded.VisibilityOff
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -57,48 +54,68 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.gabriel.zenithui.data.AppInfo
 import com.gabriel.zenithui.data.Plus
 import com.gabriel.zenithui.data.PlusStatus
 import com.gabriel.zenithui.data.ZenithSettings
-import com.gabriel.zenithui.ui.common.ZenithButton
-import com.gabriel.zenithui.ui.common.SectionLabel
 import com.gabriel.zenithui.ui.common.AppIcon
 import com.gabriel.zenithui.ui.common.LocalMotionLevel
 import com.gabriel.zenithui.ui.common.Motion
+import com.gabriel.zenithui.ui.common.ZenithButton
 import com.gabriel.zenithui.ui.common.appearIn
 import com.gabriel.zenithui.ui.common.popIn
 import com.gabriel.zenithui.ui.common.popOut
-import com.gabriel.zenithui.ui.common.pressBounce
 import com.gabriel.zenithui.ui.common.rememberTick
 import com.gabriel.zenithui.ui.common.shake
 import com.gabriel.zenithui.ui.common.staggerDelay
 import com.gabriel.zenithui.ui.common.unfoldIn
 import com.gabriel.zenithui.ui.common.unfoldOut
 import com.gabriel.zenithui.ui.common.wordsChange
+import com.gabriel.zenithui.ui.settings.CardRows
+import com.gabriel.zenithui.ui.settings.FieldBox
+import com.gabriel.zenithui.ui.settings.FieldLook
+import com.gabriel.zenithui.ui.settings.GroupDivider
+import com.gabriel.zenithui.ui.settings.Note
+import com.gabriel.zenithui.ui.settings.Section
 import com.gabriel.zenithui.ui.settings.Toggle
+import com.gabriel.zenithui.ui.settings.ToggleRow
+import com.gabriel.zenithui.ui.settings.rowPress
+import com.gabriel.zenithui.ui.theme.AppleColours
+import com.gabriel.zenithui.ui.theme.ButtonKind
+import com.gabriel.zenithui.ui.theme.CardKind
+import com.gabriel.zenithui.ui.theme.LocalApple
 import com.gabriel.zenithui.ui.theme.LocalPalette
-import com.gabriel.zenithui.ui.theme.LocalZenithFont
 import com.gabriel.zenithui.ui.theme.Palettes
 import com.gabriel.zenithui.ui.theme.ZenithShapes
-import com.gabriel.zenithui.ui.theme.glass
+import com.gabriel.zenithui.ui.theme.inkOnTint
+import com.gabriel.zenithui.ui.theme.solidCard
+
+// The sheets Plus brings, set out as an iPhone sets out a sheet: everything on solid cards (Section
+// and the rows Settings is built from), grey words on the sheet's glass only where a card's small
+// print would stand, and nothing of glass inside them.
 
 /**
  * The one paid thing in Zenith. It is shown as a description of what you get rather than as a
  * wall: everything that was free stays free, so this sheet never has to apologise for itself.
+ *
+ * Plus's name, said large, and where you stand with it are on a card at the top, so the sheet's
+ * header carries no title of its own. Under it, what Plus adds as the rows of a second card; then
+ * the free week as the main button, the two plans side by side, each a card of its own, the small
+ * print under them, and Restore and the box for a code as small actions in the accent.
  */
 @Composable
 fun PlusSheet(
@@ -119,47 +136,40 @@ fun PlusSheet(
     // What was last said, kept so that the line still has its words while it folds away.
     val said = remember { arrayOfNulls<String>(1) }
     if (message != null) said[0] = message
-    val palette = LocalPalette.current
     val reduced = LocalMotionLevel.current.reduced
 
     ZenithSheet(visible = visible, onDismiss = onDismiss) {
-        Column(
-            Modifier.verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
+        Column(Modifier.verticalScroll(rememberScrollState())) {
             // The sheet arrives a block at a time, from the top: what it is, what it holds, how to get it.
             PlusHero(status, Modifier.arrive(0))
 
-            Column(
-                Modifier
-                    .fillMaxWidth()
-                    .arrive(1)
-                    .clip(ZenithShapes.card)
-                    .background(palette.onGlass.copy(alpha = 0.05f))
-                    .padding(vertical = 4.dp),
-            ) {
-                Plus.FEATURES.forEachIndexed { index, (title, detail) ->
-                    FeatureRow(
-                        icon = FEATURE_ICONS.getOrElse(index) { Icons.Rounded.AutoAwesome },
-                        title = title,
-                        detail = detail,
-                        unlocked = status.active,
-                    )
+            Section(modifier = Modifier.arrive(1)) {
+                CardRows {
+                    Plus.FEATURES.forEachIndexed { index, (title, detail) ->
+                        FeatureRow(
+                            icon = FEATURE_ICONS.getOrElse(index) { Icons.Rounded.AutoAwesome },
+                            title = title,
+                            detail = detail,
+                            unlocked = status.active,
+                        )
+                    }
                 }
             }
 
             if (!status.lifetime) {
                 if (status.trialAvailable) {
+                    Spacer(Modifier.height(16.dp))
                     ZenithButton(
                         text = "Start my ${Plus.TRIAL_DAYS} free days",
                         onClick = onStartTrial,
-                        filled = true,
+                        kind = ButtonKind.Main,
                         modifier = Modifier.fillMaxWidth().arrive(2),
                     )
                 }
 
                 // Both plans side by side, the pass marked. Until Play has the products they are
                 // shown but greyed, with the reason underneath, rather than a dead button.
+                Spacer(Modifier.height(12.dp))
                 Row(Modifier.fillMaxWidth().arrive(3), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     if (!status.subscribed) {
                         PlanCard(
@@ -185,18 +195,17 @@ fun PlusSheet(
                     )
                 }
 
-                Text(
+                // The small print, in grey under the plans as an iPhone writes it under a card.
+                Note(
                     text = when {
                         !status.purchasable -> "Buying opens once Zenith is on Google Play. The free trial works right now."
                         status.subscribed -> "Buying the pass does not cancel the subscription — do that in Play, and you keep Plus either way."
                         else -> "Lifetime costs about ${Plus.LIFETIME_EQUIVALENT_MONTHS} months of the monthly. No ads, ever."
                     },
-                    color = palette.onGlassMuted,
-                    fontSize = 11.sp,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 7.dp),
                 )
 
+                Spacer(Modifier.height(4.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     SmallAction(Icons.Rounded.Restore, "Restore", Modifier.weight(1f)) { onRestore() }
                     SmallAction(Icons.Rounded.Redeem, "Have a code?", Modifier.weight(1f)) {
@@ -208,7 +217,8 @@ fun PlusSheet(
                 // The box for a code opens out under the button that asked for it. A code that is
                 // not one of ours makes it shake its head, and a line under it says why.
                 AnimatedVisibility(visible = redeeming, enter = unfoldIn(reduced), exit = unfoldOut(reduced)) {
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Column {
+                        Spacer(Modifier.height(8.dp))
                         PinField(
                             value = code,
                             onChange = {
@@ -218,6 +228,7 @@ fun PlusSheet(
                             digitsOnly = false,
                             modifier = Modifier.shake(refusals),
                         )
+                        Spacer(Modifier.height(12.dp))
                         ZenithButton(
                             text = "Redeem",
                             onClick = {
@@ -231,10 +242,11 @@ fun PlusSheet(
                                     refusals++
                                 }
                             },
+                            kind = ButtonKind.Grey,
                             modifier = Modifier.fillMaxWidth(),
                         )
                         AnimatedVisibility(visible = message != null, enter = unfoldIn(reduced), exit = unfoldOut(reduced)) {
-                            Text(said[0].orEmpty(), color = palette.onGlassMuted, fontSize = 12.sp)
+                            Note(said[0].orEmpty(), Modifier.padding(start = 12.dp, end = 12.dp, top = 8.dp))
                         }
                     }
                 }
@@ -258,10 +270,15 @@ internal val FEATURE_ICONS: List<ImageVector> = listOf(
     Icons.Rounded.Save,
 )
 
-/** The header: what Plus is, and where you stand with it. */
+/**
+ * The head of the sheet, on a card, as an iPhone heads a page of its own: Plus's star on a square of
+ * the accent, its name large, and in grey where you stand with it, all in the middle. During the
+ * free week a thin bar in the accent under that shows how much of the week is left.
+ */
 @Composable
 private fun PlusHero(status: PlusStatus, modifier: Modifier = Modifier) {
-    val palette = LocalPalette.current
+    val apple = LocalApple.current
+    val accent = LocalPalette.current.accent
     val reduced = LocalMotionLevel.current.reduced
     val statusLine = when {
         status.lifetime -> "Unlocked for good. Thank you — it follows you to every phone you sign in to."
@@ -273,101 +290,106 @@ private fun PlusHero(status: PlusStatus, modifier: Modifier = Modifier) {
     }
     val inTrial = !status.purchased && !status.trialAvailable && status.trialDaysLeft > 0
 
-    Column(
-        modifier
-            .fillMaxWidth()
-            .clip(ZenithShapes.card)
-            .background(
-                Brush.linearGradient(
-                    listOf(
-                        palette.accent.copy(alpha = 0.42f),
-                        palette.accentAlt.copy(alpha = 0.18f),
-                        Color.Transparent,
-                    )
-                )
-            )
-            .border(1.dp, palette.accent.copy(alpha = 0.35f), ZenithShapes.card)
-            .padding(18.dp),
-    ) {
-        Box(
+    Section(modifier = modifier) {
+        Column(
             Modifier
-                .size(46.dp)
-                // The star lands a beat after the card it is on, with a bounce of its own.
-                .appearIn(delayMillis = 180, fromScale = 0.3f, riseFrom = 0f)
-                .clip(RoundedCornerShape(15.dp))
-                .background(Brush.linearGradient(listOf(palette.accent, palette.accentAlt))),
-            contentAlignment = Alignment.Center,
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 22.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Icon(Icons.Rounded.AutoAwesome, contentDescription = null, tint = Color(0xFF0A0B12), modifier = Modifier.size(25.dp))
-        }
-        Spacer(Modifier.height(14.dp))
-        Text("Zenith Plus", color = palette.onGlass, fontSize = 26.sp, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(4.dp))
-        Text(statusLine, color = palette.onGlass.copy(alpha = 0.82f), fontSize = 13.sp, lineHeight = 18.sp)
-
-        if (inTrial) {
-            Spacer(Modifier.height(14.dp))
-            val left = status.trialDaysLeft.coerceIn(0, Plus.TRIAL_DAYS) / Plus.TRIAL_DAYS.toFloat()
-            // What is left of the week runs out along its bar as the sheet arrives.
-            val run = remember { Animatable(if (reduced) left else 0f) }
-            LaunchedEffect(left, reduced) {
-                if (reduced) run.snapTo(left) else run.animateTo(left, spring(dampingRatio = 0.85f, stiffness = 70f))
-            }
             Box(
                 Modifier
-                    .fillMaxWidth()
-                    .height(6.dp)
-                    .clip(RoundedCornerShape(50))
-                    .background(palette.onGlass.copy(alpha = 0.14f))
+                    .size(56.dp)
+                    // The star lands a beat after the card it is on, with a bounce of its own.
+                    .appearIn(delayMillis = 180, fromScale = 0.3f, riseFrom = 0f)
+                    .clip(RoundedCornerShape(13.dp))
+                    .background(accent),
+                contentAlignment = Alignment.Center,
             ) {
-                Box(
-                    Modifier
-                        .fillMaxWidth(run.value.coerceIn(0f, 1f))
-                        .height(6.dp)
-                        .clip(RoundedCornerShape(50))
-                        .background(Brush.horizontalGradient(listOf(palette.accent, palette.accentAlt)))
-                )
+                // In the ink the accent needs: white on blue, near-black on yellow.
+                Icon(Icons.Rounded.AutoAwesome, contentDescription = null, tint = inkOnTint(accent), modifier = Modifier.size(30.dp))
             }
+            Spacer(Modifier.height(14.dp))
+            Text(
+                "Zenith Plus",
+                color = apple.words,
+                fontSize = 26.sp,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+            )
             Spacer(Modifier.height(6.dp))
             Text(
-                "${status.trialDaysLeft} of ${Plus.TRIAL_DAYS} days left",
-                color = palette.onGlassMuted,
-                fontSize = 11.sp,
+                statusLine,
+                color = apple.secondary,
+                fontSize = 15.sp,
+                lineHeight = 20.sp,
+                textAlign = TextAlign.Center,
             )
+
+            if (inTrial) {
+                Spacer(Modifier.height(18.dp))
+                val left = status.trialDaysLeft.coerceIn(0, Plus.TRIAL_DAYS) / Plus.TRIAL_DAYS.toFloat()
+                // What is left of the week runs out along its bar as the sheet arrives.
+                val run = remember { Animatable(if (reduced) left else 0f) }
+                LaunchedEffect(left, reduced) {
+                    if (reduced) run.snapTo(left) else run.animateTo(left, spring(dampingRatio = 0.85f, stiffness = 70f))
+                }
+                // A thin grey track, filled with the accent as far as the days left, as an iPhone's
+                // progress bar is drawn.
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(4.dp)
+                        .clip(RoundedCornerShape(50))
+                        .background(apple.grey)
+                ) {
+                    Box(
+                        Modifier
+                            .fillMaxWidth(run.value.coerceIn(0f, 1f))
+                            .height(4.dp)
+                            .clip(RoundedCornerShape(50))
+                            .background(accent)
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "${status.trialDaysLeft} of ${Plus.TRIAL_DAYS} days left",
+                    color = apple.secondary,
+                    fontSize = 13.sp,
+                )
+            }
         }
     }
 }
 
+/**
+ * One thing Plus adds, as a row of its card: its symbol in the accent, its name, a line about it in
+ * grey, and at the end a grey lock, or a tick in the accent once it is yours. It is only read, not
+ * pressed, so it neither shades nor bounces.
+ */
 @Composable
 private fun FeatureRow(icon: ImageVector, title: String, detail: String, unlocked: Boolean) {
-    val palette = LocalPalette.current
+    val apple = LocalApple.current
+    val accent = LocalPalette.current.accent
+    val reduced = LocalMotionLevel.current.reduced
     Row(
         Modifier
             .fillMaxWidth()
-            .padding(horizontal = 14.dp, vertical = 10.dp),
+            .heightIn(min = 52.dp)
+            .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(
-            Modifier
-                .size(38.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(
-                    Brush.linearGradient(
-                        listOf(palette.accent.copy(alpha = 0.32f), palette.accentAlt.copy(alpha = 0.16f))
-                    )
-                ),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(icon, contentDescription = null, tint = palette.accent, modifier = Modifier.size(20.dp))
+        // As wide as a Settings row's square, so the words, and the hairline under them, line up.
+        Box(Modifier.size(30.dp), contentAlignment = Alignment.Center) {
+            Icon(icon, contentDescription = null, tint = accent, modifier = Modifier.size(22.dp))
         }
-        Spacer(Modifier.width(12.dp))
+        Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
-            Text(title, color = palette.onGlass, fontSize = 15.sp, fontWeight = FontWeight.Medium)
-            Text(detail, color = palette.onGlassMuted, fontSize = 12.sp, lineHeight = 16.sp)
+            Text(title, color = apple.words, fontSize = 16.sp)
+            Text(detail, color = apple.secondary, fontSize = 14.sp, lineHeight = 18.sp)
         }
-        Spacer(Modifier.width(8.dp))
+        Spacer(Modifier.width(10.dp))
         // Plus bought, or its week begun, with the sheet still open: each lock pops into a tick.
-        val reduced = LocalMotionLevel.current.reduced
         AnimatedContent(
             targetState = unlocked,
             transitionSpec = { popIn(reduced, from = 0.3f, millis = 220).togetherWith(popOut(reduced, to = 0.3f)) },
@@ -376,14 +398,19 @@ private fun FeatureRow(icon: ImageVector, title: String, detail: String, unlocke
             Icon(
                 imageVector = if (open) Icons.Rounded.Check else Icons.Rounded.Lock,
                 contentDescription = if (open) "Unlocked" else "Locked",
-                tint = if (open) palette.accent else palette.onGlassMuted,
-                modifier = Modifier.size(18.dp),
+                tint = if (open) accent else apple.secondary,
+                modifier = Modifier.size(20.dp),
             )
         }
     }
 }
 
-/** One of the two ways to pay. The featured one carries a badge and an accent rim. */
+/**
+ * One of the two ways to pay, as a solid card of its own: what it is and what that buys in grey,
+ * its price large between them. The featured one is ringed in the accent and carries a badge of
+ * it. Under a finger the card shades, as an iPhone's rows do; while Play cannot sell it is dimmed
+ * and does nothing.
+ */
 @Composable
 private fun PlanCard(
     title: String,
@@ -395,72 +422,70 @@ private fun PlanCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val palette = LocalPalette.current
+    val apple = LocalApple.current
+    val accent = LocalPalette.current.accent
+    val touch = remember { MutableInteractionSource() }
     Box(modifier) {
         Column(
             Modifier
                 .fillMaxWidth()
-                .pressBounce(0.97f, enabled = enabled)
+                // The card stays solid; only what is on it dims while a plan cannot be bought.
+                .solidCard(CardKind.Grouped)
                 .alpha(if (enabled) 1f else 0.55f)
-                .clip(ZenithShapes.card)
-                .background(
-                    if (featured) palette.accent.copy(alpha = 0.16f) else palette.onGlass.copy(alpha = 0.06f)
-                )
-                .border(
-                    width = if (featured) 1.5.dp else 1.dp,
-                    color = if (featured) palette.accent.copy(alpha = 0.8f) else palette.onGlass.copy(alpha = 0.10f),
-                    shape = ZenithShapes.card,
-                )
-                .clickable(enabled = enabled) { onClick() }
+                .then(if (featured) Modifier.border(2.dp, accent, CardKind.Grouped.shape) else Modifier)
+                .rowPress(touch, enabled = enabled)
+                .clickable(interactionSource = touch, indication = null, enabled = enabled, role = Role.Button, onClick = onClick)
                 .padding(horizontal = 14.dp, vertical = 16.dp),
         ) {
-            Text(title, color = palette.onGlassMuted, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+            Text(title, color = apple.secondary, fontSize = 13.sp, fontWeight = FontWeight.Medium)
             Spacer(Modifier.height(6.dp))
             Text(
                 text = price,
-                color = if (featured) palette.accent else palette.onGlass,
+                color = apple.words,
                 fontSize = 24.sp,
                 fontWeight = FontWeight.Bold,
             )
-            Text(per, color = palette.onGlassMuted, fontSize = 11.sp, maxLines = 1)
+            Text(per, color = apple.secondary, fontSize = 11.sp, maxLines = 1)
         }
         if (badge != null) {
+            // A pill of the accent, its words in the ink the accent needs.
             Text(
                 text = badge,
-                color = Color(0xFF0A0B12),
+                color = inkOnTint(accent),
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .padding(8.dp)
                     .clip(ZenithShapes.pill)
-                    .background(Brush.horizontalGradient(listOf(palette.accent, palette.accentAlt)))
+                    .background(accent)
                     .padding(horizontal = 8.dp, vertical = 3.dp),
             )
         }
     }
 }
 
+/**
+ * A small action under the plans, as an iPhone writes one: its symbol and its words in the accent,
+ * with nothing behind them, dimming while they are held.
+ */
 @Composable
 private fun SmallAction(icon: ImageVector, label: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    val palette = LocalPalette.current
-    Row(
-        modifier
-            .pressBounce(0.96f)
-            .clip(ZenithShapes.pill)
-            .background(palette.onGlass.copy(alpha = 0.06f))
-            .clickable { onClick() }
-            .padding(vertical = 12.dp),
-        horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(icon, contentDescription = null, tint = palette.onGlass, modifier = Modifier.size(16.dp))
-        Spacer(Modifier.width(8.dp))
-        Text(label, color = palette.onGlass, fontSize = 13.sp, fontWeight = FontWeight.Medium)
-    }
+    ZenithButton(
+        text = label,
+        onClick = onClick,
+        modifier = modifier,
+        kind = ButtonKind.Plain,
+        // Tinted by the button itself, in the colour of its words.
+        leading = { Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp)) },
+    )
 }
 
-/** Locked features send you here rather than doing nothing. */
+/**
+ * A feature that needs Plus, as a row of a card: a lock in the accent, what the feature is, and in
+ * grey what it would do. Locked features send you here rather than doing nothing. Like every
+ * [MenuRow], it goes in a [CardRows] on a card ([Section]).
+ */
 @Composable
 fun PlusLockedRow(label: String, subtitle: String, onClick: () -> Unit) {
     MenuRow(Icons.Rounded.Lock, label, subtitle, onClick = onClick)
@@ -468,6 +493,12 @@ fun PlusLockedRow(label: String, subtitle: String, onClick: () -> Unit) {
 
 // ---------------------------------------------------------------------- theme maker
 
+/**
+ * The theme maker: a palette of your own, from three colours and whether its words are light. At
+ * the top, what you are building; under it each colour on a card of its own, with the rails it is
+ * made from; then the switch for light words, and the button that puts the theme in use, offered
+ * until it is.
+ */
 @Composable
 fun ThemeMakerSheet(
     visible: Boolean,
@@ -475,20 +506,21 @@ fun ThemeMakerSheet(
     onChange: ((ZenithSettings) -> ZenithSettings) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val palette = LocalPalette.current
     val preview = remember(settings) { Palettes.custom(settings) }
+    // Apple's card and words in the dark when Light text is on, and in the light when it is off.
+    val tile = AppleColours.of(settings.customDark)
 
     ZenithSheet(visible = visible, onDismiss = onDismiss, title = "Theme maker") {
-        Column(
-            Modifier.verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            // What you are building, drawn with the colours you have chosen so far.
+        Column(Modifier.verticalScroll(rememberScrollState())) {
+            // What you are building, drawn with the colours you have chosen so far: a wallpaper
+            // painted from them, with a solid tile standing on it as the home screen's widgets do,
+            // your two accents on the tile.
             Box(
                 Modifier
+                    .padding(top = 12.dp)
                     .fillMaxWidth()
                     .height(96.dp)
-                    .clip(ZenithShapes.tile)
+                    .clip(CardKind.Grouped.shape)
                     .background(Brush.linearGradient(preview.backdrop)),
                 contentAlignment = Alignment.Center,
             ) {
@@ -496,7 +528,7 @@ fun ThemeMakerSheet(
                     Modifier
                         .padding(horizontal = 18.dp)
                         .fillMaxWidth()
-                        .glass(ZenithShapes.tile, strength = 1f, solid = 0.5f)
+                        .solidCard(CardKind.Grouped, tile.card)
                         .padding(14.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -509,8 +541,8 @@ fun ThemeMakerSheet(
                     Spacer(Modifier.width(12.dp))
                     Text(
                         "Yours",
-                        color = if (settings.customDark) Color.White else Color(0xFF10131A),
-                        fontSize = 15.sp,
+                        color = tile.words,
+                        fontSize = 16.sp,
                         fontWeight = FontWeight.Medium,
                     )
                 }
@@ -532,11 +564,13 @@ fun ThemeMakerSheet(
                 onChange = { argb -> onChange { it.copy(customBackdrop = argb, paletteId = Palettes.CUSTOM) } },
             )
 
-            SwitchRow(
-                title = "Light text",
-                detail = "On for dark backgrounds, off for pale ones.",
-                checked = settings.customDark,
-            ) { onChange { it.copy(customDark = !settings.customDark, paletteId = Palettes.CUSTOM) } }
+            Section {
+                ToggleRow(
+                    title = "Light text",
+                    subtitle = "On for dark backgrounds, off for pale ones.",
+                    checked = settings.customDark,
+                ) { on -> onChange { it.copy(customDark = on, paletteId = Palettes.CUSTOM) } }
+            }
 
             // Offered until the theme is in use, and folded away once it is.
             AnimatedVisibility(
@@ -544,20 +578,31 @@ fun ThemeMakerSheet(
                 enter = unfoldIn(LocalMotionLevel.current.reduced),
                 exit = unfoldOut(LocalMotionLevel.current.reduced),
             ) {
-                ZenithButton(
-                    text = "Use my theme",
-                    onClick = { onChange { it.copy(paletteId = Palettes.CUSTOM) } },
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                Column {
+                    Spacer(Modifier.height(16.dp))
+                    ZenithButton(
+                        text = "Use my theme",
+                        onClick = { onChange { it.copy(paletteId = Palettes.CUSTOM) } },
+                        kind = ButtonKind.Main,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
             }
         }
     }
 }
 
-/** One colour, as a swatch and the three rails that make it. */
+/** The corners of a colour's swatch: those of the square at the start of a Settings row. */
+private val SWATCH = RoundedCornerShape(7.dp)
+
+/**
+ * One colour, on a card of its own: a row with a swatch of it, its name, and its code in grey, as a
+ * row of Settings is set out, and under that the three rails it is made from: its hue, how strong it
+ * is, and how bright.
+ */
 @Composable
 private fun ColourField(label: String, value: Long, onChange: (Long) -> Unit) {
-    val palette = LocalPalette.current
+    val apple = LocalApple.current
     val hsv = remember(value) { value.toHsv() }
     var hue by remember(value) { mutableStateOf(hsv[0]) }
     var saturation by remember(value) { mutableStateOf(hsv[1]) }
@@ -565,52 +610,66 @@ private fun ColourField(label: String, value: Long, onChange: (Long) -> Unit) {
 
     fun emit() = onChange(hsvToArgb(hue, saturation, brightness))
 
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+    Section {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = 52.dp)
+                .padding(horizontal = 16.dp, vertical = 9.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // Apple's hairline round it, so a colour as pale as the card, or as dark, still shows its edge.
             Box(
                 Modifier
-                    .size(28.dp)
-                    .clip(RoundedCornerShape(10.dp))
+                    .size(30.dp)
+                    .clip(SWATCH)
                     .background(Color(value.toInt()))
-                    .border(1.dp, palette.onGlass.copy(alpha = 0.20f), RoundedCornerShape(10.dp))
+                    .border(1.dp, apple.separator, SWATCH)
             )
-            Spacer(Modifier.width(12.dp))
-            Text(label, color = palette.onGlass, fontSize = 14.sp, modifier = Modifier.weight(1f))
+            Spacer(Modifier.width(14.dp))
+            Text(label, color = apple.words, fontSize = 16.sp, modifier = Modifier.weight(1f))
             Text(
                 text = "#%06X".format(value.toInt() and 0xFFFFFF),
-                color = palette.onGlassMuted,
-                fontSize = 11.sp,
+                color = apple.secondary,
+                fontSize = 15.sp,
             )
         }
 
-        ColourRail(
-            colours = (0..12).map { Color(hsvToArgb(it * 30f, 1f, 1f).toInt()) },
-            fraction = hue / 360f,
-        ) { fraction ->
-            hue = fraction * 360f
-            emit()
-        }
-        ColourRail(
-            colours = listOf(Color(hsvToArgb(hue, 0f, brightness).toInt()), Color(hsvToArgb(hue, 1f, brightness).toInt())),
-            fraction = saturation,
-        ) { fraction ->
-            saturation = fraction
-            emit()
-        }
-        ColourRail(
-            colours = listOf(Color.Black, Color(hsvToArgb(hue, saturation, 1f).toInt())),
-            fraction = brightness,
-        ) { fraction ->
-            brightness = fraction
-            emit()
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, end = 16.dp, top = 2.dp, bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            ColourRail(
+                colours = (0..12).map { Color(hsvToArgb(it * 30f, 1f, 1f).toInt()) },
+                fraction = hue / 360f,
+            ) { fraction ->
+                hue = fraction * 360f
+                emit()
+            }
+            ColourRail(
+                colours = listOf(Color(hsvToArgb(hue, 0f, brightness).toInt()), Color(hsvToArgb(hue, 1f, brightness).toInt())),
+                fraction = saturation,
+            ) { fraction ->
+                saturation = fraction
+                emit()
+            }
+            ColourRail(
+                colours = listOf(Color.Black, Color(hsvToArgb(hue, saturation, 1f).toInt())),
+                fraction = brightness,
+            ) { fraction ->
+                brightness = fraction
+                emit()
+            }
         }
     }
 }
 
 /**
- * A gradient bar you drag a knob along. Nicer to the thumb than a stock slider, and on brand. A
- * tap glides the knob to where you touched, a drag is followed almost exactly, and for as long as
- * a finger is on the bar the knob stands a little larger.
+ * A bar of the colours one rail runs through, with a white knob to drag along it, as an iPhone's
+ * colour picker has. A tap glides the knob to where you touched, a drag is followed almost exactly,
+ * and for as long as a finger is on the bar the knob stands a little larger.
  */
 @Composable
 private fun ColourRail(colours: List<Color>, fraction: Float, onPick: (Float) -> Unit) {
@@ -695,6 +754,10 @@ private fun hsvToArgb(hue: Float, saturation: Float, brightness: Float): Long {
  *
  * This is a tidiness feature, not a security one, and the copy says so: the apps are kept out of
  * Zenith's drawer, they are not locked on the device.
+ *
+ * Locked, it asks for the PIN in Apple's box on a card of its own. Open, it says in grey what hiding
+ * does, offers a PIN as a row of a card, and lists every app on one card, each row a switch, with a
+ * hairline under the names between each two.
  */
 @Composable
 fun HiddenAppsSheet(
@@ -705,8 +768,9 @@ fun HiddenAppsSheet(
     onSetPin: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val palette = LocalPalette.current
+    val apple = LocalApple.current
     val reduced = LocalMotionLevel.current.reduced
+    val tick = rememberTick()
     var unlocked by remember(visible) { mutableStateOf(settings.hiddenPin.isEmpty()) }
     var entry by remember(visible) { mutableStateOf("") }
     var editingPin by remember(visible) { mutableStateOf(false) }
@@ -722,9 +786,11 @@ fun HiddenAppsSheet(
             label = "hiddenLock",
         ) { open ->
             if (!open) {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("Enter your PIN to see the list.", color = palette.onGlassMuted, fontSize = 13.sp)
+                Column {
+                    Note("Enter your PIN to see the list.", Modifier.padding(start = 12.dp, end = 12.dp, top = 8.dp))
+                    Spacer(Modifier.height(12.dp))
                     PinField(value = entry, onChange = { entry = it }, modifier = Modifier.shake(refusals))
+                    Spacer(Modifier.height(16.dp))
                     ZenithButton(
                         text = "Unlock",
                         onClick = {
@@ -735,16 +801,17 @@ fun HiddenAppsSheet(
                                 refusals++
                             }
                         },
+                        kind = ButtonKind.Main,
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
             } else {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(
-                        text = "Hidden apps stay out of the drawer and out of search. They are not locked " +
+                Column {
+                    // What hiding does, and what it does not, in grey over the cards.
+                    Note(
+                        "Hidden apps stay out of the drawer and out of search. They are not locked " +
                             "on your phone — anything else that lists your apps still shows them.",
-                        color = palette.onGlassMuted,
-                        fontSize = 12.sp,
+                        Modifier.padding(start = 12.dp, end = 12.dp, top = 8.dp),
                     )
 
                     // The row that offers a PIN turns into the box to type one in, and back.
@@ -754,56 +821,81 @@ fun HiddenAppsSheet(
                         label = "hiddenPin",
                     ) { editing ->
                         if (editing) {
-                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                PinField(value = entry, onChange = { entry = it })
-                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    ZenithButton(
-                                        text = if (entry.isBlank()) "Remove PIN" else "Save PIN",
-                                        onClick = {
-                                            onSetPin(entry)
-                                            entry = ""
-                                            editingPin = false
-                                        },
-                                        modifier = Modifier.weight(1f),
-                                    )
-                                }
+                            Column {
+                                Spacer(Modifier.height(12.dp))
+                                PinField(value = entry, onChange = { entry = it }, placeholder = "New PIN")
+                                Spacer(Modifier.height(12.dp))
+                                ZenithButton(
+                                    text = if (entry.isBlank()) "Remove PIN" else "Save PIN",
+                                    onClick = {
+                                        onSetPin(entry)
+                                        entry = ""
+                                        editingPin = false
+                                    },
+                                    // Saving a PIN is the thing to do here; an empty box takes the
+                                    // PIN away, a second choice, and the button turns grey to say so.
+                                    kind = if (entry.isBlank()) ButtonKind.Grey else ButtonKind.Main,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
                             }
                         } else {
-                            MenuRow(
-                                icon = Icons.Rounded.Lock,
-                                label = if (settings.hiddenPin.isEmpty()) "Set a PIN" else "Change PIN",
-                                subtitle = if (settings.hiddenPin.isEmpty()) "Optional" else "Asked for before this list opens",
-                            ) { editingPin = true }
+                            Section {
+                                CardRows {
+                                    MenuRow(
+                                        icon = Icons.Rounded.Lock,
+                                        label = if (settings.hiddenPin.isEmpty()) "Set a PIN" else "Change PIN",
+                                        subtitle = if (settings.hiddenPin.isEmpty()) "Optional" else "Asked for before this list opens",
+                                    ) { editingPin = true }
+                                }
+                            }
                         }
                     }
 
-                    SectionLabel("Apps")
-                    LazyColumn(Modifier.heightIn(max = 320.dp)) {
-                        items(apps, key = { it.key }) { app ->
-                            val hidden = app.key in settings.hiddenApps
-                            val touch = remember { MutableInteractionSource() }
-                            val pressed by touch.collectIsPressedAsState()
-                            // Hidden, its icon fades back, so the list shows at a glance which
-                            // apps are out of the drawer.
-                            val shownAs = animateFloatAsState(if (hidden) 0.5f else 1f, tween(260), label = "hiddenIcon")
-                            Row(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(16.dp))
-                                    .clickable(interactionSource = touch, indication = LocalIndication.current) { onToggle(app.key) }
-                                    .padding(horizontal = 6.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                AppIcon(
-                                    key = app.key,
-                                    label = app.label,
-                                    size = 34.dp,
-                                    shape = ZenithShapes.forIconShape(settings.iconShape),
-                                    modifier = Modifier.graphicsLayer { alpha = shownAs.value },
-                                )
-                                Spacer(Modifier.width(12.dp))
-                                Text(app.label, color = palette.onGlass, fontSize = 14.sp, modifier = Modifier.weight(1f))
-                                Toggle(hidden, pressed)
+                    Section(header = "Apps") {
+                        LazyColumn(Modifier.heightIn(max = 320.dp)) {
+                            itemsIndexed(apps, key = { _, app -> app.key }) { index, app ->
+                                val hidden = app.key in settings.hiddenApps
+                                val touch = remember { MutableInteractionSource() }
+                                val pressed by touch.collectIsPressedAsState()
+                                // Hidden, its icon fades back, so the list shows at a glance which
+                                // apps are out of the drawer.
+                                val shownAs = animateFloatAsState(if (hidden) 0.5f else 1f, tween(260), label = "hiddenIcon")
+                                Column {
+                                    // Between each two rows, Apple's hairline, starting under the names.
+                                    if (index > 0) GroupDivider()
+                                    Row(
+                                        Modifier
+                                            .fillMaxWidth()
+                                            // The whole row is the switch, as on Settings' rows: a
+                                            // finger anywhere on it is felt by the knob.
+                                            .toggleable(value = hidden, interactionSource = touch, indication = null, role = Role.Switch) {
+                                                tick()
+                                                onToggle(app.key)
+                                            }
+                                            .heightIn(min = 52.dp)
+                                            .padding(horizontal = 16.dp, vertical = 9.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        AppIcon(
+                                            key = app.key,
+                                            label = app.label,
+                                            size = 30.dp,
+                                            shape = ZenithShapes.forIconShape(settings.iconShape),
+                                            modifier = Modifier.graphicsLayer { alpha = shownAs.value },
+                                        )
+                                        Spacer(Modifier.width(14.dp))
+                                        Text(
+                                            app.label,
+                                            color = apple.words,
+                                            fontSize = 16.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.weight(1f),
+                                        )
+                                        Spacer(Modifier.width(12.dp))
+                                        Toggle(hidden, pressed)
+                                    }
+                                }
                             }
                         }
                     }
@@ -814,56 +906,30 @@ fun HiddenAppsSheet(
 }
 
 /**
- * A setting on or off, in a sheet: what it is, a line about it, and the same switch Settings has,
- * which the whole row works.
+ * The box a PIN or a code is typed into: Apple's, on a card of its own, the digits large and in the
+ * middle, with [placeholder] in grey until something is typed. A PIN takes digits only, six at most,
+ * from the number pad; a code takes up to twenty-four letters and numbers.
  */
 @Composable
-private fun SwitchRow(title: String, detail: String, checked: Boolean, onFlip: () -> Unit) {
-    val palette = LocalPalette.current
-    val tick = rememberTick()
-    val touch = remember { MutableInteractionSource() }
-    val pressed by touch.collectIsPressedAsState()
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clickable(interactionSource = touch, indication = null) {
-                tick()
-                onFlip()
-            },
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text(title, color = palette.onGlass, fontSize = 15.sp)
-            Text(detail, color = palette.onGlassMuted, fontSize = 12.sp)
-        }
-        Spacer(Modifier.width(12.dp))
-        Toggle(checked, pressed)
-    }
-}
-
-@Composable
-private fun PinField(value: String, onChange: (String) -> Unit, digitsOnly: Boolean = true, modifier: Modifier = Modifier) {
-    val palette = LocalPalette.current
-    BasicTextField(
+private fun PinField(
+    value: String,
+    onChange: (String) -> Unit,
+    digitsOnly: Boolean = true,
+    placeholder: String = if (digitsOnly) "PIN" else "Code",
+    modifier: Modifier = Modifier,
+) {
+    FieldBox(
         value = value,
         onValueChange = { text ->
             onChange(if (digitsOnly) text.filter { c -> c.isDigit() }.take(6) else text.take(24))
         },
+        placeholder = placeholder,
         modifier = modifier,
-        singleLine = true,
+        look = FieldLook.Card,
         keyboardOptions = KeyboardOptions(
             keyboardType = if (digitsOnly) KeyboardType.NumberPassword else KeyboardType.Ascii,
         ),
-        textStyle = TextStyle(fontFamily = LocalZenithFont.current, color = palette.onGlass, fontSize = 20.sp, textAlign = TextAlign.Center),
-        cursorBrush = Brush.linearGradient(listOf(palette.accent, palette.accent)),
-        decorationBox = { inner ->
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .glass(ZenithShapes.pill, strength = 0.8f)
-                    .padding(vertical = 14.dp),
-                contentAlignment = Alignment.Center,
-            ) { inner() }
-        },
+        fontSize = 20.sp,
+        textAlign = TextAlign.Center,
     )
 }

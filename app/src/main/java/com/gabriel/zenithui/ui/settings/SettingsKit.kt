@@ -270,6 +270,25 @@ internal fun GroupDivider(inset: Dp = ROW_TEXT_INSET) {
     )
 }
 
+/**
+ * Where the hairlines of a card of rows go, given each row's height from the top down: along the
+ * top of every row that shows except the first. A row folded away to nothing has none of its own,
+ * so a row that comes and goes never leaves two lines together, or one along the card's edge.
+ */
+internal fun hairlinesAt(heights: List<Int>): List<Int> {
+    val lines = mutableListOf<Int>()
+    var top = 0
+    var seen = false
+    for (height in heights) {
+        if (height > 0) {
+            if (seen) lines += top
+            seen = true
+        }
+        top += height
+    }
+    return lines
+}
+
 /** The name of a control that has no row of its own, set above it. */
 @Composable
 internal fun Caption(text: String, modifier: Modifier = Modifier) {

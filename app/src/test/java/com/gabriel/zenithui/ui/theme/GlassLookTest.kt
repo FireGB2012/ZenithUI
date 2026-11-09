@@ -110,6 +110,32 @@ class GlassLookTest {
     }
 
     @Test
+    fun `with no wallpaper to read, a sheet or an open folder is not see-through`() {
+        // Behind a sheet is the home screen, not the wallpaper: its words must not sit over the icons.
+        for (dark in listOf(true, false)) for (body in GlassBody.entries) {
+            for (solid in listOf(COVERING_BODY, 0.65f, 1.2f)) {
+                val sheet = look(solid = solid, dark = dark, body = body)
+                assertTrue(sheet.covers)
+                assertEquals(1f, fallbackBody(sheet, dark), 0f)
+            }
+        }
+    }
+
+    @Test
+    fun `with no wallpaper to read, a floating control still lets a live wallpaper show through`() {
+        for (dark in listOf(true, false)) for (body in GlassBody.entries) for (material in GlassMaterial.entries) {
+            // The dock, the pills, the bar a widget is resized with; the person's Solid glass included.
+            for (solid in listOf(0f, 0.35f, 0.45f, 0.5f)) {
+                val pane = look(material, solid = solid, dark = dark, body = body)
+                assertFalse(pane.covers)
+                assertTrue(fallbackBody(pane, dark) <= 0.94f)
+            }
+        }
+        // But with enough of a body of its own to be seen, and to read a word on.
+        for (dark in listOf(true, false)) assertTrue(fallbackBody(look(GlassMaterial.Clear, dark = dark), dark) > 0.3f)
+    }
+
+    @Test
     fun `every number the shader is given is one it can use`() {
         for (material in GlassMaterial.entries) for (dark in listOf(true, false)) for (body in GlassBody.entries) {
             for (strength in listOf(0f, 0.2f, 0.8f, 1.2f, 5f)) {

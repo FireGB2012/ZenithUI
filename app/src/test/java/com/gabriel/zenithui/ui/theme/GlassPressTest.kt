@@ -103,7 +103,7 @@ class GlassPressTest {
     }
 
     @Test
-    fun `words on tinted glass are dark on a light accent and white on a deep one`() {
+    fun `words on a pill of the accent are dark on a light accent and white on a deep one`() {
         assertEquals(Color(0xFF0B0C10), inkOnTint(Color(0xFFFFB86B)))
         assertEquals(Color(0xFF0B0C10), inkOnTint(Color(0xFF9FE3FF)))
         assertEquals(Color.White, inkOnTint(Color(0xFF5B3FD9)))

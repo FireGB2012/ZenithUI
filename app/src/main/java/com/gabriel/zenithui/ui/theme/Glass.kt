@@ -84,16 +84,14 @@ fun Modifier.glass(
     strength: Float = 1f,
     opacity: Float = 1f,
     border: Boolean = true,
-    /** Extra body for surfaces that must stay readable over busy content, such as sheets. */
+    /**
+     * Extra body for surfaces that must stay readable over busy content, such as sheets. From
+     * [COVERING_BODY] the pane is one that covers the home screen, as a sheet does.
+     */
     solid: Float = 0f,
     material: GlassMaterial = GlassMaterial.Regular,
-    /** The soft shadow the pane floats on. Off for glass lying flat inside other glass. */
+    /** The soft shadow the pane floats on. Off for a pane that fills the screen, as the drawer does. */
     shadow: Boolean = true,
-    /**
-     * Coloured glass in [tint] rather than a neutral veil: the accent's glass, for the one button
-     * that moves you on. It bends the wallpaper like clear glass and carries its own readability.
-     */
-    tinted: Boolean = false,
     /** How the pane moves under a finger, if it does: see [GlassMotion]. */
     motion: GlassMotion? = null,
     /** Whether [motion] answers a finger now: off for a button that cannot be pressed. */
@@ -122,7 +120,6 @@ fun Modifier.glass(
         tint = if (tint.isSpecified) tint else palette.glassTint,
         border = border,
         depth = LocalGlassBody.current,
-        tinted = tinted,
     ).tuned(tuning, if (tint.isSpecified) tint else palette.glassTint)
     val lens = rememberLens(levels)
     var origin by remember { mutableStateOf(Offset.Zero) }
@@ -304,32 +301,9 @@ internal fun glassLook(
     border: Boolean = true,
     /** How much body the person asked the glass to have. Clear is the glass with nothing added. */
     depth: GlassBody = GlassBody.Clear,
-    /** Coloured glass in [tint]: see `glass(tinted = ...)`. */
-    tinted: Boolean = false,
 ): GlassLook {
     val clear = material == GlassMaterial.Clear
     val amount = strength.coerceIn(0f, 1.4f)
-    if (tinted) {
-        // Clear glass's bend under a coat of the accent, about three fifths of it, so the wallpaper
-        // still shows through and bends at the rim. The colour already carries the words on it, so
-        // the veil hardly needs to thicken.
-        return GlassLook(
-            refraction = 1f * (0.35f + 0.65f * min(amount, 1f)),
-            frost = 0.25f,
-            dispersion = 0.06f * min(amount, 1f),
-            shine = if (border) 0.32f + 0.26f * min(amount, 1.2f) else 0f,
-            vibrance = 1.30f,
-            wash = tint.copy(alpha = 0.58f),
-            adapt = 0.10f,
-            opacity = opacity.coerceIn(0f, 1f),
-            mirror = if (border) MIRROR_CLEAR * min(amount, 1f) else 0f,
-            glow = if (border) GLOW else 0f,
-            gather = GATHER_CLEAR,
-            rimmed = border,
-            relief = if (border) min(amount, 1f) else 0f,
-            tinted = true,
-        )
-    }
     val body = (solid + depth.solid).coerceIn(0f, 1.5f)
     // A neutral veil, as Apple's glass has: nothing of the theme in it. (The Glass studio can still
     // add some: see tuned.)
@@ -361,12 +335,33 @@ internal fun glassLook(
         rimmed = border,
         // Turning the glass down flattens it: a slab at full strength, a sheet of light at none.
         relief = if (border) min(amount, 1f) else 0f,
+        // Asked for by what the pane is, not by how much body the person likes their glass with:
+        // Solid glass makes the dock fuller, not a lid over the wallpaper.
+        covers = solid >= COVERING_BODY,
     )
 }
 
 /**
- * The ink for words on tinted glass or a pill of the accent: dark on anything lighter than a mid
- * tone, white on a deep colour. White on Sunset's orange, or dark on violet, was hard to read.
+ * The body from which a pane covers what is behind it rather than floating over the wallpaper:
+ * a sheet's, an open folder's, the drawer's. Floating controls ask for less.
+ */
+internal const val COVERING_BODY = 0.6f
+
+/**
+ * How thick the frosted body is that a pane gets of its own when Zenith cannot read the wallpaper
+ * (a live wallpaper, or setup). A floating control keeps a light one, so the live wallpaper still
+ * shows through it; one with more veil, and so words on it, gets more. A pane that [GlassLook.covers]
+ * what is behind it is not see-through at all: behind a sheet is the home screen, not the
+ * wallpaper, and its words would sit over the icons.
+ */
+internal fun fallbackBody(look: GlassLook, dark: Boolean): Float {
+    if (look.covers) return 1f
+    return ((if (dark) 0.22f else 0.28f) + 1.3f * look.wash.alpha).coerceAtMost(0.94f)
+}
+
+/**
+ * The ink for words on a pill of the accent: dark on anything lighter than a mid tone, white on a
+ * deep colour. White on Sunset's orange, or dark on violet, was hard to read.
  */
 fun inkOnTint(fill: Color): Color = if (fill.luminance() > 0.3f) Color(0xFF0B0C10) else Color.White
 
@@ -532,15 +527,8 @@ internal fun DrawScope.drawLiquidGlass(
     } else {
         // Nothing readable behind (a live wallpaper, or setup): a frosted body of its own, lit
         // from the top, so the pane still reads as glass rather than a flat card.
-        if (look.tinted) {
-            // Tinted glass keeps its colour, a little fuller, rather than turning into a white slab.
-            drawRect(look.wash.copy(alpha = 0.88f), size = paneSize, alpha = look.opacity)
-        } else {
-            val base = if (dark) Color(0xFF181B24) else Color.White
-            // Light for floating controls, much fuller for sheets, whose text sits over the page.
-            val bodyAlpha = (if (dark) 0.22f else 0.28f) + 1.3f * look.wash.alpha
-            drawRect(base.copy(alpha = bodyAlpha.coerceAtMost(0.94f)), size = paneSize, alpha = look.opacity)
-        }
+        val base = if (dark) Color(0xFF181B24) else Color.White
+        drawRect(base.copy(alpha = fallbackBody(look, dark)), size = paneSize, alpha = look.opacity)
         drawRect(
             Brush.verticalGradient(
                 0f to Color.White.copy(alpha = if (dark) 0.10f else 0.30f),

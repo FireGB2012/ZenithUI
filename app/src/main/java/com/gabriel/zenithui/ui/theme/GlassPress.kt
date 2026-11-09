@@ -29,8 +29,8 @@ import kotlin.math.min
 /**
  * How a pane of glass answers a finger, after the four buttons of the Liquid Glass design.
  *
- * - **Flex** swells and lights up from the fingertip: plain glass buttons, in sheets.
- * - **Jelly** squishes and wobbles back: tinted glass, the one button that moves you on.
+ * - **Flex** swells and lights up from the fingertip: plain glass buttons, and the grey ones.
+ * - **Jelly** squishes and wobbles back: the main button, the one that moves you on.
  * - **Lean** swells and leans towards the finger: clear glass over the wallpaper or the dark.
  * - **Drag** swells most, for a lens that is picked up and moved: the thumb of a row of options.
  */

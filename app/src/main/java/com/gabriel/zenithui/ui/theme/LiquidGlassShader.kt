@@ -383,8 +383,12 @@ internal data class GlassLook(
     val rimmed: Boolean = true,
     /** How far the pane stands out as a solid slab, shaded and glinting: 0 a flat sheet of light, 1 fully. */
     val relief: Float = 0f,
-    /** Coloured glass: [wash] is its colour, and with nothing readable behind it the body keeps that colour. */
-    val tinted: Boolean = false,
+    /**
+     * The pane covers what is behind it rather than floating over the wallpaper: a sheet, an open
+     * folder, the drawer. Behind those is the home screen, so with no wallpaper to show their own
+     * frosted body is not see-through (see [fallbackBody]).
+     */
+    val covers: Boolean = false,
 )
 
 /** A finger on a pane: where, in pane pixels; how far its glow has spread; and how bright it is. */

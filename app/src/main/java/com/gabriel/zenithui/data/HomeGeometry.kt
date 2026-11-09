@@ -59,6 +59,12 @@ class HomeGeometry(
     /** From the bottom of a row's labels to the bottom edge of the row. */
     val underInset: Int = (rowHeight - topInset - icon - label).coerceAtLeast(0)
 
+    /**
+     * From the bottom of a widget a whole number of rows tall to the bottom edge of its last row:
+     * the strip its name is written in, and the gap under that.
+     */
+    val underWidget: Int = label + underInset
+
     /** Where an icon is drawn inside its own cell. */
     val iconFrame: PxRect = PxRect(sideInset, topInset, sideInset + icon, topInset + icon)
 
@@ -71,18 +77,31 @@ class HomeGeometry(
     /**
      * Where a widget [spanX] columns wide and [spanY] row units tall is drawn inside the cells it
      * covers: from the left edge of the icon in its first column to the right edge of the icon in
-     * its last, and from the top of the icons in its first row to the bottom of the labels in its
-     * last. That leaves the same gap under a widget as under any icon's label. One shorter than a
-     * row, which only free placement allows, keeps its whole height.
+     * its last, and from the top of the icons in its first row to the bottom of the icons in its
+     * last, as on an iPhone. Its name goes under it in the strip the icons beside it have theirs in
+     * ([widgetNameStrip]). One shorter than a row, which only free placement allows, keeps its
+     * whole height.
      */
     fun widgetFrame(spanX: Int, spanY: Int): PxRect {
         val bottom = (spanY * unitHeight).roundToInt()
         val right = spanX * cellWidth - sideInsetEnd
         return if (spanY >= ROW_UNITS) {
-            PxRect(sideInset, topInset, right, bottom - underInset)
+            PxRect(sideInset, topInset, right, bottom - underWidget)
         } else {
             PxRect(sideInset, 0, right, bottom)
         }
+    }
+
+    /**
+     * Where a widget's name is written, inside the cells the widget covers: straight under its
+     * [widgetFrame] and as wide as it, in the same strip as the names of the icons in its last
+     * row, so the gap under it is the gap under theirs. It is empty when labels are off, and for a
+     * widget shorter than a row, whose frame takes all of its height.
+     */
+    fun widgetNameStrip(spanX: Int, spanY: Int): PxRect {
+        val frame = widgetFrame(spanX, spanY)
+        val strip = if (spanY >= ROW_UNITS) label else 0
+        return PxRect(frame.left, frame.bottom, frame.right, frame.bottom + strip)
     }
 
     /**
@@ -135,6 +154,32 @@ class HomeGeometry(
         /** The height of the strip an 11sp label sits in, in dp. */
         const val LABEL_DP = 20f
 
+        /**
+         * The band the Search pill sits in, between the page and the dock, in dp. Like the dock it
+         * is a fixed height rather than one taken from the page: the page's rows are worked out
+         * from what the band and the dock leave, so a band sized from the page would change the
+         * rows, which would change the band, and the two would never settle.
+         */
+        const val SEARCH_BAND_DP = 44f
+
+        /** How tall the Search pill is, in the middle of its band, in dp. */
+        const val SEARCH_PILL_HEIGHT_DP = 32f
+
+        /**
+         * How tall the floating glass dock is, in dp: the biggest icon a page can have, 68 dp, with
+         * [DOCK_MARGIN_DP] above and below it. It does not follow the page, for the band's reason.
+         */
+        const val DOCK_HEIGHT_DP = 92f
+
+        /** How far the floating dock stands in from the left and right edges of the screen, in dp. */
+        const val DOCK_SIDE_INSET_DP = 10f
+
+        /** The floating dock's corners, as round as an iPhone's, in dp. */
+        const val DOCK_CORNER_DP = 36f
+
+        /** The corners of every widget, whatever its size, in dp. */
+        const val WIDGET_CORNER_DP = 22f
+
         /** How much of its share of an over-full dock an icon may take, leaving the rest as gaps. */
         private const val DOCK_FILL = 0.9f
 
@@ -142,14 +187,14 @@ class HomeGeometry(
         private const val DOCK_MARGIN_DP = 12f
 
         /**
-         * How big an icon is, worked out from the cell it sits in rather than chosen: about three
-         * quarters of the cell's width, never so tall that it pushes its label out, and kept
-         * between sizes that read well.
+         * How big an icon is, worked out from the cell it sits in rather than chosen: as on an
+         * iPhone, a little under two thirds of the cell's width, kept between sizes that read well,
+         * and never so tall that it pushes its label out or so wide that it meets its neighbours.
          */
         fun iconSizeDp(cellWidthDp: Float, rowHeightDp: Float, showLabels: Boolean): Float {
             val labelSpace = if (showLabels) 24f else 4f
             return minOf(
-                (cellWidthDp * 0.75f).coerceIn(54f, 72f),
+                (cellWidthDp * 0.64f).coerceIn(52f, 68f),
                 (rowHeightDp - labelSpace - 8f).coerceAtLeast(28f),
                 (cellWidthDp - 8f).coerceAtLeast(28f),
             )

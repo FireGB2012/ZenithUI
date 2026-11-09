@@ -1363,7 +1363,8 @@ private fun BoxScope.ResizeFrame(
     val side = geometry.sideInset.toFloat()
     val sideEnd = geometry.sideInsetEnd.toFloat()
     val topInset = geometry.topInset.toFloat()
-    val underInset = geometry.underInset.toFloat()
+    // A widget ends where its last row's icons end, with its name in the strip under it.
+    val underWidget = geometry.underWidget.toFloat()
     val pageRows = unitRows / ROW_UNITS
 
     // Where an app's picture starts and ends for each number of rows it could span, from the same
@@ -1387,7 +1388,7 @@ private fun BoxScope.ResizeFrame(
     fun restingRight(spanX: Int) = spanX * cellWidthPx - sideEnd
     fun restingBottom(spanY: Int) = when {
         isApp -> appBottom[rowsOf(spanY)]
-        spanY >= ROW_UNITS -> spanY * cellHeightPx - underInset
+        spanY >= ROW_UNITS -> spanY * cellHeightPx - underWidget
         else -> spanY * cellHeightPx
     }
 
@@ -1416,7 +1417,7 @@ private fun BoxScope.ResizeFrame(
         return when {
             // Whole rows: whichever height's picture ends nearest the finger.
             isApp -> spanX to (((1..room).minByOrNull { abs(appBottom[it] - b) } ?: 1) * ROW_UNITS)
-            free -> spanX to ((b + underInset) / cellHeightPx).roundToInt().coerceIn(1, unitRows - live.row)
+            free -> spanX to ((b + underWidget) / cellHeightPx).roundToInt().coerceIn(1, unitRows - live.row)
             else -> spanX to (((1..room).minByOrNull { abs(restingBottom(it * ROW_UNITS) - b) } ?: 1) * ROW_UNITS)
         }
     }

@@ -22,6 +22,13 @@ class HomeGeometryTest {
     /** The Pixel 10a's page: 1080 px less the page margins, at 2.625 px per dp, 4 by 5. */
     private val pixel = HomeGeometry(width = 1016, height = 1724, columns = 4, rows = 5, density = 2.625f, showLabels = true)
 
+    /**
+     * The Pixel 10a on the iPhone grid, 4 by 6, at 2.625 px per dp: a page as wide as its 1080 px
+     * (411 dp) screen, and as tall as its 2424 px (923 dp) less the 230 dp, 604 px, that the
+     * status bar, the Search band and the dock take.
+     */
+    private val four = HomeGeometry(width = 1080, height = 1820, columns = 4, rows = 6, density = 2.625f, showLabels = true)
+
     @Test
     fun `every cell is the same size and the spare pixels are shared between the edges`() = everyPage { g ->
         assertEquals(g.width / g.columns, g.cellWidth)
@@ -54,17 +61,30 @@ class HomeGeometryTest {
     }
 
     @Test
-    fun `a widget runs from the top of its icons to the bottom of its last labels`() = everyPage { g ->
+    fun `a widget runs from the top of its first icons to the bottom of its last icons`() = everyPage { g ->
         for (rows in 1..g.rows) {
             val widget = g.widgetFrame(2, rows * ROW_UNITS)
             assertEquals(g.iconFrame.top, widget.top)
-            assertEquals((rows - 1) * g.rowHeight + g.iconFrame.bottom + g.label, widget.bottom)
+            assertEquals((rows - 1) * g.rowHeight + g.iconFrame.bottom, widget.bottom)
         }
     }
 
     @Test
-    fun `the gap under a widget is the gap under a label`() = everyPage { g ->
-        assertEquals(g.underInset, 2 * g.rowHeight - g.widgetFrame(2, 2 * ROW_UNITS).bottom)
+    fun `a widget's name sits in the strip under its last icons, as wide as the widget`() = everyPage { g ->
+        for (spanX in 1..g.columns) for (rows in 1..g.rows) {
+            val widget = g.widgetFrame(spanX, rows * ROW_UNITS)
+            val name = g.widgetNameStrip(spanX, rows * ROW_UNITS)
+            // Straight under the widget and as wide as it...
+            assertEquals(widget.left, name.left)
+            assertEquals(widget.right, name.right)
+            assertEquals(widget.bottom, name.top)
+            // ...in the strip the names of the icons beside it are written in, with the same gap
+            // under it as under theirs.
+            assertEquals((rows - 1) * g.rowHeight + g.iconFrame.bottom, name.top)
+            assertEquals(g.label, name.height)
+            assertEquals(g.underInset, rows * g.rowHeight - name.bottom)
+            assertEquals(g.underWidget, rows * g.rowHeight - widget.bottom)
+        }
     }
 
     @Test
@@ -81,6 +101,17 @@ class HomeGeometryTest {
         assertEquals(0, strip.top)
         assertEquals((2 * pixel.unitHeight).roundToInt(), strip.bottom)
         assertEquals(pixel.iconFrame.left, strip.left)
+        // That leaves no room under it for a name.
+        assertEquals(0, pixel.widgetNameStrip(4, 2).height)
+    }
+
+    @Test
+    fun `a 2x2 widget on the four grid is within a tenth of square`() {
+        // A row on the Pixel 10a's iPhone grid is about 1.12 times a column, as an iPhone's is...
+        assertEquals(1.12f, four.rowHeight.toFloat() / four.cellWidth, 0.01f)
+        // ...so a widget two icons across and two down comes out nearly square.
+        val small = four.widgetFrame(2, 2 * ROW_UNITS)
+        assertEquals(1f, small.height.toFloat() / small.width, 0.1f)
     }
 
     @Test
@@ -154,10 +185,10 @@ class HomeGeometryTest {
         // Six rows a pixel apart in height. The icons shrink to fit the shorter rows, and a dock
         // that shrank with them would hand the page its pixel back, the icons would grow again,
         // and the two would chase each other on every frame.
-        val roomier = HomeGeometry(1016, 1338, columns = 5, rows = 6, density = 2.625f, showLabels = true)
-        val tighter = HomeGeometry(1016, 1337, columns = 5, rows = 6, density = 2.625f, showLabels = true)
-        assertEquals(139, roomier.icon)
-        assertEquals(138, tighter.icon)
+        val roomier = HomeGeometry(1016, 1320, columns = 5, rows = 6, density = 2.625f, showLabels = true)
+        val tighter = HomeGeometry(1016, 1319, columns = 5, rows = 6, density = 2.625f, showLabels = true)
+        assertEquals(136, roomier.icon)
+        assertEquals(135, tighter.icon)
         assertEquals(roomier.dockHeight, tighter.dockHeight)
     }
 
@@ -167,20 +198,34 @@ class HomeGeometryTest {
     }
 
     @Test
+    fun `the floating dock has room for the biggest icon, and the Search band for its pill`() {
+        // Neither follows the page, so they are sized for the biggest icon a page can have.
+        val biggest = HomeGeometry.iconSizeDp(Float.MAX_VALUE, Float.MAX_VALUE, showLabels = true)
+        assertEquals(68f, biggest, 0f)
+        assertTrue(HomeGeometry.DOCK_HEIGHT_DP >= biggest + 2 * 12f)
+        assertTrue(HomeGeometry.DOCK_CORNER_DP <= HomeGeometry.DOCK_HEIGHT_DP / 2)
+        assertTrue(HomeGeometry.SEARCH_PILL_HEIGHT_DP < HomeGeometry.SEARCH_BAND_DP)
+    }
+
+    @Test
     fun `the page's left and right lines are the outer icon edges`() = everyPage { g ->
         assertEquals(g.iconFrame.left, g.leftLine)
         assertEquals((g.columns - 1) * g.cellWidth + g.iconFrame.right, g.rightLine)
     }
 
     @Test
-    fun `icons are sized as they always were`() {
-        // Three quarters of the cell, held between 54 and 72 dp...
-        assertEquals(72f, HomeGeometry.iconSizeDp(96.8f, 131f, showLabels = true), 0.001f)
-        assertEquals(58.5f, HomeGeometry.iconSizeDp(78f, 131f, showLabels = true), 0.001f)
-        // ...never so tall that the label is pushed out of the row...
+    fun `icons are about two thirds of a cell, between 52 and 68 dp`() {
+        // As on an iPhone, 0.64 of a column: 65.8 dp of the Pixel 10a's 102.9 dp columns...
+        assertEquals(0.64f * four.cellWidth / four.density, four.iconDp, 0.001f)
+        assertEquals(173, four.icon)
+        // ...and never less than 52 dp or more than 68...
+        assertEquals(52f, HomeGeometry.iconSizeDp(70f, 131f, showLabels = true), 0.001f)
+        assertEquals(68f, HomeGeometry.iconSizeDp(120f, 180f, showLabels = true), 0.001f)
+        // ...never so tall that the label is pushed out of the row, where with labels off the row
+        // gives the icon that room back...
         assertEquals(48f, HomeGeometry.iconSizeDp(96.8f, 80f, showLabels = true), 0.001f)
-        // ...and with labels off the row gives the icon that room back.
-        assertEquals(68f, HomeGeometry.iconSizeDp(96.8f, 80f, showLabels = false), 0.001f)
-        assertEquals(189, pixel.icon)
+        assertEquals(0.64f * 96.8f, HomeGeometry.iconSizeDp(96.8f, 80f, showLabels = false), 0.001f)
+        // ...and never wider than its cell less a margin.
+        assertEquals(48f, HomeGeometry.iconSizeDp(56f, 131f, showLabels = true), 0.001f)
     }
 }

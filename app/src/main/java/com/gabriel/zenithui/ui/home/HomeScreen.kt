@@ -1510,268 +1510,278 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             val baseConfiguration = androidx.compose.ui.platform.LocalViewConfiguration.current
             val quickHold = remember(baseConfiguration) { QuickHold(baseConfiguration) }
             androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalViewConfiguration provides quickHold) {
-            Column(Modifier.fillMaxSize()) {
-                // The page's left and right lines: the outer edges of the first and last columns'
-                // icons. What is written at the top starts on the left one, and the search bar
-                // runs from one to the other. They are measured from the page's own margin, which
-                // is put on separately so that it rounds to the same pixel as the page's does.
-                val geometry = drag.geometry
-                val leftLine = if (geometry != null) {
-                    with(density) { (geometry.originX + geometry.leftLine).toDp() }
-                } else {
-                    14.dp
-                }
-                val rightLine = if (geometry != null) {
-                    with(density) { (geometry.width - geometry.originX - geometry.rightLine).toDp() }
-                } else {
-                    14.dp
-                }
-                val header = HomeHeader.text(settings.header, settings.userName, hour)
-                if (HomeHeader.isLive(settings.header)) {
-                    LiveHeader(
-                        style = settings.header,
-                        modifier = Modifier
-                            .statusBarsPadding()
-                            .arriving({ arrivalClock.value }, { arrivalDepth.floatValue }, distance = 1f, from = (-28).dp, style = settings.arrival)
-                            .pointerInput(Unit) {
-                                detectTapGestures(onLongPress = {
-                                    haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
-                                    showSheet(HomeSheet.Customize)
-                                })
-                            }
-                            .padding(horizontal = PAGE_MARGIN)
-                            .padding(start = leftLine, end = rightLine, top = 8.dp, bottom = 10.dp),
-                    )
-                } else if (header != null) {
-                    Greeting(
-                        text = header,
-                        modifier = Modifier
-                            .statusBarsPadding()
-                            .arriving({ arrivalClock.value }, { arrivalDepth.floatValue }, distance = 1f, from = (-28).dp, style = settings.arrival)
-                            // Holding it opens Customise too — always reachable, however full
-                            // the page underneath is.
-                            .pointerInput(Unit) {
-                                detectTapGestures(onLongPress = {
-                                    haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
-                                    showSheet(HomeSheet.Customize)
-                                })
-                            }
-                            .padding(horizontal = PAGE_MARGIN)
-                            .padding(start = leftLine, end = rightLine, top = 8.dp, bottom = 8.dp),
-                    )
-                } else {
-                    Spacer(Modifier.statusBarsPadding().height(8.dp))
-                }
-
-                val doubleTap = Gestures.actionFor(Gestures.DOUBLE_TAP, settings.gestures)
-                val doubleTapNow by androidx.compose.runtime.rememberUpdatedState(doubleTap)
-                var pageOrigin by remember { mutableStateOf(Offset.Zero) }
-                Box(
-                    Modifier
-                        .weight(1f)
-                        .onGloballyPositioned { pageOrigin = it.positionInRoot() }
-                        .draggable(
-                            orientation = Orientation.Vertical,
-                            // With the library on the side, swiping up is left alone; swiping
-                            // down is still the swipe-down gesture.
-                            state = rememberDraggableState { delta -> pageDrag(delta) },
-                            onDragStarted = { dragKind = DRAG_UNDECIDED },
-                            onDragStopped = { velocity -> pageDragStopped(velocity) },
-                        )
-                        // A double tap waits for the second tap before a single one counts, so it
-                        // is only listened for when it has been given something to do.
-                        .pointerInput(resizingId, doubleTap != GestureActions.NONE) {
-                            detectTapGestures(
-                                onTap = { if (resizingId != null) resizingId = null },
-                                onDoubleTap = if (doubleTap == GestureActions.NONE) null else { at ->
-                                    if (resizingId == null) {
-                                        ringAt(pageOrigin + at)
-                                        runGesture(doubleTapNow)
+            // The page's left and right lines: the outer edges of the first and last columns'
+            // icons. What is written at the top starts on the left one, and the search bar
+            // runs from one to the other. They are measured from the page's own margin, which
+            // is put on separately so that it rounds to the same pixel as the page's does.
+            val geometry = drag.geometry
+            val leftLine = if (geometry != null) {
+                with(density) { (geometry.originX + geometry.leftLine).toDp() }
+            } else {
+                14.dp
+            }
+            val rightLine = if (geometry != null) {
+                with(density) { (geometry.width - geometry.originX - geometry.rightLine).toDp() }
+            } else {
+                14.dp
+            }
+            HomeLayout(
+                // What is written at the top, and under it the page and the gestures made on it.
+                pager = { room ->
+                    Column(room) {
+                        val header = HomeHeader.text(settings.header, settings.userName, hour)
+                        if (HomeHeader.isLive(settings.header)) {
+                            LiveHeader(
+                                style = settings.header,
+                                modifier = Modifier
+                                    .arriving({ arrivalClock.value }, { arrivalDepth.floatValue }, distance = 1f, from = (-28).dp, style = settings.arrival)
+                                    .pointerInput(Unit) {
+                                        detectTapGestures(onLongPress = {
+                                            haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                                            showSheet(HomeSheet.Customize)
+                                        })
                                     }
-                                },
-                                onLongPress = { if (resizingId == null) showSheet(HomeSheet.Customize) },
+                                    .padding(horizontal = PAGE_MARGIN)
+                                    .padding(start = leftLine, end = rightLine, top = 8.dp, bottom = 10.dp),
                             )
-                        },
-                ) {
-                    HorizontalPager(
-                        state = pagerState,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .nestedScroll(libraryPull)
-                            .onGloballyPositioned { coords ->
-                                val topLeft = coords.positionInRoot()
-                                pagerBounds = androidx.compose.ui.geometry.Rect(
-                                    offset = topLeft,
-                                    size = androidx.compose.ui.geometry.Size(
-                                        coords.size.width.toFloat(),
-                                        coords.size.height.toFloat(),
-                                    ),
+                        } else if (header != null) {
+                            Greeting(
+                                text = header,
+                                modifier = Modifier
+                                    .arriving({ arrivalClock.value }, { arrivalDepth.floatValue }, distance = 1f, from = (-28).dp, style = settings.arrival)
+                                    // Holding it opens Customise too — always reachable, however full
+                                    // the page underneath is.
+                                    .pointerInput(Unit) {
+                                        detectTapGestures(onLongPress = {
+                                            haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                                            showSheet(HomeSheet.Customize)
+                                        })
+                                    }
+                                    .padding(horizontal = PAGE_MARGIN)
+                                    .padding(start = leftLine, end = rightLine, top = 8.dp, bottom = 8.dp),
+                            )
+                        } else {
+                            Spacer(Modifier.height(8.dp))
+                        }
+
+                        val doubleTap = Gestures.actionFor(Gestures.DOUBLE_TAP, settings.gestures)
+                        val doubleTapNow by androidx.compose.runtime.rememberUpdatedState(doubleTap)
+                        var pageOrigin by remember { mutableStateOf(Offset.Zero) }
+                        Box(
+                            Modifier
+                                .weight(1f)
+                                .onGloballyPositioned { pageOrigin = it.positionInRoot() }
+                                .draggable(
+                                    orientation = Orientation.Vertical,
+                                    // With the library on the side, swiping up is left alone; swiping
+                                    // down is still the swipe-down gesture.
+                                    state = rememberDraggableState { delta -> pageDrag(delta) },
+                                    onDragStarted = { dragKind = DRAG_UNDECIDED },
+                                    onDragStopped = { velocity -> pageDragStopped(velocity) },
                                 )
-                            },
-                        // While something is in the air every page stays composed, so the gesture
-                        // carrying it survives being scrolled off screen.
-                        beyondViewportPageCount = if (drag.isDragging) LayoutBuilder.MAX_PAGES else 1,
-                    ) { page ->
-                        val offset = (pagerState.currentPage - page) + pagerState.currentPageOffsetFraction
-                        // The page the swipe started on, whichever way it goes: the one Stack sinks.
-                        val leaving = page == pagerState.settledPage
-                        // With movement reduced a page simply slides.
-                        val turn = PageEffects.transform(if (motion.reduced) "slide" else settings.pageEffect, offset, leaving)
-                        HomePage(
-                            page = page,
-                            active = page == pagerState.currentPage,
-                            items = layout.filter { it.page == page },
-                            settings = settings,
-                            appsByKey = appsByKey,
-                            drag = drag,
-                            resizingId = resizingId,
-                            onResize = { item, spanX, spanY ->
-                                when (item) {
-                                    is WidgetCell -> viewModel.resizeWidget(item.id, spanX, spanY)
-                                    is AppCell -> viewModel.resizeApp(item.id, spanX, rows = spanY / ROW_UNITS)
-                                    is HostedWidgetCell, is StackCell -> viewModel.resizeHosted(item.id, spanX, spanY)
-                                    else -> false
-                                }
-                            },
-                            onRestoreWidget = { item, info -> viewModel.addHostedWidget(info, replacing = item.id) },
-                            onResizeDone = { resizingId = null },
-                            onGathered = { haptic.tick() },
-                            onOpenApp = { launchApp(it) },
-                            onOpenFolder = { folder, icon -> openFolder(folder.id, icon) },
-                            onItemMenu = { showSheet(HomeSheet.Item(it.id)) },
-                            onSearch = { openDrawer(search = true) },
-                            onNoteChange = { viewModel.setNote(it) },
-                            onAmbient = { ambient = true },
-                            onDrop = { handleDrop() },
-                            dropPlan = dropPlan,
-                            freePlacement = settings.freeform && plus.active,
-                            animateEntrance = entrance,
-                            pageOffset = if (turn.parallax) offset else 0f,
-                            arrivalClock = { arrivalClock.value },
-                            arrivalDepth = { arrivalDepth.floatValue },
-                            jiggleClock = { jiggleClock.floatValue },
-                            jiggleStrength = { jiggleStrength.value },
-                            modifier = Modifier
-                                .fillMaxSize()
-                                // The page coming in is drawn over the one being left, going back
-                                // as well as going on: the pager alone draws them left to right.
-                                .zIndex(PageEffects.over(leaving))
-                                .graphicsLayer {
-                                    alpha = turn.alpha
-                                    scaleX = turn.scale * turn.squash
-                                    scaleY = turn.scale
-                                    rotationY = turn.rotationY
-                                    rotationZ = turn.rotationZ
-                                    transformOrigin = TransformOrigin(turn.pivotX, turn.pivotY)
-                                    translationX = turn.shiftX * size.width
-                                    // Further back than the default, so a turning page keeps its
-                                    // shape instead of flaring out towards the eye.
-                                    cameraDistance = 14f * this.density
-                                }
-                                .padding(horizontal = PAGE_MARGIN, vertical = 4.dp),
-                        )
-                    }
-
-                    if (layout.isEmpty()) {
-                        Text(
-                            text = if (libraryMode) "Swipe left to open your apps" else "Swipe up to open your apps",
-                            color = palette.onGlassMuted,
-                            fontSize = 14.sp,
-                            modifier = Modifier.align(Alignment.Center),
-                        )
-                    }
-                }
-
-                AnimatedVisibility(
-                    visible = !isDefaultLauncher && !hintDismissed && hintAllowed,
-                    enter = fadeIn(tween(260)) + androidx.compose.animation.expandVertically(
-                        androidx.compose.animation.core.spring(dampingRatio = 1f, stiffness = 300f)
-                    ),
-                    exit = fadeOut(tween(160)) + androidx.compose.animation.shrinkVertically(
-                        androidx.compose.animation.core.spring(dampingRatio = 1f, stiffness = 300f)
-                    ),
-                    modifier = Modifier.align(Alignment.CenterHorizontally),
-                ) {
-                    DefaultLauncherHint(
-                        onSetDefault = {
-                            runCatching {
-                                context.startActivity(
-                                    Intent(Settings.ACTION_HOME_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                // A double tap waits for the second tap before a single one counts, so it
+                                // is only listened for when it has been given something to do.
+                                .pointerInput(resizingId, doubleTap != GestureActions.NONE) {
+                                    detectTapGestures(
+                                        onTap = { if (resizingId != null) resizingId = null },
+                                        onDoubleTap = if (doubleTap == GestureActions.NONE) null else { at ->
+                                            if (resizingId == null) {
+                                                ringAt(pageOrigin + at)
+                                                runGesture(doubleTapNow)
+                                            }
+                                        },
+                                        onLongPress = { if (resizingId == null) showSheet(HomeSheet.Customize) },
+                                    )
+                                },
+                        ) {
+                            HorizontalPager(
+                                state = pagerState,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .nestedScroll(libraryPull)
+                                    .onGloballyPositioned { coords ->
+                                        val topLeft = coords.positionInRoot()
+                                        pagerBounds = androidx.compose.ui.geometry.Rect(
+                                            offset = topLeft,
+                                            size = androidx.compose.ui.geometry.Size(
+                                                coords.size.width.toFloat(),
+                                                coords.size.height.toFloat(),
+                                            ),
+                                        )
+                                    },
+                                // While something is in the air every page stays composed, so the gesture
+                                // carrying it survives being scrolled off screen.
+                                beyondViewportPageCount = if (drag.isDragging) LayoutBuilder.MAX_PAGES else 1,
+                            ) { page ->
+                                val offset = (pagerState.currentPage - page) + pagerState.currentPageOffsetFraction
+                                // The page the swipe started on, whichever way it goes: the one Stack sinks.
+                                val leaving = page == pagerState.settledPage
+                                // With movement reduced a page simply slides.
+                                val turn = PageEffects.transform(if (motion.reduced) "slide" else settings.pageEffect, offset, leaving)
+                                HomePage(
+                                    page = page,
+                                    active = page == pagerState.currentPage,
+                                    items = layout.filter { it.page == page },
+                                    settings = settings,
+                                    appsByKey = appsByKey,
+                                    drag = drag,
+                                    resizingId = resizingId,
+                                    onResize = { item, spanX, spanY ->
+                                        when (item) {
+                                            is WidgetCell -> viewModel.resizeWidget(item.id, spanX, spanY)
+                                            is AppCell -> viewModel.resizeApp(item.id, spanX, rows = spanY / ROW_UNITS)
+                                            is HostedWidgetCell, is StackCell -> viewModel.resizeHosted(item.id, spanX, spanY)
+                                            else -> false
+                                        }
+                                    },
+                                    onRestoreWidget = { item, info -> viewModel.addHostedWidget(info, replacing = item.id) },
+                                    onResizeDone = { resizingId = null },
+                                    onGathered = { haptic.tick() },
+                                    onOpenApp = { launchApp(it) },
+                                    onOpenFolder = { folder, icon -> openFolder(folder.id, icon) },
+                                    onItemMenu = { showSheet(HomeSheet.Item(it.id)) },
+                                    onSearch = { openDrawer(search = true) },
+                                    onNoteChange = { viewModel.setNote(it) },
+                                    onAmbient = { ambient = true },
+                                    onDrop = { handleDrop() },
+                                    dropPlan = dropPlan,
+                                    freePlacement = settings.freeform && plus.active,
+                                    animateEntrance = entrance,
+                                    pageOffset = if (turn.parallax) offset else 0f,
+                                    arrivalClock = { arrivalClock.value },
+                                    arrivalDepth = { arrivalDepth.floatValue },
+                                    jiggleClock = { jiggleClock.floatValue },
+                                    jiggleStrength = { jiggleStrength.value },
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        // The page coming in is drawn over the one being left, going back
+                                        // as well as going on: the pager alone draws them left to right.
+                                        .zIndex(PageEffects.over(leaving))
+                                        .graphicsLayer {
+                                            alpha = turn.alpha
+                                            scaleX = turn.scale * turn.squash
+                                            scaleY = turn.scale
+                                            rotationY = turn.rotationY
+                                            rotationZ = turn.rotationZ
+                                            transformOrigin = TransformOrigin(turn.pivotX, turn.pivotY)
+                                            translationX = turn.shiftX * size.width
+                                            // Further back than the default, so a turning page keeps its
+                                            // shape instead of flaring out towards the eye.
+                                            cameraDistance = 14f * this.density
+                                        }
+                                        .padding(horizontal = PAGE_MARGIN, vertical = 4.dp),
                                 )
                             }
-                        },
-                        onDismiss = { hintDismissed = true },
-                        modifier = Modifier.padding(horizontal = 18.dp),
-                    )
-                }
 
-                PageDots(
-                    style = settings.indicator,
-                    count = pageCount,
-                    position = { pagerState.currentPage + pagerState.currentPageOffsetFraction },
-                    canAdd = pageCount < LayoutBuilder.MAX_PAGES,
-                    onAddPage = { revealPage(viewModel.addPage()) },
-                    modifier = Modifier
-                        .align(Alignment.CenterHorizontally)
-                        .arriving({ arrivalClock.value }, { arrivalDepth.floatValue }, distance = 0.7f, from = 30.dp, style = settings.arrival)
-                        .padding(vertical = 10.dp),
-                )
-
-                // From the first column's icons to the last column's, like everything on the page.
-                if (settings.searchBar) {
-                    HomeSearchBar(
-                        onSearch = { openDrawer(search = true) },
-                        modifier = Modifier
-                            .arriving({ arrivalClock.value }, { arrivalDepth.floatValue }, distance = 0.85f, from = 40.dp, style = settings.arrival)
-                            .padding(horizontal = PAGE_MARGIN)
-                            .padding(start = leftLine, end = rightLine, bottom = 10.dp),
-                    )
-                }
-
-                if (settings.showDock) DockBar(
-                    keys = settings.dock,
-                    appsByKey = appsByKey,
-                    settings = settings,
-                    highlight = overDock,
-                    animateEntrance = entrance,
-                    geometry = drag.geometry,
-                    onOpen = { launchApp(it) },
-                    onLongPress = { showSheet(HomeSheet.DrawerApp(it)) },
-                    onReorder = { from, to -> viewModel.moveInDock(from, to) },
-                    onDragOut = { key, iconCentre ->
-                        if (drag.cellWidth > 0f && drag.cellHeight > 0f) {
-                            // The cell that puts a home screen icon exactly where the dock icon was
-                            // let go; from there it is put down like any icon on the page.
-                            val iconMiddle = (drag.geometry?.topInset ?: 0) + drag.iconSizePx / 2f
-                            val ghost = Offset(
-                                iconCentre.x - drag.gridOrigin.x - drag.cellWidth / 2f,
-                                iconCentre.y - drag.gridOrigin.y - iconMiddle,
-                            )
-                            val placed = viewModel.moveDockToHome(
-                                key = key,
-                                page = pagerState.currentPage,
-                                exactCol = ghost.x / drag.cellWidth,
-                                exactRow = ghost.y / drag.cellHeight,
-                                colWidthInRowUnits = drag.cellWidth / drag.cellHeight,
-                            )
-                            if (placed != null) {
-                                drag.landing = Landing(placed, ghost)
-                            } else {
-                                Toast.makeText(context, "No room on this page", Toast.LENGTH_SHORT).show()
+                            if (layout.isEmpty()) {
+                                Text(
+                                    text = if (libraryMode) "Swipe left to open your apps" else "Swipe up to open your apps",
+                                    color = palette.onGlassMuted,
+                                    fontSize = 14.sp,
+                                    modifier = Modifier.align(Alignment.Center),
+                                )
                             }
                         }
-                    },
-                    onBounds = { dockBounds = it },
-                    modifier = Modifier
-                        .arriving({ arrivalClock.value }, { arrivalDepth.floatValue }, distance = 1f, from = 56.dp, style = settings.arrival)
-                        .padding(horizontal = PAGE_MARGIN)
-                        .navigationBarsPadding()
-                        .padding(bottom = 10.dp),
-                ) else {
-                    // Without the dock the pages reach down to the gesture bar instead.
-                    Spacer(Modifier.navigationBarsPadding().height(10.dp))
-                }
-            }
+                    }
+                },
+                // Under the page: the hint to make Zenith the home app, the dots and the search bar.
+                searchBand = { band ->
+                    Column(band) {
+                        AnimatedVisibility(
+                            visible = !isDefaultLauncher && !hintDismissed && hintAllowed,
+                            enter = fadeIn(tween(260)) + androidx.compose.animation.expandVertically(
+                                androidx.compose.animation.core.spring(dampingRatio = 1f, stiffness = 300f)
+                            ),
+                            exit = fadeOut(tween(160)) + androidx.compose.animation.shrinkVertically(
+                                androidx.compose.animation.core.spring(dampingRatio = 1f, stiffness = 300f)
+                            ),
+                            modifier = Modifier.align(Alignment.CenterHorizontally),
+                        ) {
+                            DefaultLauncherHint(
+                                onSetDefault = {
+                                    runCatching {
+                                        context.startActivity(
+                                            Intent(Settings.ACTION_HOME_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                        )
+                                    }
+                                },
+                                onDismiss = { hintDismissed = true },
+                                modifier = Modifier.padding(horizontal = 18.dp),
+                            )
+                        }
+
+                        PageDots(
+                            style = settings.indicator,
+                            count = pageCount,
+                            position = { pagerState.currentPage + pagerState.currentPageOffsetFraction },
+                            canAdd = pageCount < LayoutBuilder.MAX_PAGES,
+                            onAddPage = { revealPage(viewModel.addPage()) },
+                            modifier = Modifier
+                                .align(Alignment.CenterHorizontally)
+                                .arriving({ arrivalClock.value }, { arrivalDepth.floatValue }, distance = 0.7f, from = 30.dp, style = settings.arrival)
+                                .padding(vertical = 10.dp),
+                        )
+
+                        // From the first column's icons to the last column's, like everything on the page.
+                        if (settings.searchBar) {
+                            HomeSearchBar(
+                                onSearch = { openDrawer(search = true) },
+                                modifier = Modifier
+                                    .arriving({ arrivalClock.value }, { arrivalDepth.floatValue }, distance = 0.85f, from = 40.dp, style = settings.arrival)
+                                    .padding(horizontal = PAGE_MARGIN)
+                                    .padding(start = leftLine, end = rightLine, bottom = 10.dp),
+                            )
+                        }
+                    }
+                },
+                dock = { room ->
+                    if (settings.showDock) DockBar(
+                        keys = settings.dock,
+                        appsByKey = appsByKey,
+                        settings = settings,
+                        highlight = overDock,
+                        animateEntrance = entrance,
+                        geometry = drag.geometry,
+                        onOpen = { launchApp(it) },
+                        onLongPress = { showSheet(HomeSheet.DrawerApp(it)) },
+                        onReorder = { from, to -> viewModel.moveInDock(from, to) },
+                        onDragOut = { key, iconCentre ->
+                            if (drag.cellWidth > 0f && drag.cellHeight > 0f) {
+                                // The cell that puts a home screen icon exactly where the dock icon was
+                                // let go; from there it is put down like any icon on the page.
+                                val iconMiddle = (drag.geometry?.topInset ?: 0) + drag.iconSizePx / 2f
+                                val ghost = Offset(
+                                    iconCentre.x - drag.gridOrigin.x - drag.cellWidth / 2f,
+                                    iconCentre.y - drag.gridOrigin.y - iconMiddle,
+                                )
+                                val placed = viewModel.moveDockToHome(
+                                    key = key,
+                                    page = pagerState.currentPage,
+                                    exactCol = ghost.x / drag.cellWidth,
+                                    exactRow = ghost.y / drag.cellHeight,
+                                    colWidthInRowUnits = drag.cellWidth / drag.cellHeight,
+                                )
+                                if (placed != null) {
+                                    drag.landing = Landing(placed, ghost)
+                                } else {
+                                    Toast.makeText(context, "No room on this page", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        },
+                        onBounds = { dockBounds = it },
+                        modifier = room
+                            .arriving({ arrivalClock.value }, { arrivalDepth.floatValue }, distance = 1f, from = 56.dp, style = settings.arrival)
+                            .padding(horizontal = PAGE_MARGIN)
+                            .navigationBarsPadding()
+                            .padding(bottom = 10.dp),
+                    ) else {
+                        // Without the dock the pages reach down to the gesture bar instead.
+                        Spacer(room.navigationBarsPadding().height(10.dp))
+                    }
+                },
+                // Nothing floats over the page yet.
+                overlays = {},
+            )
             }
         }
 

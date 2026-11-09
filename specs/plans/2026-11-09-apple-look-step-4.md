@@ -75,10 +75,10 @@ the app drawer and "Add to home screen"; and "The rule for glass".
 
 ### Part 3: the long-press menus and "Add to home screen"
 
-- [ ] The long-press menus (on the home screen and in the drawer) in Apple's groups: the app's
+- [x] The long-press menus (on the home screen and in the drawer) in Apple's groups: the app's
   shortcuts, what can be done, what cannot be undone in red, and Customise. Each row an iOS row.
-- [ ] Customise, How it works (the tips on one card, in setup too) and Lock with a gesture.
-- [ ] `PinItemActivity` on `ZenithSheet`: the picture and whose it is on a card, Not now and Add.
+- [x] Customise (solid tiles), How it works (the tips on one card) and Lock with a gesture.
+- [x] `PinItemActivity` on `ZenithSheet`: the picture and whose it is on a card, Not now and Add.
 
 ### Part 4: every other sheet's insides
 

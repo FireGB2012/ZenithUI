@@ -12,26 +12,15 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.MutableTransitionState
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -44,11 +33,9 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.asImageBitmap
@@ -67,19 +54,23 @@ import com.gabriel.zenithui.data.ShortcutCell
 import com.gabriel.zenithui.data.ZenithWidgetHost
 import com.gabriel.zenithui.ui.common.ZenithButton
 import com.gabriel.zenithui.ui.common.LocalMotionLevel
-import com.gabriel.zenithui.ui.common.Motion
 import com.gabriel.zenithui.ui.common.MotionLevel
 import com.gabriel.zenithui.ui.common.rememberAnimationsEnabled
-import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.ZenithShapes
 import com.gabriel.zenithui.ui.theme.ZenithTheme
-import com.gabriel.zenithui.ui.theme.glass
-import kotlinx.coroutines.flow.first
+import androidx.compose.runtime.setValue
+import com.gabriel.zenithui.ui.home.ZenithSheet
+import com.gabriel.zenithui.ui.home.SHEET_GONE_MS
+import com.gabriel.zenithui.ui.settings.Section
+import com.gabriel.zenithui.ui.theme.LocalApple
+import com.gabriel.zenithui.ui.theme.ButtonKind
+import kotlinx.coroutines.delay
+import androidx.compose.foundation.layout.fillMaxSize
 
 /**
  * Where another app's "Add to home screen" lands: Chrome's shortcut to a page, a messaging app's
  * shortcut to one chat, an app's own "add this widget". Android hands it to the home app, and
- * Zenith shows it on a card of glass over the app that asked. Say yes and it goes on the first
+ * Zenith shows it on one of its own sheets over the app that asked. Say yes and it goes on the first
  * free spot of the home screen, and you stay where you were; the next time you go home it is there.
  */
 class PinItemActivity : ComponentActivity() {
@@ -253,90 +244,75 @@ private class Card(
 )
 
 /**
- * The card: what is to be added and whose it is, and two answers. It comes up from the foot of
- * the screen like any of Zenith's sheets, and goes back down whichever answer is given.
+ * The card: what is to be added and whose it is, and two answers, on one of Zenith's own sheets.
+ * It comes up from the foot of the screen as they all do, and goes back down whichever answer is
+ * given, or when it is pulled down, its X or the space above it is tapped, or back is pressed.
+ * Once it has gone, so has the screen.
  */
 @Composable
 private fun PinCard(card: Card, shape: Shape, closing: Boolean, onGone: () -> Unit) {
-    val palette = LocalPalette.current
-    val reduced = LocalMotionLevel.current.reduced
-    val shown = remember { MutableTransitionState(false).apply { targetState = true } }
-    if (closing) shown.targetState = false
-    // Once it has been put away, and has finished going, the screen closes.
-    LaunchedEffect(shown) {
-        snapshotFlow { !shown.targetState && shown.isIdle }.first { it }
-        onGone()
-    }
-    BackHandler { shown.targetState = false }
-
-    Box(Modifier.fillMaxSize()) {
-        AnimatedVisibility(visibleState = shown, enter = fadeIn(tween(240)), exit = fadeOut(tween(220))) {
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.35f))
-                    .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) { shown.targetState = false },
-            )
+    val apple = LocalApple.current
+    var open by remember { mutableStateOf(true) }
+    // Android's answer about a widget closes it from outside.
+    LaunchedEffect(closing) { if (closing) open = false }
+    // Once it has been put away, and has had time to go, the screen closes.
+    LaunchedEffect(open) {
+        if (!open) {
+            delay(SHEET_GONE_MS.toLong())
+            onGone()
         }
-        AnimatedVisibility(
-            visibleState = shown,
-            enter = if (reduced) fadeIn(tween(Motion.REDUCED_MS)) else slideInVertically(Motion.sheet()) { it } + fadeIn(tween(220)),
-            exit = if (reduced) fadeOut(tween(Motion.REDUCED_MS)) else slideOutVertically(tween(300)) { it } + fadeOut(tween(240)),
-            modifier = Modifier.align(Alignment.BottomCenter),
-        ) {
-            Column(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(10.dp)
-                    .glass(RoundedCornerShape(34.dp), strength = 1.2f, solid = 0.65f)
-                    .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) { }
-                    .navigationBarsPadding()
-                    .padding(horizontal = 20.dp, vertical = 18.dp),
-            ) {
-                Text("Add to home screen", color = palette.onGlass, fontSize = 19.sp, fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.height(16.dp))
-                if (card.wide) {
-                    Box(
-                        Modifier
-                            .fillMaxWidth()
-                            .height(150.dp)
-                            .clip(RoundedCornerShape(20.dp))
-                            .background(palette.onGlass.copy(alpha = 0.08f)),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        card.picture?.let { Image(it, contentDescription = null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize().padding(10.dp)) }
-                    }
-                    Spacer(Modifier.height(12.dp))
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (!card.wide) {
-                        Box(
-                            Modifier
-                                .size(56.dp)
-                                .clip(shape)
-                                .background(palette.onGlass.copy(alpha = 0.1f)),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            card.picture?.let { Image(it, contentDescription = null, modifier = Modifier.fillMaxSize()) }
-                        }
-                        Spacer(Modifier.width(14.dp))
-                    }
-                    Column(Modifier.weight(1f)) {
-                        Text(card.label, color = palette.onGlass, fontSize = 16.sp, fontWeight = FontWeight.Medium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        Text("From ${card.from}", color = palette.onGlassMuted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    }
-                }
-                Spacer(Modifier.height(20.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    ZenithButton(text = "Not now", onClick = { shown.targetState = false }, modifier = Modifier.weight(1f))
-                    ZenithButton(
-                        text = "Add",
-                        filled = true,
-                        onClick = { if (card.add()) shown.targetState = false },
-                        modifier = Modifier.weight(1f),
-                    )
+    }
+    BackHandler(enabled = open) { open = false }
+
+    ZenithSheet(visible = open, onDismiss = { open = false }, title = "Add to home screen") {
+        Section {
+            if (card.wide) {
+                // A widget's picture, at its own shape, in a well of the card-on-a-card grey.
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(start = 12.dp, end = 12.dp, top = 12.dp)
+                        .height(150.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(apple.raised),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    card.picture?.let { Image(it, contentDescription = null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize().padding(10.dp)) }
                 }
             }
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (!card.wide) {
+                    Box(
+                        Modifier
+                            .size(56.dp)
+                            .clip(shape)
+                            .background(apple.raised),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        card.picture?.let { Image(it, contentDescription = null, modifier = Modifier.fillMaxSize()) }
+                    }
+                    Spacer(Modifier.width(14.dp))
+                }
+                Column(Modifier.weight(1f)) {
+                    Text(card.label, color = apple.words, fontSize = 16.sp, fontWeight = FontWeight.Medium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text("From ${card.from}", color = apple.secondary, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+        }
+        Spacer(Modifier.height(18.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            ZenithButton(text = "Not now", onClick = { open = false }, modifier = Modifier.weight(1f))
+            ZenithButton(
+                text = "Add",
+                kind = ButtonKind.Main,
+                onClick = { if (card.add()) open = false },
+                modifier = Modifier.weight(1f),
+            )
         }
     }
 }

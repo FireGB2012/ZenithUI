@@ -162,6 +162,10 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 import com.gabriel.zenithui.data.server.ServerConfig
 import com.gabriel.zenithui.ui.settings.AccountActions
+import com.gabriel.zenithui.ui.settings.Section
+import com.gabriel.zenithui.ui.settings.CardRows
+import com.gabriel.zenithui.ui.theme.LocalApple
+import com.gabriel.zenithui.ui.theme.inkOnTint
 
 /**
  * How close to the side of the glass the finger itself has to be to turn the page, for items too
@@ -2861,18 +2865,28 @@ private fun DrawerAppSheet(
     onDismiss: () -> Unit,
 ) {
     ZenithSheet(visible = visible, onDismiss = onDismiss, title = label) {
+        // Grouped as the home screen's menu is: the app's own shortcuts, what can be done, and
+        // Uninstall in red on a card of its own.
         var row = 0
         ShortcutRows(shortcuts, onRun = { onShortcut(it); onDismiss() }, onAdd = { onAddShortcut(it); onDismiss() })
-        MenuRow(Icons.AutoMirrored.Rounded.OpenInNew, "Open", if (work) "In your work profile" else null, index = row++) { onOpen(); onDismiss() }
-        if (work) {
-            MenuRow(Icons.Rounded.Info, "App info", index = row) { onAppInfo(); onDismiss() }
-        } else {
-            MenuRow(Icons.Rounded.AddHome, "Add to home screen", index = row++) { onAddToHome(); onDismiss() }
-            MenuRow(Icons.Rounded.Edit, "Edit", "Its name, its icon, or no name at all", index = row++) { onEdit() }
-            // Apps go into the dock by dragging them there; the menu only offers the way back out.
-            if (pinned) MenuRow(Icons.Rounded.PushPin, "Remove from dock", index = row++) { onToggleDock(); onDismiss() }
-            MenuRow(Icons.Rounded.Info, "App info", index = row++) { onAppInfo(); onDismiss() }
-            MenuRow(Icons.Rounded.Delete, "Uninstall", danger = true, index = row) { onUninstall(); onDismiss() }
+        Section {
+            CardRows {
+                MenuRow(Icons.AutoMirrored.Rounded.OpenInNew, "Open", if (work) "In your work profile" else null, index = row++) { onOpen(); onDismiss() }
+                if (work) {
+                    MenuRow(Icons.Rounded.Info, "App info", index = row++) { onAppInfo(); onDismiss() }
+                } else {
+                    MenuRow(Icons.Rounded.AddHome, "Add to home screen", index = row++) { onAddToHome(); onDismiss() }
+                    MenuRow(Icons.Rounded.Edit, "Edit", "Its name, its icon, or no name at all", index = row++) { onEdit() }
+                    // Apps go into the dock by dragging them there; the menu only offers the way back out.
+                    if (pinned) MenuRow(Icons.Rounded.PushPin, "Remove from dock", index = row++) { onToggleDock(); onDismiss() }
+                    MenuRow(Icons.Rounded.Info, "App info", index = row++) { onAppInfo(); onDismiss() }
+                }
+            }
+        }
+        if (!work) {
+            Section {
+                MenuRow(Icons.Rounded.Delete, "Uninstall", danger = true, index = row) { onUninstall(); onDismiss() }
+            }
         }
     }
 }
@@ -2890,7 +2904,7 @@ private fun PullHint(progress: () -> Float, armed: Boolean, label: String, modif
     val shown by remember { derivedStateOf { progress() > 0.001f } }
     if (!shown) return
     val fill by animateColorAsState(if (armed) palette.accent.copy(alpha = 0.88f) else Color.Transparent, tween(160), label = "pullFill")
-    val ink by animateColorAsState(if (armed) Color(0xFF0A0B12) else palette.onGlass, tween(160), label = "pullInk")
+    val ink by animateColorAsState(if (armed) inkOnTint(palette.accent) else palette.onGlass, tween(160), label = "pullInk")
     Row(
         modifier
             .statusBarsPadding()
@@ -2929,28 +2943,26 @@ private fun PullHint(progress: () -> Float, armed: Boolean, label: String, modif
  */
 @Composable
 private fun LockHelperSheet(visible: Boolean, onOpen: () -> Unit, onDismiss: () -> Unit) {
-    val palette = LocalPalette.current
     ZenithSheet(visible = visible, onDismiss = onDismiss, title = "Lock with a gesture") {
-        Text(
-            "Android only lets a home app lock the phone through an accessibility service. Zenith's lock helper " +
-                "is one that does nothing else: it presses lock when you use the gesture, asks for no events and " +
-                "cannot see the screen. Nothing on it is read, kept or sent.",
-            color = palette.onGlass,
-            fontSize = 15.sp,
-            lineHeight = 21.sp,
+        // What it is on a card, and what to do in Android's list in grey under it.
+        Section(
+            footer = "In the list that opens, choose Zenith lock helper and turn it on. Android asks you to confirm.",
             modifier = Modifier.appearIn(delayMillis = staggerDelay(0), riseFrom = 18f),
-        )
-        Spacer(Modifier.height(12.dp))
-        Text(
-            "In the list that opens, choose Zenith lock helper and turn it on. Android asks you to confirm.",
-            color = palette.onGlassMuted,
-            fontSize = 13.sp,
-            modifier = Modifier.appearIn(delayMillis = staggerDelay(1), riseFrom = 18f),
-        )
+        ) {
+            Text(
+                "Android only lets a home app lock the phone through an accessibility service. Zenith's lock helper " +
+                    "is one that does nothing else: it presses lock when you use the gesture, asks for no events and " +
+                    "cannot see the screen. Nothing on it is read, kept or sent.",
+                color = LocalApple.current.words,
+                fontSize = 15.sp,
+                lineHeight = 21.sp,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+            )
+        }
         Spacer(Modifier.height(18.dp))
         Row(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
-            modifier = Modifier.appearIn(delayMillis = staggerDelay(2), riseFrom = 18f),
+            modifier = Modifier.appearIn(delayMillis = staggerDelay(1), riseFrom = 18f),
         ) {
             ZenithButton(text = "Not now", onClick = onDismiss, modifier = Modifier.weight(1f))
             ZenithButton(

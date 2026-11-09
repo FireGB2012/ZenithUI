@@ -39,8 +39,10 @@ import androidx.compose.ui.unit.sp
 import com.gabriel.zenithui.ui.common.appearIn
 import com.gabriel.zenithui.ui.common.staggerDelay
 import com.gabriel.zenithui.ui.theme.LocalPalette
-import com.gabriel.zenithui.ui.theme.ZenithShapes
 import com.gabriel.zenithui.ui.theme.glass
+import com.gabriel.zenithui.ui.settings.Section
+import com.gabriel.zenithui.ui.settings.CardRows
+import com.gabriel.zenithui.ui.theme.LocalApple
 
 /**
  * The last stop of setup, under the finished phone: the three moves that unlock everything else.
@@ -115,34 +117,36 @@ private val TIPS = listOf(
 /** Every gesture, for the How it works sheet. */
 @Composable
 fun TipList(startDelay: Int = 0) {
-    TIPS.forEachIndexed { index, tip ->
-        TipCard(tip = tip, delayMillis = startDelay + staggerDelay(index) * 2)
+    // One card of rows, as an iPhone lists things, each tip coming up a beat behind the one above.
+    Section {
+        CardRows {
+            TIPS.forEachIndexed { index, tip ->
+                TipRow(tip = tip, delayMillis = startDelay + staggerDelay(index) * 2)
+            }
+        }
     }
 }
 
+/** One tip: its symbol in the accent, what to do, and how, in grey. */
 @Composable
-private fun TipCard(tip: Tip, delayMillis: Int) {
-    val palette = LocalPalette.current
+private fun TipRow(tip: Tip, delayMillis: Int) {
+    val apple = LocalApple.current
+    val accent = LocalPalette.current.accent
     Row(
         Modifier
             .fillMaxWidth()
-            .appearIn(delayMillis = delayMillis, riseFrom = 26f)
-            .glass(ZenithShapes.card, strength = 0.85f)
-            .padding(14.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .appearIn(delayMillis = delayMillis, riseFrom = 14f)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.Top,
     ) {
-        Box(
-            Modifier
-                .size(40.dp)
-                .glass(ZenithShapes.tile, strength = 1.1f),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(tip.icon, contentDescription = null, tint = palette.accent, modifier = Modifier.size(20.dp))
+        Box(Modifier.size(30.dp), contentAlignment = Alignment.Center) {
+            Icon(tip.icon, contentDescription = null, tint = accent, modifier = Modifier.size(22.dp))
         }
-        Spacer(Modifier.size(14.dp))
+        Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
-            Text(tip.title, color = palette.onGlass, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-            Text(tip.body, color = palette.onGlassMuted, fontSize = 12.5.sp, lineHeight = 17.sp)
+            Text(tip.title, color = apple.words, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.size(2.dp))
+            Text(tip.body, color = apple.secondary, fontSize = 13.sp, lineHeight = 18.sp)
         }
     }
 }

@@ -59,32 +59,33 @@ the app drawer and "Add to home screen"; and "The rule for glass".
 
 ### Part 1: the rules, tests first
 
-- [ ] `GlassLookTest`: when the wallpaper cannot be read, a sheet's body and an open folder's are not
+- [x] `GlassLookTest`: when the wallpaper cannot be read, a sheet's body and an open folder's are not
   see-through, in the light and the dark; a floating control's still lets a live wallpaper show
   through, even with the person's Solid glass.
-- [ ] `CardRowsTest`: a hairline at the top of every row that shows except the first; none for a row
+- [x] `CardRowsTest`: a hairline at the top of every row that shows except the first; none for a row
   folded away to nothing; none for a card of one row or of none.
-- [ ] `GlassPressTest`: the words on a pill of the accent (the test that spoke of tinted glass).
-- [ ] `fallbackBody`, `GlassLook.covers`, `hairlinesAt`; tinted glass removed.
+- [x] `GlassPressTest`: the words on a pill of the accent (the test that spoke of tinted glass).
+- [x] `fallbackBody`, `GlassLook.covers`, `hairlinesAt`; tinted glass removed.
 
 ### Part 2: the sheet
 
-- [ ] `ZenithSheet`: on the foot of the screen, 38 dp corners, frosted; the grabber; the title in the
+- [x] `ZenithSheet`: on the foot of the screen, 38 dp corners, frosted; the grabber; the title in the
   middle, rolling over when it changes; the round X; a back chevron for a sheet with pages.
-- [ ] `CardRows`, `MenuRow` as an iOS row, `FieldBox`, `LocalOnGlass`, `SectionLabel`.
+- [x] `CardRows`, `MenuRow` as an iOS row, `FieldBox`, `LocalOnGlass`, `SectionLabel`.
 
-### Part 3: every sheet's insides
+### Part 3: the long-press menus and "Add to home screen"
 
-- [ ] Edit and Choose icon; a gesture's sheet and Lock with a gesture; the Looks' four; Plus, Theme
-  maker and Hidden apps; Glass studio, By time of day, Colour and Fonts; Wallpaper (its pages through
-  the sheet's back chevron); World clock, Countdown, Weather and Quick Toggles; Customise and How it
-  works. Glass, glassy fills and rings inside them give way to cards, fields and grey buttons.
-
-### Part 4: the long-press menus and "Add to home screen"
-
-- [ ] The long-press menu in Apple's groups: the app's shortcuts, what can be done, what cannot be
-  undone in red, and Customise. Each row an iOS row.
+- [ ] The long-press menus (on the home screen and in the drawer) in Apple's groups: the app's
+  shortcuts, what can be done, what cannot be undone in red, and Customise. Each row an iOS row.
+- [ ] Customise, How it works (the tips on one card, in setup too) and Lock with a gesture.
 - [ ] `PinItemActivity` on `ZenithSheet`: the picture and whose it is on a card, Not now and Add.
+
+### Part 4: every other sheet's insides
+
+- [ ] Edit and Choose icon; a gesture's sheet; the Looks' four; Plus, Theme maker and Hidden apps;
+  Glass studio, By time of day, Colour and Fonts; Wallpaper (its pages through the sheet's back
+  chevron); World clock, Countdown, Weather and Quick Toggles. Glass, glassy fills and rings inside
+  them give way to cards, fields and grey buttons.
 
 ### Part 5: the app drawer
 

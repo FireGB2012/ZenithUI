@@ -121,6 +121,24 @@ import com.gabriel.zenithui.ui.theme.glass
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.roundToInt
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.key
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.automirrored.rounded.ArrowBackIos
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextAlign
+import com.gabriel.zenithui.ui.theme.LocalApple
+import com.gabriel.zenithui.ui.theme.LocalOnGlass
+import com.gabriel.zenithui.ui.theme.CardKind
+import com.gabriel.zenithui.ui.common.CloseButton
+import com.gabriel.zenithui.ui.common.popIn
+import com.gabriel.zenithui.ui.common.popOut
+import com.gabriel.zenithui.ui.common.rollOver
+import com.gabriel.zenithui.ui.settings.rowPress
+import com.gabriel.zenithui.ui.settings.Section
+import com.gabriel.zenithui.ui.settings.CardRows
 
 /** How far a sheet comes up when it is pulled up, at the very most. */
 private val SHEET_GIVE = 28.dp
@@ -132,13 +150,16 @@ private val SHEET_GIVE = 28.dp
 const val SHEET_GONE_MS = 340
 
 /**
- * Bottom-anchored glass sheet. It comes up from the edge on a spring, the home screen dimming
- * behind it, and goes back the way it came.
+ * A sheet, as an iPhone's: frosted glass standing on the foot of the screen with Apple's corners
+ * along its top, the grabber, its name in the middle and a round grey X, and everything in it on
+ * solid cards ([Section] and the rows Settings is built from). It comes up from the edge on a
+ * spring, the home screen dimming behind it, and goes back the way it came. Its body covers the
+ * home screen, so it is never see-through, whether or not Zenith can read the wallpaper.
  *
  * Take hold of it and it follows your finger: down as far as you pull, up only a little and less
  * the further. Let go and it settles back, or, past a third of its own height or with a flick,
  * carries on down and is gone. Pulling down on what is inside it does the same, once that has
- * nowhere left to scroll. See [SheetPull] for the sums.
+ * nowhere left to scroll. See [SheetPull] for the sums. The X, a tap above it, and back close it.
  */
 @Composable
 fun ZenithSheet(
@@ -147,9 +168,15 @@ fun ZenithSheet(
     title: String? = null,
     /** How much of the screen the sheet may take. Settings, with its pages, gets more. */
     maxHeightFraction: Float = 0.72f,
+    /**
+     * For a sheet with pages, on any page but its first: back to the page before. A chevron in the
+     * accent stands where the title begins.
+     */
+    onBack: (() -> Unit)? = null,
+    /** What back goes back to, for anyone who hears the screen rather than sees it. */
+    backTo: String = "the page before",
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val palette = LocalPalette.current
     val reduced = LocalMotionLevel.current.reduced
     val maxHeight = LocalConfiguration.current.screenHeightDp.dp * maxHeightFraction
     val scope = rememberCoroutineScope()
@@ -271,9 +298,8 @@ fun ZenithSheet(
                     // Moved while placing rather than on a layer, so its glass looks again at
                     // where it is all the way down.
                     .offset { IntOffset(0, down().roundToInt()) }
-                    .padding(10.dp)
-                    // The regular material provides a readable body without a second opaque fill.
-                    .glass(RoundedCornerShape(34.dp), strength = 1.2f, solid = 0.65f)
+                    // Frosted, with the body of a pane that covers what is behind it.
+                    .glass(CardKind.Sheet.shape, strength = 1.2f, solid = 0.65f)
                     .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) { }
                     .nestedScroll(pullThrough)
                     .draggable(
@@ -285,30 +311,128 @@ fun ZenithSheet(
                         onDragStopped = { velocity -> letGo(velocity) },
                     )
                     .navigationBarsPadding()
-                    .padding(horizontal = 18.dp, vertical = 14.dp),
+                    .padding(bottom = 12.dp),
             ) {
-                Box(
-                    Modifier
-                        .align(Alignment.CenterHorizontally)
-                        // The handle draws out a little while the sheet is in your hand.
-                        .graphicsLayer { scaleX = 1f + 0.5f * (abs(down()) / (height * SheetPull.AWAY)).coerceIn(0f, 1f) }
-                        .width(40.dp)
-                        .height(4.dp)
-                        .clip(RoundedCornerShape(50))
-                        .background(palette.onGlass.copy(alpha = 0.25f))
+                SheetHeader(
+                    title = title,
+                    onBack = onBack,
+                    backTo = backTo,
+                    onClose = onDismiss,
+                    // The grabber draws out a little while the sheet is in your hand.
+                    stretch = { (abs(down()) / (height * SheetPull.AWAY)).coerceIn(0f, 1f) },
                 )
-                if (title != null) {
-                    Spacer(Modifier.height(14.dp))
-                    Text(title, color = palette.onGlass, fontSize = 19.sp, fontWeight = FontWeight.SemiBold)
+                // Words standing on the glass itself take the glass's grey; on a card, a card's.
+                CompositionLocalProvider(LocalOnGlass provides true) {
+                    Column(Modifier.padding(horizontal = 16.dp), content = content)
                 }
-                Spacer(Modifier.height(12.dp))
-                content()
-                Spacer(Modifier.height(8.dp))
             }
         }
     }
 }
 
+/**
+ * The head of a sheet, as an iPhone's: the grabber, drawn out by [stretch] while the sheet is pulled;
+ * the sheet's name in the middle, rolling over when it changes (up into a page, down coming back);
+ * for a sheet with pages, a chevron in the accent back to the page before; and the round grey X.
+ */
+@Composable
+private fun SheetHeader(
+    title: String?,
+    onBack: (() -> Unit)?,
+    backTo: String,
+    onClose: () -> Unit,
+    stretch: () -> Float,
+) {
+    val palette = LocalPalette.current
+    val apple = LocalApple.current
+    val reduced = LocalMotionLevel.current.reduced
+    // Where back last went, so the chevron fades away doing what it did rather than nothing.
+    val lastBack = remember { arrayOf(onBack) }
+    if (onBack != null) lastBack[0] = onBack
+    val lastBackTo = remember { arrayOf(backTo) }
+    if (onBack != null) lastBackTo[0] = backTo
+    Column(Modifier.fillMaxWidth()) {
+        Box(
+            Modifier
+                .align(Alignment.CenterHorizontally)
+                .padding(top = 6.dp)
+                .graphicsLayer { scaleX = 1f + 0.5f * stretch() }
+                .width(36.dp)
+                .height(5.dp)
+                .clip(RoundedCornerShape(50))
+                .background(apple.faint)
+        )
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .height(48.dp)
+                .padding(horizontal = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // As wide as the X, so the title stands in the middle of the sheet, not of what is left.
+            Box(Modifier.size(44.dp), contentAlignment = Alignment.Center) {
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = onBack != null,
+                    enter = popIn(reduced, from = 0.6f),
+                    exit = popOut(reduced, to = 0.6f),
+                ) {
+                    SheetBack(lastBackTo[0]) { lastBack[0]?.invoke() }
+                }
+            }
+            Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                AnimatedContent(
+                    targetState = title.orEmpty(),
+                    transitionSpec = { rollOver(reduced, down = onBack == null) },
+                    label = "sheetTitle",
+                ) { text ->
+                    Text(
+                        text,
+                        color = palette.onGlass,
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+            CloseButton(onClose)
+        }
+    }
+}
+
+/** Back to a sheet's page before: Apple's chevron in the accent, dimming while it is held. */
+@Composable
+private fun SheetBack(backTo: String, onBack: () -> Unit) {
+    val accent = LocalPalette.current.accent
+    val touch = remember { MutableInteractionSource() }
+    val pressed by touch.collectIsPressedAsState()
+    Box(
+        Modifier
+            .size(44.dp)
+            .clip(CircleShape)
+            .clickable(interactionSource = touch, indication = null, role = Role.Button, onClick = onBack)
+            .graphicsLayer { alpha = if (pressed) 0.35f else 1f },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            Icons.AutoMirrored.Rounded.ArrowBackIos,
+            contentDescription = "Back to $backTo",
+            tint = accent,
+            // The chevron sits to the left of its own box; this puts it in the middle of the button.
+            modifier = Modifier
+                .offset(x = 3.dp)
+                .size(20.dp),
+        )
+    }
+}
+
+/**
+ * One thing a menu does, as an iPhone sets it on a card: its symbol in the accent, its name, and in
+ * grey what it does. What cannot be undone is red, symbol and name. A row shades under a finger
+ * rather than bouncing, and comes up a beat behind the row above it ([index]) as the menu arrives.
+ * Rows go in a [CardRows] on a card ([Section]), which draws the hairlines between them.
+ */
 @Composable
 fun MenuRow(
     icon: ImageVector,
@@ -318,41 +442,38 @@ fun MenuRow(
     index: Int = 0,
     onClick: () -> Unit,
 ) {
-    val palette = LocalPalette.current
-    val tint = if (danger) Color(0xFFFF6B6B) else palette.onGlass
+    val apple = LocalApple.current
+    val accent = LocalPalette.current.accent
+    val touch = remember { MutableInteractionSource() }
     Row(
         Modifier
             .fillMaxWidth()
-            .appearIn(delayMillis = staggerDelay(index), riseFrom = 22f)
-            .pressBounce(0.97f)
-            .clip(RoundedCornerShape(18.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 13.dp),
+            .appearIn(delayMillis = staggerDelay(index), riseFrom = 14f)
+            .rowPress(touch)
+            .clickable(interactionSource = touch, indication = null, role = Role.Button, onClick = onClick)
+            .heightIn(min = 50.dp)
+            .padding(horizontal = 16.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(
-            Modifier
-                .size(36.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(tint.copy(alpha = 0.10f)),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(19.dp))
+        // As wide as a Settings row's square, so the words, and the hairline under them, line up.
+        Box(Modifier.size(30.dp), contentAlignment = Alignment.Center) {
+            Icon(icon, contentDescription = null, tint = if (danger) apple.danger else accent, modifier = Modifier.size(22.dp))
         }
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
-            Text(label, color = tint, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+            Text(label, color = if (danger) apple.danger else apple.words, fontSize = 16.sp)
             if (subtitle != null) {
-                Text(subtitle, color = palette.onGlassMuted, fontSize = 12.sp)
+                Text(subtitle, color = apple.secondary, fontSize = 13.sp, lineHeight = 17.sp)
             }
         }
     }
 }
 
 /**
- * An app's own shortcuts, at the top of its menu: a route home, one chat. Each runs at a tap, and
- * the button beside it puts it on the home screen as an icon of its own. Android hands them over
- * a moment after the menu is up, so they open out above the rest and rise in one after another.
+ * An app's own shortcuts, at the top of its menu, on a card of their own: a route home, one chat.
+ * Each runs at a tap, and the button at its end puts it on the home screen as an icon of its own.
+ * Android hands them over a moment after the menu is up, so the card opens out above the rest and
+ * its rows come up one after another.
  */
 @Composable
 fun ShortcutRows(
@@ -360,7 +481,8 @@ fun ShortcutRows(
     onRun: (AppShortcut) -> Unit,
     onAdd: (AppShortcut) -> Unit,
 ) {
-    val palette = LocalPalette.current
+    val apple = LocalApple.current
+    val accent = LocalPalette.current.accent
     val reduced = LocalMotionLevel.current.reduced
     // What was last listed stays while it folds away, so it is seen to go rather than vanish.
     val listed = remember { arrayOf(shortcuts) }
@@ -370,48 +492,46 @@ fun ShortcutRows(
         enter = if (reduced) fadeIn(tween(Motion.REDUCED_MS)) else expandVertically(Motion.sheet()) + fadeIn(tween(200)),
         exit = if (reduced) fadeOut(tween(Motion.REDUCED_MS)) else shrinkVertically(tween(220)) + fadeOut(tween(160)),
     ) {
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .padding(bottom = 8.dp)
-                .clip(RoundedCornerShape(22.dp))
-                .background(palette.onGlass.copy(alpha = 0.06f))
-                .padding(vertical = 4.dp),
-        ) {
-            listed[0].forEachIndexed { index, shortcut ->
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .appearIn(delayMillis = staggerDelay(index), riseFrom = 18f)
-                        .pressBounce(0.97f)
-                        .clickable { onRun(shortcut) }
-                        .padding(start = 12.dp, end = 6.dp, top = 7.dp, bottom = 7.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    AppIcon(key = shortcut.key, label = shortcut.label, size = 30.dp)
-                    Spacer(Modifier.width(14.dp))
-                    Text(
-                        text = shortcut.label,
-                        color = palette.onGlass,
-                        fontSize = 15.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f),
-                    )
-                    Box(
-                        Modifier
-                            .size(38.dp)
-                            .pressBounce()
-                            .clip(RoundedCornerShape(50))
-                            .clickable { onAdd(shortcut) },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            Icons.Rounded.AddHome,
-                            contentDescription = "Put ${shortcut.label} on the home screen",
-                            tint = palette.onGlassMuted,
-                            modifier = Modifier.size(19.dp),
-                        )
+        Section {
+            CardRows {
+                listed[0].forEachIndexed { index, shortcut ->
+                    key(shortcut.key) {
+                        val touch = remember { MutableInteractionSource() }
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .appearIn(delayMillis = staggerDelay(index), riseFrom = 14f)
+                                .rowPress(touch)
+                                .clickable(interactionSource = touch, indication = null, role = Role.Button) { onRun(shortcut) }
+                                .heightIn(min = 50.dp)
+                                .padding(start = 16.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            AppIcon(key = shortcut.key, label = shortcut.label, size = 30.dp)
+                            Spacer(Modifier.width(14.dp))
+                            Text(
+                                text = shortcut.label,
+                                color = apple.words,
+                                fontSize = 16.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Box(
+                                Modifier
+                                    .size(44.dp)
+                                    .clip(CircleShape)
+                                    .clickable(role = Role.Button) { onAdd(shortcut) },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    Icons.Rounded.AddHome,
+                                    contentDescription = "Put ${shortcut.label} on the home screen",
+                                    tint = accent,
+                                    modifier = Modifier.size(21.dp),
+                                )
+                            }
+                        }
                     }
                 }
             }

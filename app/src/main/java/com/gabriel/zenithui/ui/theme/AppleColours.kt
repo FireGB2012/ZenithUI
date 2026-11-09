@@ -172,6 +172,13 @@ fun AppleColours.button(kind: ButtonKind, accent: Color, surfaces: AppleSurfaces
 val LocalApple = staticCompositionLocalOf { AppleColours.Dark }
 
 /**
+ * Whether what is drawn here stands on glass (a sheet, the drawer) rather than on a page or a card.
+ * Grey words standing on glass, a group's name or a footnote, take the glass's own grey
+ * ([ZenithPalette.onGlassMuted]), which holds up over any wallpaper; on a card they are Apple's.
+ */
+val LocalOnGlass = staticCompositionLocalOf { false }
+
+/**
  * How far apart two colours stand, as the Web's accessibility guidelines measure it: 1 to 1 for the
  * same colour, 21 to 1 for black on white. A see-through [front] is taken as seen over [back].
  */

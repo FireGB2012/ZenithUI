@@ -45,14 +45,20 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Cancel
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Remove
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
@@ -69,22 +75,29 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.gabriel.zenithui.data.IconShapes
@@ -102,7 +115,9 @@ import com.gabriel.zenithui.ui.common.unfoldOut
 import com.gabriel.zenithui.ui.common.wordsChange
 import com.gabriel.zenithui.ui.theme.CardKind
 import com.gabriel.zenithui.ui.theme.LocalApple
+import com.gabriel.zenithui.ui.theme.LocalOnGlass
 import com.gabriel.zenithui.ui.theme.LocalPalette
+import com.gabriel.zenithui.ui.theme.LocalZenithFont
 import com.gabriel.zenithui.ui.theme.ZenithPalette
 import com.gabriel.zenithui.ui.theme.ZenithShapes
 import com.gabriel.zenithui.ui.theme.solidCard
@@ -198,7 +213,10 @@ internal fun Section(
             .padding(top = 12.dp),
     ) {
         if (header != null) GroupName(header)
-        Column(Modifier.fillMaxWidth().solidCard(CardKind.Grouped), content = content)
+        // On the card, words are a card's, even inside a sheet.
+        CompositionLocalProvider(LocalOnGlass provides false) {
+            Column(Modifier.fillMaxWidth().solidCard(CardKind.Grouped), content = content)
+        }
         AnimatedVisibility(visible = footer != null, enter = unfoldIn(reduced), exit = unfoldOut(reduced)) {
             Note(lastFooter[0].orEmpty(), Modifier.padding(start = 12.dp, end = 12.dp, top = 7.dp))
         }
@@ -226,12 +244,19 @@ internal fun ControlRow(title: String? = null, edgeToEdge: Boolean = false, cont
     }
 }
 
+/**
+ * Grey words where they stand: on a sheet's glass the glass's own grey, which holds up over any
+ * wallpaper; on a page or a card, Apple's.
+ */
+@Composable
+internal fun quietWords(): Color = if (LocalOnGlass.current) LocalPalette.current.onGlassMuted else LocalApple.current.secondary
+
 /** The name of a group of rows, as an iPhone writes it over the card: small grey capitals. */
 @Composable
 internal fun GroupName(text: String, modifier: Modifier = Modifier) {
     Text(
         text.uppercase(),
-        color = LocalApple.current.secondary,
+        color = quietWords(),
         fontSize = 13.sp,
         letterSpacing = 0.3.sp,
         modifier = modifier.padding(start = 16.dp, end = 16.dp, bottom = 7.dp),
@@ -244,14 +269,16 @@ internal fun GroupName(text: String, modifier: Modifier = Modifier) {
  */
 @Composable
 internal fun Group(padding: Dp = 0.dp, rise: Int? = null, content: @Composable ColumnScope.() -> Unit) {
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .then(if (rise != null) Modifier.riseIn(rise) else Modifier)
-            .solidCard(CardKind.Grouped)
-            .padding(padding),
-        content = content,
-    )
+    CompositionLocalProvider(LocalOnGlass provides false) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .then(if (rise != null) Modifier.riseIn(rise) else Modifier)
+                .solidCard(CardKind.Grouped)
+                .padding(padding),
+            content = content,
+        )
+    }
 }
 
 /**
@@ -268,6 +295,40 @@ internal fun GroupDivider(inset: Dp = ROW_TEXT_INSET) {
             .height(hairline)
             .background(LocalApple.current.separator)
     )
+}
+
+/**
+ * The rows of a card, one under another, with Apple's hairline between each two that show,
+ * starting under their words ([inset]) and running to the card's far edge. Rows that come and go,
+ * as a menu's do, need no dividers of their own: see [hairlinesAt]. A pressed row's shade covers
+ * the line along its top, as an iPhone's does.
+ */
+@Composable
+internal fun CardRows(modifier: Modifier = Modifier, inset: Dp = ROW_TEXT_INSET, content: @Composable () -> Unit) {
+    val line = LocalApple.current.separator
+    var lines by remember { mutableStateOf(emptyList<Int>()) }
+    Layout(
+        content = content,
+        modifier = modifier.drawBehind {
+            val start = inset.toPx()
+            val left = if (layoutDirection == LayoutDirection.Ltr) start else 0f
+            for (y in lines) drawRect(line, topLeft = Offset(left, y.toFloat()), size = Size(size.width - start, 1f))
+        },
+    ) { measurables, constraints ->
+        val rows = measurables.map { it.measure(constraints.copy(minHeight = 0)) }
+        val width = if (constraints.hasBoundedWidth) constraints.maxWidth else rows.maxOfOrNull { it.width } ?: 0
+        val height = rows.sumOf { it.height }
+        val at = hairlinesAt(rows.map { it.height })
+        layout(width.coerceIn(constraints.minWidth, constraints.maxWidth), height.coerceIn(constraints.minHeight, constraints.maxHeight)) {
+            var y = 0
+            for (row in rows) {
+                row.placeRelative(0, y)
+                y += row.height
+            }
+            // Written, not read: the lines are only drawn, and the same list again changes nothing.
+            lines = at
+        }
+    }
 }
 
 /**
@@ -294,7 +355,7 @@ internal fun hairlinesAt(heights: List<Int>): List<Int> {
 internal fun Caption(text: String, modifier: Modifier = Modifier) {
     Text(
         text,
-        color = LocalApple.current.secondary,
+        color = quietWords(),
         fontSize = 13.sp,
         fontWeight = FontWeight.Medium,
         modifier = modifier.padding(horizontal = 4.dp),
@@ -309,7 +370,7 @@ internal fun Caption(text: String, modifier: Modifier = Modifier) {
 @Composable
 internal fun Note(text: String, modifier: Modifier = Modifier) {
     val reduced = LocalMotionLevel.current.reduced
-    val secondary = LocalApple.current.secondary
+    val secondary = quietWords()
     AnimatedContent(
         targetState = text,
         transitionSpec = { wordsChange(reduced) },
@@ -317,6 +378,106 @@ internal fun Note(text: String, modifier: Modifier = Modifier) {
         label = "note",
     ) { words ->
         Text(words, color = secondary, fontSize = 13.sp, lineHeight = 18.sp)
+    }
+}
+
+/** What a box to type in stands on: a card of its own, Apple's grey (a search), or the card it is a row of. */
+internal enum class FieldLook { Card, Search, Row }
+
+/**
+ * A box to type in, as an iPhone draws one: on a card of its own, as a row of the card it is on, or,
+ * for a search, in Apple's grey with a magnifying glass. The words are the words' colour, what goes
+ * there is said in grey until something is typed, and the cursor is the accent. Once something is
+ * in a search, a grey round button clears it. What may be typed, and what the keyboard offers, are
+ * the caller's: [onValueChange] can filter, [keyboardOptions] and [keyboardActions] are passed on.
+ */
+@Composable
+internal fun FieldBox(
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String,
+    modifier: Modifier = Modifier,
+    look: FieldLook = FieldLook.Card,
+    keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
+    keyboardActions: KeyboardActions = KeyboardActions.Default,
+    singleLine: Boolean = true,
+    fontSize: TextUnit = 16.sp,
+    textAlign: TextAlign = TextAlign.Start,
+    visualTransformation: VisualTransformation = VisualTransformation.None,
+    /** Told when the box gains the keyboard, and when it loses it. */
+    onFocusChanged: (Boolean) -> Unit = {},
+) {
+    val apple = LocalApple.current
+    val palette = LocalPalette.current
+    val reduced = LocalMotionLevel.current.reduced
+    val search = look == FieldLook.Search
+    Row(
+        modifier
+            .fillMaxWidth()
+            .then(
+                when (look) {
+                    FieldLook.Card -> Modifier.solidCard(CardKind.Grouped)
+                    FieldLook.Search -> Modifier.clip(RoundedCornerShape(10.dp)).background(apple.field)
+                    FieldLook.Row -> Modifier
+                }
+            )
+            .heightIn(min = if (search) 40.dp else 48.dp)
+            .padding(start = if (search) 10.dp else 16.dp, end = if (search) 6.dp else 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (search) {
+            Icon(Icons.Rounded.Search, contentDescription = null, tint = apple.secondary, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(7.dp))
+        }
+        Box(
+            Modifier
+                .weight(1f)
+                .padding(vertical = if (singleLine) 0.dp else 13.dp),
+            contentAlignment = if (singleLine) Alignment.CenterStart else Alignment.TopStart,
+        ) {
+            if (value.isEmpty()) {
+                Text(
+                    placeholder,
+                    color = apple.secondary,
+                    fontSize = fontSize,
+                    textAlign = textAlign,
+                    maxLines = if (singleLine) 1 else Int.MAX_VALUE,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+            BasicTextField(
+                value = value,
+                onValueChange = onValueChange,
+                singleLine = singleLine,
+                textStyle = TextStyle(fontFamily = LocalZenithFont.current, color = apple.words, fontSize = fontSize, textAlign = textAlign),
+                cursorBrush = SolidColor(palette.accent),
+                keyboardOptions = keyboardOptions,
+                keyboardActions = keyboardActions,
+                visualTransformation = visualTransformation,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .onFocusChanged { onFocusChanged(it.isFocused) },
+            )
+        }
+        if (search) {
+            AnimatedVisibility(
+                visible = value.isNotEmpty(),
+                enter = popIn(reduced, millis = 140),
+                exit = popOut(reduced, millis = 100),
+            ) {
+                Icon(
+                    Icons.Rounded.Cancel,
+                    contentDescription = "Clear",
+                    tint = apple.secondary,
+                    modifier = Modifier
+                        .size(30.dp)
+                        .clip(CircleShape)
+                        .clickable { onValueChange("") }
+                        .padding(5.dp),
+                )
+            }
+        }
     }
 }
 

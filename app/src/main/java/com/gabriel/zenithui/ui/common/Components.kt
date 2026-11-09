@@ -68,6 +68,7 @@ import com.gabriel.zenithui.ui.theme.ZenithShapes
 import com.gabriel.zenithui.ui.theme.GlassMaterial
 import com.gabriel.zenithui.ui.theme.GlassMotion
 import com.gabriel.zenithui.ui.theme.LocalApple
+import com.gabriel.zenithui.ui.theme.LocalOnGlass
 import com.gabriel.zenithui.ui.theme.glass
 import com.gabriel.zenithui.ui.theme.inkOnTint
 import kotlin.math.cos
@@ -444,16 +445,17 @@ fun ZenithButton(
     }
 }
 
-/** The heading over a block of a page: small capitals, spaced out, in the muted ink. */
+/**
+ * The heading over a block, as an iPhone names a group: small grey capitals. On glass (a sheet, the
+ * drawer) the grey is the glass's own, which holds up over any wallpaper.
+ */
 @Composable
 fun SectionLabel(text: String, modifier: Modifier = Modifier) {
-    val palette = LocalPalette.current
     Text(
         text = text.uppercase(),
-        color = palette.onGlassMuted,
-        fontSize = 12.sp,
-        fontWeight = FontWeight.SemiBold,
-        letterSpacing = 1.4.sp,
+        color = if (LocalOnGlass.current) LocalPalette.current.onGlassMuted else LocalApple.current.secondary,
+        fontSize = 13.sp,
+        letterSpacing = 0.3.sp,
         modifier = modifier,
     )
 }

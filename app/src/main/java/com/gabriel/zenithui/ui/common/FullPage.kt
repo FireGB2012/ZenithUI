@@ -204,14 +204,17 @@ private fun PageBack(label: String, onBack: () -> Unit) {
     }
 }
 
-/** The way out of the page: a small round grey button with a cross in it, as an iPhone's sheets have. */
+/**
+ * The way out of a page or a sheet: a small round grey button with a cross in it, as an iPhone's
+ * sheets have. Its room to be touched is wider than the circle.
+ */
 @Composable
-private fun CloseButton(onClose: () -> Unit) {
+internal fun CloseButton(onClose: () -> Unit, modifier: Modifier = Modifier) {
     val apple = LocalApple.current
     val touch = remember { MutableInteractionSource() }
     val pressed by touch.collectIsPressedAsState()
     Box(
-        Modifier
+        modifier
             .size(44.dp)
             .clip(CircleShape)
             .clickable(interactionSource = touch, indication = null, role = Role.Button, onClick = onClose),

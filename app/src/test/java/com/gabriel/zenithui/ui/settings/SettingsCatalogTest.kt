@@ -32,6 +32,17 @@ class SettingsCatalogTest {
     }
 
     @Test
+    fun `the top line, the page dots and the search bar are not offered any more`() {
+        // The home screen no longer draws them. Their settings are kept, for old backups and
+        // Looks, but there is nothing in Settings to find or change.
+        val ids = SettingsCatalog.entries.map { it.id }
+        listOf("header", "indicator", "searchBar").forEach { assertTrue(it, it !in ids) }
+        assertTrue("header" !in found("greeting"))
+        assertTrue("indicator" !in found("page dots"))
+        assertTrue("searchBar" !in found("search bar"))
+    }
+
+    @Test
     fun `an option is found by the start of a word`() {
         assertEquals("wallpaper", found("wall").first())
         assertTrue("iconShape" in found("sha"))

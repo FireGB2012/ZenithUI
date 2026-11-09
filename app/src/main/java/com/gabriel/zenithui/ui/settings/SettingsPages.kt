@@ -49,7 +49,6 @@ import com.gabriel.zenithui.data.DayParts
 import com.gabriel.zenithui.data.DrawerSort
 import com.gabriel.zenithui.data.GlassBody
 import com.gabriel.zenithui.data.GridDensity
-import com.gabriel.zenithui.data.HomeHeader
 import com.gabriel.zenithui.data.IconPackInfo
 import com.gabriel.zenithui.data.IconPacks
 import com.gabriel.zenithui.data.IconShapes
@@ -448,10 +447,8 @@ internal fun HomeOptions(settings: ZenithSettings, plus: PlusStatus, preview: Se
                 }
             }
         }
-        GroupDivider(inset = 16.dp)
-        Spot("searchBar") {
-            ToggleRow("Search bar", "Above the dock, for your apps and the web", settings.searchBar) { value -> change { it.copy(searchBar = value) } }
-        }
+        // The full-width search bar is not drawn on the home screen any more, so it has no row:
+        // Search is the pill between the page and the dock, always there.
     }
     Group(rise = 4) {
         Spot("badges") {
@@ -489,53 +486,8 @@ internal fun HomeOptions(settings: ZenithSettings, plus: PlusStatus, preview: Se
         }
     }
     Group(rise = 5) {
-        Spot("header") {
-            Column(Modifier.padding(14.dp)) {
-                Caption("Top of the page")
-                Spacer(Modifier.height(10.dp))
-                ChoiceChips(
-                    options = listOf(
-                        HomeHeader.NAME to "Name", HomeHeader.GREETING to "Greeting", HomeHeader.CLOCK to "Clock",
-                        HomeHeader.DATE to "Date", HomeHeader.GLANCE to "At a glance", HomeHeader.OFF to "Nothing",
-                    ),
-                    selected = settings.header,
-                    onSelect = { value -> change { it.copy(header = value) } },
-                )
-                Spacer(Modifier.height(8.dp))
-                Note(
-                    when (settings.header) {
-                        HomeHeader.GREETING -> "A greeting for the time of day, with your name, above the first row."
-                        HomeHeader.OFF -> "Nothing is written above the first row."
-                        HomeHeader.CLOCK -> "A large clock in the numbers' font, the date under it."
-                        HomeHeader.DATE -> "The day and the date, large."
-                        HomeHeader.GLANCE -> "The date, and the weather where the Weather widget is set to."
-                        else -> "Your name, small, above the first row."
-                    }
-                )
-            }
-        }
-        GroupDivider(inset = 16.dp)
-        Spot("indicator") {
-            Column(Modifier.padding(14.dp)) {
-                Caption("Which page you are on")
-                Spacer(Modifier.height(10.dp))
-                Segmented(
-                    options = listOf("dots" to "Dots", "line" to "Line", "numbers" to "Numbers", "none" to "None"),
-                    selected = settings.indicator,
-                    onSelect = { value -> change { it.copy(indicator = value) } },
-                )
-                Spacer(Modifier.height(8.dp))
-                Note(
-                    when (settings.indicator) {
-                        "line" -> "A short bar gliding along a line as the pages turn."
-                        "numbers" -> "The page's number, out of how many there are."
-                        "none" -> "Nothing. Pinch out for every page at once."
-                        else -> "A dot for each page; the one in view stretches."
-                    }
-                )
-            }
-        }
-        GroupDivider(inset = 16.dp)
+        // Nothing is written above the first row and there are no page dots on the home screen
+        // any more, so neither has a row. Their settings are kept, for old backups and Looks.
         Spot("folderStyle") {
             Column(Modifier.padding(14.dp)) {
                 Caption("Folders")

@@ -62,9 +62,8 @@ object SettingsCatalog {
         SettingsEntry("badges", SettingsPage.Home, "Notification dots", "badge badges count unread number alerts"),
         SettingsEntry("dock", SettingsPage.Home, "Dock", "bottom favourites favorites"),
         SettingsEntry("dockStyle", SettingsPage.Home, "Dock style", "bar floating pill icons only glass"),
-        SettingsEntry("searchBar", SettingsPage.Home, "Search bar", "find google web"),
-        SettingsEntry("header", SettingsPage.Home, "Top of the page", "name greeting header title hello clock date glance weather"),
-        SettingsEntry("indicator", SettingsPage.Home, "Which page you are on", "page dots indicator line numbers"),
+        // The top line, the page dots and the full-width search bar are not drawn on the home
+        // screen any more: their settings are kept for old backups and Looks, but not offered.
         SettingsEntry("folderStyle", SettingsPage.Home, "Folders", "folder grid stack cover colour color"),
         SettingsEntry("lockLayout", SettingsPage.Home, "Lock layout", "lock freeze prevent move accidental"),
         SettingsEntry("hideStatusBar", SettingsPage.Home, "Hide the status bar", "status bar fullscreen immersive clock notifications"),

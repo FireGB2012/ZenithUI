@@ -51,7 +51,6 @@ import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.PushPin
-import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.AddHome
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Home
@@ -94,7 +93,6 @@ import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
@@ -129,7 +127,6 @@ import com.gabriel.zenithui.ui.common.staggerDelay
 import kotlinx.coroutines.flow.map
 import com.gabriel.zenithui.data.DropPlanner
 import com.gabriel.zenithui.data.FolderCell
-import com.gabriel.zenithui.data.HomeHeader
 import com.gabriel.zenithui.data.HomeItem
 import com.gabriel.zenithui.data.LaunchMotion
 import com.gabriel.zenithui.data.LayoutBuilder
@@ -1016,14 +1013,6 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
 
     val density = LocalDensity.current
 
-    // The hour, for a greeting at the top of the page; looked at again every minute.
-    val hour by produceState(java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)) {
-        while (true) {
-            delay(60_000)
-            value = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
-        }
-    }
-
     /** The page in view as the drop planner sees it, measured from the grid actually drawn. */
     fun dropPage(): DropPlanner.Page =
         DropPlanner.pageFor(settings, settings.freeform && plus.active, drag.cellWidth / drag.cellHeight)
@@ -1510,58 +1499,35 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             val baseConfiguration = androidx.compose.ui.platform.LocalViewConfiguration.current
             val quickHold = remember(baseConfiguration) { QuickHold(baseConfiguration) }
             androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalViewConfiguration provides quickHold) {
-            // The page's left and right lines: the outer edges of the first and last columns'
-            // icons. What is written at the top starts on the left one, and the search bar
-            // runs from one to the other. They are measured from the page's own margin, which
-            // is put on separately so that it rounds to the same pixel as the page's does.
-            val geometry = drag.geometry
-            val leftLine = if (geometry != null) {
-                with(density) { (geometry.originX + geometry.leftLine).toDp() }
-            } else {
-                14.dp
-            }
-            val rightLine = if (geometry != null) {
-                with(density) { (geometry.width - geometry.originX - geometry.rightLine).toDp() }
-            } else {
-                14.dp
-            }
             HomeLayout(
-                // What is written at the top, and under it the page and the gestures made on it.
+                // The page and the gestures made on it. Nothing is written above it any more; while
+                // Zenith is not the home app the hint to make it so stands there instead, above the
+                // first row, so it covers nothing on the page and keeps clear of Search.
                 pager = { room ->
                     Column(room) {
-                        val header = HomeHeader.text(settings.header, settings.userName, hour)
-                        if (HomeHeader.isLive(settings.header)) {
-                            LiveHeader(
-                                style = settings.header,
-                                modifier = Modifier
-                                    .arriving({ arrivalClock.value }, { arrivalDepth.floatValue }, distance = 1f, from = (-28).dp, style = settings.arrival)
-                                    .pointerInput(Unit) {
-                                        detectTapGestures(onLongPress = {
-                                            haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
-                                            showSheet(HomeSheet.Customize)
-                                        })
+                        AnimatedVisibility(
+                            visible = !isDefaultLauncher && !hintDismissed && hintAllowed,
+                            enter = fadeIn(tween(260)) + androidx.compose.animation.expandVertically(
+                                androidx.compose.animation.core.spring(dampingRatio = 1f, stiffness = 300f)
+                            ),
+                            exit = fadeOut(tween(160)) + androidx.compose.animation.shrinkVertically(
+                                androidx.compose.animation.core.spring(dampingRatio = 1f, stiffness = 300f)
+                            ),
+                            modifier = Modifier.align(Alignment.CenterHorizontally),
+                        ) {
+                            DefaultLauncherHint(
+                                onSetDefault = {
+                                    runCatching {
+                                        context.startActivity(
+                                            Intent(Settings.ACTION_HOME_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                        )
                                     }
-                                    .padding(horizontal = PAGE_MARGIN)
-                                    .padding(start = leftLine, end = rightLine, top = 8.dp, bottom = 10.dp),
-                            )
-                        } else if (header != null) {
-                            Greeting(
-                                text = header,
+                                },
+                                onDismiss = { hintDismissed = true },
                                 modifier = Modifier
-                                    .arriving({ arrivalClock.value }, { arrivalDepth.floatValue }, distance = 1f, from = (-28).dp, style = settings.arrival)
-                                    // Holding it opens Customise too — always reachable, however full
-                                    // the page underneath is.
-                                    .pointerInput(Unit) {
-                                        detectTapGestures(onLongPress = {
-                                            haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
-                                            showSheet(HomeSheet.Customize)
-                                        })
-                                    }
-                                    .padding(horizontal = PAGE_MARGIN)
-                                    .padding(start = leftLine, end = rightLine, top = 8.dp, bottom = 8.dp),
+                                    .padding(horizontal = 18.dp)
+                                    .padding(bottom = 4.dp),
                             )
-                        } else {
-                            Spacer(Modifier.height(8.dp))
                         }
 
                         val doubleTap = Gestures.actionFor(Gestures.DOUBLE_TAP, settings.gestures)
@@ -1684,54 +1650,22 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                         }
                     }
                 },
-                // Under the page: the hint to make Zenith the home app, the dots and the search bar.
+                // Search, a pill in the middle of the band between the page and the dock. There are
+                // no page dots and no full-width bar any more. Until the pill opens a search of its
+                // own it opens the drawer's, with the keyboard up, as the bar did.
                 searchBand = { band ->
-                    Column(band) {
-                        AnimatedVisibility(
-                            visible = !isDefaultLauncher && !hintDismissed && hintAllowed,
-                            enter = fadeIn(tween(260)) + androidx.compose.animation.expandVertically(
-                                androidx.compose.animation.core.spring(dampingRatio = 1f, stiffness = 300f)
-                            ),
-                            exit = fadeOut(tween(160)) + androidx.compose.animation.shrinkVertically(
-                                androidx.compose.animation.core.spring(dampingRatio = 1f, stiffness = 300f)
-                            ),
-                            modifier = Modifier.align(Alignment.CenterHorizontally),
-                        ) {
-                            DefaultLauncherHint(
-                                onSetDefault = {
-                                    runCatching {
-                                        context.startActivity(
-                                            Intent(Settings.ACTION_HOME_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                        )
-                                    }
-                                },
-                                onDismiss = { hintDismissed = true },
-                                modifier = Modifier.padding(horizontal = 18.dp),
-                            )
-                        }
-
-                        PageDots(
-                            style = settings.indicator,
-                            count = pageCount,
+                    Box(band, contentAlignment = Alignment.Center) {
+                        SearchPill(
+                            onOpen = { openDrawer(search = true) },
+                            // Always the words for now: nothing turns them into the dots yet.
+                            dots = { 0f },
+                            pageCount = pageCount,
                             position = { pagerState.currentPage + pagerState.currentPageOffsetFraction },
-                            canAdd = pageCount < LayoutBuilder.MAX_PAGES,
-                            onAddPage = { revealPage(viewModel.addPage()) },
-                            modifier = Modifier
-                                .align(Alignment.CenterHorizontally)
-                                .arriving({ arrivalClock.value }, { arrivalDepth.floatValue }, distance = 0.7f, from = 30.dp, style = settings.arrival)
-                                .padding(vertical = 10.dp),
+                            // It arrives as the search bar did, moved on a layer, so its glass reads
+                            // the clock that moves it and keeps the wallpaper in place behind it.
+                            tracking = { arrivalClock.value },
+                            modifier = Modifier.arriving({ arrivalClock.value }, { arrivalDepth.floatValue }, distance = 0.85f, from = 40.dp, style = settings.arrival),
                         )
-
-                        // From the first column's icons to the last column's, like everything on the page.
-                        if (settings.searchBar) {
-                            HomeSearchBar(
-                                onSearch = { openDrawer(search = true) },
-                                modifier = Modifier
-                                    .arriving({ arrivalClock.value }, { arrivalDepth.floatValue }, distance = 0.85f, from = 40.dp, style = settings.arrival)
-                                    .padding(horizontal = PAGE_MARGIN)
-                                    .padding(start = leftLine, end = rightLine, bottom = 10.dp),
-                            )
-                        }
                     }
                 },
                 dock = { room ->
@@ -1779,8 +1713,27 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                         Spacer(room.navigationBarsPadding().height(10.dp))
                     }
                 },
-                // Nothing floats over the page yet.
-                overlays = {},
+                // Undo, over the foot of the page and 12 dp above the band, so it covers neither
+                // Search nor the dock. Part of the home screen now, it sinks, fades and softens with
+                // it as the drawer, a folder, an app or Settings comes over it.
+                overlays = {
+                    val removed by viewModel.removed.collectAsState()
+                    val removedWhat = when (removed.size) {
+                        0 -> null
+                        1 -> "${removedName(removed.first(), appsByKey)} removed"
+                        else -> "${removed.size} things removed"
+                    }
+                    UndoPill(
+                        what = removedWhat,
+                        key = removed.firstOrNull()?.id,
+                        millis = com.gabriel.zenithui.data.UNDO_MS,
+                        onUndo = { viewModel.undoRemove().firstOrNull()?.let { back -> revealPage(back.page) } },
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = 12.dp)
+                            .padding(horizontal = 16.dp),
+                    )
+                },
             )
             }
         }
@@ -1815,27 +1768,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             onDismiss = { overview = false },
         )
 
-        // ------------------------------------------------------------ undo
-        // Over the dock, under the drawer, Settings and every sheet.
-        val removed by viewModel.removed.collectAsState()
-        val removedWhat = when (removed.size) {
-            0 -> null
-            1 -> "${removedName(removed.first(), appsByKey)} removed"
-            else -> "${removed.size} things removed"
-        }
-        val undoLift = with(density) {
-            if (!dockBounds.isEmpty && drawerHeightPx > 0f) (drawerHeightPx - dockBounds.top).coerceAtLeast(0f).toDp() + 12.dp else 96.dp
-        }
-        UndoPill(
-            what = removedWhat,
-            key = removed.firstOrNull()?.id,
-            millis = com.gabriel.zenithui.data.UNDO_MS,
-            onUndo = { viewModel.undoRemove().firstOrNull()?.let { back -> revealPage(back.page) } },
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = undoLift)
-                .padding(horizontal = 16.dp),
-        )
+        // Undo is part of the home screen now, over the foot of the page: see HomeLayout's overlays.
 
         if (drawerProgress > 0.002f || drawerEverOpened) {
             // In the order chosen in Settings. By colour needs every icon's colour, worked out once.
@@ -2701,92 +2634,6 @@ private fun DefaultLauncherHint(
             contentAlignment = Alignment.Center,
         ) {
             Icon(Icons.Rounded.Close, contentDescription = "Dismiss", tint = palette.onGlassMuted, modifier = Modifier.size(15.dp))
-        }
-    }
-}
-
-@Composable
-private fun Greeting(text: String, modifier: Modifier = Modifier) {
-    val palette = LocalPalette.current
-    Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            text = text,
-            color = palette.onGlass.copy(alpha = 0.85f),
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Medium,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-    }
-}
-
-/**
- * The top of the page as a clock, the date, or the date at a glance with the weather: set in the
- * font numbers are set in, the digits rolling over as the minutes change.
- */
-@Composable
-private fun LiveHeader(style: String, modifier: Modifier = Modifier) {
-    val palette = LocalPalette.current
-    val now = rememberNow()
-    val date = remember(now.dayOfYear) { HomeHeader.dateLine(now.toLocalDate()) }
-    val forecast = LocalWidgetWorld.current?.forecast
-    Column(modifier.fillMaxWidth()) {
-        when (style) {
-            HomeHeader.CLOCK -> {
-                val time = remember(now.hour, now.minute) { "%02d:%02d".format(now.hour, now.minute) }
-                Figure(time, 58.sp, animated = true)
-                Spacer(Modifier.height(6.dp))
-                Text(date, color = quiet(), fontSize = 14.sp, fontWeight = FontWeight.Medium)
-            }
-            HomeHeader.DATE -> Text(date, color = palette.onGlass, fontSize = 26.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            else -> {
-                Text(date, color = palette.onGlass, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                val weather = forecast?.let { HomeHeader.weatherLine(it.temperature, com.gabriel.zenithui.data.WeatherCodes.words(it.code, it.day)) }
-                androidx.compose.animation.AnimatedVisibility(visible = weather != null, enter = com.gabriel.zenithui.ui.common.unfoldIn(LocalMotionLevel.current.reduced)) {
-                    Text(weather.orEmpty() + (forecast?.place?.let { " in $it" } ?: ""), color = quiet(), fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun PageDots(
-    /** How the page in view is shown: see [PageIndicator]. */
-    style: String,
-    count: Int,
-    /** Where the pager is: a page number, with a fraction while a page is turning. */
-    position: () -> Float,
-    canAdd: Boolean,
-    onAddPage: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val palette = LocalPalette.current
-    // With no indicator there is no add button either: the page overview adds pages.
-    if (style == "none") return
-    Row(modifier, horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-        PageIndicator(style, count, position)
-
-        // The one control that makes another page. It sits where the next dot would appear, so
-        // it reads as "one more of these" rather than as a button bolted on.
-        if (canAdd) {
-            Box(
-                Modifier
-                    .padding(start = 2.dp)
-                    .size(18.dp)
-                    .clip(RoundedCornerShape(50))
-                    .background(palette.onGlass.copy(alpha = 0.12f))
-                    .pressBounce()
-                    .clickable { onAddPage() },
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = Icons.Rounded.Add,
-                    contentDescription = "Add page",
-                    tint = palette.onGlass.copy(alpha = 0.55f),
-                    modifier = Modifier.size(12.dp),
-                )
-            }
         }
     }
 }

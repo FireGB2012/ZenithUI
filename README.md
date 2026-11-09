@@ -41,26 +41,35 @@ built entirely in Jetpack Compose.
   opening on its page when there is no room there; an arrow never pushes anything aside, and a tap
   with no room shakes the bar instead. The rules are `Reshape.resized` and `Reshape.nudged`.
 - **App drawer** — a sheet that tracks your finger: drag up anywhere on the page and it follows,
-  release and a fling (or the halfway point) decides whether it opens or falls back. Close it by
+  release and a fling (or the halfway point) decides whether it opens or falls back. It is a
+  frosted blur of the wallpaper, as the iPhone's App Library is, with nothing of the theme washed
+  over it; what stands on it (the tabs, its buttons, the library's plates, what a search finds) is
+  grey or solid, never glass of its own. Close it by
   dragging down anywhere — the handle, the header, the search row, or the app grid once it is
   scrolled to the top (nested scroll hands the gesture over) — or with back, or the X. The home
-  screen blurs and scales behind it in step with the drag. The single-line search field sits at the
-  *bottom*, next to your thumb; it searches installed apps and falls through to Google: enter opens
+  screen blurs and scales behind it in step with the drag. The single-line search field, in
+  Apple's grey, sits at the *bottom*, next to your thumb; it searches installed apps and falls through to Google: enter opens
   the first match or, when nothing matches, the web search.
 - **The drawer, your way** (Settings → Apps): A to Z, Most used (counted on the phone as apps are
   opened), Newest, or By colour (each icon's main colour, round the wheel, greys last:
   `DrawerSort`, `IconColour`); as many columns as the home screen or three to six. Along the top,
-  tabs you make — **+** for a new one, a name and the apps ticked into it, a hold to change it —
-  and **Work** on a phone with a work profile, whose apps open there. A to Z, a long list gets an
-  index down its right edge: drag along it and a lens of glass beside the thumb shows the letter,
+  tabs you make, grey capsules with the chosen one in the accent — **+** for a new one, a name and
+  the apps ticked into it, a hold to change it — and **Work** on a phone with a work profile, whose
+  apps open there. A to Z, a long list gets an
+  index down its right edge: drag along it and a round bubble beside the thumb shows the letter,
   the letters near it swell out like a Mac's dock, the list jumps with a tick at each.
 - **Search that answers** — above the apps it finds: a sum (`2+2*3`, `15% of 80`, `80 + 15%`:
-  `Calculator`), a conversion (`5 km in miles`, `30 c to f`, `2 cups in ml`: `Units`), each a pane
+  `Calculator`), a conversion (`5 km in miles`, `30 c to f`, `2 cups in ml`: `Units`), each a card
   that turns over as you type and copies at a tap; Android's settings by name ("blue" finds
   Bluetooth: `SettingsLinks`); and any app's shortcuts by their names. A search spans the work
   apps too.
-- **Every menu is a bottom sheet** — item menus, Customise, wallpapers. Nothing needs a second
-  hand. Settings and the widget gallery are pages of their own, the full height of the screen, on
+- **Every menu is a bottom sheet** — item menus, Customise, wallpapers — and each is an iPhone's
+  (`ZenithSheet`): frosted glass standing on the foot of the screen, a grabber, its name in the
+  middle and a round grey X, everything in it on solid cards, and a chevron back for one with pages.
+  A long-press menu groups its rows as an iPhone's does: an app's own shortcuts, what can be done,
+  what cannot be undone in red on a card of its own, and the way to Customise. Over Settings or the
+  gallery a sheet is solid instead, a step lighter than the page in the dark, since glass there
+  would be a hole through to the wallpaper. Nothing needs a second hand. Settings and the widget gallery are pages of their own, the full height of the screen, on
   one shell (`ui/common/FullPage.kt`), solid in Apple's page colour as an iPhone's Settings is: a
   bar with Apple's Back (an accent chevron and the name of where it goes) and a round grey button
   to close, pulled down to close.
@@ -79,7 +88,7 @@ built entirely in Jetpack Compose.
   route home, one chat), as Android's own launcher does. A tap runs one; the button beside it puts
   it on the page as an icon of its own (`ShortcutCell`), the shortcut's picture with the app's
   small in its corner, pinned for as long as it is there. Another app's "Add to home screen" —
-  Chrome's, say — comes up as a card of glass over that app (`PinItemActivity`), and lands on the
+  Chrome's, say — comes up on Zenith's own sheet over that app (`PinItemActivity`), and lands on the
   first free spot.
 - **Notification dots** — Apple's red badge at an icon's top corner, with the count in white, while
   its app has something to read, on the page, in the dock and in the drawer; a folder's is the sum of its apps'.
@@ -197,7 +206,7 @@ iPhone's grouped list; an app opens out to its widgets in a row, each its pictur
 Android 12's own cells where it gives them, otherwise its size in dp turned into cells and whole
 rows (`HostedSizes`). Android asks once whether Zenith may show widgets, and a widget with a set-up
 screen opens it; backing out of either puts nothing on the page. An app's own "add this widget"
-comes up as a card of glass over that app, the same one shortcuts use.
+comes up on Zenith's own sheet over that app, the same one shortcuts use.
 
 On the page it is the app's own view in Zenith's frame (`HostedWidgetCell`, through one
 `AppWidgetHost`, kept up to date while the home screen is on show), told its size in dp, with an
@@ -521,9 +530,9 @@ already show, keeps nothing and sends nothing.
 `Modifier.glass()` is Zenith's Liquid Glass, modelled on Apple's own description of it and on the
 pictures Apple published of it, in two finishes: **Clear** for the dock, folders and small
 controls, which only mists the wallpaper and bends it most, and **Regular** for widgets, search and
-sheets, which frosts it so text on top stays readable. A third, **Tinted** (`glass(tinted = true)`),
-was the accent's own glass for the one button that moves you on; that button is a solid pill of
-the accent now, as an iPhone's is, and nothing is drawn in tinted glass any more. Glass goes only where the wallpaper is right behind it: it shows the wallpaper, so on a
+sheets, which frosts it so text on top stays readable. There was a third, **Tinted**,
+the accent's own glass for the one button that moves you on; that button is a solid pill of the
+accent now, as an iPhone's is, and tinted glass has gone. Glass goes only where the wallpaper is right behind it: it shows the wallpaper, so on a
 page of its own it would be a hole, and there things are solid (`solidCard`, in Apple's colours:
 `AppleColours`). On Android 13+ an AGSL shader
 (`LiquidGlassShader`) draws each pane, and does three things to the wallpaper round it:
@@ -571,7 +580,10 @@ Samsung phones never announce them to the app that set the wallpaper. Android 14
 still wallpaper zoomed by a tenth to leave room for parallax, and the shader matches that. With no
 usable copy (a live wallpaper, or one set in another app) panes fall back to frosted glass with a
 rim of the same kind and the slab's form drawn in plain shading, rather than showing a picture that
-is not really behind them. Android 12
+is not really behind them. A pane that covers the home screen instead of floating over the
+wallpaper (a sheet, an open folder, the drawer: `GlassLook.covers`) is not see-through then, since
+its words would sit over the icons: it is Apple's page colour, which the cards on it stand off
+(`fallbackFill`). Android 12
 uses the frosted copy. Nothing is captured or blurred per frame.
 
 ## Accounts and the server

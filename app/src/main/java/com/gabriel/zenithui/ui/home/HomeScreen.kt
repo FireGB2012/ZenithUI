@@ -166,6 +166,8 @@ import com.gabriel.zenithui.ui.settings.Section
 import com.gabriel.zenithui.ui.settings.CardRows
 import com.gabriel.zenithui.ui.theme.LocalApple
 import com.gabriel.zenithui.ui.theme.inkOnTint
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 
 /**
  * How close to the side of the glass the finger itself has to be to turn the page, for items too
@@ -1395,7 +1397,8 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         )
     }
 
-    CompositionLocalProvider(LocalWidgetWorld provides widgetWorld) {
+    // A sheet opened over Settings or the gallery is solid; over the home screen, glass.
+    CompositionLocalProvider(LocalWidgetWorld provides widgetWorld, LocalSheetsOverPage provides (settingsOpen || widgetsOpen)) {
     Box(
         Modifier
             .fillMaxSize()
@@ -2865,27 +2868,30 @@ private fun DrawerAppSheet(
     onDismiss: () -> Unit,
 ) {
     ZenithSheet(visible = visible, onDismiss = onDismiss, title = label) {
-        // Grouped as the home screen's menu is: the app's own shortcuts, what can be done, and
-        // Uninstall in red on a card of its own.
-        var row = 0
-        ShortcutRows(shortcuts, onRun = { onShortcut(it); onDismiss() }, onAdd = { onAddShortcut(it); onDismiss() })
-        Section {
-            CardRows {
-                MenuRow(Icons.AutoMirrored.Rounded.OpenInNew, "Open", if (work) "In your work profile" else null, index = row++) { onOpen(); onDismiss() }
-                if (work) {
-                    MenuRow(Icons.Rounded.Info, "App info", index = row++) { onAppInfo(); onDismiss() }
-                } else {
-                    MenuRow(Icons.Rounded.AddHome, "Add to home screen", index = row++) { onAddToHome(); onDismiss() }
-                    MenuRow(Icons.Rounded.Edit, "Edit", "Its name, its icon, or no name at all", index = row++) { onEdit() }
-                    // Apps go into the dock by dragging them there; the menu only offers the way back out.
-                    if (pinned) MenuRow(Icons.Rounded.PushPin, "Remove from dock", index = row++) { onToggleDock(); onDismiss() }
-                    MenuRow(Icons.Rounded.Info, "App info", index = row++) { onAppInfo(); onDismiss() }
+        // An app with many shortcuts scrolls rather than losing Uninstall off the foot.
+        Column(Modifier.verticalScroll(rememberScrollState())) {
+            // Grouped as the home screen's menu is: the app's own shortcuts, what can be done, and
+            // Uninstall in red on a card of its own.
+            var row = 0
+            ShortcutRows(shortcuts, onRun = { onShortcut(it); onDismiss() }, onAdd = { onAddShortcut(it); onDismiss() })
+            Section {
+                CardRows {
+                    MenuRow(Icons.AutoMirrored.Rounded.OpenInNew, "Open", if (work) "In your work profile" else null, index = row++) { onOpen(); onDismiss() }
+                    if (work) {
+                        MenuRow(Icons.Rounded.Info, "App info", index = row++) { onAppInfo(); onDismiss() }
+                    } else {
+                        MenuRow(Icons.Rounded.AddHome, "Add to home screen", index = row++) { onAddToHome(); onDismiss() }
+                        MenuRow(Icons.Rounded.Edit, "Edit", "Its name, its icon, or no name at all", index = row++) { onEdit() }
+                        // Apps go into the dock by dragging them there; the menu only offers the way back out.
+                        if (pinned) MenuRow(Icons.Rounded.PushPin, "Remove from dock", index = row++) { onToggleDock(); onDismiss() }
+                        MenuRow(Icons.Rounded.Info, "App info", index = row++) { onAppInfo(); onDismiss() }
+                    }
                 }
             }
-        }
-        if (!work) {
-            Section {
-                MenuRow(Icons.Rounded.Delete, "Uninstall", danger = true, index = row) { onUninstall(); onDismiss() }
+            if (!work) {
+                Section {
+                    MenuRow(Icons.Rounded.Delete, "Uninstall", danger = true, index = row) { onUninstall(); onDismiss() }
+                }
             }
         }
     }

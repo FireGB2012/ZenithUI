@@ -141,6 +141,17 @@ import com.gabriel.zenithui.ui.settings.CardRows
 import androidx.compose.material.icons.automirrored.rounded.HelpOutline
 import com.gabriel.zenithui.ui.theme.solidCard
 import com.gabriel.zenithui.ui.theme.inkOnTint
+import com.gabriel.zenithui.ui.common.LocalIconsOnPlate
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.first
+import androidx.compose.ui.draw.shadow
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.paneTitle
+import androidx.compose.ui.semantics.heading
+import com.gabriel.zenithui.ui.theme.elevated
 
 /** How far a sheet comes up when it is pulled up, at the very most. */
 private val SHEET_GIVE = 28.dp
@@ -152,11 +163,19 @@ private val SHEET_GIVE = 28.dp
 const val SHEET_GONE_MS = 340
 
 /**
+ * Whether sheets opened here come up over a page of its own (Settings, the gallery) rather than
+ * over the home screen. There a sheet is solid, a step up from the page, as an iPhone's is: glass
+ * shows the wallpaper, and over a solid page it would be a hole through to it.
+ */
+val LocalSheetsOverPage = compositionLocalOf { false }
+
+/**
  * A sheet, as an iPhone's: frosted glass standing on the foot of the screen with Apple's corners
  * along its top, the grabber, its name in the middle and a round grey X, and everything in it on
  * solid cards ([Section] and the rows Settings is built from). It comes up from the edge on a
  * spring, the home screen dimming behind it, and goes back the way it came. Its body covers the
- * home screen, so it is never see-through, whether or not Zenith can read the wallpaper.
+ * home screen, so it is never see-through, whether or not Zenith can read the wallpaper. Over a page
+ * of its own ([LocalSheetsOverPage]) it is solid instead, in Apple's colours a step up.
  *
  * Take hold of it and it follows your finger: down as far as you pull, up only a little and less
  * the further. Let go and it settles back, or, past a third of its own height or with a flick,
@@ -177,6 +196,11 @@ fun ZenithSheet(
     onBack: (() -> Unit)? = null,
     /** What back goes back to, for anyone who hears the screen rather than sees it. */
     backTo: String = "the page before",
+    /**
+     * Told once, when the sheet has been shown and then put away and has finished going: for a
+     * screen that is only the sheet, which closes with it.
+     */
+    onGone: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val reduced = LocalMotionLevel.current.reduced
@@ -189,6 +213,24 @@ fun ZenithSheet(
     // put on screen, and without this it would simply be there instead of coming up from the edge.
     val shown = remember { MutableTransitionState(false) }
     shown.targetState = visible
+
+    // Solid over a page of its own, glass over the home screen: settled while it is open, so a sheet
+    // going down as a page comes up keeps the look it had.
+    val overPage = LocalSheetsOverPage.current
+    val solidBody = remember { booleanArrayOf(overPage) }
+    if (visible) solidBody[0] = overPage
+    val apple = LocalApple.current
+    val surfaces = if (solidBody[0]) apple.elevated() else apple
+
+    if (onGone != null) {
+        val gone by rememberUpdatedState(onGone)
+        LaunchedEffect(shown) {
+            // Shown first, then put away and settled: however long the going took.
+            snapshotFlow { shown.targetState }.first { it }
+            snapshotFlow { !shown.targetState && shown.isIdle }.first { it }
+            gone()
+        }
+    }
 
     // While a finger has it the pull is written straight from the drag, with no coroutine in
     // between, so the sheet sits exactly under the thumb. Let go, and a spring takes it from there.
@@ -281,7 +323,11 @@ fun ZenithSheet(
                     // It clears as the sheet is pulled away, so nothing is left dimmed behind a
                     // sheet that has already gone.
                     .drawBehind { drawRect(Color.Black, alpha = 0.35f * (1f - (down() / height).coerceIn(0f, 1f))) }
-                    .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) { onDismiss() },
+                    .clickable(
+                        indication = null,
+                        interactionSource = remember { MutableInteractionSource() },
+                        onClickLabel = "Close",
+                    ) { onDismiss() },
             )
         }
 
@@ -300,9 +346,21 @@ fun ZenithSheet(
                     // Moved while placing rather than on a layer, so its glass looks again at
                     // where it is all the way down.
                     .offset { IntOffset(0, down().roundToInt()) }
-                    // Frosted, with the body of a pane that covers what is behind it.
-                    .glass(CardKind.Sheet.shape, strength = 1.2f, solid = 0.65f)
-                    .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) { }
+                    .then(
+                        if (solidBody[0]) {
+                            Modifier
+                                .shadow(16.dp, CardKind.Sheet.shape, clip = false)
+                                .clip(CardKind.Sheet.shape)
+                                .background(surfaces.page)
+                        } else {
+                            // Frosted, with the body of a pane that covers what is behind it. No rim:
+                            // its sides and foot are the screen's edges, not the glass's.
+                            Modifier.glass(CardKind.Sheet.shape, strength = 1.2f, solid = 0.65f, border = false)
+                        }
+                    )
+                    // Taps on the sheet stop at it, without making all of it one button to TalkBack.
+                    .pointerInput(Unit) { detectTapGestures { } }
+                    .semantics { if (title != null) paneTitle = title }
                     .nestedScroll(pullThrough)
                     .draggable(
                         orientation = Orientation.Vertical,
@@ -315,17 +373,20 @@ fun ZenithSheet(
                     .navigationBarsPadding()
                     .padding(bottom = 12.dp),
             ) {
-                SheetHeader(
-                    title = title,
-                    onBack = onBack,
-                    backTo = backTo,
-                    onClose = onDismiss,
-                    // The grabber draws out a little while the sheet is in your hand.
-                    stretch = { (abs(down()) / (height * SheetPull.AWAY)).coerceIn(0f, 1f) },
-                )
-                // Words standing on the glass itself take the glass's grey; on a card, a card's.
-                CompositionLocalProvider(LocalOnGlass provides true) {
-                    Column(Modifier.padding(horizontal = 16.dp), content = content)
+                CompositionLocalProvider(LocalApple provides surfaces) {
+                    SheetHeader(
+                        title = title,
+                        onBack = onBack,
+                        backTo = backTo,
+                        onClose = onDismiss,
+                        // The grabber draws out a little while the sheet is in your hand.
+                        stretch = { (abs(down()) / (height * SheetPull.AWAY)).coerceIn(0f, 1f) },
+                    )
+                    // Words standing on the glass itself take the glass's grey; on a card, or on a
+                    // solid sheet, a card's. An icon anywhere in it is never a pane of glass of its own.
+                    CompositionLocalProvider(LocalOnGlass provides !solidBody[0], LocalIconsOnPlate provides true) {
+                        Column(Modifier.padding(horizontal = 16.dp), content = content)
+                    }
                 }
             }
         }
@@ -395,6 +456,7 @@ private fun SheetHeader(
                         textAlign = TextAlign.Center,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.semantics { heading() },
                     )
                 }
             }
@@ -596,112 +658,115 @@ fun ItemMenuSheet(
     }
 
     ZenithSheet(visible = visible, onDismiss = onDismiss, title = title) {
-        // Grouped as an iPhone groups a menu, each group a card: the app's own shortcuts, what can be
-        // done, what cannot be undone (in red), and the way to Customise. Each row comes up a beat
-        // behind the one above it, so the menu is read from the top as it arrives.
-        var row = 0
-        if (locked) {
-            Section {
-                MenuRow(Icons.Rounded.LockOpen, "The layout is locked", "Unlock it to move, resize or remove things", index = row++) { onUnlock() }
-            }
-        }
-        if (item is AppCell) {
-            ShortcutRows(shortcuts, onRun = { onShortcut(it); onDismiss() }, onAdd = { onAddShortcut(it); onDismiss() })
-        }
-        // Never empty: whatever is locked, everything has something on this card.
-        Section {
-            CardRows {
-                when (item) {
-                    is AppCell -> {
-                        if (!locked) MenuRow(Icons.Rounded.OpenInFull, "Resize and move", "Pull its corner to any size, or move it a cell at a time", index = row++) { onResize() }
-                        MenuRow(Icons.Rounded.Edit, "Edit", "Its name, its icon, or no name at all", index = row++) { onEdit(item.key) }
-                        MenuRow(Icons.AutoMirrored.Rounded.OpenInNew, "Open", index = row++) { onOpen(item.key); onDismiss() }
-                        MenuRow(Icons.Rounded.Info, "App info", "Storage, permissions and notifications, in the phone's settings", index = row++) { onAppInfo(item.key); onDismiss() }
-                    }
-
-                    is ShortcutCell -> {
-                        MenuRow(Icons.AutoMirrored.Rounded.OpenInNew, "Open", index = row++) { onOpen(item.key); onDismiss() }
-                    }
-
-                    is FolderCell -> {
-                        MenuRow(Icons.Rounded.Edit, "Rename folder", index = row++) { onRename(item.id) }
-                        MenuRow(Icons.Rounded.Palette, "Colour", if (item.colour == 0L) "Clear glass, or a colour of its own" else "Its own colour", index = row++) { onColour() }
-                    }
-
-                    is WidgetCell -> {
-                        when (Widgets.solid(item.type)) {
-                            "toggles" -> MenuRow(Icons.Rounded.Tune, "Choose buttons", "Pick which controls it shows", index = row++) { onChooseToggles() }
-                            "world" -> MenuRow(Icons.Rounded.Public, "Choose cities", "Up to four, in the order shown", index = row++) { onSetUp("world") }
-                            "countdown" -> MenuRow(Icons.Rounded.Event, "Set the date", "What it counts down to, and when", index = row++) { onSetUp("countdown") }
-                            "photo" -> MenuRow(Icons.Rounded.PhotoLibrary, "Choose photos", "Up to twelve; a different one each time you come home", index = row++) {
-                                onSetUp("photo")
-                                onDismiss()
-                            }
-                            "weather" -> MenuRow(Icons.Rounded.LocationOn, "Choose a place", "Where the forecast is for", index = row++) { onSetUp("weather") }
-                            "todo" -> MenuRow(Icons.Rounded.DoneAll, "Clear what is done", "Takes the ticked ones off the list", index = row++) {
-                                onSetUp("todo")
-                                onDismiss()
-                            }
-                            "media" -> if (!com.gabriel.zenithui.data.NotificationDots.allowed(context)) {
-                                MenuRow(Icons.Rounded.MusicNote, "Let Zenith see what is playing", "Android's notification access, the one the dots use", index = row++) {
-                                    onSetUp("media")
-                                    onDismiss()
-                                }
-                            }
-                        }
-                        MenuRow(Icons.Rounded.Palette, "Colour", if (item.accent == 0L) "The theme's, or one of its own" else "Its own, not the theme's", index = row++) { onColour() }
-                        if (!locked) MenuRow(Icons.Rounded.OpenInFull, "Resize and move", "Pull its corner, pick a size, or move it a cell at a time", index = row++) { onResize() }
-                        if (!locked) MenuRow(Icons.Rounded.Layers, "Stack another widget here", "Swipe up and down between them, in this one spot", index = row++) { onStack() }
-                    }
-
-                    is HostedWidgetCell -> {
-                        if (!locked) MenuRow(Icons.Rounded.OpenInFull, "Resize and move", "Pull its corner, or move it a cell at a time", index = row++) { onResize() }
-                        MenuRow(
-                            if (item.glass) Icons.Rounded.LayersClear else Icons.Rounded.Layers,
-                            if (item.glass) "Take the tile away" else "Put a tile behind it",
-                            if (item.glass) "The widget on its own, as its app draws it" else "A solid tile, for a widget with no background of its own",
-                            index = row++,
-                        ) { onGlassBehind(!item.glass); onDismiss() }
-                        if (!locked) MenuRow(Icons.Rounded.Layers, "Stack another widget here", "Swipe up and down between them, in this one spot", index = row++) { onStack() }
-                    }
-
-                    is StackCell -> {
-                        if (!locked) MenuRow(Icons.Rounded.OpenInFull, "Resize and move", "Every widget in it takes the new size", index = row++) { onResize() }
-                        if (item.members.size < StackRules.MOST) {
-                            if (!locked) MenuRow(Icons.Rounded.Layers, "Stack another widget", "${item.members.size} in it now", index = row++) { onStack() }
-                        }
-                        item.members.forEachIndexed { index, member ->
-                            val name = remember(member) { memberName(context, member) }
-                            MenuRow(Icons.AutoMirrored.Rounded.Logout, "Take $name out", "Onto a spot of its own on this page", index = row++) {
-                                onUnstack(index)
-                                onDismiss()
-                            }
-                        }
-                    }
+        // A menu with many shortcuts, or a stack of many widgets, scrolls rather than losing its last rows.
+        Column(Modifier.verticalScroll(rememberScrollState())) {
+            // Grouped as an iPhone groups a menu, each group a card: the app's own shortcuts, what can be
+            // done, what cannot be undone (in red), and the way to Customise. Each row comes up a beat
+            // behind the one above it, so the menu is read from the top as it arrives.
+            var row = 0
+            if (locked) {
+                Section {
+                    MenuRow(Icons.Rounded.LockOpen, "The layout is locked", "Unlock it to move, resize or remove things", index = row++) { onUnlock() }
                 }
             }
-        }
-        // What cannot be undone, in red, on a card of its own. With the layout locked only an app's
-        // Uninstall is left of it.
-        if (!locked || item is AppCell) {
+            if (item is AppCell) {
+                ShortcutRows(shortcuts, onRun = { onShortcut(it); onDismiss() }, onAdd = { onAddShortcut(it); onDismiss() })
+            }
+            // Never empty: whatever is locked, everything has something on this card.
             Section {
                 CardRows {
                     when (item) {
                         is AppCell -> {
-                            if (!locked) MenuRow(Icons.Rounded.Home, "Remove from home", "The app stays installed, and in the drawer", danger = true, index = row++) { onRemove(); onDismiss() }
-                            MenuRow(Icons.Rounded.Delete, "Uninstall", "Takes the app off the phone", danger = true, index = row++) { onUninstall(item.key); onDismiss() }
+                            if (!locked) MenuRow(Icons.Rounded.OpenInFull, "Resize and move", "Pull its corner to any size, or move it a cell at a time", index = row++) { onResize() }
+                            MenuRow(Icons.Rounded.Edit, "Edit", "Its name, its icon, or no name at all", index = row++) { onEdit(item.key) }
+                            MenuRow(Icons.AutoMirrored.Rounded.OpenInNew, "Open", index = row++) { onOpen(item.key); onDismiss() }
+                            MenuRow(Icons.Rounded.Info, "App info", "Storage, permissions and notifications, in the phone's settings", index = row++) { onAppInfo(item.key); onDismiss() }
                         }
-                        is ShortcutCell -> MenuRow(Icons.Rounded.Home, "Remove from home", "The app keeps its shortcut", danger = true, index = row++) { onRemove(); onDismiss() }
-                        is FolderCell -> MenuRow(Icons.Rounded.Home, "Remove from home", "Its apps stay installed, and in the drawer", danger = true, index = row++) { onRemove(); onDismiss() }
-                        is WidgetCell -> MenuRow(Icons.Rounded.Home, "Remove widget", "It can be added again from Widgets", danger = true, index = row++) { onRemove(); onDismiss() }
-                        is HostedWidgetCell -> MenuRow(Icons.Rounded.Home, "Remove widget", "It can be added again from Widgets", danger = true, index = row++) { onRemove(); onDismiss() }
-                        is StackCell -> MenuRow(Icons.Rounded.Home, "Remove stack", "All ${item.members.size} widgets in it", danger = true, index = row++) { onRemove(); onDismiss() }
+
+                        is ShortcutCell -> {
+                            MenuRow(Icons.AutoMirrored.Rounded.OpenInNew, "Open", index = row++) { onOpen(item.key); onDismiss() }
+                        }
+
+                        is FolderCell -> {
+                            MenuRow(Icons.Rounded.Edit, "Rename folder", index = row++) { onRename(item.id) }
+                            MenuRow(Icons.Rounded.Palette, "Colour", if (item.colour == 0L) "Clear glass, or a colour of its own" else "Its own colour", index = row++) { onColour() }
+                        }
+
+                        is WidgetCell -> {
+                            when (Widgets.solid(item.type)) {
+                                "toggles" -> MenuRow(Icons.Rounded.Tune, "Choose buttons", "Pick which controls it shows", index = row++) { onChooseToggles() }
+                                "world" -> MenuRow(Icons.Rounded.Public, "Choose cities", "Up to four, in the order shown", index = row++) { onSetUp("world") }
+                                "countdown" -> MenuRow(Icons.Rounded.Event, "Set the date", "What it counts down to, and when", index = row++) { onSetUp("countdown") }
+                                "photo" -> MenuRow(Icons.Rounded.PhotoLibrary, "Choose photos", "Up to twelve; a different one each time you come home", index = row++) {
+                                    onSetUp("photo")
+                                    onDismiss()
+                                }
+                                "weather" -> MenuRow(Icons.Rounded.LocationOn, "Choose a place", "Where the forecast is for", index = row++) { onSetUp("weather") }
+                                "todo" -> MenuRow(Icons.Rounded.DoneAll, "Clear what is done", "Takes the ticked ones off the list", index = row++) {
+                                    onSetUp("todo")
+                                    onDismiss()
+                                }
+                                "media" -> if (!com.gabriel.zenithui.data.NotificationDots.allowed(context)) {
+                                    MenuRow(Icons.Rounded.MusicNote, "Let Zenith see what is playing", "Android's notification access, the one the dots use", index = row++) {
+                                        onSetUp("media")
+                                        onDismiss()
+                                    }
+                                }
+                            }
+                            MenuRow(Icons.Rounded.Palette, "Colour", if (item.accent == 0L) "The theme's, or one of its own" else "Its own, not the theme's", index = row++) { onColour() }
+                            if (!locked) MenuRow(Icons.Rounded.OpenInFull, "Resize and move", "Pull its corner, pick a size, or move it a cell at a time", index = row++) { onResize() }
+                            if (!locked) MenuRow(Icons.Rounded.Layers, "Stack another widget here", "Swipe up and down between them, in this one spot", index = row++) { onStack() }
+                        }
+
+                        is HostedWidgetCell -> {
+                            if (!locked) MenuRow(Icons.Rounded.OpenInFull, "Resize and move", "Pull its corner, or move it a cell at a time", index = row++) { onResize() }
+                            MenuRow(
+                                if (item.glass) Icons.Rounded.LayersClear else Icons.Rounded.Layers,
+                                if (item.glass) "Take the tile away" else "Put a tile behind it",
+                                if (item.glass) "The widget on its own, as its app draws it" else "A solid tile, for a widget with no background of its own",
+                                index = row++,
+                            ) { onGlassBehind(!item.glass); onDismiss() }
+                            if (!locked) MenuRow(Icons.Rounded.Layers, "Stack another widget here", "Swipe up and down between them, in this one spot", index = row++) { onStack() }
+                        }
+
+                        is StackCell -> {
+                            if (!locked) MenuRow(Icons.Rounded.OpenInFull, "Resize and move", "Every widget in it takes the new size", index = row++) { onResize() }
+                            if (item.members.size < StackRules.MOST) {
+                                if (!locked) MenuRow(Icons.Rounded.Layers, "Stack another widget", "${item.members.size} in it now", index = row++) { onStack() }
+                            }
+                            item.members.forEachIndexed { index, member ->
+                                val name = remember(member) { memberName(context, member) }
+                                MenuRow(Icons.AutoMirrored.Rounded.Logout, "Take $name out", "Onto a spot of its own on this page", index = row++) {
+                                    onUnstack(index)
+                                    onDismiss()
+                                }
+                            }
+                        }
                     }
                 }
             }
-        }
-        Section {
-            MenuRow(Icons.Rounded.Tune, "Customise home screen", "Widgets, wallpaper and settings", index = row) { onCustomize() }
+            // What cannot be undone, in red, on a card of its own. With the layout locked only an app's
+            // Uninstall is left of it.
+            if (!locked || item is AppCell) {
+                Section {
+                    CardRows {
+                        when (item) {
+                            is AppCell -> {
+                                if (!locked) MenuRow(Icons.Rounded.Home, "Remove from home", "The app stays installed, and in the drawer", danger = true, index = row++) { onRemove(); onDismiss() }
+                                MenuRow(Icons.Rounded.Delete, "Uninstall", "Takes the app off the phone", danger = true, index = row++) { onUninstall(item.key); onDismiss() }
+                            }
+                            is ShortcutCell -> MenuRow(Icons.Rounded.Home, "Remove from home", "The app keeps its shortcut", danger = true, index = row++) { onRemove(); onDismiss() }
+                            is FolderCell -> MenuRow(Icons.Rounded.Home, "Remove from home", "Its apps stay installed, and in the drawer", danger = true, index = row++) { onRemove(); onDismiss() }
+                            is WidgetCell -> MenuRow(Icons.Rounded.Home, "Remove widget", "It can be added again from Widgets", danger = true, index = row++) { onRemove(); onDismiss() }
+                            is HostedWidgetCell -> MenuRow(Icons.Rounded.Home, "Remove widget", "It can be added again from Widgets", danger = true, index = row++) { onRemove(); onDismiss() }
+                            is StackCell -> MenuRow(Icons.Rounded.Home, "Remove stack", "All ${item.members.size} widgets in it", danger = true, index = row++) { onRemove(); onDismiss() }
+                        }
+                    }
+                }
+            }
+            Section {
+                MenuRow(Icons.Rounded.Tune, "Customise home screen", "Widgets, wallpaper and settings", index = row) { onCustomize() }
+            }
         }
     }
 }
@@ -727,34 +792,37 @@ fun CustomizeSheet(
             ?.isRoleHeld(android.app.role.RoleManager.ROLE_HOME) == true
     }
     ZenithSheet(visible = visible, onDismiss = onDismiss, title = "Customise") {
-        // The four things people come here for, as big solid tiles with room between them; the
-        // rest underneath, on a card of rows.
-        Row(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(TILE_GAP)) {
-            QuickTile(Icons.Rounded.Dashboard, "Widgets", "Add a clock, calendar, note, battery or toggles", index = 0, modifier = Modifier.weight(1f)) { onWidgets() }
-            QuickTile(
-                icon = Icons.Rounded.Image,
-                label = "Wallpaper",
-                detail = when {
-                    wallpaperName != null -> "$wallpaperName, one of Zenith's own"
-                    wallpaper != null -> "A photo of yours"
-                    else -> "Zenith's own designs, or a photo of yours"
-                },
-                picture = wallpaper,
-                index = 1,
-                modifier = Modifier.weight(1f),
-            ) { onWallpaper() }
-        }
-        Spacer(Modifier.height(TILE_GAP))
-        Row(horizontalArrangement = Arrangement.spacedBy(TILE_GAP)) {
-            QuickTile(Icons.Rounded.Tune, "Settings", "Colours, grid, glass, motion and backup", index = 2, modifier = Modifier.weight(1f)) { onSettings() }
-            QuickTile(Icons.Rounded.Bedtime, "Bedside clock", "A dim full-screen clock for the night", index = 3, modifier = Modifier.weight(1f)) { onAmbient() }
-        }
-        Section {
-            CardRows {
-                if (!isHome) {
-                    MenuRow(Icons.Rounded.Home, "Make Zenith your home screen", "So the home button always comes back here", index = 4) { onDefaultLauncher(); onDismiss() }
+        // On a short screen, or with large text, it scrolls rather than losing its last rows.
+        Column(Modifier.verticalScroll(rememberScrollState())) {
+            // The four things people come here for, as big solid tiles with room between them; the
+            // rest underneath, on a card of rows.
+            Row(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(TILE_GAP)) {
+                QuickTile(Icons.Rounded.Dashboard, "Widgets", "Add a clock, calendar, note, battery or toggles", index = 0, modifier = Modifier.weight(1f)) { onWidgets() }
+                QuickTile(
+                    icon = Icons.Rounded.Image,
+                    label = "Wallpaper",
+                    detail = when {
+                        wallpaperName != null -> "$wallpaperName, one of Zenith's own"
+                        wallpaper != null -> "A photo of yours"
+                        else -> "Zenith's own designs, or a photo of yours"
+                    },
+                    picture = wallpaper,
+                    index = 1,
+                    modifier = Modifier.weight(1f),
+                ) { onWallpaper() }
+            }
+            Spacer(Modifier.height(TILE_GAP))
+            Row(horizontalArrangement = Arrangement.spacedBy(TILE_GAP)) {
+                QuickTile(Icons.Rounded.Tune, "Settings", "Colours, grid, glass, motion and backup", index = 2, modifier = Modifier.weight(1f)) { onSettings() }
+                QuickTile(Icons.Rounded.Bedtime, "Bedside clock", "A dim full-screen clock for the night", index = 3, modifier = Modifier.weight(1f)) { onAmbient() }
+            }
+            Section {
+                CardRows {
+                    if (!isHome) {
+                        MenuRow(Icons.Rounded.Home, "Make Zenith your home screen", "So the home button always comes back here", index = 4) { onDefaultLauncher(); onDismiss() }
+                    }
+                    MenuRow(Icons.AutoMirrored.Rounded.HelpOutline, "How it works", "Every gesture in one page", index = 5) { onHelp() }
                 }
-                MenuRow(Icons.AutoMirrored.Rounded.HelpOutline, "How it works", "Every gesture in one page", index = 5) { onHelp() }
             }
         }
     }

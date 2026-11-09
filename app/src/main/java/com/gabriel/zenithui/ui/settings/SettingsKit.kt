@@ -390,6 +390,9 @@ internal enum class FieldLook { Card, Search, Row }
  * there is said in grey until something is typed, and the cursor is the accent. Once something is
  * in a search, a grey round button clears it. What may be typed, and what the keyboard offers, are
  * the caller's: [onValueChange] can filter, [keyboardOptions] and [keyboardActions] are passed on.
+ *
+ * The whole box is the field: a tap anywhere in it brings the keyboard, and what goes there is the
+ * field's own name to anyone who hears the screen rather than sees it.
  */
 @Composable
 internal fun FieldBox(
@@ -411,9 +414,20 @@ internal fun FieldBox(
     val palette = LocalPalette.current
     val reduced = LocalMotionLevel.current.reduced
     val search = look == FieldLook.Search
-    Row(
-        modifier
+    // A search may stand on a sheet's glass; there the grey of what goes in it is the glass's own.
+    val hint = if (search) quietWords() else apple.secondary
+    BasicTextField(
+        value = value,
+        onValueChange = onValueChange,
+        singleLine = singleLine,
+        textStyle = TextStyle(fontFamily = LocalZenithFont.current, color = apple.words, fontSize = fontSize, textAlign = textAlign),
+        cursorBrush = SolidColor(palette.accent),
+        keyboardOptions = keyboardOptions,
+        keyboardActions = keyboardActions,
+        visualTransformation = visualTransformation,
+        modifier = modifier
             .fillMaxWidth()
+            .onFocusChanged { onFocusChanged(it.isFocused) }
             .then(
                 when (look) {
                     FieldLook.Card -> Modifier.solidCard(CardKind.Grouped)
@@ -421,64 +435,55 @@ internal fun FieldBox(
                     FieldLook.Row -> Modifier
                 }
             )
-            .heightIn(min = if (search) 40.dp else 48.dp)
-            .padding(start = if (search) 10.dp else 16.dp, end = if (search) 6.dp else 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        if (search) {
-            Icon(Icons.Rounded.Search, contentDescription = null, tint = apple.secondary, modifier = Modifier.size(20.dp))
-            Spacer(Modifier.width(7.dp))
-        }
-        Box(
-            Modifier
-                .weight(1f)
-                .padding(vertical = if (singleLine) 0.dp else 13.dp),
-            contentAlignment = if (singleLine) Alignment.CenterStart else Alignment.TopStart,
-        ) {
-            if (value.isEmpty()) {
-                Text(
-                    placeholder,
-                    color = apple.secondary,
-                    fontSize = fontSize,
-                    textAlign = textAlign,
-                    maxLines = if (singleLine) 1 else Int.MAX_VALUE,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.fillMaxWidth(),
-                )
+            // A search is tall enough for its clear button's finger room from the start.
+            .heightIn(min = if (search) 44.dp else 48.dp)
+            .padding(start = if (search) 10.dp else 16.dp, end = if (search) 0.dp else 16.dp),
+        decorationBox = { inner ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (search) {
+                    Icon(Icons.Rounded.Search, contentDescription = null, tint = hint, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(7.dp))
+                }
+                Box(
+                    Modifier
+                        .weight(1f)
+                        .padding(vertical = if (singleLine) 0.dp else 13.dp),
+                    contentAlignment = if (singleLine) Alignment.CenterStart else Alignment.TopStart,
+                    propagateMinConstraints = true,
+                ) {
+                    if (value.isEmpty()) {
+                        Text(
+                            placeholder,
+                            color = hint,
+                            fontSize = fontSize,
+                            textAlign = textAlign,
+                            maxLines = if (singleLine) 1 else Int.MAX_VALUE,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    inner()
+                }
+                if (search) {
+                    AnimatedVisibility(
+                        visible = value.isNotEmpty(),
+                        enter = popIn(reduced, millis = 140),
+                        exit = popOut(reduced, millis = 100),
+                    ) {
+                        // Apple's round clear button, with a finger's room round it.
+                        Box(
+                            Modifier
+                                .size(44.dp)
+                                .clip(CircleShape)
+                                .clickable(role = Role.Button) { onValueChange("") },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(Icons.Rounded.Cancel, contentDescription = "Clear", tint = hint, modifier = Modifier.size(20.dp))
+                        }
+                    }
+                }
             }
-            BasicTextField(
-                value = value,
-                onValueChange = onValueChange,
-                singleLine = singleLine,
-                textStyle = TextStyle(fontFamily = LocalZenithFont.current, color = apple.words, fontSize = fontSize, textAlign = textAlign),
-                cursorBrush = SolidColor(palette.accent),
-                keyboardOptions = keyboardOptions,
-                keyboardActions = keyboardActions,
-                visualTransformation = visualTransformation,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .onFocusChanged { onFocusChanged(it.isFocused) },
-            )
-        }
-        if (search) {
-            AnimatedVisibility(
-                visible = value.isNotEmpty(),
-                enter = popIn(reduced, millis = 140),
-                exit = popOut(reduced, millis = 100),
-            ) {
-                Icon(
-                    Icons.Rounded.Cancel,
-                    contentDescription = "Clear",
-                    tint = apple.secondary,
-                    modifier = Modifier
-                        .size(30.dp)
-                        .clip(CircleShape)
-                        .clickable { onValueChange("") }
-                        .padding(5.dp),
-                )
-            }
-        }
-    }
+        },
+    )
 }
 
 /**

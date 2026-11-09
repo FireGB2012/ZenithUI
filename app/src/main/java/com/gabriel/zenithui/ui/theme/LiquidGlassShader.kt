@@ -386,10 +386,16 @@ internal data class GlassLook(
     /**
      * The pane covers what is behind it rather than floating over the wallpaper: a sheet, an open
      * folder, the drawer. Behind those is the home screen, so with no wallpaper to show their own
-     * frosted body is not see-through (see [fallbackBody]).
+     * frosted body is not see-through (see [fallbackFill]).
      */
     val covers: Boolean = false,
-)
+) {
+    /**
+     * Whether the pane looks any different as the phone tips: only one with a rim, which bends what
+     * is behind it and catches the light, does. One without need not be drawn again for the tilt.
+     */
+    val followsTilt: Boolean get() = rimmed
+}
 
 /** A finger on a pane: where, in pane pixels; how far its glow has spread; and how bright it is. */
 internal data class GlassTouch(val at: Offset, val reach: Float, val strength: Float) {

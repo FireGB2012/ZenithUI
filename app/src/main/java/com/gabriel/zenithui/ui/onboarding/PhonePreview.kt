@@ -87,6 +87,8 @@ import com.gabriel.zenithui.ui.theme.ZenithShapes
 import com.gabriel.zenithui.ui.theme.GlassMaterial
 import com.gabriel.zenithui.ui.theme.glass
 import kotlin.math.min
+import androidx.compose.runtime.CompositionLocalProvider
+import com.gabriel.zenithui.ui.common.LocalIconsOnPlate
 
 /** The phone's position on screen, kept outside state: the zoom reads it every frame and must not recompose. */
 private class PhoneSpot {
@@ -223,17 +225,21 @@ fun PhonePreview(
                             transformOrigin = TransformOrigin(0f, 0f)
                         },
                 ) {
-                    MiniHome(
-                        items = items,
-                        dock = dock,
-                        appsByKey = appsByKey,
-                        settings = settings,
-                        wallpaper = wallpaper,
-                        shown = shown,
-                        // Over the last stretch of the zoom the preview's own background dissolves,
-                        // so your real wallpaper is already there when the home screen takes over.
-                        backgroundAlpha = { ((1f - zoom()) / 0.4f).coerceIn(0f, 1f) },
-                    )
+                    // A picture of the home screen draws its icons as the home screen does, glass
+                    // ones included, even on a page or in a sheet that would give them a plate.
+                    CompositionLocalProvider(LocalIconsOnPlate provides false) {
+                        MiniHome(
+                            items = items,
+                            dock = dock,
+                            appsByKey = appsByKey,
+                            settings = settings,
+                            wallpaper = wallpaper,
+                            shown = shown,
+                            // Over the last stretch of the zoom the preview's own background dissolves,
+                            // so your real wallpaper is already there when the home screen takes over.
+                            backgroundAlpha = { ((1f - zoom()) / 0.4f).coerceIn(0f, 1f) },
+                        )
+                    }
                 }
                 // It is a picture of your phone, not a second phone: nothing inside takes a touch.
                 Box(Modifier.matchParentSize().pointerInput(Unit) { detectTapGestures { } })

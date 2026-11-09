@@ -35,6 +35,33 @@ class AppleColoursTest {
     }
 
     @Test
+    fun `a sheet over a page is a step lighter in the dark, as an iPhone's, and the same in the light`() {
+        assertEquals(AppleColours.Light, AppleColours.Light.elevated())
+        val up = AppleColours.Dark.elevated()
+        assertEquals(Color(0xFF1C1C1E), up.page)
+        assertEquals(Color(0xFF2C2C2E), up.card)
+        // The sheet stands off the black page under it, its cards off the sheet, and a card on a
+        // card off its card.
+        assertTrue(contrast(up.page, AppleColours.Dark.page) > 1.15f)
+        assertTrue(contrast(up.card, up.page) > 1.1f)
+        assertTrue(contrast(up.raised, up.card) > 1.1f)
+        assertTrue(contrast(up.pressed, up.card) > 1.1f)
+    }
+
+    @Test
+    fun `on a sheet a step up, words, second lines, red and every accent still stand`() {
+        val up = AppleColours.Dark.elevated()
+        for (ground in listOf(up.page, up.card, up.raised, up.pressed)) {
+            assertTrue("words", contrast(up.words, ground) >= 4.5f)
+            assertTrue("second line", contrast(up.secondary, ground) >= 4.5f)
+        }
+        assertTrue("red", contrast(up.danger, up.card) >= 3f)
+        for (palette in every) {
+            assertTrue(palette.id, contrast(AppleColours.accent(palette, dark = true), up.card) >= 3f)
+        }
+    }
+
+    @Test
     fun `frost is apple's own blue`() {
         assertEquals(Color(0xFF0A84FF), AppleColours.accent(Palettes.Frost, dark = true))
         assertEquals(Color(0xFF007AFF), AppleColours.accent(Palettes.Frost, dark = false))

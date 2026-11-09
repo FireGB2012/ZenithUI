@@ -55,6 +55,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.gabriel.zenithui.ui.theme.LocalApple
 import com.gabriel.zenithui.ui.theme.LocalPalette
+import androidx.compose.runtime.CompositionLocalProvider
 
 /**
  * A page the full height of the screen, laid over the home screen, as an iPhone draws a screen of
@@ -111,7 +112,10 @@ fun FullPage(
             ) {
                 Column(Modifier.fillMaxSize().graphicsLayer { alpha = uncovered.value }) {
                     PageBar(title, canGoBack, backTo, titleShown, onBack, onClose)
-                    Box(Modifier.weight(1f).fillMaxWidth(), content = content)
+                    // A page of its own is solid: an icon on it never shows the wallpaper through.
+                    CompositionLocalProvider(LocalIconsOnPlate provides true) {
+                        Box(Modifier.weight(1f).fillMaxWidth(), content = content)
+                    }
                 }
             }
         }

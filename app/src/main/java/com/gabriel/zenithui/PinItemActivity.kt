@@ -60,12 +60,12 @@ import com.gabriel.zenithui.ui.theme.ZenithShapes
 import com.gabriel.zenithui.ui.theme.ZenithTheme
 import androidx.compose.runtime.setValue
 import com.gabriel.zenithui.ui.home.ZenithSheet
-import com.gabriel.zenithui.ui.home.SHEET_GONE_MS
 import com.gabriel.zenithui.ui.settings.Section
 import com.gabriel.zenithui.ui.theme.LocalApple
 import com.gabriel.zenithui.ui.theme.ButtonKind
-import kotlinx.coroutines.delay
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 
 /**
  * Where another app's "Add to home screen" lands: Chrome's shortcut to a page, a messaging app's
@@ -255,52 +255,62 @@ private fun PinCard(card: Card, shape: Shape, closing: Boolean, onGone: () -> Un
     var open by remember { mutableStateOf(true) }
     // Android's answer about a widget closes it from outside.
     LaunchedEffect(closing) { if (closing) open = false }
-    // Once it has been put away, and has had time to go, the screen closes.
-    LaunchedEffect(open) {
-        if (!open) {
-            delay(SHEET_GONE_MS.toLong())
-            onGone()
-        }
-    }
-    BackHandler(enabled = open) { open = false }
+    // Back puts it away, and while it is going a second back does nothing more: the screen closes
+    // once the sheet has gone, not before.
+    BackHandler { open = false }
 
-    ZenithSheet(visible = open, onDismiss = { open = false }, title = "Add to home screen") {
-        Section {
-            if (card.wide) {
-                // A widget's picture, at its own shape, in a well of the card-on-a-card grey.
-                Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(start = 12.dp, end = 12.dp, top = 12.dp)
-                        .height(150.dp)
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(apple.raised),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    card.picture?.let { Image(it, contentDescription = null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize().padding(10.dp)) }
-                }
-            }
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                if (!card.wide) {
+    ZenithSheet(
+        visible = open,
+        onDismiss = { open = false },
+        title = "Add to home screen",
+        // As tall as it needs, nearly the whole screen if it must, as the card before it was.
+        maxHeightFraction = 0.95f,
+        onGone = onGone,
+    ) {
+        // On a short window (a phone on its side, split screen) the card scrolls, and the two
+        // answers under it always keep their room.
+        Column(
+            Modifier
+                .weight(1f, fill = false)
+                .verticalScroll(rememberScrollState()),
+        ) {
+            Section {
+                if (card.wide) {
+                    // A widget's picture, at its own shape, in a well of the card-on-a-card grey.
                     Box(
                         Modifier
-                            .size(56.dp)
-                            .clip(shape)
+                            .fillMaxWidth()
+                            .padding(start = 12.dp, end = 12.dp, top = 12.dp)
+                            .height(150.dp)
+                            .clip(RoundedCornerShape(14.dp))
                             .background(apple.raised),
                         contentAlignment = Alignment.Center,
                     ) {
-                        card.picture?.let { Image(it, contentDescription = null, modifier = Modifier.fillMaxSize()) }
+                        card.picture?.let { Image(it, contentDescription = null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize().padding(10.dp)) }
                     }
-                    Spacer(Modifier.width(14.dp))
                 }
-                Column(Modifier.weight(1f)) {
-                    Text(card.label, color = apple.words, fontSize = 16.sp, fontWeight = FontWeight.Medium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                    Text("From ${card.from}", color = apple.secondary, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (!card.wide) {
+                        Box(
+                            Modifier
+                                .size(56.dp)
+                                .clip(shape)
+                                .background(apple.raised),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            card.picture?.let { Image(it, contentDescription = null, modifier = Modifier.fillMaxSize()) }
+                        }
+                        Spacer(Modifier.width(14.dp))
+                    }
+                    Column(Modifier.weight(1f)) {
+                        Text(card.label, color = apple.words, fontSize = 16.sp, fontWeight = FontWeight.Medium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        Text("From ${card.from}", color = apple.secondary, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
                 }
             }
         }

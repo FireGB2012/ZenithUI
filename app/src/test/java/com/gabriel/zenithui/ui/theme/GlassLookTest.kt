@@ -112,13 +112,32 @@ class GlassLookTest {
     @Test
     fun `with no wallpaper to read, a sheet or an open folder is not see-through`() {
         // Behind a sheet is the home screen, not the wallpaper: its words must not sit over the icons.
+        // It is Apple's page instead, so the cards on it stand off it as they do in Settings.
         for (dark in listOf(true, false)) for (body in GlassBody.entries) {
             for (solid in listOf(COVERING_BODY, 0.65f, 1.2f)) {
                 val sheet = look(solid = solid, dark = dark, body = body)
                 assertTrue(sheet.covers)
-                assertEquals(1f, fallbackBody(sheet, dark), 0f)
+                assertEquals(AppleColours.of(dark).page, fallbackFill(sheet, dark))
+                assertEquals(1f, fallbackFill(sheet, dark).alpha, 0f)
+                assertTrue(contrast(AppleColours.of(dark).card, fallbackFill(sheet, dark)) > 1.05f)
             }
         }
+    }
+
+    @Test
+    fun `with no wallpaper to read, a sheet's page is flat, so its first cards stand off it too`() {
+        // The sheen that lights a floating pane from the top would lift a sheet's black page to the
+        // cards' own grey just where its first cards sit.
+        for (dark in listOf(true, false)) {
+            assertEquals(0f, fallbackSheen(look(solid = 0.65f, dark = dark), dark), 0f)
+            assertTrue(fallbackSheen(look(dark = dark), dark) > 0f)
+        }
+    }
+
+    @Test
+    fun `a pane with no rim does not change as the phone tips, so it need not be drawn again`() {
+        assertFalse(look(border = false, solid = 0.65f).followsTilt)
+        assertTrue(look().followsTilt)
     }
 
     @Test
@@ -128,11 +147,12 @@ class GlassLookTest {
             for (solid in listOf(0f, 0.35f, 0.45f, 0.5f)) {
                 val pane = look(material, solid = solid, dark = dark, body = body)
                 assertFalse(pane.covers)
-                assertTrue(fallbackBody(pane, dark) <= 0.94f)
+                // Never more than 94% (a colour keeps its alpha to the nearest 255th).
+                assertTrue(fallbackFill(pane, dark).alpha < 0.95f)
             }
         }
         // But with enough of a body of its own to be seen, and to read a word on.
-        for (dark in listOf(true, false)) assertTrue(fallbackBody(look(GlassMaterial.Clear, dark = dark), dark) > 0.3f)
+        for (dark in listOf(true, false)) assertTrue(fallbackFill(look(GlassMaterial.Clear, dark = dark), dark).alpha > 0.3f)
     }
 
     @Test

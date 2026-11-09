@@ -168,6 +168,19 @@ fun AppleColours.button(kind: ButtonKind, accent: Color, surfaces: AppleSurfaces
     ButtonKind.Plain -> ButtonColours(fill = Color.Transparent, words = accent)
 }
 
+/**
+ * Apple's colours a step up, for a sheet standing solid over a page of its own (Settings, the
+ * gallery) rather than as glass over the wallpaper, as an iPhone's sheets do. In the dark everything
+ * is a shade lighter, so the sheet stands off the black page under it and its cards off the sheet;
+ * in the light a sheet is already the grouped grey with white cards, and nothing changes.
+ */
+fun AppleSurfaces.elevated(): AppleSurfaces = if (!dark) this else copy(
+    page = Color(0xFF1C1C1E),
+    card = Color(0xFF2C2C2E),
+    raised = Color(0xFF3A3A3C),
+    pressed = Color(0xFF48484A),
+)
+
 /** The colours of the light or the dark in use, for anything drawn solid. */
 val LocalApple = staticCompositionLocalOf { AppleColours.Dark }
 

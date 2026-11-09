@@ -170,7 +170,9 @@ fun Modifier.glass(
                     screen = screen,
                     wallpaperOffset = wallpaperOffset.value,
                     look = look,
-                    lean = tilt.value,
+                    // Only a pane whose rim bends and catches the light changes as the phone
+                    // tips; one without is not drawn again for it.
+                    lean = if (look.followsTilt) tilt.value else Offset.Zero,
                     dark = palette.dark,
                     tuning = tuning,
                 )
@@ -348,16 +350,26 @@ internal fun glassLook(
 internal const val COVERING_BODY = 0.6f
 
 /**
- * How thick the frosted body is that a pane gets of its own when Zenith cannot read the wallpaper
- * (a live wallpaper, or setup). A floating control keeps a light one, so the live wallpaper still
- * shows through it; one with more veil, and so words on it, gets more. A pane that [GlassLook.covers]
- * what is behind it is not see-through at all: behind a sheet is the home screen, not the
- * wallpaper, and its words would sit over the icons.
+ * The frosted body a pane gets of its own when Zenith cannot read the wallpaper (a live wallpaper,
+ * or setup). A floating control keeps a light one, so the live wallpaper still shows through it;
+ * one with more veil, and so words on it, gets more. A pane that [GlassLook.covers] what is behind
+ * it is not see-through at all, since behind a sheet is the home screen, not the wallpaper, and its
+ * words would sit over the icons: it is Apple's page instead, which the cards in it stand off as
+ * they do in Settings.
  */
-internal fun fallbackBody(look: GlassLook, dark: Boolean): Float {
-    if (look.covers) return 1f
-    return ((if (dark) 0.22f else 0.28f) + 1.3f * look.wash.alpha).coerceAtMost(0.94f)
+internal fun fallbackFill(look: GlassLook, dark: Boolean): Color {
+    if (look.covers) return AppleColours.of(dark).page
+    val base = if (dark) Color(0xFF181B24) else Color.White
+    return base.copy(alpha = ((if (dark) 0.22f else 0.28f) + 1.3f * look.wash.alpha).coerceAtMost(0.94f))
 }
+
+/**
+ * How bright the light is across the top of a pane's own frosted body when Zenith cannot read the
+ * wallpaper, so a floating control still reads as glass. A covering pane has none: it is Apple's
+ * page, and the light would lift it to the colour of the cards on it just where the first ones sit.
+ */
+internal fun fallbackSheen(look: GlassLook, dark: Boolean): Float =
+    if (look.covers) 0f else if (dark) 0.10f else 0.30f
 
 /**
  * The ink for words on a pill of the accent: dark on anything lighter than a mid tone, white on a
@@ -527,17 +539,19 @@ internal fun DrawScope.drawLiquidGlass(
     } else {
         // Nothing readable behind (a live wallpaper, or setup): a frosted body of its own, lit
         // from the top, so the pane still reads as glass rather than a flat card.
-        val base = if (dark) Color(0xFF181B24) else Color.White
-        drawRect(base.copy(alpha = fallbackBody(look, dark)), size = paneSize, alpha = look.opacity)
-        drawRect(
-            Brush.verticalGradient(
-                0f to Color.White.copy(alpha = if (dark) 0.10f else 0.30f),
-                0.5f to Color.Transparent,
-                endY = paneSize.height,
-            ),
-            size = paneSize,
-            alpha = look.opacity,
-        )
+        drawRect(fallbackFill(look, dark), size = paneSize, alpha = look.opacity)
+        val sheen = fallbackSheen(look, dark)
+        if (sheen > 0f) {
+            drawRect(
+                Brush.verticalGradient(
+                    0f to Color.White.copy(alpha = sheen),
+                    0.5f to Color.Transparent,
+                    endY = paneSize.height,
+                ),
+                size = paneSize,
+                alpha = look.opacity,
+            )
+        }
     }
     if (touch.strength > 0f) {
         // The finger's light, as the shader draws it: brightest under the fingertip.
@@ -551,7 +565,8 @@ internal fun DrawScope.drawLiquidGlass(
             size = paneSize,
         )
     }
-    drawRim(paneSize, outline, look, light, dark)
+    // A covering pane with nothing to show is Apple's page, flat: its slab is not shaded either.
+    drawRim(paneSize, outline, if (!canSee && look.covers) look.copy(relief = 0f) else look, light, dark)
 }
 
 /**

@@ -46,6 +46,11 @@ data class AppleSurfaces(
     val danger: Color,
     /** A row's chevron, and marks quieter still than a second line. */
     val faint: Color,
+    /**
+     * A page with nothing grouped on it, as setup is: white in the light, black in the dark, as an
+     * iPhone's own setup is. Settings' page is the grouped grey ([page]) so its cards stand off it.
+     */
+    val plain: Color,
 )
 
 object AppleColours {
@@ -65,6 +70,7 @@ object AppleColours {
         field = Color(0xFF767680).copy(alpha = 0.24f),
         danger = Color(0xFFFF453A),
         faint = Color(0xFFEBEBF5).copy(alpha = 0.3f),
+        plain = Color.Black,
     )
 
     val Light = AppleSurfaces(
@@ -82,6 +88,7 @@ object AppleColours {
         field = Color(0xFF767680).copy(alpha = 0.12f),
         danger = Color(0xFFFF3B30),
         faint = Color(0xFF3C3C43).copy(alpha = 0.3f),
+        plain = Color.White,
     )
 
     fun of(dark: Boolean): AppleSurfaces = if (dark) Dark else Light
@@ -176,6 +183,7 @@ fun AppleColours.button(kind: ButtonKind, accent: Color, surfaces: AppleSurfaces
  */
 fun AppleSurfaces.elevated(): AppleSurfaces = if (!dark) this else copy(
     page = Color(0xFF1C1C1E),
+    plain = Color(0xFF1C1C1E),
     card = Color(0xFF2C2C2E),
     raised = Color(0xFF3A3A3C),
     pressed = Color(0xFF48484A),

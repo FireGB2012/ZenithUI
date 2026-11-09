@@ -62,6 +62,28 @@ class AppleColoursTest {
     }
 
     @Test
+    fun `setup's plain page is white in the light and black in the dark, a step up on a sheet`() {
+        assertEquals(Color.White, AppleColours.Light.plain)
+        assertEquals(Color.Black, AppleColours.Dark.plain)
+        assertEquals(Color.White, AppleColours.Light.elevated().plain)
+        assertEquals(Color(0xFF1C1C1E), AppleColours.Dark.elevated().plain)
+    }
+
+    @Test
+    fun `on the plain page words, second lines, the accent and words in a field all stand`() {
+        for (s in both) {
+            assertTrue("words, dark=${s.dark}", contrast(s.words, s.plain) >= 4.5f)
+            assertTrue("second line, dark=${s.dark}", contrast(s.secondary, s.plain) >= 4.5f)
+            val field = s.field.compositeOver(s.plain)
+            assertTrue("words in a field, dark=${s.dark}", contrast(s.words, field) >= 4.5f)
+            assertTrue("grey in a field, dark=${s.dark}", contrast(s.secondary, field) >= 4.5f)
+            for (palette in every) {
+                assertTrue("${palette.id} dark=${s.dark}", contrast(AppleColours.accent(palette, s.dark), s.plain) >= 3f)
+            }
+        }
+    }
+
+    @Test
     fun `frost is apple's own blue`() {
         assertEquals(Color(0xFF0A84FF), AppleColours.accent(Palettes.Frost, dark = true))
         assertEquals(Color(0xFF007AFF), AppleColours.accent(Palettes.Frost, dark = false))

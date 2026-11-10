@@ -127,6 +127,7 @@ import com.gabriel.zenithui.ui.common.labelShadow
 import com.gabriel.zenithui.ui.common.pressBounce
 import com.gabriel.zenithui.ui.common.staggerDelay
 import com.gabriel.zenithui.ui.theme.GlassMaterial
+import com.gabriel.zenithui.ui.theme.IconOutlineShape
 import com.gabriel.zenithui.ui.theme.LocalOnWallpaper
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.PressLight
@@ -1072,6 +1073,10 @@ fun HomeItemContent(
             showLabel = settings.showLabels,
             frame = geometry.iconFrame,
             style = settings.folderStyle,
+            // Cut like the app icons beside it. The free-form outlines (pebble, teardrop, hexagon,
+            // clover) keep the squircle: the lens draws every free-form outline as a superellipse, so
+            // glass clipped to one of them would show a squircle's rim cut off by the clip.
+            shape = ZenithShapes.forIconShape(settings.iconShape).takeUnless { it is IconOutlineShape } ?: ZenithShapes.icon,
         )
 
         is WidgetCell -> {
@@ -1110,17 +1115,25 @@ private fun WidgetName(name: String, strip: PxRect) {
 /**
  * The name under another app's widget, [provider] being its flattened component name: the app it
  * comes from as the drawer has it, or as Android has it for an app the drawer does not have.
+ *
+ * Until the drawer's list has come in, which at every start is a moment after the home screen is
+ * first drawn, the name is left empty rather than asked of Android: that would be a call to the
+ * system for every such widget while the page is first composed, and would put Android's name up
+ * where the drawer may have one of its own.
  */
 @Composable
 private fun hostedName(provider: String, appsByKey: Map<String, AppInfo>): String {
     val context = LocalContext.current
     return remember(provider, appsByKey) {
         Widgets.hostedName(provider, appsByKey.values)
-            ?: runCatching {
-                val packages = context.packageManager
-                packages.getApplicationLabel(packages.getApplicationInfo(provider.substringBefore('/'), 0)).toString()
-            }.getOrNull()
-            ?: Widgets.UNNAMED
+            ?: if (appsByKey.isEmpty()) {
+                ""
+            } else {
+                runCatching {
+                    val packages = context.packageManager
+                    packages.getApplicationLabel(packages.getApplicationInfo(provider.substringBefore('/'), 0)).toString()
+                }.getOrNull() ?: Widgets.UNNAMED
+            }
     }
 }
 
@@ -1365,6 +1378,8 @@ fun FolderTile(
     frame: PxRect? = null,
     /** "grid": four small, two by two; "stack": the first three fanned; "cover": the first large. */
     style: String = "grid",
+    /** The outline of its glass and its colour, so that it is cut like the app icons beside it. */
+    shape: androidx.compose.ui.graphics.Shape = ZenithShapes.icon,
 ) {
     val density = LocalDensity.current
     val own = if (folder.colour == 0L) null else Color(folder.colour.toInt())
@@ -1384,9 +1399,9 @@ fun FolderTile(
             Box(
                 Modifier
                     .fillMaxSize()
-                    .glass(ZenithShapes.icon, strength = 1.2f, material = GlassMaterial.Clear, interactive = true, tint = own ?: Color.Unspecified)
+                    .glass(shape, strength = 1.2f, material = GlassMaterial.Clear, interactive = true, tint = own ?: Color.Unspecified)
                     // A colour of its own, laid in the glass, easing in and out as it is chosen.
-                    .background(shownColour.copy(alpha = shownColour.alpha * 0.3f), ZenithShapes.icon)
+                    .background(shownColour.copy(alpha = shownColour.alpha * 0.3f), shape)
                     .padding(iconSize * 0.12f),
                 contentAlignment = Alignment.Center,
             ) {

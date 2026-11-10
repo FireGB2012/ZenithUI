@@ -43,6 +43,7 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.staticCompositionLocalOf
@@ -234,10 +235,16 @@ fun WidgetStack(
     val reduced = LocalMotionLevel.current.reduced
     val pager = rememberPagerState(pageCount = { stack.members.size })
     var dotsUp by remember { mutableStateOf(false) }
+    val shown by rememberUpdatedState(onShown)
+    // Told the member that has settled, and told again when the members change under it: the pager
+    // keeps showing the same widget by its key and moves it to its new place without scrolling, so
+    // only the settled page, which follows that move, says where it is now.
+    LaunchedEffect(pager) {
+        snapshotFlow { pager.settledPage }.collect { shown(it) }
+    }
     LaunchedEffect(pager) {
         snapshotFlow { pager.isScrollInProgress }.collect { moving ->
             if (moving) dotsUp = true else {
-                onShown(pager.currentPage)
                 delay(1200)
                 dotsUp = false
             }

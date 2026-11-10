@@ -30,6 +30,8 @@ import com.gabriel.zenithui.ui.common.LabelStyle
 import com.gabriel.zenithui.ui.common.LocalIconStyle
 import com.gabriel.zenithui.ui.common.LocalLabelStyle
 import com.gabriel.zenithui.ui.common.LocalPressStyle
+import com.gabriel.zenithui.ui.common.MotionLevel
+import com.gabriel.zenithui.ui.common.rememberAnimationsEnabled
 
 /** The colours everything is drawn in: Zenith's one look in Light or Dark, or a widget's own colour inside it. */
 val LocalPalette = staticCompositionLocalOf { NeutralLook.Dark }
@@ -134,11 +136,13 @@ fun ZenithTheme(
     val typography = remember(font) { typographyIn(font.family) }
     val numbers = remember(font, settings.numberFont) { ZenithFonts.numbers(settings.numberFont, font) }
 
-    // One sensor for the whole launcher, read by every glass surface.
-    val tilt = rememberTilt(settings.glassShine)
+    // One sensor for the whole launcher: the light every glass surface reads, and how far the tilt
+    // floats the home screen, which it does not with movement reduced.
+    val tilt = rememberTilt(settings.glassShine, floats = !MotionLevel.of(settings.motion, rememberAnimationsEnabled()).reduced)
 
     CompositionLocalProvider(
-        LocalTilt provides tilt,
+        LocalTilt provides tilt.light,
+        LocalParallax provides tilt.parallax,
         LocalPalette provides palette,
         LocalBackdrop provides glass?.frost,
         LocalGlassLevels provides glass,

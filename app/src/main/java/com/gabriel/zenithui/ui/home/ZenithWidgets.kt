@@ -135,6 +135,7 @@ import com.gabriel.zenithui.data.ToggleGrid
 import com.gabriel.zenithui.data.ToggleNames
 import com.gabriel.zenithui.data.WidgetForm
 import com.gabriel.zenithui.data.Widgets
+import com.gabriel.zenithui.ui.common.labelShadow
 import com.gabriel.zenithui.ui.common.pressBounce
 import com.gabriel.zenithui.ui.common.rememberTick
 import com.gabriel.zenithui.ui.common.shake
@@ -143,6 +144,7 @@ import com.gabriel.zenithui.ui.theme.GlassMaterial
 import com.gabriel.zenithui.ui.theme.GlassMotion
 import com.gabriel.zenithui.ui.theme.glassPress
 import com.gabriel.zenithui.ui.theme.LocalNumberFont
+import com.gabriel.zenithui.ui.theme.LocalOnWallpaper
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.LocalZenithFont
 import com.gabriel.zenithui.ui.theme.ZenithShapes
@@ -185,7 +187,7 @@ fun ZenithWidget(
     if (kind == "search") {
         // A one line bar: it draws, and reacts, at exactly its own size.
         Box(modifier, contentAlignment = Alignment.Center) {
-            SearchWidget(onSearch)
+            WordsOnWallpaper { SearchWidget(onSearch) }
         }
         return
     }
@@ -217,29 +219,30 @@ fun ZenithWidget(
         modifier
             .glass(ZenithShapes.card, strength = 1f, interactive = true)
             .clip(ZenithShapes.card)
-            // A trace of the theme's colour, leaving the wallpaper and refracted edge visible.
-            .drawBehind {
-                drawCircle(
-                    brush = Brush.radialGradient(
-                        listOf(palette.accent.copy(alpha = 0.08f), Color.Transparent),
-                        center = Offset(size.width * 0.12f, size.height * 0.05f),
-                        radius = size.maxDimension * 0.75f,
-                    ),
-                    radius = size.maxDimension * 0.75f,
-                    center = Offset(size.width * 0.12f, size.height * 0.05f),
-                )
-                drawCircle(
-                    brush = Brush.radialGradient(
-                        listOf(palette.accentAlt.copy(alpha = 0.05f), Color.Transparent),
-                        center = Offset(size.width * 0.95f, size.height),
-                        radius = size.maxDimension * 0.6f,
-                    ),
-                    radius = size.maxDimension * 0.6f,
-                    center = Offset(size.width * 0.95f, size.height),
-                )
-            }
     ) {
-        WidgetBody(kind, formOf(maxWidth, maxHeight), maxWidth, maxHeight, userName, note, onNoteChange, toggles)
+        WordsOnWallpaper {
+            WidgetBody(kind, formOf(maxWidth, maxHeight), maxWidth, maxHeight, userName, note, onNoteChange, toggles)
+        }
+    }
+}
+
+/**
+ * Words on a widget's glass where that glass stands on the wallpaper ([LocalOnWallpaper]): white,
+ * with the soft shadow the names under the icons have, in Light as in Dark, since the glass is the
+ * same clear glass in both. Anywhere else, a widget shown in a sheet say, its words follow the mode.
+ */
+@Composable
+private fun WordsOnWallpaper(content: @Composable () -> Unit) {
+    if (LocalOnWallpaper.current) {
+        CompositionLocalProvider(
+            LocalPalette provides LocalPalette.current.copy(dark = true),
+            LocalTextStyle provides LocalTextStyle.current.merge(
+                TextStyle(shadow = labelShadow(onWallpaper = true, legacyShadow = false, density = LocalDensity.current.density))
+            ),
+            content = content,
+        )
+    } else {
+        content()
     }
 }
 
@@ -365,7 +368,14 @@ internal fun Figure(
         style = tight(glassSize, FontWeight.Bold, keepWeight = true).copy(color = Color.White)
         look = Modifier.glassInk(bevel = with(LocalDensity.current) { glassSize.toDp() } * 0.075f)
     } else {
-        style = if (accent) tight(size, weight).copy(brush = accentBrush()) else tight(size, weight).copy(color = palette.onGlass)
+        // On the wallpaper's glass the names' soft shadow comes with the words (see
+        // WordsOnWallpaper); anywhere else there is none.
+        val shadow = LocalTextStyle.current.shadow
+        style = if (accent) {
+            tight(size, weight).copy(brush = accentBrush(), shadow = shadow)
+        } else {
+            tight(size, weight).copy(color = palette.onGlass, shadow = shadow)
+        }
         look = Modifier
     }
     if (animated) {

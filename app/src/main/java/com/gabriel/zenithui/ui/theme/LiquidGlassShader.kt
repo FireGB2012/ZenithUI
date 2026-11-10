@@ -391,6 +391,13 @@ internal data class GlassLook(
     val relief: Float = 0f,
     /** Coloured glass: [wash] is its colour, and with nothing readable behind it the body keeps that colour. */
     val tinted: Boolean = false,
+    /**
+     * Glass standing on the wallpaper, the same in Light and in Dark: with nothing readable behind
+     * it, its body is one thin neutral grey in both. The shader is told nothing new for it, since
+     * this glass reaches the shader as dark: a uniform set but not declared would leave every phone
+     * with the glass that has no shader.
+     */
+    val onWallpaper: Boolean = false,
 )
 
 /** A finger on a pane: where, in pane pixels; how far its glow has spread; and how bright it is. */

@@ -19,7 +19,7 @@ class GlassTuningTest {
     @Test
     fun `the defaults change nothing at all`() {
         val look = pane()
-        assertSame(look, look.tuned(GlassTuning(), Color(0xFF7C6CFF)))
+        assertSame(look, look.tuned(GlassTuning()))
         for (lean in listOf(Offset.Zero, Offset(0.3f, -0.2f), Offset(-1f, 1f))) {
             // Zenith's own light, exactly as it was worked out before there was a studio.
             assertEquals(Offset(-0.45f - 1.6f * lean.x, -1f - 1.2f * lean.y), lightFrom(lean, GlassTuning()))
@@ -29,31 +29,23 @@ class GlassTuningTest {
     @Test
     fun `each slider changes what it says and nothing else`() {
         val look = pane()
-        val bent = look.tuned(GlassTuning(bend = 2f), Color.Red)
+        val bent = look.tuned(GlassTuning(bend = 2f))
         assertEquals(look.refraction * 2f, bent.refraction, 1e-6f)
         assertEquals(look.copy(refraction = bent.refraction), bent)
-        val frosted = look.tuned(GlassTuning(frost = 1f), Color.Red)
+        val frosted = look.tuned(GlassTuning(frost = 1f))
         assertEquals(look.frost + 1f, frosted.frost, 1e-6f)
-        val rimless = look.tuned(GlassTuning(rim = 0f), Color.Red)
+        val rimless = look.tuned(GlassTuning(rim = 0f))
         assertEquals(0f, rimless.shine, 0f)
         assertEquals(0f, rimless.mirror, 0f)
-        val rainbow = look.tuned(GlassTuning(rainbow = 3f), Color.Red)
+        val rainbow = look.tuned(GlassTuning(rainbow = 3f))
         assertEquals(look.dispersion * 3f, rainbow.dispersion, 1e-6f)
-    }
-
-    @Test
-    fun `more theme in the glass colours the veil without thinning it`() {
-        val look = pane()
-        val tinted = look.tuned(GlassTuning(tint = 0.4f), Color(0xFFFF0000))
-        assertEquals(look.wash.alpha, tinted.wash.alpha, 1e-6f)
-        assertTrue(tinted.wash.red > look.wash.red)
     }
 
     @Test
     fun `frost stays within what the shader can draw`() {
         val sheet = glassLook(GlassMaterial.Regular, 1f, solid = 1.5f, opacity = 1f, dark = true, tint = Color.White)
-        assertEquals(3f, sheet.tuned(GlassTuning(frost = 1f), Color.White).frost, 0f)
-        assertTrue(pane().tuned(GlassTuning(frost = -1f), Color.White).frost >= 0f)
+        assertEquals(3f, sheet.tuned(GlassTuning(frost = 1f)).frost, 0f)
+        assertTrue(pane().tuned(GlassTuning(frost = -1f)).frost >= 0f)
     }
 
     @Test

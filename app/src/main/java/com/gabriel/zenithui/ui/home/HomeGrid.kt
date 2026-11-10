@@ -127,6 +127,7 @@ import com.gabriel.zenithui.ui.common.labelShadow
 import com.gabriel.zenithui.ui.common.pressBounce
 import com.gabriel.zenithui.ui.common.staggerDelay
 import com.gabriel.zenithui.ui.theme.GlassMaterial
+import com.gabriel.zenithui.ui.theme.LocalOnWallpaper
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.PressLight
 import com.gabriel.zenithui.ui.theme.ZenithShapes
@@ -899,13 +900,18 @@ fun HomePage(
 
 /**
  * [content] written on the wallpaper itself, as everything on a home page is, and on the small home
- * screens that show one: its names are white with a soft shadow whatever the palette, as on an
- * iPhone. The drawer and the folder panel have surfaces of their own under their names, and keep
- * the palette's ink.
+ * screens that show one: whatever Light or Dark, its names are white with a soft shadow, as on an
+ * iPhone, and its glass is the wallpaper's ([LocalOnWallpaper]), the same clear glass in both. The
+ * drawer and the folder panel have surfaces of their own under their names, and keep the ink and the
+ * glass of the mode.
  */
 @Composable
 internal fun OnWallpaper(content: @Composable () -> Unit) {
-    CompositionLocalProvider(LocalLabelStyle provides LocalLabelStyle.current.copy(onWallpaper = true), content = content)
+    CompositionLocalProvider(
+        LocalLabelStyle provides LocalLabelStyle.current.copy(onWallpaper = true),
+        LocalOnWallpaper provides true,
+        content = content,
+    )
 }
 
 /**

@@ -57,6 +57,7 @@ import com.gabriel.zenithui.data.IconLoader
 import com.gabriel.zenithui.data.IconSource
 import com.gabriel.zenithui.data.IconStyles
 import com.gabriel.zenithui.data.ShortcutKeys
+import com.gabriel.zenithui.ui.theme.LocalOnWallpaper
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.LocalZenithFont
 import com.gabriel.zenithui.ui.theme.ZenithShapes
@@ -195,24 +196,29 @@ fun AppIcon(
 
 /**
  * The app's symbol on a tile: in the words' ink on a plain tile, iOS's dark grey in Dark and white
- * in Light, or in the ink of the page on a tile of clear glass. Its symbol fades in once it is
- * drawn, over the tile, which is there at once.
+ * in Light, or on a tile of clear glass in the ink of the page, and white on the wallpaper, where
+ * the glass is the same in Light and in Dark. Its symbol fades in once it is drawn, over the tile,
+ * which is there at once.
  */
 @Composable
 private fun StyledIcon(key: String, label: String, px: Int, shape: Shape, style: String, onGlass: Boolean, version: Int) {
     val loader = LocalIconLoader.current
     val palette = LocalPalette.current
+    val onWallpaper = LocalOnWallpaper.current
     val ready = remember(key, px, version) { loader.peekGlyph(key, px) }
     val glyph by produceState(initialValue = ready, key, px, version) {
         value = loader.loadGlyph(key, px) ?: value
     }
     val appear by animateFloatAsState(if (glyph != null) 1f else 0f, tween(340), label = "glyphFade")
     val glass = style == IconStyles.GLASS
-    // No theme's colour in it: the symbol is in the ink, whatever the tile.
-    val ink = palette.onGlass
+    // No theme's colour in it: the symbol is in the ink, whatever the tile. A glass tile on the
+    // wallpaper is the wallpaper's clear glass in either mode, so its symbol is white, as the names
+    // under it are; a plain tile is a surface of its own, in the mode's ink.
+    val glassTileInk = if (onWallpaper) Color.White else palette.onGlass
+    val ink = if (glass) glassTileInk else palette.onGlass
     val tile = when {
         // Glass inside glass would show the wallpaper through a hole in it: a pale plate instead.
-        glass && onGlass -> Modifier.clip(shape).background(palette.onGlass.copy(alpha = 0.12f))
+        glass && onGlass -> Modifier.clip(shape).background(glassTileInk.copy(alpha = 0.12f))
         glass -> Modifier.glass(shape, strength = 1.2f, material = GlassMaterial.Clear, interactive = true)
         palette.dark -> Modifier.clip(shape).background(Color(0xFF1C1C1E))
         else -> Modifier.clip(shape).background(Color.White)

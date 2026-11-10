@@ -77,6 +77,12 @@ enum class GlassMaterial { Regular, Clear }
  * An [interactive] pane lights up from within under your finger. Labels and icons drawn on top
  * stay sharp.
  *
+ * Glass standing on the wallpaper ([LocalOnWallpaper]: everything on a home page, the dock, the
+ * Search pill) is the same in Light and in Dark, since the picture it stands on does not change with
+ * the mode: a neutral grey veil, and the shadow, rim and body Dark gives it, in both. Glass on a page
+ * or a sheet keeps a body that follows the mode, as iOS's sheets do: that body is the page, which
+ * the glass cannot show under it.
+ *
  * On Android 13+ with a readable wallpaper this is a GPU shader over copies of the wallpaper
  * softened ahead of time (no screen capture, no per-frame blur). Android 12 gets the frosted
  * wallpaper with a rim of the same kind; a wallpaper Zenith cannot read gets a frosted body of its
@@ -121,18 +127,30 @@ fun Modifier.glass(
     val wallpaperOffset = LocalWallpaperOffset.current
     val tilt = LocalTilt.current
     val tuning = LocalGlassTuning.current
+    val onWallpaper = LocalOnWallpaper.current
+    // On the wallpaper the glass is made as Dark makes it, in Light too: the shader, the shadow and
+    // the rim are told it is dark, so nothing about it follows the mode.
+    val dark = onWallpaper || palette.dark
+    // A colour somebody chose (a folder's, the blue of a button) still tints the pane; with none,
+    // glass on the wallpaper has its neutral grey veil.
+    val paneTint = when {
+        tint.isSpecified -> tint
+        onWallpaper -> WALLPAPER_VEIL
+        else -> palette.glassTint
+    }
     val amount = (LocalGlassStrength.current * strength).coerceIn(0f, 1.4f)
     val look = glassLook(
         material = material,
         strength = amount,
         solid = solid,
         opacity = opacity,
-        dark = palette.dark,
-        tint = if (tint.isSpecified) tint else palette.glassTint,
+        dark = dark,
+        tint = paneTint,
         border = border,
         depth = LocalGlassBody.current,
         tinted = tinted,
-    ).tuned(tuning, if (tint.isSpecified) tint else palette.glassTint)
+        onWallpaper = onWallpaper,
+    ).tuned(tuning)
     val lens = rememberLens(levels)
     var origin by remember { mutableStateOf(Offset.Zero) }
     // Where the pane was laid out, kept to work out where it is drawn while something moves it.
@@ -173,7 +191,7 @@ fun Modifier.glass(
                 Modifier.drawWithCache {
                     val outline = shape.createOutline(size, layoutDirection, this)
                     val path = android.graphics.Path().apply { addOutline(outline) }
-                    val shadows = shadowPaints(look, material, palette.dark, density, size)
+                    val shadows = shadowPaints(look, material, dark, density, size)
                     onDrawBehind {
                         drawIntoCanvas {
                             val canvas = it.nativeCanvas
@@ -210,7 +228,7 @@ fun Modifier.glass(
                     wallpaperOffset = wallpaperOffset.value,
                     look = lit,
                     lean = tilt.value,
-                    dark = palette.dark,
+                    dark = dark,
                     touch = touch,
                     tuning = tuning,
                     squircleN = squircleN,
@@ -275,6 +293,7 @@ class PressLight internal constructor(private val scope: CoroutineScope) {
  * under its edge that says it is a solid thing. Both fall away from the light, down and a little
  * to the right, and a bigger pane is a thicker slab and casts more of each. They are a little
  * deeper in the dark, where they have to show against a dark picture, and lighter for Clear.
+ * Glass on the wallpaper casts Dark's in Light as well: the picture they fall on is the same in both.
  */
 internal fun shadowPaints(look: GlassLook, material: GlassMaterial, dark: Boolean, density: Float, pane: Size): List<android.graphics.Paint> {
     val clear = material == GlassMaterial.Clear
@@ -379,9 +398,16 @@ internal fun glassLook(
     depth: GlassBody = GlassBody.Clear,
     /** Coloured glass in [tint]: see `glass(tinted = ...)`. */
     tinted: Boolean = false,
+    /**
+     * Glass standing on the wallpaper ([LocalOnWallpaper]): made with Dark's numbers in Light as
+     * well, under a neutral grey veil, so it is the same clear glass in both.
+     */
+    onWallpaper: Boolean = false,
 ): GlassLook {
     val clear = material == GlassMaterial.Clear
     val amount = strength.coerceIn(0f, 1.4f)
+    // The wallpaper does not change with the mode, so neither does the glass standing on it.
+    val toneDark = dark || onWallpaper
     if (tinted) {
         // Clear glass's bend under a coat of the accent, about three fifths of it, so the wallpaper
         // still shows through and bends at the rim. The colour already carries the words on it, so
@@ -401,12 +427,15 @@ internal fun glassLook(
             rimmed = border,
             relief = if (border) min(amount, 1f) else 0f,
             tinted = true,
+            onWallpaper = onWallpaper,
         )
     }
     val body = (solid + depth.solid).coerceIn(0f, 1.5f)
-    // A whisper of the theme in the veil, never enough to turn the glass into a coloured card.
-    val veil = lerp(if (dark) Color(0xFF0A0C12) else Color.White, tint, 0.10f)
-    val veilAlpha = if (dark) {
+    // A whisper of the tint in the veil, never enough to turn the glass into a coloured card. On the
+    // wallpaper the veil is a neutral grey, neither the white that made Light's glass milky nor the
+    // near-black that made Dark's smoky.
+    val veil = lerp(if (onWallpaper) WALLPAPER_VEIL else if (toneDark) Color(0xFF0A0C12) else Color.White, tint, 0.10f)
+    val veilAlpha = if (toneDark) {
         (if (clear) 0.08f else 0.20f) + 0.42f * body
     } else {
         (if (clear) 0.12f else 0.30f) + 0.40f * body
@@ -425,7 +454,7 @@ internal fun glassLook(
         wash = veil.copy(alpha = veilAlpha.coerceIn(0f, 0.92f)),
         adapt = (if (clear) 0.30f else 0.34f) + 0.2f * min(body, 1f),
         opacity = opacity.coerceIn(0f, 1f),
-        lift = glassLift(clear, dark, tint, body, depth.lift),
+        lift = glassLift(clear, toneDark, tint, body, depth.lift),
         // A pane with no rim to catch the light has none to hold a reflection either.
         mirror = if (border) (if (clear) MIRROR_CLEAR else MIRROR_REGULAR) * min(amount, 1f) else 0f,
         glow = if (border) GLOW else 0f,
@@ -433,6 +462,7 @@ internal fun glassLook(
         rimmed = border,
         // Turning the glass down flattens it: a slab at full strength, a sheet of light at none.
         relief = if (border) min(amount, 1f) else 0f,
+        onWallpaper = onWallpaper,
     )
 }
 
@@ -445,8 +475,26 @@ fun inkOnTint(fill: Color): Color = if (fill.luminance() > 0.3f) Color(0xFF0B0C1
 /** The Glass studio's tuning, for every pane: Zenith's own glass with the defaults, and without Plus. */
 val LocalGlassTuning = staticCompositionLocalOf { GlassTuning() }
 
-/** This pane as the Glass studio has it; with the defaults, exactly as it was. */
-internal fun GlassLook.tuned(tuning: GlassTuning, tint: Color): GlassLook {
+/**
+ * True for glass standing on the wallpaper: everything on a home page and on the small home screens
+ * that show one, the dock's slab, the Search pill. That glass is one recipe in Light and in Dark,
+ * since the picture under it does not change with the mode; glass on a page or a sheet keeps a body
+ * that follows the mode.
+ */
+val LocalOnWallpaper = staticCompositionLocalOf { false }
+
+/**
+ * The veil of glass on the wallpaper, in Light and in Dark alike: a grey with no colour in it, and
+ * its body where there is no wallpaper to show.
+ */
+internal val WALLPAPER_VEIL = Color(0xFF3A3A3C)
+
+/**
+ * This pane as the Glass studio has it; with the defaults, exactly as it was. The studio's old
+ * "Theme in the glass" ([GlassTuning.tint]) is still read and saved, but no longer reaches the
+ * veil: there is no theme left to put in it.
+ */
+internal fun GlassLook.tuned(tuning: GlassTuning): GlassLook {
     if (tuning.isDefault) return this
     return copy(
         refraction = refraction * tuning.bend,
@@ -454,8 +502,6 @@ internal fun GlassLook.tuned(tuning: GlassTuning, tint: Color): GlassLook {
         dispersion = dispersion * tuning.rainbow,
         shine = shine * tuning.rim,
         mirror = (mirror * tuning.rim).coerceIn(0f, 1f),
-        // More of the theme in the veil, as thick as it was: readable as before, just more coloured.
-        wash = if (tuning.tint <= 0f) wash else lerp(wash, tint.copy(alpha = wash.alpha), tuning.tint),
     )
 }
 
@@ -496,10 +542,11 @@ internal const val GATHER_REGULAR = 0.28f
 /**
  * The frost that lifts a pane off a picture of its own tone. In the dark a pane over a dark
  * wallpaper is a dark veil on a dark picture, and only its rim says it is there; a little pale
- * frost, in the theme's colour, makes it a shade lighter than what is round it. In the light it is
- * the other way about: over a near-white picture the pane takes a faint cool shade. The colour is
- * the frost; its alpha is how much of it, and the shader lays it on only where the picture behind
- * really is that dark or that pale, so glass over anything else stays as clear as it was.
+ * frost, in the pane's tint, makes it a shade lighter than what is round it. In the light it is
+ * the other way about: over a near-white picture the pane takes a faint cool shade. Glass on the
+ * wallpaper takes the dark one in Light as well, and over a pale picture its veil thickens instead.
+ * The colour is the frost; its alpha is how much of it, and the shader lays it on only where the
+ * picture behind really is that dark or that pale, so glass over anything else stays as clear as it was.
  *
  * A pane that already has a full veil, like a sheet, needs less of it.
  */
@@ -605,9 +652,14 @@ internal fun DrawScope.drawLiquidGlass(
     } else {
         // Nothing readable behind (a live wallpaper, or setup): a frosted body of its own, lit
         // from the top, so the pane still reads as glass rather than a flat card.
+        val overWallpaper = look.onWallpaper && !look.tinted
         if (look.tinted) {
             // Tinted glass keeps its colour, a little fuller, rather than turning into a white slab.
             drawRect(look.wash.copy(alpha = 0.88f), size = paneSize, alpha = look.opacity)
+        } else if (overWallpaper) {
+            // On the wallpaper, one thin neutral body in Light and in Dark: glass over a picture,
+            // never the white slab Light made of it or the smoke Dark did.
+            drawRect(WALLPAPER_VEIL.copy(alpha = (0.14f + look.wash.alpha).coerceAtMost(0.6f)), size = paneSize, alpha = look.opacity)
         } else {
             val base = if (dark) Color(0xFF181B24) else Color.White
             // Light for floating controls, much fuller for sheets, whose text sits over the page.
@@ -616,7 +668,7 @@ internal fun DrawScope.drawLiquidGlass(
         }
         drawRect(
             Brush.verticalGradient(
-                0f to Color.White.copy(alpha = if (dark) 0.10f else 0.30f),
+                0f to Color.White.copy(alpha = if (overWallpaper) 0.16f else if (dark) 0.10f else 0.30f),
                 0.5f to Color.Transparent,
                 endY = paneSize.height,
             ),

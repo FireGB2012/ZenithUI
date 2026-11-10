@@ -103,8 +103,6 @@ fun GlassStudioSheet(visible: Boolean, tuning: GlassTuning, onChange: (GlassTuni
                 PillSlider("Rim light", tuning.rim, GlassTuning.RIM, times(tuning.rim)) { onChange(tuning.copy(rim = it)) }
                 Spacer(Modifier.height(10.dp))
                 PillSlider("Rainbow edge", tuning.rainbow, GlassTuning.RAINBOW, times(tuning.rainbow)) { onChange(tuning.copy(rainbow = it)) }
-                Spacer(Modifier.height(10.dp))
-                PillSlider("Theme in the glass", tuning.tint, GlassTuning.TINT, "+${(tuning.tint * 100).roundToInt()}%") { onChange(tuning.copy(tint = it)) }
             }
             Spacer(Modifier.height(16.dp))
             Column(Modifier.appearIn(delayMillis = staggerDelay(2), riseFrom = 14f)) {

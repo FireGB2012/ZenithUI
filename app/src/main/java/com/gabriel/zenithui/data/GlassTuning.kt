@@ -5,9 +5,10 @@ import org.json.JSONObject
 
 /**
  * The glass made your own (Zenith Plus, Wallpaper & theme → Glass studio): how far it bends, how
- * frosted it is, how bright its rim, how much light splits into colour at its edge, how much of
- * the theme is in it, and where the light comes from. The defaults are the glass as Zenith makes
- * it and change nothing; only what is changed is saved.
+ * frosted it is, how bright its rim, how much light splits into colour at its edge, and where the
+ * light comes from. The defaults are the glass as Zenith makes it and change nothing; only what is
+ * changed is saved. [tint] is the old "Theme in the glass", kept so old settings, Looks and backups
+ * read, and ignored.
  */
 @Immutable
 data class GlassTuning(
@@ -19,7 +20,12 @@ data class GlassTuning(
     val rim: Float = 1f,
     /** How far light splits into colour at the rim of clear glass: 1 as made. */
     val rainbow: Float = 1f,
-    /** How much more of the theme's colour is in the veil: 0 as made, up to 0.4. */
+    /**
+     * The old "Theme in the glass": how much more of the theme's colour was in the veil, 0 to 0.4.
+     * There are no themes now, so nothing reads it into the glass; it is still read and saved, so
+     * old settings, Looks and backups come back as they went, and its key is never given another
+     * meaning.
+     */
     val tint: Float = 0f,
     /** Where the light comes from, in degrees clockwise from the right; null is Zenith's, up and to the left. */
     val lightAngle: Float? = null,

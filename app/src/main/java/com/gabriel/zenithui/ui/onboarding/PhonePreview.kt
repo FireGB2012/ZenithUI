@@ -345,16 +345,19 @@ private fun MiniHome(
                 }
 
                 if (settings.showDock && dock.isNotEmpty()) {
-                    MiniDock(
-                        dock = dock,
-                        appsByKey = appsByKey,
-                        settings = settings,
-                        page = page,
-                        // Its apps come after the page's while the home screen is put together.
-                        shownFrom = items.size,
-                        shown = shown,
-                        modifier = Modifier.padding(bottom = navBottom + 10.dp),
-                    )
+                    // On the wallpaper, as the real dock is, so its slab is the same glass.
+                    OnWallpaper {
+                        MiniDock(
+                            dock = dock,
+                            appsByKey = appsByKey,
+                            settings = settings,
+                            page = page,
+                            // Its apps come after the page's while the home screen is put together.
+                            shownFrom = items.size,
+                            shown = shown,
+                            modifier = Modifier.padding(bottom = navBottom + 10.dp),
+                        )
+                    }
                 } else {
                     Spacer(Modifier.padding(bottom = navBottom).height(10.dp))
                 }

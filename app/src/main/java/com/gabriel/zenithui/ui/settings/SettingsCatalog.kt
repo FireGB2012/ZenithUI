@@ -50,7 +50,7 @@ object SettingsCatalog {
         SettingsEntry("glass", SettingsPage.Theme, "Glass", "blur frost transparency strength liquid"),
         SettingsEntry("glassBody", SettingsPage.Theme, "Glass panels", "clear frosted solid contrast readable see through transparent blend wallpaper stand out"),
         SettingsEntry("tiltShine", SettingsPage.Theme, "Tilt shine", "highlight light reflection gyro"),
-        SettingsEntry("glassStudio", SettingsPage.Theme, "Glass studio", "glass bend refraction frost rim light rainbow tint direction tune plus"),
+        SettingsEntry("glassStudio", SettingsPage.Theme, "Glass studio", "glass bend refraction frost rim light rainbow direction tune plus"),
 
         SettingsEntry("grid", SettingsPage.Home, "Grid", "density compact balanced roomy custom columns rows size icons layout cells"),
         SettingsEntry("iconShape", SettingsPage.Home, "Icon shape", "squircle circle rounded square pebble teardrop hexagon clover iphone"),

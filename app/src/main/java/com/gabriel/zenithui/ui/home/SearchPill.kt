@@ -15,6 +15,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
@@ -35,6 +36,7 @@ import com.gabriel.zenithui.data.HomeGeometry
 import com.gabriel.zenithui.ui.common.labelShadow
 import com.gabriel.zenithui.ui.theme.GlassMaterial
 import com.gabriel.zenithui.ui.theme.GlassMotion
+import com.gabriel.zenithui.ui.theme.LocalOnWallpaper
 import com.gabriel.zenithui.ui.theme.ZenithShapes
 import com.gabriel.zenithui.ui.theme.glass
 
@@ -60,50 +62,53 @@ fun SearchPill(
     tracking: (() -> Unit)? = null,
 ) {
     val density = LocalDensity.current.density
-    Box(
-        modifier
-            .height(HomeGeometry.SEARCH_PILL_HEIGHT_DP.dp)
-            .widthIn(min = PILL_WIDTH)
-            .glass(
-                ZenithShapes.pill,
-                material = GlassMaterial.Clear,
-                interactive = true,
-                // Clear glass over the wallpaper leans towards the finger, as Zenith's other clear
-                // glass does.
-                motion = GlassMotion.Lean,
-                tracking = tracking,
-            )
-            .clickable(role = Role.Button, onClick = onOpen)
-            .drawBehind {
-                val shown = dots().coerceIn(0f, 1f)
-                if (shown > 0.001f) pageDots(pageCount, position(), shown)
-            }
-            .padding(horizontal = 16.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.graphicsLayer {
-                // The words shrink away as the dots come, and come back as they go.
-                val gone = dots().coerceIn(0f, 1f)
-                alpha = 1f - gone
-                val s = 1f - 0.5f * gone
-                scaleX = s
-                scaleY = s
-            },
+    // The pill stands on the wallpaper: the same clear glass in Light and in Dark.
+    CompositionLocalProvider(LocalOnWallpaper provides true) {
+        Box(
+            modifier
+                .height(HomeGeometry.SEARCH_PILL_HEIGHT_DP.dp)
+                .widthIn(min = PILL_WIDTH)
+                .glass(
+                    ZenithShapes.pill,
+                    material = GlassMaterial.Clear,
+                    interactive = true,
+                    // Clear glass over the wallpaper leans towards the finger, as Zenith's other clear
+                    // glass does.
+                    motion = GlassMotion.Lean,
+                    tracking = tracking,
+                )
+                .clickable(role = Role.Button, onClick = onOpen)
+                .drawBehind {
+                    val shown = dots().coerceIn(0f, 1f)
+                    if (shown > 0.001f) pageDots(pageCount, position(), shown)
+                }
+                .padding(horizontal = 16.dp),
+            contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Rounded.Search, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
-            Spacer(Modifier.width(6.dp))
-            // White whatever the palette, with the soft shadow the names on the wallpaper have, so
-            // the word reads on a pale wallpaper through glass that only mists it.
-            Text(
-                text = "Search",
-                color = Color.White,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                style = LocalTextStyle.current.merge(TextStyle(shadow = labelShadow(onWallpaper = true, legacyShadow = false, density = density))),
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.graphicsLayer {
+                    // The words shrink away as the dots come, and come back as they go.
+                    val gone = dots().coerceIn(0f, 1f)
+                    alpha = 1f - gone
+                    val s = 1f - 0.5f * gone
+                    scaleX = s
+                    scaleY = s
+                },
+            ) {
+                Icon(Icons.Rounded.Search, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(6.dp))
+                // White whatever the palette, with the soft shadow the names on the wallpaper have, so
+                // the word reads on a pale wallpaper through glass that only mists it.
+                Text(
+                    text = "Search",
+                    color = Color.White,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    style = LocalTextStyle.current.merge(TextStyle(shadow = labelShadow(onWallpaper = true, legacyShadow = false, density = density))),
+                )
+            }
         }
     }
 }

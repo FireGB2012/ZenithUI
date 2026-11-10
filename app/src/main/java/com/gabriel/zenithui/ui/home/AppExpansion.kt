@@ -53,6 +53,7 @@ import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.LocalScreenSize
 import com.gabriel.zenithui.ui.theme.LocalTilt
 import com.gabriel.zenithui.ui.theme.LocalWallpaperOffset
+import com.gabriel.zenithui.ui.theme.WALLPAPER_VEIL
 import com.gabriel.zenithui.ui.theme.tuned
 import kotlin.math.roundToInt
 
@@ -201,15 +202,17 @@ fun AppLaunchCard(
             clip.reset()
             clip.addRoundRect(roundRect)
             // The same glass as every pane on the home screen, gaining body as it grows so the
-            // app arriving on top of it reads cleanly.
+            // app arriving on top of it reads cleanly. It always stands on the wallpaper, so it is
+            // the same clear glass in Light and in Dark.
             val look = glassLook(
                 material = GlassMaterial.Regular,
                 strength = glassStrength,
                 solid = 0.15f + 0.35f * amount,
                 opacity = 1f,
-                dark = palette.dark,
-                tint = palette.glassTint,
-            ).tuned(tuning, palette.glassTint)
+                dark = true,
+                tint = WALLPAPER_VEIL,
+                onWallpaper = true,
+            ).tuned(tuning)
             translate(left, top) {
                 clipPath(clip) {
                     drawLiquidGlass(
@@ -222,7 +225,7 @@ fun AppLaunchCard(
                         wallpaperOffset = wallpaperOffset.value,
                         look = look,
                         lean = tilt.value,
-                        dark = palette.dark,
+                        dark = true,
                         tuning = tuning,
                     )
                 }

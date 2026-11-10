@@ -1670,50 +1670,54 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     }
                 },
                 dock = { room ->
-                    if (settings.showDock) DockBar(
-                        keys = settings.dock,
-                        appsByKey = appsByKey,
-                        settings = settings,
-                        highlight = overDock,
-                        animateEntrance = entrance,
-                        geometry = drag.geometry,
-                        onOpen = { launchApp(it) },
-                        onLongPress = { showSheet(HomeSheet.DrawerApp(it)) },
-                        onReorder = { from, to -> viewModel.moveInDock(from, to) },
-                        onDragOut = { key, iconCentre ->
-                            if (drag.cellWidth > 0f && drag.cellHeight > 0f) {
-                                // The cell that puts a home screen icon exactly where the dock icon was
-                                // let go; from there it is put down like any icon on the page.
-                                val iconMiddle = (drag.geometry?.topInset ?: 0) + drag.iconSizePx / 2f
-                                val ghost = Offset(
-                                    iconCentre.x - drag.gridOrigin.x - drag.cellWidth / 2f,
-                                    iconCentre.y - drag.gridOrigin.y - iconMiddle,
-                                )
-                                val placed = viewModel.moveDockToHome(
-                                    key = key,
-                                    page = pagerState.currentPage,
-                                    exactCol = ghost.x / drag.cellWidth,
-                                    exactRow = ghost.y / drag.cellHeight,
-                                    colWidthInRowUnits = drag.cellWidth / drag.cellHeight,
-                                )
-                                if (placed != null) {
-                                    drag.landing = Landing(placed, ghost)
-                                } else {
-                                    Toast.makeText(context, "No room on this page", Toast.LENGTH_SHORT).show()
+                    // The dock's slab stands on the wallpaper, as the page does: the same clear glass
+                    // in Light and in Dark.
+                    if (settings.showDock) OnWallpaper {
+                        DockBar(
+                            keys = settings.dock,
+                            appsByKey = appsByKey,
+                            settings = settings,
+                            highlight = overDock,
+                            animateEntrance = entrance,
+                            geometry = drag.geometry,
+                            onOpen = { launchApp(it) },
+                            onLongPress = { showSheet(HomeSheet.DrawerApp(it)) },
+                            onReorder = { from, to -> viewModel.moveInDock(from, to) },
+                            onDragOut = { key, iconCentre ->
+                                if (drag.cellWidth > 0f && drag.cellHeight > 0f) {
+                                    // The cell that puts a home screen icon exactly where the dock icon was
+                                    // let go; from there it is put down like any icon on the page.
+                                    val iconMiddle = (drag.geometry?.topInset ?: 0) + drag.iconSizePx / 2f
+                                    val ghost = Offset(
+                                        iconCentre.x - drag.gridOrigin.x - drag.cellWidth / 2f,
+                                        iconCentre.y - drag.gridOrigin.y - iconMiddle,
+                                    )
+                                    val placed = viewModel.moveDockToHome(
+                                        key = key,
+                                        page = pagerState.currentPage,
+                                        exactCol = ghost.x / drag.cellWidth,
+                                        exactRow = ghost.y / drag.cellHeight,
+                                        colWidthInRowUnits = drag.cellWidth / drag.cellHeight,
+                                    )
+                                    if (placed != null) {
+                                        drag.landing = Landing(placed, ghost)
+                                    } else {
+                                        Toast.makeText(context, "No room on this page", Toast.LENGTH_SHORT).show()
+                                    }
                                 }
-                            }
-                        },
-                        onBounds = { dockBounds = it },
-                        // It spans the screen and stands its slab in from the edges itself, its apps
-                        // still under the page's columns.
-                        modifier = room
-                            .arriving({ arrivalClock.value }, { arrivalDepth.floatValue }, distance = 1f, from = 56.dp, style = settings.arrival)
-                            .navigationBarsPadding()
-                            .padding(bottom = 10.dp),
-                        // It arrives moved on a layer, so its glass reads the clock that moves it and
-                        // keeps the wallpaper in place behind it, as Search's does.
-                        tracking = { arrivalClock.value },
-                    ) else {
+                            },
+                            onBounds = { dockBounds = it },
+                            // It spans the screen and stands its slab in from the edges itself, its apps
+                            // still under the page's columns.
+                            modifier = room
+                                .arriving({ arrivalClock.value }, { arrivalDepth.floatValue }, distance = 1f, from = 56.dp, style = settings.arrival)
+                                .navigationBarsPadding()
+                                .padding(bottom = 10.dp),
+                            // It arrives moved on a layer, so its glass reads the clock that moves it and
+                            // keeps the wallpaper in place behind it, as Search's does.
+                            tracking = { arrivalClock.value },
+                        )
+                    } else {
                         // Without the dock the pages reach down to the gesture bar instead.
                         Spacer(room.navigationBarsPadding().height(10.dp))
                     }

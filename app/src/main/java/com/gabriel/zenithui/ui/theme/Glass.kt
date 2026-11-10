@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -74,8 +75,9 @@ enum class GlassMaterial { Regular, Clear }
  * opposite, in the colour of the wallpaper round it, and it moves as the phone tilts. The pane is
  * a solid slab and looks it: its shoulders are shaded by that light, its polished edge glints, and
  * it casts a shadow, wide where it floats and close and dark under its edge, deeper in the dark.
- * An [interactive] pane lights up from within under your finger. Labels and icons drawn on top
- * stay sharp.
+ * An [interactive] pane lights up from within under your finger, and on the home screen every pane
+ * lights up, rim and face, as a ring of light from a tap on the wallpaper passes ([LocalGlassRing]).
+ * Labels and icons drawn on top stay sharp.
  *
  * Glass standing on the wallpaper ([LocalOnWallpaper]: everything on a home page, the dock, the
  * Search pill) is the same in Light and in Dark, since the picture it stands on does not change with
@@ -116,9 +118,17 @@ fun Modifier.glass(
     /**
      * For a pane that something outside it moves or scales with a graphicsLayer, as a dragged lens
      * is: reads what moves it, while drawing, so the wallpaper behind is lined up again as it goes
-     * rather than travelling with the pane.
+     * rather than travelling with the pane. Inside [GlassMovedBy] it follows that as well.
      */
     tracking: (() -> Unit)? = null,
+    /**
+     * Glass made from the wallpaper, for the home screen's panes that stand on it (the dock, Search,
+     * the glass widgets): its veil takes a little of the wallpaper's own colour where it sits
+     * ([WALL_TINT]) and it glows with that colour underneath, following the wallpaper as it changes.
+     * A pane given a colour in [tint] wears that instead, with no glow; glass that is not standing
+     * on the wallpaper ([LocalOnWallpaper]) takes none.
+     */
+    wallpaperTint: Boolean = false,
 ): Modifier {
     val palette = LocalPalette.current
     val backdrop = LocalBackdrop.current
@@ -128,6 +138,14 @@ fun Modifier.glass(
     val tilt = LocalTilt.current
     val tuning = LocalGlassTuning.current
     val onWallpaper = LocalOnWallpaper.current
+    // On something that moves its panes with a layer, as the tilt floats a home page's icons and
+    // widgets and the dock ([GlassMovedBy]), the pane follows that as well as what it was given.
+    val carried = LocalGlassTracking.current
+    val follows = when {
+        carried == null -> tracking
+        tracking == null -> carried
+        else -> ({ tracking(); carried() })
+    }
     // On the wallpaper the glass is made as Dark makes it, in Light too: the shader, the shadow and
     // the rim are told it is dark, so nothing about it follows the mode.
     val dark = onWallpaper || palette.dark
@@ -139,6 +157,12 @@ fun Modifier.glass(
         else -> palette.glassTint
     }
     val amount = (LocalGlassStrength.current * strength).coerceIn(0f, 1.4f)
+    // Only glass on the wallpaper is made from it, and a colour somebody chose takes its place.
+    val wallTinted = wallpaperTint && onWallpaper && !tinted && !tint.isSpecified
+    // The wallpaper's colour for when there is no copy of it to read from: none, if never read.
+    val savedWall = LocalWallColour.current
+    // The ring of light a tap on the wallpaper sends out, on the home screen: read while drawing.
+    val glassRing = LocalGlassRing.current
     val look = glassLook(
         material = material,
         strength = amount,
@@ -150,8 +174,8 @@ fun Modifier.glass(
         depth = LocalGlassBody.current,
         tinted = tinted,
         onWallpaper = onWallpaper,
-    ).tuned(tuning)
-    val lens = rememberLens(levels)
+    ).tuned(tuning).let { if (wallTinted) it.copy(wallTint = WALL_TINT) else it }
+    val lens = sharedLens(levels)
     var origin by remember { mutableStateOf(Offset.Zero) }
     // Where the pane was laid out, kept to work out where it is drawn while something moves it.
     val placed = remember { arrayOfNulls<LayoutCoordinates>(1) }
@@ -192,12 +216,21 @@ fun Modifier.glass(
                     val outline = shape.createOutline(size, layoutDirection, this)
                     val path = android.graphics.Path().apply { addOutline(outline) }
                     val shadows = shadowPaints(look, material, dark, density, size)
+                    val glow = if (wallTinted) android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG) else null
                     onDrawBehind {
+                        // The glow is the wallpaper's colour under the pane, so it is found as the pane
+                        // is drawn: where the pane is and how the wallpaper is scrolled are read here.
+                        val wall = if (glow != null) wallUnder(levels, origin, size, screen, wallpaperOffset.value, savedWall) else Color.Unspecified
                         drawIntoCanvas {
                             val canvas = it.nativeCanvas
                             canvas.save()
                             // Only the shadow is wanted: the pane itself is drawn by the glass.
                             canvas.clipOutPath(path)
+                            // Beneath the shadows, so the close one still shows under the pane's edge.
+                            if (glow != null && wall.isSpecified) {
+                                glow.glowWith(glowColour(wall, dark), look.opacity, density)
+                                canvas.drawPath(path, glow)
+                            }
                             for (paint in shadows) canvas.drawPath(path, paint)
                             canvas.restore()
                         }
@@ -218,16 +251,21 @@ fun Modifier.glass(
                 // Where the pane was laid out is read every time, even by a pane that works out where
                 // it is drawn: a layer further out, such as the home screen's pull or its zoom, moves
                 // it without its motion or tracking knowing, and the new position is what redraws it.
+                // So too a pane being laid out somewhere new, as an icon gliding to another cell is:
+                // it is drawn again there.
                 val laidOut = origin
                 val touch = press?.touch(size) ?: GlassTouch.None
                 // A pressed pane bends the light a little more, as the finger's light comes up.
                 val lit = if (touch.strength > 0f) look.copy(refraction = look.refraction * (1f + 0.22f * touch.strength)) else look
+                // Glass made from the wallpaper: the lens reads the colour under each of its points
+                // for itself, and without the lens the pane takes the colour under its middle.
+                val wall = if (wallTinted) wallUnder(levels, laidOut, size, screen, wallpaperOffset.value, savedWall) else Color.Unspecified
                 drawLiquidGlass(
                     paneSize = size,
                     outline = outline,
                     lens = lens,
                     softened = backdrop,
-                    origin = if (moved != null || tracking != null) drawnOrigin(placed[0], moved, tracking) ?: laidOut else laidOut,
+                    origin = if (moved != null || follows != null) drawnOrigin(placed[0], moved, follows) ?: laidOut else laidOut,
                     screen = screen,
                     wallpaperOffset = wallpaperOffset.value,
                     look = lit,
@@ -236,6 +274,8 @@ fun Modifier.glass(
                     touch = touch,
                     tuning = tuning,
                     squircleN = squircleN,
+                    wall = wall,
+                    ring = glassRing?.drawn(),
                 )
             }
         }
@@ -320,6 +360,26 @@ internal fun shadowPaints(look: GlassLook, material: GlassMaterial, dark: Boolea
 }
 
 /**
+ * Makes this the third paint beside [shadowPaints], under glass made from the wallpaper: a soft glow
+ * of [colour] ([glowColour]), wide, falling the way the shadows fall, and fading with the pane as
+ * [opacity] says. It is set again each time the pane is drawn, since its colour is the wallpaper's
+ * under the pane and changes as the pane moves over it.
+ */
+internal fun android.graphics.Paint.glowWith(colour: Color, opacity: Float, density: Float) {
+    color = android.graphics.Color.BLACK
+    setShadowLayer(
+        GLOW_BLUR_DP * density,
+        SHADOW_FALL.x * GLOW_FALL_DP * density,
+        SHADOW_FALL.y * GLOW_FALL_DP * density,
+        colour.copy(alpha = (colour.alpha * opacity).coerceIn(0f, 1f)).toArgb(),
+    )
+}
+
+/** How softly the glow under glass made from the wallpaper is spread, and how far it falls, in dp. */
+private const val GLOW_BLUR_DP = 18f
+private const val GLOW_FALL_DP = 6f
+
+/**
  * Which way shadows fall: straight away from the lamp as it hangs when the phone is held still
  * (see the light in [drawLiquidGlass]). They do not swing with the phone as the highlights do.
  */
@@ -377,7 +437,10 @@ internal val SYSTEM_WALLPAPER_ZOOM: Float = if (Build.VERSION.SDK_INT >= 34) 1.1
 internal fun systemWallpaperOffset(launcher: Offset): Offset =
     if (Build.VERSION.SDK_INT >= 34) Offset(0.5f, 0.5f) else launcher
 
-/** One shader per pane, rebuilt only when the wallpaper itself changes. */
+/**
+ * A lens of its own for [levels], rebuilt only when the wallpaper itself changes: what [ZenithTheme]
+ * makes the shared one with, and what a pane falls back to where none was made (see [sharedLens]).
+ */
 @Composable
 internal fun rememberLens(levels: GlassLevels?): LiquidGlassShader? =
     remember(levels) {
@@ -388,6 +451,20 @@ internal fun rememberLens(levels: GlassLevels?): LiquidGlassShader? =
             null
         }
     }
+
+/**
+ * The lens for [levels]: the one [ZenithTheme] made for them ([LocalLens]), which every pane shares,
+ * so a page of panes coming into view, or a new wallpaper, compiles the shader once and not once a
+ * pane. Where none was made for these levels (a preview, PinItemActivity, the island), the pane
+ * makes its own, as every pane once did.
+ */
+@Composable
+internal fun sharedLens(levels: GlassLevels?): LiquidGlassShader? {
+    val shared = LocalLens.current
+    // Before Android 13 there is no lens, shared or not, and nothing to ask what one was made for.
+    val made = Build.VERSION.SDK_INT >= 33 && levels != null && shared != null && shared.levels === levels
+    return if (made) shared else rememberLens(levels)
+}
 
 /** The recipe for one pane. Kept apart from drawing so the launch card can use the same glass. */
 internal fun glassLook(
@@ -486,6 +563,27 @@ val LocalGlassTuning = staticCompositionLocalOf { GlassTuning() }
  * that follows the mode.
  */
 val LocalOnWallpaper = staticCompositionLocalOf { false }
+
+/**
+ * What moves the panes here with a layer, read while drawing, as a pane's own `tracking` is, so the
+ * wallpaper behind each stays where it is on screen while the pane moves. Given by [GlassMovedBy];
+ * null where nothing moves them.
+ */
+internal val LocalGlassTracking = staticCompositionLocalOf<(() -> Unit)?> { null }
+
+/**
+ * [content] standing on something a layer moves, as the tilt floats the icons and widgets on a home
+ * page and the dock, [moves] reading whatever moves it: every pane of glass in it reads [moves] while
+ * drawing and lines its wallpaper up again as it goes, as a pane given `glass(tracking = ...)` does.
+ * Inside another it follows both. [moves] is best remembered, since a new one composes all of
+ * [content] again.
+ */
+@Composable
+fun GlassMovedBy(moves: () -> Unit, content: @Composable () -> Unit) {
+    val outer = LocalGlassTracking.current
+    val both = remember(outer, moves) { if (outer == null) moves else ({ outer(); moves() }) }
+    CompositionLocalProvider(LocalGlassTracking provides both, content = content)
+}
 
 /**
  * The veil of glass on the wallpaper, in Light and in Dark alike: a grey with no colour in it, and
@@ -589,6 +687,18 @@ internal fun DrawScope.drawLiquidGlass(
      * Without the lens the rim is stroked along the outline itself, so it needs no telling.
      */
     squircleN: Float = SQUIRCLE_EXPONENT,
+    /**
+     * For glass made from the wallpaper ([GlassLook.wallTint]) drawn without the lens: the colour
+     * its veil takes, one for the whole pane ([wallUnder]). Unspecified for none; the lens reads the
+     * wallpaper's colour under each point itself.
+     */
+    wall: Color = Color.Unspecified,
+    /**
+     * A ring of light from a tap on the wallpaper ([GlassRing]), its centre where the screen has it,
+     * or null for none. The lens lights the band where it crosses the pane; without the lens the
+     * rim brightens as the ring passes the pane's middle ([paneLight]).
+     */
+    ring: RingNow? = null,
 ) {
     if (paneSize.width <= 0f || paneSize.height <= 0f || look.opacity <= 0f) return
     // The light sits up and to the left, and swings the other way as the phone tips.
@@ -596,10 +706,12 @@ internal fun DrawScope.drawLiquidGlass(
     val leaning = if (tuning.lightTilt) lean else Offset.Zero
     val canSee = softened != null && screen.width > 0 && screen.height > 0
     val shown = systemWallpaperOffset(wallpaperOffset)
+    // The ring in the pane's own pixels, as everything about the pane is drawn.
+    val ringHere = ring?.let { it.copy(centre = it.centre - origin) }
 
     if (canSee && lens != null && Build.VERSION.SDK_INT >= 33) {
         drawIntoCanvas {
-            lens.draw(it.nativeCanvas, paneSize, outline, origin, screen, shown, density, look, light, dark, touch, leaning, squircleN)
+            lens.draw(it.nativeCanvas, paneSize, outline, origin, screen, shown, density, look, light, dark, touch, leaning, squircleN, ringHere)
         }
         return
     }
@@ -647,7 +759,8 @@ internal fun DrawScope.drawLiquidGlass(
                 filterQuality = FilterQuality.Low,
             )
         }
-        drawRect(look.wash, size = paneSize, alpha = look.opacity)
+        // Glass made from the wallpaper takes a little of the colour under its middle into the veil.
+        drawRect(tintMix(look.wash, wall, look.wallTint), size = paneSize, alpha = look.opacity)
         // No shader to see how dark the picture is under each point, so the lift goes on evenly
         // and a little thinner.
         if (look.lift.alpha > 0f) {
@@ -662,8 +775,10 @@ internal fun DrawScope.drawLiquidGlass(
             drawRect(look.wash.copy(alpha = 0.88f), size = paneSize, alpha = look.opacity)
         } else if (overWallpaper) {
             // On the wallpaper, one thin neutral body in Light and in Dark: glass over a picture,
-            // never the white slab Light made of it or the smoke Dark did.
-            drawRect(WALLPAPER_VEIL.copy(alpha = (0.14f + look.wash.alpha).coerceAtMost(0.6f)), size = paneSize, alpha = look.opacity)
+            // never the white slab Light made of it or the smoke Dark did. Glass made from the
+            // wallpaper takes a little of the colour last read from it, if any was.
+            val body = WALLPAPER_VEIL.copy(alpha = (0.14f + look.wash.alpha).coerceAtMost(0.6f))
+            drawRect(tintMix(body, wall, look.wallTint), size = paneSize, alpha = look.opacity)
         } else {
             val base = if (dark) Color(0xFF181B24) else Color.White
             // Light for floating controls, much fuller for sheets, whose text sits over the page.
@@ -692,7 +807,10 @@ internal fun DrawScope.drawLiquidGlass(
             size = paneSize,
         )
     }
-    drawRim(paneSize, outline, look, light, dark)
+    // Without the lens there is one light for the whole pane: as bright as the ring is where the
+    // pane's middle is.
+    val ringLight = ringHere?.let { paneLight(hypot(it.centre.x - paneSize.width / 2f, it.centre.y - paneSize.height / 2f), it) } ?: 0f
+    drawRim(paneSize, outline, look, light, dark, ringLight)
 }
 
 /**
@@ -703,8 +821,11 @@ internal fun DrawScope.drawLiquidGlass(
  *
  * The slab's form ([GlassLook.relief]) is drawn the same way and under the rim: light falling away
  * evenly across the pane, and the edge turned from the lamp in its own shade.
+ *
+ * A ring of light from a tap on the wallpaper passing the pane, [ringLight] of it, brightens the
+ * rim all the way round, since it comes from no one side.
  */
-private fun DrawScope.drawRim(paneSize: Size, outline: Outline, look: GlassLook, light: Offset, dark: Boolean) {
+private fun DrawScope.drawRim(paneSize: Size, outline: Outline, look: GlassLook, light: Offset, dark: Boolean, ringLight: Float = 0f) {
     val centre = Offset(paneSize.width / 2f, paneSize.height / 2f)
     val length = kotlin.math.hypot(light.x, light.y).coerceAtLeast(0.001f)
     val towards = Offset(light.x / length, light.y / length)
@@ -754,7 +875,18 @@ private fun DrawScope.drawRim(paneSize: Size, outline: Outline, look: GlassLook,
     val glow = lit(0.085f * strength)
     for (width in RIM_GLOW_WIDTHS) drawOutline(outline, glow, style = Stroke(min(width.dp.toPx(), widest)))
     drawOutline(outline, lit(strength), style = Stroke(2.5.dp.toPx()))
+
+    val ring = ringLight.coerceIn(0f, 1f) * look.opacity
+    if (ring > 0.004f) {
+        val ringGlow = Color.White.copy(alpha = RING_RIM_GLOW * ring)
+        for (width in RIM_GLOW_WIDTHS) drawOutline(outline, ringGlow, style = Stroke(min(width.dp.toPx(), widest)))
+        drawOutline(outline, Color.White.copy(alpha = RING_RIM * ring), style = Stroke(2.5.dp.toPx()))
+    }
 }
+
+/** How bright a passing ring of light makes the rim, and the glow just inside it, at its brightest. */
+private const val RING_RIM = 0.85f
+private const val RING_RIM_GLOW = 0.10f
 
 /** The strokes that make the glow inside the rim, in dp; the pane's clip shows the inner half of each. */
 private val RIM_GLOW_WIDTHS = floatArrayOf(14f, 9f, 5f)

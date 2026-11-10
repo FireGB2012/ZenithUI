@@ -31,6 +31,8 @@ import com.gabriel.zenithui.ui.common.LabelStyle
 import com.gabriel.zenithui.ui.common.LocalIconStyle
 import com.gabriel.zenithui.ui.common.LocalLabelStyle
 import com.gabriel.zenithui.ui.common.LocalPressStyle
+import com.gabriel.zenithui.ui.common.MotionLevel
+import com.gabriel.zenithui.ui.common.rememberAnimationsEnabled
 
 /** The colours everything is drawn in: Zenith's one look in Light or Dark, or a widget's own colour inside it. */
 val LocalPalette = staticCompositionLocalOf { NeutralLook.Dark }
@@ -43,6 +45,13 @@ val LocalBackdrop = staticCompositionLocalOf<ImageBitmap?> { null }
 
 /** The wallpaper at every softness the lens shows it: bent at a pane's rim, softened in its face, thrown back by its edge. */
 val LocalGlassLevels = staticCompositionLocalOf<GlassLevels?> { null }
+
+/**
+ * The lens made for [LocalGlassLevels], once for each wallpaper, which every pane shares (see
+ * `sharedLens`). Null where none was made: before Android 13, without a copy of the wallpaper, and
+ * outside [ZenithTheme].
+ */
+internal val LocalLens = staticCompositionLocalOf<LiquidGlassShader?> { null }
 
 /** Android's current wallpaper scroll, read during drawing so paging only invalidates the material. */
 val LocalWallpaperOffset = staticCompositionLocalOf<State<Offset>> { mutableStateOf(Offset(0.5f, 0.5f)) }
@@ -141,14 +150,23 @@ fun ZenithTheme(
     val typography = remember(font) { typographyIn(font.family) }
     val numbers = remember(font, settings.numberFont) { ZenithFonts.numbers(settings.numberFont, font) }
 
-    // One sensor for the whole launcher, read by every glass surface.
-    val tilt = rememberTilt(settings.glassShine)
+    // One sensor for the whole launcher: the light every glass surface reads, and how far the tilt
+    // floats the home screen, which it does not with movement reduced.
+    val tilt = rememberTilt(settings.glassShine, floats = !MotionLevel.of(settings.motion, rememberAnimationsEnabled()).reduced)
+
+    // One lens for the wallpaper, shared by every pane of glass, made again only when the wallpaper
+    // changes: a page of panes coming into view no longer compiles the shader once for each.
+    val lens = rememberLens(glass)
 
     CompositionLocalProvider(
-        LocalTilt provides tilt,
+        LocalTilt provides tilt.light,
+        LocalParallax provides tilt.parallax,
         LocalPalette provides palette,
         LocalBackdrop provides glass?.frost,
         LocalGlassLevels provides glass,
+        LocalLens provides lens,
+        // For glass made from the wallpaper where there is no copy of the wallpaper to read.
+        LocalWallColour provides savedWallColour(settings),
         LocalScreenSize provides screenSize,
         LocalGlassStrength provides settings.glass,
         LocalGlassBody provides GlassBody.byId(settings.glassBody),

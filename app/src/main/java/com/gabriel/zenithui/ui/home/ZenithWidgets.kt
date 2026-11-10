@@ -288,7 +288,8 @@ fun ZenithWidget(
     val tint = if (own.shows) lerp(WALLPAPER_VEIL, own.colour, own.mix.coerceAtMost(1f)) else Color.Unspecified
     BoxWithConstraints(
         modifier
-            .glass(WidgetShape, tint = tint, strength = 1f, interactive = true)
+            // Glass made from the wallpaper, or, for a widget with a colour of its own, tinted with that.
+            .glass(WidgetShape, tint = tint, strength = 1f, interactive = true, wallpaperTint = true)
             .clip(WidgetShape)
     ) {
         WordsOnWallpaper {

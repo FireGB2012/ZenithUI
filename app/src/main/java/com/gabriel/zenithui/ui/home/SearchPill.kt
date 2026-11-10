@@ -81,6 +81,8 @@ fun SearchPill(
                     // glass does.
                     motion = GlassMotion.Lean,
                     tracking = tracking,
+                    // Made from the wallpaper: a little of its colour where the pill sits, glowing under it.
+                    wallpaperTint = true,
                 )
                 .clickable(role = Role.Button, onClick = onOpen)
                 .drawBehind {

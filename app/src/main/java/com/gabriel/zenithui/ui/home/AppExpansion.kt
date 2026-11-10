@@ -45,7 +45,7 @@ import com.gabriel.zenithui.ui.theme.GlassMaterial
 import com.gabriel.zenithui.ui.theme.LocalGlassTuning
 import com.gabriel.zenithui.ui.theme.drawLiquidGlass
 import com.gabriel.zenithui.ui.theme.glassLook
-import com.gabriel.zenithui.ui.theme.rememberLens
+import com.gabriel.zenithui.ui.theme.sharedLens
 import com.gabriel.zenithui.ui.theme.LocalBackdrop
 import com.gabriel.zenithui.ui.theme.LocalGlassLevels
 import com.gabriel.zenithui.ui.theme.LocalGlassStrength
@@ -137,7 +137,8 @@ fun AppLaunchCard(
     val tuning = LocalGlassTuning.current
     var origin by remember { mutableStateOf(Offset.Zero) }
     val clip = remember { Path() }
-    val lens = rememberLens(if (glass) levels else null)
+    // The lens every pane shares: an app opening does not have to compile one of its own first.
+    val lens = sharedLens(if (glass) levels else null)
     val outline = remember { android.graphics.Path() }
     val shade = remember { android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG) }
 

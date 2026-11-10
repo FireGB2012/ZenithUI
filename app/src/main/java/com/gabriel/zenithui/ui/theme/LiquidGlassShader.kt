@@ -42,10 +42,15 @@ import kotlin.math.max
  * polished edge mirrors the lamp there is a glint, with a fainter one opposite.
  *
  * A finger on the glass lights it from within, the glow starting under the fingertip and spreading
- * out. One shader per pane, built once; each frame only sets numbers on it.
+ * out. A ring of light from a tap on the wallpaper (see [GlassRing]) lights its rim, and a little of
+ * its face, where the ring's band crosses it.
+ *
+ * One shader for the wallpaper in [levels], built once and shared by every pane (see `sharedLens`):
+ * each pane sets every number on it before it draws, and Android copies those numbers into the
+ * drawing as it is recorded, so no pane is drawn with another's.
  */
 @RequiresApi(33)
-internal class LiquidGlassShader(levels: GlassLevels) {
+internal class LiquidGlassShader(val levels: GlassLevels) {
     private val sharpSize = sizeOf(levels.sharp)
     private val mistSize = sizeOf(levels.mist)
     private val frostSize = sizeOf(levels.frost)
@@ -78,6 +83,8 @@ internal class LiquidGlassShader(levels: GlassLevels) {
         lean: Offset = Offset.Zero,
         /** The exponent of a free-form outline's superellipse: see [squircleExponent]. */
         squircleN: Float = SQUIRCLE_EXPONENT,
+        /** A ring of light from a tap on the wallpaper, its centre in pane pixels, or null for none. */
+        ring: RingNow? = null,
     ) {
         if (size.width <= 0f || size.height <= 0f || screen.width <= 0 || screen.height <= 0) return
         // The wallpaper as Android shows it: centre-cropped to fill the screen, zoomed a little
@@ -114,8 +121,15 @@ internal class LiquidGlassShader(levels: GlassLevels) {
         // Glass materialises by bending light, not by fading: a pane on its way in bends less.
         shader.setFloatUniform("presence", look.opacity.coerceIn(0f, 1f))
         shader.setFloatUniform("touch", touch.at.x, touch.at.y, touch.reach, touch.strength)
+        // Set on every draw, so a pane that is not made from the wallpaper never keeps one's tint.
+        shader.setFloatUniform("wallTint", look.wallTint.coerceIn(0f, 1f))
         // Set on every draw, whatever the outline, so a pane is never left with another pane's.
         shader.setFloatUniform("squircleN", squircleN)
+        // Set on every draw too, so a pane the ring is not crossing never keeps another pane's band.
+        shader.setFloatUniform("ringCentre", ring?.centre?.x ?: 0f, ring?.centre?.y ?: 0f)
+        shader.setFloatUniform("ringRadius", ring?.radius ?: 0f)
+        shader.setFloatUniform("ringWidth", ring?.width ?: 1f)
+        shader.setFloatUniform("ringStrength", (ring?.strength ?: 0f).coerceIn(0f, 1f))
         when (outline) {
             is Outline.Rounded -> {
                 val r = outline.roundRect
@@ -183,6 +197,11 @@ internal class LiquidGlassShader(levels: GlassLevels) {
             uniform float4 lift;
             uniform float presence;
             uniform float4 touch;
+            uniform float wallTint;
+            uniform float2 ringCentre;
+            uniform float ringRadius;
+            uniform float ringWidth;
+            uniform float ringStrength;
 
             // Signed distance to the outline: negative inside, in pixels.
             float edgeDistance(float2 point) {
@@ -277,7 +296,10 @@ internal class LiquidGlassShader(levels: GlassLevels) {
                 // white text, dark ones under dark text - and stays clear everywhere else.
                 float seen = dot(color, float3(0.2126, 0.7152, 0.0722));
                 float fight = dark > 0.5 ? smoothstep(0.42, 0.95, seen) : 1.0 - smoothstep(0.08, 0.55, seen);
-                color = mix(color, wash.rgb, clamp(wash.a + fight * adapt, 0.0, 0.95));
+                // Glass made from the wallpaper: the veil takes a little of the colour round it, as
+                // far as wallTint says, and keeps its own where it thickens for the words on it.
+                float3 veil = mix(wash.rgb, air, wallTint * (1.0 - fight));
+                color = mix(color, veil, clamp(wash.a + fight * adapt, 0.0, 0.95));
                 // Separation. Over a picture as dark as the pane itself, or in the light as pale,
                 // the glass would vanish into it; there, and only there, a little frost lifts the
                 // pane a step away from what is round it.
@@ -345,6 +367,15 @@ internal class LiquidGlassShader(levels: GlassLevels) {
                 color += lamp * shine * (rim * (1.0 - 0.12 * dark) + (band + bloom) * (0.5 + 0.22 * dark)
                     + relief * (1.1 * glint + sheen + mix(0.40, 0.90, dark) * max(form, 0.0)));
 
+                // A ring of light from a tap on the wallpaper, running out across the screen: where
+                // its band crosses the pane the face brightens a little, and the rim and the glow just
+                // inside it catch the light, as a rim catches any light that passes over it.
+                if (ringStrength > 0.0) {
+                    float ringOff = (length(point - ringCentre) - ringRadius) / max(ringWidth, 1.0);
+                    float ringLit = ringStrength * exp(-ringOff * ringOff);
+                    color += lamp * ringLit * (0.10 + rimmed * (0.85 * hairline + 0.30 * near * near) + 0.16 * t * t);
+                }
+
                 // A finger lights the glass from within: brightest under the fingertip, spreading
                 // through the pane, and flaring the rim where the glow reaches it.
                 if (touch.w > 0.0) {
@@ -398,6 +429,12 @@ internal data class GlassLook(
      * with the glass that has no shader.
      */
     val onWallpaper: Boolean = false,
+    /**
+     * Glass made from the wallpaper: how far its veil takes the wallpaper's own colour where it sits,
+     * 0 for none, [WALL_TINT] for the dock, Search and the glass widgets. The lens reads that colour
+     * under every point; without the lens the pane is given one colour for the whole of it.
+     */
+    val wallTint: Float = 0f,
 )
 
 /** A finger on a pane: where, in pane pixels; how far its glow has spread; and how bright it is. */

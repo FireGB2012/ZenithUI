@@ -27,7 +27,8 @@ object HostedSizes {
 
     /**
      * The cells across and row units down a widget wants. [cellDp] and [rowDp] are one cell's width
-     * and one whole row's height on the page; [targetX] and [targetY] the widget's own cells, or 0.
+     * and one whole row's height on the page, and [iconDp] the size of its icons; [targetX] and
+     * [targetY] the widget's own cells, or 0.
      */
     fun spanFor(
         widthDp: Int,
@@ -36,24 +37,30 @@ object HostedSizes {
         targetY: Int,
         cellDp: Float,
         rowDp: Float,
+        iconDp: Float,
         columns: Int,
         rows: Int,
     ): Pair<Int, Int> {
-        val across = if (targetX > 0) targetX else cells(widthDp, cellDp)
-        val down = if (targetY > 0) targetY else cells(heightDp, rowDp)
+        val across = if (targetX > 0) targetX else cells(widthDp, cellDp, iconDp)
+        val down = if (targetY > 0) targetY else cells(heightDp, rowDp, iconDp)
         return across.coerceIn(1, columns) to down.coerceIn(1, rows) * ROW_UNITS
     }
 
     /** The smallest it may be made, in cells and row units: what it says it can shrink to. */
-    fun minSpan(minWidthDp: Int, minHeightDp: Int, cellDp: Float, rowDp: Float, columns: Int, rows: Int): Pair<Int, Int> =
-        cells(minWidthDp, cellDp).coerceIn(1, columns) to cells(minHeightDp, rowDp).coerceIn(1, rows) * ROW_UNITS
+    fun minSpan(minWidthDp: Int, minHeightDp: Int, cellDp: Float, rowDp: Float, iconDp: Float, columns: Int, rows: Int): Pair<Int, Int> =
+        cells(minWidthDp, cellDp, iconDp).coerceIn(1, columns) to cells(minHeightDp, rowDp, iconDp).coerceIn(1, rows) * ROW_UNITS
 
-    /** How many cells of [cellDp] it takes to hold [dp], allowing a little for the gaps between them. */
-    private fun cells(dp: Int, cellDp: Float): Int {
-        if (dp <= 0 || cellDp <= 0f) return 1
-        // A widget a hair wider than a cell still fits in one: Android's own launchers forgive
+    /**
+     * How many cells [pitch] apart it takes to hold [dp]. A widget is drawn from the icons in its
+     * first cell to the icons in its last ([HomeGeometry.widgetFrame]), so n cells give it the room
+     * of n - 1 of them and one icon of [iconDp], across and down alike.
+     */
+    private fun cells(dp: Int, pitch: Float, iconDp: Float): Int {
+        if (dp <= 0 || pitch <= 0f) return 1
+        // A widget a hair bigger than that still fits in it: Android's own launchers forgive
         // about a tenth.
-        return ceil((dp / cellDp) - 0.1f).toInt().coerceAtLeast(1)
+        val past = (dp * 0.9f - iconDp).coerceAtLeast(0f)
+        return (1f + ceil(past / pitch)).toInt()
     }
 }
 

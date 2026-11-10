@@ -123,8 +123,8 @@ val LocalBadges = compositionLocalOf { BadgeState() }
 
 /**
  * An app's name under its icon, at the size asked for in Settings: on the wallpaper white with a
- * soft shadow, as on an iPhone, and anywhere else in the palette's ink with the shadow Settings
- * asks for.
+ * soft shadow, as on an iPhone, a darker one with Name shadow on, and anywhere else in the
+ * palette's ink with the shadow Settings asks for.
  */
 @Composable
 fun IconLabel(text: String, modifier: Modifier = Modifier, textAlign: TextAlign? = null) {
@@ -152,11 +152,15 @@ fun IconLabel(text: String, modifier: Modifier = Modifier, textAlign: TextAlign?
 internal fun labelInk(onWallpaper: Boolean, onGlass: Color): Color = if (onWallpaper) Color.White else onGlass
 
 /**
- * The shadow under a name. On the wallpaper it is always a soft one, a dp below the words and
- * blurred across three, which keeps white words readable on a pale wallpaper without dulling them
- * on a dark one. Anywhere else it is the one Name shadow ([legacyShadow]) has always given, or none.
+ * The shadow under a name. On the wallpaper it is always there: a soft one, a dp below the words
+ * and blurred across three, which keeps white words readable on most wallpapers without dulling
+ * them on a dark one, and with Name shadow on ([legacyShadow]) a darker, closer one, for a pale or
+ * busy wallpaper. Closer rather than wider: spread wider, the same shadow only thins out under
+ * strokes as fine as an 11 sp name's. Anywhere else it is the one Name shadow has always given, or
+ * none.
  */
 internal fun labelShadow(onWallpaper: Boolean, legacyShadow: Boolean, density: Float): Shadow? = when {
+    onWallpaper && legacyShadow -> Shadow(Color.Black.copy(alpha = 0.75f), Offset(0f, 1f * density), 1.5f * density)
     onWallpaper -> Shadow(Color.Black.copy(alpha = 0.45f), Offset(0f, 1f * density), 3f * density)
     legacyShadow -> NAME_SHADOW
     else -> null
@@ -164,6 +168,17 @@ internal fun labelShadow(onWallpaper: Boolean, legacyShadow: Boolean, density: F
 
 /** What Name shadow puts under the names, in pixels, as it always has. */
 private val NAME_SHADOW = Shadow(Color.Black.copy(alpha = 0.6f), Offset(0f, 1.5f), 7f)
+
+/**
+ * The colour of a symbol's shadow beside words with [shadow] under them, such as Search's
+ * magnifier: a copy of the symbol in this, as far down as [shadow] falls, drawn under it. The copy
+ * is sharp, since blurring it needs Android 12, and a sharp shadow reads darker than a blurred one
+ * of the same strength, so it has a little less.
+ */
+internal fun symbolShadowColour(shadow: Shadow): Color = shadow.color.copy(alpha = shadow.color.alpha * SHARP_SHADOW)
+
+/** How much of a blurred shadow's strength the sharp copy under a symbol has. */
+private const val SHARP_SHADOW = 0.78f
 
 @Composable
 fun AppIcon(

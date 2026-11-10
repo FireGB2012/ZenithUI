@@ -127,6 +127,7 @@ import com.gabriel.zenithui.ui.common.labelShadow
 import com.gabriel.zenithui.ui.common.pressBounce
 import com.gabriel.zenithui.ui.common.staggerDelay
 import com.gabriel.zenithui.ui.theme.GlassMaterial
+import com.gabriel.zenithui.ui.theme.IconOutlineShape
 import com.gabriel.zenithui.ui.theme.LocalOnWallpaper
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.PressLight
@@ -154,8 +155,9 @@ class HomeDragState {
      * counts, so carrying an icon across a full page never swallows it into a folder by accident.
      */
     var hoverItemId by mutableStateOf<String?>(null)
-    /** The bin's own rectangle. The pointer has to be inside it, not merely above its bottom
-     *  edge — widgets live at the top of the page, so a whole top strip cannot be a trapdoor. */
+    /** The bin's own rectangle. The pointer has to be over it or straight above it, not merely
+     *  above its bottom edge — widgets live at the top of the page, so a whole top strip cannot be
+     *  a trapdoor. See [overRemove]. */
     var removeZone by mutableStateOf(Rect.Zero)
     var gridOrigin by mutableStateOf(Offset.Zero)
     var cellWidth by mutableStateOf(0f)
@@ -192,9 +194,17 @@ class HomeDragState {
         )
     }
 
-    /** Your finger is on the bin right now. */
+    /**
+     * Your finger is on the bin right now: across it, and above the bottom of both the bin and the
+     * first row's icons. With nothing written above it the page starts just under the status bar,
+     * so the bin's lower half lies over the first row's middle icons; carrying something to those
+     * cells, or onto one of those icons to make a folder, must not arm it. The strip above the bin
+     * counts, so it stays as easy to hit as it was.
+     */
     val overRemove: Boolean
-        get() = item != null && !removeZone.isEmpty && removeZone.contains(pointer)
+        get() = item != null && !removeZone.isEmpty &&
+            pointer.x in removeZone.left..removeZone.right &&
+            pointer.y < minOf(removeZone.bottom, gridOrigin.y + (geometry?.topInset ?: 0))
 
     /**
      * Only an armed bin deletes anything. The bin lives over the top row, where widgets are, so
@@ -1072,6 +1082,10 @@ fun HomeItemContent(
             showLabel = settings.showLabels,
             frame = geometry.iconFrame,
             style = settings.folderStyle,
+            // Cut like the app icons beside it. The free-form outlines (pebble, teardrop, hexagon,
+            // clover) keep the squircle: the lens draws every free-form outline as a superellipse, so
+            // glass clipped to one of them would show a squircle's rim cut off by the clip.
+            shape = ZenithShapes.forIconShape(settings.iconShape).takeUnless { it is IconOutlineShape } ?: ZenithShapes.icon,
         )
 
         is WidgetCell -> {
@@ -1110,17 +1124,25 @@ private fun WidgetName(name: String, strip: PxRect) {
 /**
  * The name under another app's widget, [provider] being its flattened component name: the app it
  * comes from as the drawer has it, or as Android has it for an app the drawer does not have.
+ *
+ * Until the drawer's list has come in, which at every start is a moment after the home screen is
+ * first drawn, the name is left empty rather than asked of Android: that would be a call to the
+ * system for every such widget while the page is first composed, and would put Android's name up
+ * where the drawer may have one of its own.
  */
 @Composable
 private fun hostedName(provider: String, appsByKey: Map<String, AppInfo>): String {
     val context = LocalContext.current
     return remember(provider, appsByKey) {
         Widgets.hostedName(provider, appsByKey.values)
-            ?: runCatching {
-                val packages = context.packageManager
-                packages.getApplicationLabel(packages.getApplicationInfo(provider.substringBefore('/'), 0)).toString()
-            }.getOrNull()
-            ?: Widgets.UNNAMED
+            ?: if (appsByKey.isEmpty()) {
+                ""
+            } else {
+                runCatching {
+                    val packages = context.packageManager
+                    packages.getApplicationLabel(packages.getApplicationInfo(provider.substringBefore('/'), 0)).toString()
+                }.getOrNull() ?: Widgets.UNNAMED
+            }
     }
 }
 
@@ -1371,6 +1393,8 @@ fun FolderTile(
     frame: PxRect? = null,
     /** "grid": four small, two by two; "stack": the first three fanned; "cover": the first large. */
     style: String = "grid",
+    /** The outline of its glass and its colour, so that it is cut like the app icons beside it. */
+    shape: androidx.compose.ui.graphics.Shape = ZenithShapes.icon,
 ) {
     val density = LocalDensity.current
     val own = if (folder.colour == 0L) null else Color(folder.colour.toInt())
@@ -1390,9 +1414,9 @@ fun FolderTile(
             Box(
                 Modifier
                     .fillMaxSize()
-                    .glass(ZenithShapes.icon, strength = 1.2f, material = GlassMaterial.Clear, interactive = true, tint = own ?: Color.Unspecified)
+                    .glass(shape, strength = 1.2f, material = GlassMaterial.Clear, interactive = true, tint = own ?: Color.Unspecified)
                     // A colour of its own, laid in the glass, easing in and out as it is chosen.
-                    .background(shownColour.copy(alpha = shownColour.alpha * 0.3f), ZenithShapes.icon)
+                    .background(shownColour.copy(alpha = shownColour.alpha * 0.3f), shape)
                     .padding(iconSize * 0.12f),
                 contentAlignment = Alignment.Center,
             ) {
@@ -1506,7 +1530,10 @@ private fun BoxScope.ResizeFrame(
         return when {
             // Whole rows: whichever height's picture ends nearest the finger.
             isApp -> spanX to (((1..room).minByOrNull { abs(appBottom[it] - b) } ?: 1) * ROW_UNITS)
-            free -> spanX to ((b + underWidget) / cellHeightPx).roundToInt().coerceIn(1, unitRows - live.row)
+            // Any number of row units: whichever height's outline ends nearest the finger, as for
+            // whole rows. Adding the name's strip to the finger instead grew a widget shorter than
+            // a row the moment it was pulled, since nothing is left under one of those for a name.
+            free -> spanX to ((1..(unitRows - live.row)).minByOrNull { abs(restingBottom(it) - b) } ?: 1)
             else -> spanX to (((1..room).minByOrNull { abs(restingBottom(it * ROW_UNITS) - b) } ?: 1) * ROW_UNITS)
         }
     }
@@ -1975,6 +2002,12 @@ fun DockBar(
      * along it, as it always has.
      */
     onBounds: (Rect) -> Unit,
+    /**
+     * Where the middle of each app in the dock stands across the screen, in order: something carried
+     * from the page and let go on the dock takes its place among them by these, as an app moved
+     * along the dock does.
+     */
+    onCentres: (List<Float>) -> Unit = {},
     animateEntrance: Boolean = false,
     /** The page's geometry: the dock stands on the same columns and its icons are the same size. */
     geometry: HomeGeometry? = null,
@@ -2085,6 +2118,14 @@ fun DockBar(
             return Rect(place.left + left, top, place.left + left + side, top + side)
         }
 
+        // The apps' middles, told again whenever where they belong changes: the dock found, the page
+        // measured, an app more or less, another style.
+        val currentOnCentres by rememberUpdatedState(onCentres)
+        LaunchedEffect(Unit) {
+            androidx.compose.runtime.snapshotFlow { List(currentKeys.size) { slotOf(it)?.center?.x ?: 0f } }
+                .collect { currentOnCentres(it) }
+        }
+
         /** Carried far enough up to leave the dock. */
         fun liftedNow(): Boolean = draggingIndex != null && dragOffset.y < -iconSizePx * 1.2f
 
@@ -2139,14 +2180,15 @@ fun DockBar(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 if (keys.isEmpty()) {
-                    // White, with the soft shadow the names on the wallpaper have, as Search's word
-                    // is: it stands on clear glass that only mists the wallpaper, or on the wallpaper.
+                    // White, with the shadow the names on the wallpaper have, darker with Name shadow
+                    // on, as Search's word is: it stands on clear glass that only mists the
+                    // wallpaper, or on the wallpaper.
                     Text(
                         text = if (highlight) "Let go to add it" else "Drag an app here to add it to the dock",
                         color = Color.White.copy(alpha = 0.85f),
                         fontSize = 12.sp,
                         style = LocalTextStyle.current.merge(
-                            TextStyle(shadow = labelShadow(onWallpaper = true, legacyShadow = false, density = density.density))
+                            TextStyle(shadow = labelShadow(onWallpaper = true, legacyShadow = LocalLabelStyle.current.shadow, density = density.density))
                         ),
                         modifier = Modifier.padding(vertical = 10.dp),
                     )

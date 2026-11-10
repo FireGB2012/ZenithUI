@@ -213,15 +213,19 @@ object LayoutBuilder {
             }
         }
 
-        // Anything with no room left on its own page goes to the next page that has some.
+        // Anything with no room left on its own page goes to the next page that has some. The page
+        // the search starts from moves on only when something is put down: one that fits nowhere
+        // must not send everything after it to the last page.
         var page = items.maxOfOrNull { it.page } ?: 0
         for (item in overflow) {
-            var slot = grid(page).findSlot(item.spanX, item.spanY, step)
-            while (slot == null && page < MAX_PAGES - 1) {
-                page += 1
-                slot = grid(page).findSlot(item.spanX, item.spanY, step)
+            var at = page
+            var slot = grid(at).findSlot(item.spanX, item.spanY, step)
+            while (slot == null && at < MAX_PAGES - 1) {
+                at += 1
+                slot = grid(at).findSlot(item.spanX, item.spanY, step)
             }
             if (slot == null) continue
+            page = at
             grid(page).occupy(slot.first, slot.second, item.spanX, item.spanY)
             placed[item.id] = item.moved(page, slot.first, slot.second)
         }
@@ -253,6 +257,19 @@ object LayoutBuilder {
             val spanX = item.spanX.coerceIn(1, columns)
             val spanY = ((item.spanY + ROW_UNITS / 2) / ROW_UNITS).coerceIn(1, rows) * ROW_UNITS
             if (spanX == item.spanX && spanY == item.spanY) item else item.copy(spanX = spanX, spanY = spanY)
+        } else if (item is HostedWidgetCell || item is StackCell) {
+            // Another app's widget and a stack have no size of Zenith's own to keep to, but they are
+            // no wider or taller than the page either, and on whole rows unless placed freely. One
+            // five columns wide taken onto the iPhone's four would otherwise hang off the side of
+            // the page, with icons put in the cells under it that it was never counted as holding.
+            val spanX = item.spanX.coerceIn(1, columns)
+            val spanY = if (free) item.spanY.coerceIn(1, unitRows) else wholeRows(item.spanY).coerceIn(ROW_UNITS, unitRows)
+            when {
+                spanX == item.spanX && spanY == item.spanY -> item
+                item is HostedWidgetCell -> item.copy(spanX = spanX, spanY = spanY)
+                item is StackCell -> item.copy(spanX = spanX, spanY = spanY)
+                else -> item
+            }
         } else {
             item
         }

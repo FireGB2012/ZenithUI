@@ -58,6 +58,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
+import com.gabriel.zenithui.data.HomeGeometry
 import com.gabriel.zenithui.data.HostedSizes
 import com.gabriel.zenithui.data.HostedWidgetCell
 import com.gabriel.zenithui.data.LayoutBuilder
@@ -209,13 +210,15 @@ class PinItemActivity : ComponentActivity() {
     private fun placeWidget(id: Int, info: AppWidgetProviderInfo): Boolean {
         val store = SettingsStore.get(this)
         val now = store.settings.value
-        // Near enough the page's own cells: the screen shared out among its columns and rows.
+        // Near enough the page's own cells: the screen shared out among its columns and rows, and
+        // the icons cells that size hold. There is no page here to measure.
         val metrics = resources.displayMetrics
         val cellDp = metrics.widthPixels / metrics.density / now.columns.coerceAtLeast(1)
         val rowDp = (metrics.heightPixels / metrics.density - 220f) / now.rows.coerceAtLeast(1)
+        val iconDp = HomeGeometry.iconSizeDp(cellDp, rowDp, now.showLabels)
         val targetX = if (Build.VERSION.SDK_INT >= 31) info.targetCellWidth else 0
         val targetY = if (Build.VERSION.SDK_INT >= 31) info.targetCellHeight else 0
-        val (spanX, spanY) = HostedSizes.spanFor(info.minWidth, info.minHeight, targetX, targetY, cellDp, rowDp, now.columns, now.rows)
+        val (spanX, spanY) = HostedSizes.spanFor(info.minWidth, info.minHeight, targetX, targetY, cellDp, rowDp, iconDp, now.columns, now.rows)
         val slot = freeSlot(spanX, spanY)
         if (slot == null) {
             runCatching { ZenithWidgetHost.get(this).deleteAppWidgetId(id) }

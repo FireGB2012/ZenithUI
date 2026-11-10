@@ -323,9 +323,11 @@ private fun Gallery(
         // Other apps' widgets, below Zenith's own.
         val cellDp = geometry?.let { with(density) { it.cellWidth.toDp().value } } ?: 80f
         val rowDp = geometry?.let { with(density) { (it.unitHeight * ROW_UNITS).toDp().value } } ?: 100f
+        val iconDp = geometry?.iconDp ?: HomeGeometry.iconSizeDp(cellDp, rowDp, settings.showLabels)
         HostedWidgetPicker(
             cellDp = cellDp,
             rowDp = rowDp,
+            iconDp = iconDp,
             columns = settings.columns,
             rows = settings.rows,
             modifier = Modifier

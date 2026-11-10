@@ -215,6 +215,10 @@ fun Modifier.glass(
             onDrawBehind {
                 // Position, wallpaper scroll, tilt and the finger's light are all read here, while
                 // drawing, so any of them changing repaints the glass without recomposing anything.
+                // Where the pane was laid out is read every time, even by a pane that works out where
+                // it is drawn: a layer further out, such as the home screen's pull or its zoom, moves
+                // it without its motion or tracking knowing, and the new position is what redraws it.
+                val laidOut = origin
                 val touch = press?.touch(size) ?: GlassTouch.None
                 // A pressed pane bends the light a little more, as the finger's light comes up.
                 val lit = if (touch.strength > 0f) look.copy(refraction = look.refraction * (1f + 0.22f * touch.strength)) else look
@@ -223,7 +227,7 @@ fun Modifier.glass(
                     outline = outline,
                     lens = lens,
                     softened = backdrop,
-                    origin = if (moved != null || tracking != null) drawnOrigin(placed[0], moved, tracking) ?: origin else origin,
+                    origin = if (moved != null || tracking != null) drawnOrigin(placed[0], moved, tracking) ?: laidOut else laidOut,
                     screen = screen,
                     wallpaperOffset = wallpaperOffset.value,
                     look = lit,

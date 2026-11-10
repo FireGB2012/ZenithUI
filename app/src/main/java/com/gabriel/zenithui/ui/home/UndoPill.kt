@@ -1,6 +1,8 @@
 package com.gabriel.zenithui.ui.home
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
@@ -14,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Undo
@@ -31,29 +34,32 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.gabriel.zenithui.ui.common.LocalMotionLevel
-import com.gabriel.zenithui.ui.common.edgeIn
-import com.gabriel.zenithui.ui.common.edgeOut
+import com.gabriel.zenithui.ui.common.popIn
+import com.gabriel.zenithui.ui.common.popOut
 import com.gabriel.zenithui.ui.common.pressBounce
 import com.gabriel.zenithui.ui.common.rememberTick
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.glass
 
 /**
- * A pill of glass rising from the foot of the screen when something has been taken off the home
- * screen: what it was, and Undo, round which a ring runs down for as long as it can still be put
- * back. Tapping Undo puts it back; the pill sinks away when the time is up.
+ * A pill of glass in Search's place, in the band between the page and the dock, when something has
+ * been taken off the home screen: what it was, and Undo, round which a ring runs down for as long as
+ * it can still be put back. Tapping Undo puts it back; when the time is up the pill gives way to
+ * Search again ([bandSwapIn], [bandSwapOut]).
  */
 @Composable
 fun UndoPill(what: String?, key: Any?, millis: Long, onUndo: () -> Unit, modifier: Modifier = Modifier) {
     val reduced = LocalMotionLevel.current.reduced
-    // Kept while the pill goes, so its words do not empty out as it sinks.
+    // Kept while the pill goes, so its words do not empty out on its way.
     val shown = remember { arrayOf("") }
     if (what != null) shown[0] = what
     AnimatedVisibility(
         visible = what != null,
-        enter = edgeIn(reduced, fromFoot = true),
-        exit = edgeOut(reduced, toFoot = true),
-        modifier = modifier,
+        enter = bandSwapIn(reduced),
+        exit = bandSwapOut(reduced),
+        // A little taller than the band it stands in: it keeps its own height, centred on the band,
+        // rather than being squeezed into it.
+        modifier = modifier.wrapContentHeight(unbounded = true),
     ) {
         val palette = LocalPalette.current
         val tick = rememberTick()
@@ -109,6 +115,17 @@ fun UndoPill(what: String?, key: Any?, millis: Long, onUndo: () -> Unit, modifie
         }
     }
 }
+
+/**
+ * Search and Undo giving way to each other in the band, where they stand: the one going shrinks a
+ * little as it fades, and the one coming grows from that size. With movement reduced, a fade.
+ */
+internal fun bandSwapIn(reduced: Boolean): EnterTransition = popIn(reduced, from = BAND_SWAP_SCALE, millis = 200)
+
+internal fun bandSwapOut(reduced: Boolean): ExitTransition = popOut(reduced, to = BAND_SWAP_SCALE, millis = 140)
+
+/** How small Search or Undo is as it comes or goes, so the two are seen to trade places. */
+private const val BAND_SWAP_SCALE = 0.86f
 
 /** What [item] is called in the pill: the app's name, the folder's, the widget's. */
 fun removedName(item: com.gabriel.zenithui.data.HomeItem, appsByKey: Map<String, com.gabriel.zenithui.data.AppInfo>): String = when (item) {

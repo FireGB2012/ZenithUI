@@ -1227,9 +1227,13 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
     private var cellDp = 80f
     private var rowDp = 100f
 
-    fun noteCellSize(cellWidthDp: Float, rowHeightDp: Float) {
+    /** And its icons' size, in dp: a widget is drawn from the icons in its first cell to those in its last. */
+    private var iconDp = com.gabriel.zenithui.data.HomeGeometry.iconSizeDp(cellDp, rowDp, showLabels = true)
+
+    fun noteCellSize(cellWidthDp: Float, rowHeightDp: Float, iconSizeDp: Float) {
         if (cellWidthDp > 0f) cellDp = cellWidthDp
         if (rowHeightDp > 0f) rowDp = rowHeightDp
+        if (iconSizeDp > 0f) iconDp = iconSizeDp
     }
 
     /**
@@ -1248,7 +1252,7 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
         } else {
             val targetX = if (android.os.Build.VERSION.SDK_INT >= 31) info.targetCellWidth else 0
             val targetY = if (android.os.Build.VERSION.SDK_INT >= 31) info.targetCellHeight else 0
-            com.gabriel.zenithui.data.HostedSizes.spanFor(info.minWidth, info.minHeight, targetX, targetY, cellDp, rowDp, s.columns, s.rows)
+            com.gabriel.zenithui.data.HostedSizes.spanFor(info.minWidth, info.minHeight, targetX, targetY, cellDp, rowDp, iconDp, s.columns, s.rows)
         }
         val id = runCatching { widgetHost.allocateAppWidgetId() }.getOrNull() ?: return
         pending = PendingWidget(id, info, spanX, spanY, stackOnto, replacing)
@@ -1370,7 +1374,7 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
                 com.gabriel.zenithui.data.HostedSizes.minSpan(
                     info.minResizeWidth.takeIf { it > 0 } ?: info.minWidth,
                     info.minResizeHeight.takeIf { it > 0 } ?: info.minHeight,
-                    cellDp, rowDp, s.columns, s.rows,
+                    cellDp, rowDp, iconDp, s.columns, s.rows,
                 )
             } ?: (1 to ROW_UNITS)
             else -> 1 to ROW_UNITS

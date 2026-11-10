@@ -349,6 +349,8 @@ private data class ProviderGroup(val packageName: String, val app: String, val p
 fun HostedWidgetPicker(
     cellDp: Float,
     rowDp: Float,
+    /** The page's icons, in dp: a widget is drawn from the icons in its first cell to those in its last. */
+    iconDp: Float,
     columns: Int,
     rows: Int,
     modifier: Modifier = Modifier,
@@ -422,7 +424,7 @@ fun HostedWidgetPicker(
                         contentPadding = androidx.compose.foundation.layout.PaddingValues(start = 14.dp, end = 14.dp, bottom = 14.dp),
                     ) {
                         items(group.providers, key = { it.provider.flattenToString() }) { info ->
-                            ProviderCard(info, cellDp, rowDp, columns, rows) { onPick(info) }
+                            ProviderCard(info, cellDp, rowDp, iconDp, columns, rows) { onPick(info) }
                         }
                     }
                 }
@@ -433,14 +435,14 @@ fun HostedWidgetPicker(
 
 /** One widget to choose: its picture on a little well, its name, and how many cells it takes here. */
 @Composable
-private fun ProviderCard(info: AppWidgetProviderInfo, cellDp: Float, rowDp: Float, columns: Int, rows: Int, onClick: () -> Unit) {
+private fun ProviderCard(info: AppWidgetProviderInfo, cellDp: Float, rowDp: Float, iconDp: Float, columns: Int, rows: Int, onClick: () -> Unit) {
     val palette = LocalPalette.current
     val context = LocalContext.current
     val name = remember(info) { runCatching { info.loadLabel(context.packageManager) }.getOrDefault("Widget") }
-    val (spanX, spanY) = remember(info, cellDp, rowDp, columns, rows) {
+    val (spanX, spanY) = remember(info, cellDp, rowDp, iconDp, columns, rows) {
         val targetX = if (Build.VERSION.SDK_INT >= 31) info.targetCellWidth else 0
         val targetY = if (Build.VERSION.SDK_INT >= 31) info.targetCellHeight else 0
-        HostedSizes.spanFor(info.minWidth, info.minHeight, targetX, targetY, cellDp, rowDp, columns, rows)
+        HostedSizes.spanFor(info.minWidth, info.minHeight, targetX, targetY, cellDp, rowDp, iconDp, columns, rows)
     }
     Column(
         Modifier

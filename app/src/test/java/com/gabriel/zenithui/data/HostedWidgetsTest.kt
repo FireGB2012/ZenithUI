@@ -102,12 +102,13 @@ class HostedWidgetsTest {
     @Test
     fun `a widget asks for the cells its own size needs, never more than the page`() {
         // Android 12's own cells win where the widget gives them.
-        assertEquals(4 to 2 * ROW_UNITS, HostedSizes.spanFor(250, 110, targetX = 4, targetY = 2, cellDp = 80f, rowDp = 100f, columns = 4, rows = 6))
-        // Otherwise its size in dp: a hair over one cell is still one.
-        assertEquals(1 to ROW_UNITS, HostedSizes.spanFor(84, 104, 0, 0, cellDp = 80f, rowDp = 100f, columns = 4, rows = 6))
-        assertEquals(3 to 2 * ROW_UNITS, HostedSizes.spanFor(220, 180, 0, 0, cellDp = 80f, rowDp = 100f, columns = 4, rows = 6))
+        assertEquals(4 to 2 * ROW_UNITS, HostedSizes.spanFor(250, 110, targetX = 4, targetY = 2, cellDp = 80f, rowDp = 100f, iconDp = 52f, columns = 4, rows = 6))
+        // Otherwise its size in dp, against the room n cells give it: n - 1 cells and one icon (52 dp
+        // in cells 80 dp wide), across and down alike. 84 by 104 is more than an icon either way.
+        assertEquals(2 to 2 * ROW_UNITS, HostedSizes.spanFor(84, 104, 0, 0, cellDp = 80f, rowDp = 100f, iconDp = 52f, columns = 4, rows = 6))
+        assertEquals(3 to 3 * ROW_UNITS, HostedSizes.spanFor(220, 180, 0, 0, cellDp = 80f, rowDp = 100f, iconDp = 52f, columns = 4, rows = 6))
         // Bigger than the page is the whole page.
-        assertEquals(4 to 6 * ROW_UNITS, HostedSizes.spanFor(900, 2000, 0, 0, cellDp = 80f, rowDp = 100f, columns = 4, rows = 6))
-        assertEquals(2 to ROW_UNITS, HostedSizes.minSpan(150, 40, cellDp = 80f, rowDp = 100f, columns = 4, rows = 6))
+        assertEquals(4 to 6 * ROW_UNITS, HostedSizes.spanFor(900, 2000, 0, 0, cellDp = 80f, rowDp = 100f, iconDp = 52f, columns = 4, rows = 6))
+        assertEquals(3 to ROW_UNITS, HostedSizes.minSpan(150, 40, cellDp = 80f, rowDp = 100f, iconDp = 52f, columns = 4, rows = 6))
     }
 }

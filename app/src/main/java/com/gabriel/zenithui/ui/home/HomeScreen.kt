@@ -1142,11 +1142,12 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
     LaunchedEffect(Unit) {
         viewModel.widgetPlaced.collect { page -> revealPage(page) }
     }
-    // How big a cell is, in dp, so another app's widget is given the cells its own size needs.
+    // How big a cell and its icons are, in dp, so another app's widget is given the cells its own
+    // size needs.
     val pageGeometry = drag.geometry
     LaunchedEffect(pageGeometry) {
         val g = pageGeometry ?: return@LaunchedEffect
-        viewModel.noteCellSize(g.cellWidth / density.density, g.unitHeight * ROW_UNITS / density.density)
+        viewModel.noteCellSize(g.cellWidth / density.density, g.unitHeight * ROW_UNITS / density.density, g.iconDp)
     }
 
     // A landing plays the moment the item is let go; after that it would only replay by mistake.

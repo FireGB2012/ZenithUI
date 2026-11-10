@@ -398,6 +398,8 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
     val pagerState = rememberPagerState(pageCount = { pageCount })
     var pagerBounds by remember { mutableStateOf(androidx.compose.ui.geometry.Rect.Zero) }
     var dockBounds by remember { mutableStateOf(androidx.compose.ui.geometry.Rect.Zero) }
+    // Where the middle of each app in the dock stands, so a drop from the page goes between them.
+    var dockCentres by remember { mutableStateOf(emptyList<Float>()) }
     // A hidden dock must not keep catching drops at the place it used to be.
     LaunchedEffect(settings.showDock) {
         if (!settings.showDock) dockBounds = androidx.compose.ui.geometry.Rect.Zero
@@ -1171,9 +1173,11 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             val gathered = drag.gathered.map { it.first.id }
             when {
                 droppedOnDock -> {
-                    // Where along the bar it was let go decides its place among the others.
-                    val slots = settings.dock.size + 1
-                    val index = ((drag.pointer.x - dockBounds.left) / dockBounds.width * slots).toInt()
+                    // Where it was let go among the dock's apps decides its place: after every app
+                    // whose middle is left of the finger, as moving an app along the dock decides it.
+                    // Sharing the slab out evenly put it a place off where the apps do not stand
+                    // evenly across it, as with two or three on the glass dock or a floating one.
+                    val index = dockCentres.count { it < drag.pointer.x }
                     if (viewModel.moveToDock(item.id, index)) {
                         drag.sent = Sent(item, copyAt, into = null)
                     } else {
@@ -1706,6 +1710,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                                 }
                             },
                             onBounds = { dockBounds = it },
+                            onCentres = { dockCentres = it },
                             // It spans the screen and stands its slab in from the edges itself, its apps
                             // still under the page's columns.
                             modifier = room

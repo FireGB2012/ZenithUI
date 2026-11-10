@@ -155,8 +155,9 @@ class HomeDragState {
      * counts, so carrying an icon across a full page never swallows it into a folder by accident.
      */
     var hoverItemId by mutableStateOf<String?>(null)
-    /** The bin's own rectangle. The pointer has to be inside it, not merely above its bottom
-     *  edge — widgets live at the top of the page, so a whole top strip cannot be a trapdoor. */
+    /** The bin's own rectangle. The pointer has to be over it or straight above it, not merely
+     *  above its bottom edge — widgets live at the top of the page, so a whole top strip cannot be
+     *  a trapdoor. See [overRemove]. */
     var removeZone by mutableStateOf(Rect.Zero)
     var gridOrigin by mutableStateOf(Offset.Zero)
     var cellWidth by mutableStateOf(0f)
@@ -193,9 +194,17 @@ class HomeDragState {
         )
     }
 
-    /** Your finger is on the bin right now. */
+    /**
+     * Your finger is on the bin right now: across it, and above the bottom of both the bin and the
+     * first row's icons. With nothing written above it the page starts just under the status bar,
+     * so the bin's lower half lies over the first row's middle icons; carrying something to those
+     * cells, or onto one of those icons to make a folder, must not arm it. The strip above the bin
+     * counts, so it stays as easy to hit as it was.
+     */
     val overRemove: Boolean
-        get() = item != null && !removeZone.isEmpty && removeZone.contains(pointer)
+        get() = item != null && !removeZone.isEmpty &&
+            pointer.x in removeZone.left..removeZone.right &&
+            pointer.y < minOf(removeZone.bottom, gridOrigin.y + (geometry?.topInset ?: 0))
 
     /**
      * Only an armed bin deletes anything. The bin lives over the top row, where widgets are, so
@@ -1515,7 +1524,10 @@ private fun BoxScope.ResizeFrame(
         return when {
             // Whole rows: whichever height's picture ends nearest the finger.
             isApp -> spanX to (((1..room).minByOrNull { abs(appBottom[it] - b) } ?: 1) * ROW_UNITS)
-            free -> spanX to ((b + underWidget) / cellHeightPx).roundToInt().coerceIn(1, unitRows - live.row)
+            // Any number of row units: whichever height's outline ends nearest the finger, as for
+            // whole rows. Adding the name's strip to the finger instead grew a widget shorter than
+            // a row the moment it was pulled, since nothing is left under one of those for a name.
+            free -> spanX to ((1..(unitRows - live.row)).minByOrNull { abs(restingBottom(it) - b) } ?: 1)
             else -> spanX to (((1..room).minByOrNull { abs(restingBottom(it * ROW_UNITS) - b) } ?: 1) * ROW_UNITS)
         }
     }
@@ -1984,6 +1996,12 @@ fun DockBar(
      * along it, as it always has.
      */
     onBounds: (Rect) -> Unit,
+    /**
+     * Where the middle of each app in the dock stands across the screen, in order: something carried
+     * from the page and let go on the dock takes its place among them by these, as an app moved
+     * along the dock does.
+     */
+    onCentres: (List<Float>) -> Unit = {},
     animateEntrance: Boolean = false,
     /** The page's geometry: the dock stands on the same columns and its icons are the same size. */
     geometry: HomeGeometry? = null,
@@ -2092,6 +2110,14 @@ fun DockBar(
             val side = currentIconPx.toFloat()
             val top = place.top + (place.height - side) / 2f
             return Rect(place.left + left, top, place.left + left + side, top + side)
+        }
+
+        // The apps' middles, told again whenever where they belong changes: the dock found, the page
+        // measured, an app more or less, another style.
+        val currentOnCentres by rememberUpdatedState(onCentres)
+        LaunchedEffect(Unit) {
+            androidx.compose.runtime.snapshotFlow { List(currentKeys.size) { slotOf(it)?.center?.x ?: 0f } }
+                .collect { currentOnCentres(it) }
         }
 
         /** Carried far enough up to leave the dock. */

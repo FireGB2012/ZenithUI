@@ -1657,18 +1657,45 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 // Search, a pill in the middle of the band between the page and the dock. There are
                 // no page dots and no full-width bar any more. Until the pill opens a search of its
                 // own it opens the drawer's, with the keyboard up, as the bar did.
+                //
+                // For the five seconds something taken off the home screen can still be put back,
+                // Undo stands in the band in Search's place, and Search comes back when it goes. Over
+                // the foot of the page it covered the last row's names and icons; a little taller
+                // than the band, here it reaches only into the page's padding and the top of the
+                // dock's slab, and the band is drawn over the dock so the slab does not cut it off.
+                // Part of the home screen, it sinks, fades and softens with it as the drawer, a
+                // folder, an app or Settings comes over it.
                 searchBand = { band ->
-                    Box(band, contentAlignment = Alignment.Center) {
-                        SearchPill(
-                            onOpen = { openDrawer(search = true) },
-                            // Always the words for now: nothing turns them into the dots yet.
-                            dots = { 0f },
-                            pageCount = pageCount,
-                            position = { pagerState.currentPage + pagerState.currentPageOffsetFraction },
-                            // It arrives as the search bar did, moved on a layer, so its glass reads
-                            // the clock that moves it and keeps the wallpaper in place behind it.
-                            tracking = { arrivalClock.value },
-                            modifier = Modifier.arriving({ arrivalClock.value }, { arrivalDepth.floatValue }, distance = 0.85f, from = 40.dp, style = settings.arrival),
+                    val removed by viewModel.removed.collectAsState()
+                    val removedWhat = when (removed.size) {
+                        0 -> null
+                        1 -> "${removedName(removed.first(), appsByKey)} removed"
+                        else -> "${removed.size} things removed"
+                    }
+                    Box(band.zIndex(1f), contentAlignment = Alignment.Center) {
+                        AnimatedVisibility(
+                            visible = removedWhat == null,
+                            enter = bandSwapIn(motion.reduced),
+                            exit = bandSwapOut(motion.reduced),
+                        ) {
+                            SearchPill(
+                                onOpen = { openDrawer(search = true) },
+                                // Always the words for now: nothing turns them into the dots yet.
+                                dots = { 0f },
+                                pageCount = pageCount,
+                                position = { pagerState.currentPage + pagerState.currentPageOffsetFraction },
+                                // It arrives as the search bar did, moved on a layer, so its glass reads
+                                // the clock that moves it and keeps the wallpaper in place behind it.
+                                tracking = { arrivalClock.value },
+                                modifier = Modifier.arriving({ arrivalClock.value }, { arrivalDepth.floatValue }, distance = 0.85f, from = 40.dp, style = settings.arrival),
+                            )
+                        }
+                        UndoPill(
+                            what = removedWhat,
+                            key = removed.firstOrNull()?.id,
+                            millis = com.gabriel.zenithui.data.UNDO_MS,
+                            onUndo = { viewModel.undoRemove().firstOrNull()?.let { back -> revealPage(back.page) } },
+                            modifier = Modifier.padding(horizontal = 16.dp),
                         )
                     }
                 },
@@ -1726,27 +1753,8 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                         Spacer(room.navigationBarsPadding().height(10.dp))
                     }
                 },
-                // Undo, over the foot of the page and 12 dp above the band, so it covers neither
-                // Search nor the dock. Part of the home screen now, it sinks, fades and softens with
-                // it as the drawer, a folder, an app or Settings comes over it.
-                overlays = {
-                    val removed by viewModel.removed.collectAsState()
-                    val removedWhat = when (removed.size) {
-                        0 -> null
-                        1 -> "${removedName(removed.first(), appsByKey)} removed"
-                        else -> "${removed.size} things removed"
-                    }
-                    UndoPill(
-                        what = removedWhat,
-                        key = removed.firstOrNull()?.id,
-                        millis = com.gabriel.zenithui.data.UNDO_MS,
-                        onUndo = { viewModel.undoRemove().firstOrNull()?.let { back -> revealPage(back.page) } },
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .padding(bottom = 12.dp)
-                            .padding(horizontal = 16.dp),
-                    )
-                },
+                // Nothing floats over the page: Undo stands in the band, in Search's place.
+                overlays = {},
             )
             }
         }
@@ -1781,7 +1789,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             onDismiss = { overview = false },
         )
 
-        // Undo is part of the home screen now, over the foot of the page: see HomeLayout's overlays.
+        // Undo is part of the home screen now, in Search's place in the band: see HomeLayout's searchBand.
 
         if (drawerProgress > 0.002f || drawerEverOpened) {
             // In the order chosen in Settings. By colour needs every icon's colour, worked out once.

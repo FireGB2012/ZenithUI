@@ -1,8 +1,11 @@
 package com.gabriel.zenithui.ui.home
 
+import android.Manifest
 import android.content.Intent
+import android.net.Uri
 import android.provider.Settings
 import android.widget.Toast
+import androidx.core.app.ActivityCompat
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -103,6 +106,8 @@ import com.gabriel.zenithui.data.AppEdit
 import com.gabriel.zenithui.data.AppShortcut
 import com.gabriel.zenithui.data.Backup
 import com.gabriel.zenithui.data.Badges
+import com.gabriel.zenithui.data.CalendarAccess
+import com.gabriel.zenithui.data.CalendarRepository
 import com.gabriel.zenithui.data.NotificationDots
 import com.gabriel.zenithui.data.ShortcutKeys
 import com.gabriel.zenithui.ui.common.BadgeState
@@ -1356,6 +1361,18 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             }
         }
     }
+    // The Calendar widget's "Show your events" puts Android's question for the calendar when it is
+    // tapped, never by itself. As the bedside clock does, this remembers whether the question has come
+    // back refused on this visit and whether Android would still show it, since once Android has
+    // stopped asking, a tap that put the question again would do nothing at all.
+    var calendarRefused by remember { mutableStateOf(false) }
+    var calendarCanAskAgain by remember { mutableStateOf(true) }
+    val askCalendar = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        calendarRefused = !granted
+        calendarCanAskAgain = context.findActivity()?.let {
+            ActivityCompat.shouldShowRequestPermissionRationale(it, Manifest.permission.READ_CALENDAR)
+        } ?: true
+    }
     fun setUpWidget(kind: String) {
         when (kind) {
             "world" -> showSheet(HomeSheet.WorldCities)
@@ -1364,6 +1381,26 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             "photo" -> pickFrame.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
             "media" -> NotificationDots.ask(context)
             "todo" -> viewModel.updateSettings { it.copy(todos = com.gabriel.zenithui.data.Todos.clearDone(it.todos)) }
+            // The widget has no "Not now" of its own, and the bedside clock's is about the clock, so
+            // a tap here always asks; once Android has stopped asking, Zenith's page in the phone's
+            // settings opens instead, where the calendar can still be allowed.
+            "calendar" -> when (
+                CalendarAccess.of(
+                    granted = CalendarRepository.hasPermission(context),
+                    declined = false,
+                    refused = calendarRefused,
+                    canAskAgain = calendarCanAskAgain,
+                )
+            ) {
+                CalendarAccess.Granted -> Unit
+                CalendarAccess.Blocked -> runCatching {
+                    context.startActivity(
+                        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null))
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    )
+                }
+                else -> askCalendar.launch(Manifest.permission.READ_CALENDAR)
+            }
         }
     }
     val forecast by viewModel.forecast.collectAsState()

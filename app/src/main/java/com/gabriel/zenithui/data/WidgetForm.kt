@@ -139,10 +139,16 @@ object WidgetLayouts {
             "calendar" -> when (form) {
                 WidgetForm.Mini -> "The day of the week over today's date."
                 WidgetForm.Strip -> "Today's date, with the day and the month beside it."
-                WidgetForm.Square -> "The day, a big date and the month, like a tear-off calendar."
-                WidgetForm.Wide -> "Today on the left, the whole month on the right."
+                WidgetForm.Square ->
+                    if (bare) "The day, a big date and the month, like a tear-off calendar."
+                    else "The day in red, a big date, and your next event."
+                WidgetForm.Wide ->
+                    if (bare) "Today on the left, the whole month on the right."
+                    else "Today's date on the left, and your next three events beside it."
                 WidgetForm.Tall -> "The whole month, headed by today."
-                WidgetForm.Big -> "The whole month, large, with today's date over it."
+                WidgetForm.Big ->
+                    if (bare) "The whole month, large, with today's date over it."
+                    else "Today's date across the top, and the rest of the day's events under it."
             }
             "notes" -> when (form) {
                 WidgetForm.Mini -> "A pencil, and a couple of lines to write on."

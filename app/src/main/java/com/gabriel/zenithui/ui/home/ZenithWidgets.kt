@@ -34,6 +34,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -168,9 +169,17 @@ import com.gabriel.zenithui.ui.theme.addOutline
 import com.gabriel.zenithui.ui.theme.glass
 import com.gabriel.zenithui.ui.theme.glassInk
 import com.gabriel.zenithui.ui.theme.inkOnTint
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
+import com.gabriel.zenithui.data.CalendarEvent
+import com.gabriel.zenithui.data.CalendarRepository
 import kotlinx.coroutines.delay
+import java.time.Duration
+import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
+import java.time.ZoneId
+import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import java.util.Locale
@@ -599,6 +608,28 @@ internal fun rememberNow(): LocalDateTime {
         }
     }
     return now
+}
+
+/**
+ * Today's date, which turns over at midnight. It waits for the turn of the day, and looks again
+ * whenever the home screen comes back, since a phone asleep over midnight does not count the hours
+ * it sleeps and would wake the wait late; and at least every hour, so a clock or a time zone changed
+ * by hand is caught too. It changes once a day, so nothing reading it is drawn again in between.
+ */
+@Composable
+internal fun rememberToday(): LocalDate {
+    var today by remember { mutableStateOf(LocalDate.now()) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { today = LocalDate.now() }
+    LaunchedEffect(Unit) {
+        while (true) {
+            val now = ZonedDateTime.now()
+            val midnight = now.toLocalDate().plusDays(1).atStartOfDay(now.zone)
+            // A moment past midnight, so the date has surely moved on by then.
+            delay(minOf(Duration.between(now, midnight).toMillis() + 1_000L, 60 * 60_000L))
+            today = LocalDate.now()
+        }
+    }
+    return today
 }
 
 /**
@@ -1268,7 +1299,8 @@ private fun Segments(fraction: Float, modifier: Modifier) {
 @Composable
 private fun CalendarWidget(form: WidgetForm, width: Dp, height: Dp) {
     val palette = LocalPalette.current
-    val today = remember { LocalDate.now() }
+    // It turns over at midnight, rather than staying on the day the widget was drawn.
+    val today = rememberToday()
     val daysInMonth = remember(today) { today.lengthOfMonth() }
     val remaining = ChronoUnit.DAYS.between(today, today.withDayOfMonth(daysInMonth))
     val weekday = today.format(DateTimeFormatter.ofPattern("EEEE"))
@@ -1276,6 +1308,14 @@ private fun CalendarWidget(form: WidgetForm, width: Dp, height: Dp) {
     val left = if (remaining <= 0) "Last day of the month" else "$remaining days left"
     val bare = LocalBare.current
     val day = "${today.dayOfMonth}"
+
+    // Small, Medium and Large are set out as an iPhone's Calendar widget is; "No glass" widgets keep
+    // the layouts they had.
+    val shrink = if (bare) null else iphoneShrink(form, width, height)
+    if (shrink != null) {
+        AtIphoneSize(shrink, width, height) { across, down -> IphoneCalendar(today, form, across, down) }
+        return
+    }
 
     when (form) {
         // The day of the week over today's date.
@@ -1493,6 +1533,208 @@ private fun MonthGrid(today: LocalDate, fontSize: TextUnit, dot: Dp, modifier: M
                     }
                 }
             }
+        }
+    }
+}
+
+/**
+ * The calendar as an iPhone's Calendar widget has it, at its three sizes: the weekday in red
+ * capitals over the date, large, and today's events from the next one on, each a bar in its
+ * calendar's colour, its name and its time. Small has the next event under the date; Medium the date
+ * on the left and up to three events beside it; Large the date across the top and the rest of the
+ * day's events under it, each in full. Until Zenith may read the calendar, "Show your events" stands
+ * where the events would, and asks for it when it is tapped.
+ */
+@Composable
+private fun IphoneCalendar(today: LocalDate, form: WidgetForm, width: Dp, height: Dp) {
+    val context = LocalContext.current
+    val world = LocalWidgetWorld.current
+    // Looked at again whenever the home screen comes back: an answer to Android's question, or the
+    // phone's settings, may have changed what can be read, and the calendar itself may have changed.
+    var back by remember { mutableIntStateOf(0) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { back++ }
+    val allowed = remember(back) { CalendarRepository.hasPermission(context) }
+    // Null until the calendar has been read, so it never says there are no events before it has looked.
+    val events by produceState<List<CalendarEvent>?>(null, allowed, today, back) {
+        value = if (allowed) CalendarRepository.today(context) else emptyList()
+    }
+    // What is listed changes only as an event finishes, so the clock is read again then, and not in between.
+    val now by produceState(System.currentTimeMillis(), events, back) {
+        while (true) {
+            val at = System.currentTimeMillis()
+            value = at
+            val next = events.orEmpty().filter { !it.allDay && it.endMillis > at }.minOfOrNull { it.endMillis } ?: break
+            delay(next - at + 1)
+        }
+    }
+    val next = remember(events, now) { events?.let { CalendarRepository.upcoming(it, now, most = it.size) } }
+    val weekday = remember(today) { today.format(DateTimeFormatter.ofPattern("EEEE")).uppercase() }
+    val date = "${today.dayOfMonth}"
+
+    @Composable
+    fun Weekday() = Text(
+        weekday,
+        color = weekdayInk(),
+        fontSize = 11.sp,
+        fontWeight = FontWeight.SemiBold,
+        letterSpacing = 0.6.sp,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+    )
+
+    /** Today's events, as many as there is room for and no more than [most], or why there are none. */
+    @Composable
+    fun Events(most: Int, full: Boolean, modifier: Modifier) {
+        val listed = next
+        when {
+            !allowed -> ShowYourEvents(modifier) { world?.setUp("calendar") }
+            listed == null -> Box(modifier)
+            listed.isEmpty() -> Text(
+                if (events.isNullOrEmpty()) "No events today" else "No more events today",
+                color = quiet(),
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                modifier = modifier,
+            )
+            else -> AsManyAsFit(
+                listed,
+                modifier,
+                gap = 8.dp,
+                most = most,
+                more = { left ->
+                    Text(
+                        if (left == 1) "1 more event" else "$left more events",
+                        color = quiet(),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                    )
+                },
+            ) { event -> EventLine(event, full) }
+        }
+    }
+
+    when (form) {
+        WidgetForm.Square -> Column(Modifier.fillMaxSize().padding(16.dp)) {
+            Weekday()
+            Figure(date, fit(height * 0.28f, width * 0.32f), FontWeight.Normal, accent = false)
+            Spacer(Modifier.height(6.dp))
+            Events(most = 1, full = false, modifier = Modifier.weight(1f).fillMaxWidth())
+        }
+        WidgetForm.Wide -> Row(Modifier.fillMaxSize().padding(16.dp)) {
+            Column(Modifier.weight(0.42f)) {
+                Weekday()
+                Figure(date, fit(height * 0.32f, 56.dp), FontWeight.Normal, accent = false)
+            }
+            Spacer(Modifier.width(12.dp))
+            Events(most = 3, full = false, modifier = Modifier.weight(0.58f).fillMaxHeight())
+        }
+        else -> Column(Modifier.fillMaxSize().padding(16.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
+                Column(Modifier.weight(1f)) {
+                    Weekday()
+                    Figure(date, fit(height * 0.15f, 56.dp), FontWeight.Normal, accent = false)
+                }
+                Text(
+                    remember(today) { today.format(DateTimeFormatter.ofPattern("MMMM")) },
+                    color = quiet(),
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                )
+            }
+            Spacer(Modifier.height(12.dp))
+            Box(Modifier.fillMaxWidth().height(1.dp).background(LocalPalette.current.onGlass.copy(alpha = 0.18f)))
+            Spacer(Modifier.height(10.dp))
+            Events(most = Int.MAX_VALUE, full = true, modifier = Modifier.weight(1f).fillMaxWidth())
+        }
+    }
+}
+
+/**
+ * The weekday heading the calendar, in iOS's red as on an iPhone's own. On a colour card it is the
+ * card's colour for actions: that red on the calendar's page, and the card's ink on a card in a
+ * colour of the widget's own. On glass a colour of the widget's own takes over from the red as it
+ * eases in, as it does in every heading ([accentInk]).
+ */
+@Composable
+private fun weekdayInk(): Color {
+    val palette = LocalPalette.current
+    if (LocalWidgetFill.current != null) return palette.accent
+    return lerp(palette.destructive, accentInk(), palette.ownColour.coerceIn(0f, 1f))
+}
+
+/**
+ * One of the day's events as an iPhone lists them: a bar in its calendar's colour, its name, and
+ * when it is, "All day" or from and to. [full] gives a long name a second line.
+ */
+@Composable
+private fun EventLine(event: CalendarEvent, full: Boolean) {
+    val palette = LocalPalette.current
+    val time = remember(event) {
+        if (event.allDay) {
+            "All day"
+        } else {
+            val zone = ZoneId.systemDefault()
+            val clock = DateTimeFormatter.ofPattern("HH:mm")
+            fun at(millis: Long): String = Instant.ofEpochMilli(millis).atZone(zone).format(clock)
+            "${at(event.startMillis)}–${at(event.endMillis)}"
+        }
+    }
+    // The calendar's own colour, as the calendar shows it; the words' ink for one that has none.
+    val bar = if (event.colour != 0) Color(event.colour).copy(alpha = 1f) else palette.decor(palette.accent)
+    Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
+        Box(
+            Modifier
+                .width(3.dp)
+                .fillMaxHeight()
+                .clip(RoundedCornerShape(percent = 50))
+                .background(bar)
+        )
+        Spacer(Modifier.width(7.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                event.title,
+                color = palette.onGlass,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = if (full) 2 else 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(time, color = quiet(), fontSize = 12.sp, maxLines = 1)
+        }
+    }
+}
+
+/**
+ * Where the events would be, until Zenith may read the calendar. A tap asks for it, and only a tap
+ * ([WidgetWorld.setUp]): Android's question is put, or, once Android has stopped asking, the phone's
+ * settings open, where it can still be allowed. It is an action, so in the card's colour for actions
+ * in the colour look, the calendar's red; on glass it is the words' ink, as a colour would be lost
+ * against the wallpaper.
+ */
+@Composable
+private fun ShowYourEvents(modifier: Modifier, onClick: () -> Unit) {
+    val palette = LocalPalette.current
+    val ink = if (LocalWidgetFill.current != null) palette.accent else palette.onGlass
+    Box(modifier) {
+        Row(
+            Modifier
+                .pressBounce(0.94f)
+                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
+                .padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Symbol(Icons.Rounded.CalendarMonth, 16.dp, tint = ink)
+            Spacer(Modifier.width(6.dp))
+            Text(
+                "Show your events",
+                color = ink,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }

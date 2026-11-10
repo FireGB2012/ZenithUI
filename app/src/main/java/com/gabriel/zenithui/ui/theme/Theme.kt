@@ -158,6 +158,8 @@ fun ZenithTheme(
         LocalBackdrop provides glass?.frost,
         LocalGlassLevels provides glass,
         LocalLens provides lens,
+        // For glass made from the wallpaper where there is no copy of the wallpaper to read.
+        LocalWallColour provides savedWallColour(settings),
         LocalScreenSize provides screenSize,
         LocalGlassStrength provides settings.glass,
         LocalGlassBody provides GlassBody.byId(settings.glassBody),

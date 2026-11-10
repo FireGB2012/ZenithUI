@@ -217,7 +217,14 @@ fun ZenithWidget(
 
     BoxWithConstraints(
         modifier
-            .glass(ZenithShapes.card, strength = 1f, interactive = true)
+            // Glass made from the wallpaper, or, for a widget with a colour of its own, tinted with that.
+            .glass(
+                ZenithShapes.card,
+                strength = 1f,
+                interactive = true,
+                tint = if (palette.ownColour > 0f) palette.glassTint else Color.Unspecified,
+                wallpaperTint = true,
+            )
             .clip(ZenithShapes.card)
     ) {
         WordsOnWallpaper {

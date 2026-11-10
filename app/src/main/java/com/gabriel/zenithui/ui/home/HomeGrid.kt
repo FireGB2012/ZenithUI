@@ -2336,6 +2336,8 @@ internal fun BoxScope.DockSlab(width: () -> Int, light: PressLight? = null, trac
                 interactive = light != null,
                 light = light,
                 tracking = tracking,
+                // Made from the wallpaper: a little of its colour where the dock sits, glowing under it.
+                wallpaperTint = true,
             ),
     )
 }

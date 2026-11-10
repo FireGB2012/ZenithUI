@@ -98,6 +98,7 @@ import com.gabriel.zenithui.ui.settings.ToggleRow
 import com.gabriel.zenithui.ui.theme.LocalBackdrop
 import com.gabriel.zenithui.ui.theme.LocalGlassLevels
 import com.gabriel.zenithui.ui.theme.LocalPalette
+import com.gabriel.zenithui.ui.theme.NeutralLook
 import com.gabriel.zenithui.ui.theme.Palettes
 import com.gabriel.zenithui.ui.theme.ZenithPalette
 import com.gabriel.zenithui.ui.theme.toned
@@ -107,12 +108,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * A gallery of wallpapers Zenith paints itself, in every theme's colours and in light and dark.
- * It opens on the ones made for the theme you are using; the chips along the top sort the designs
- * onto shelves and show them in any other theme. Tapping one shows it large, as it will be by day
- * and by night, with your own home screen on it. Once set, a design is kept in step with the
- * theme: change the palette, or go from light to dark, and the wallpaper is painted again to
- * match. Your own photos are one row away at the bottom.
+ * A gallery of wallpapers Zenith paints itself, in a choice of colour sets, each with a light
+ * picture and a dark one. It opens on the colours your design is in, or was last set in; the chips
+ * along the top sort the designs onto shelves and show them in another set. Tapping one shows it
+ * large, as it will be by day and by night, with your own home screen on it. Once set, a design
+ * keeps its colours and changes between light and dark with Zenith, painted again to match. Your
+ * own photos are one row away at the bottom.
  */
 @Composable
 fun WallpaperSheet(
@@ -122,11 +123,8 @@ fun WallpaperSheet(
     home: SettingsPreview,
     /** Whether the designs made for Zenith Plus may be set. */
     plusActive: Boolean,
-    /**
-     * Sets a design. [pinnedPalette] is the palette to keep it in whatever the theme does, or empty
-     * to follow the theme; [switchThemeTo] is the theme to change Zenith to as well, if asked.
-     */
-    onSet: (style: WallStyle, pinnedPalette: String, lockToo: Boolean, switchThemeTo: String?) -> Unit,
+    /** Sets a design, painted in the colour set with the id [colours], and on the lock screen too if [lockToo]. */
+    onSet: (style: WallStyle, colours: String, lockToo: Boolean) -> Unit,
     /** Called once a photo has become the wallpaper. */
     onPhoto: () -> Unit,
     onFollow: (Boolean) -> Unit,
@@ -134,15 +132,26 @@ fun WallpaperSheet(
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
-    val current = remember(settings.paletteId, settings.customAccent, settings.customAccentAlt, settings.customBackdrop) {
-        Palettes.resolve(settings)
+    // The colour set the wallpaper is painted in, or would be: an empty one is from settings saved
+    // before every design was given a set, and means paletteId's.
+    val current = remember(
+        settings.wallpaperPalette, settings.paletteId,
+        settings.customAccent, settings.customAccentAlt, settings.customBackdrop, settings.customDark,
+        settings.wallAccent, settings.wallAccentAlt, settings.wallBackdrop, settings.wallDark,
+    ) {
+        Palettes.setById(settings.wallpaperPalette.ifEmpty { settings.paletteId }, settings)
     }
-    // The theme you are using first, then every other one you can use.
-    val palettes = remember(current, settings.unlockedThemes) {
-        buildList {
-            add(current)
-            addAll((Palettes.all + Palettes.aura.filter { it.id in settings.unlockedThemes }).filter { it.id != current.id })
-        }
+    // The wallpaper's colours first, then every other set a design can be painted in: the six, the
+    // Aura sets you bought, your own if you made one, and the one taken from your wallpaper.
+    val palettes = remember(
+        current, settings.unlockedThemes, settings.paletteId,
+        settings.customAccent, settings.customAccentAlt, settings.customBackdrop, settings.customDark,
+        settings.wallAccent, settings.wallAccentAlt, settings.wallBackdrop, settings.wallDark,
+    ) {
+        val madeOwn = settings.paletteId == Palettes.CUSTOM || settings.customAccent != ZenithSettings().customAccent
+        val others = Palettes.all + Palettes.aura.filter { it.id in settings.unlockedThemes } +
+            listOfNotNull(Palettes.custom(settings).takeIf { madeOwn }, Palettes.fromWallpaper(settings))
+        listOf(current) + others.filter { it.id != current.id }
     }
     val dark = settings.isDark(isSystemInDarkTheme())
     var filter by remember { mutableStateOf(current.id) }
@@ -207,7 +216,6 @@ fun WallpaperSheet(
                 Browse(
                     settings = settings,
                     palettes = palettes,
-                    currentId = current.id,
                     dark = dark,
                     plusActive = plusActive,
                     filter = filter,
@@ -245,13 +253,12 @@ fun WallpaperSheet(
                     settings = settings,
                     home = home,
                     dark = dark,
-                    isCurrentTheme = selection.second.id == current.id,
                     following = settings.wallpaperFollow,
                     locked = selection.first.plus && !plusActive,
                     startOnLock = settings.wallpaperLock,
-                    onSet = { pinned, lockToo, theme ->
+                    onSet = { colours, lockToo ->
                         // No toast: the wallpaper fading in behind the sheet as it closes says it.
-                        onSet(selection.first, pinned, lockToo, theme)
+                        onSet(selection.first, colours, lockToo)
                         onDismiss()
                     },
                     onPlus = onPlus,
@@ -265,14 +272,13 @@ fun WallpaperSheet(
 private fun Browse(
     settings: ZenithSettings,
     palettes: List<ZenithPalette>,
-    currentId: String,
     dark: Boolean,
     plusActive: Boolean,
     filter: String,
     onFilter: (String) -> Unit,
     shelf: WallGroup?,
     onShelf: (WallGroup?) -> Unit,
-    /** A design was tapped: which, in which theme, and where on screen the middle of its thumbnail is. */
+    /** A design was tapped: which, in which colour set, and where on screen the middle of its thumbnail is. */
     onPick: (WallStyle, ZenithPalette, Offset) -> Unit,
     onFollow: (Boolean) -> Unit,
     onPhotos: () -> Unit,
@@ -283,10 +289,10 @@ private fun Browse(
     Column(Modifier.verticalScroll(rememberScrollState())) {
         Group {
             ToggleRow(
-                title = "Follows your theme",
+                title = "Follows light and dark",
                 subtitle = when {
-                    inUse == null -> "Pick one and it will follow your theme."
-                    settings.wallpaperFollow -> "${inUse.label} repaints when you change palette, or go light or dark"
+                    inUse == null -> "Pick one and it will change with light and dark."
+                    settings.wallpaperFollow -> "${inUse.label} repaints when Zenith goes light or dark"
                     else -> "${inUse.label} stays as it is"
                 },
                 checked = settings.wallpaperFollow,
@@ -310,7 +316,7 @@ private fun Browse(
         ) {
             palettes.forEach { option ->
                 Chip(
-                    label = if (option.id == currentId) "${option.name} (yours)" else option.name,
+                    label = option.name,
                     selected = option.id == shown.id,
                     dot = option,
                 ) { onFilter(option.id) }
@@ -322,17 +328,11 @@ private fun Browse(
             transitionSpec = { fadeIn(tween(220, delayMillis = 60)).togetherWith(fadeOut(tween(120))) },
             label = "wallpaperTheme",
         ) { (theme, group) ->
-            // Shown as they would be set: in this theme's colours, light or dark as Zenith is now.
+            // Shown as they would be set: in this colour set, light or dark as Zenith is now.
             val toned = remember(theme, dark) { theme.toned(dark) }
             val styles = remember(group) { WallStyle.entries.filter { group == null || it.group == group } }
             Column {
-                Caption(
-                    if (theme.id == currentId) {
-                        "${styles.size} designs, painted in your theme's colours"
-                    } else {
-                        "${styles.size} designs, painted in ${theme.name}'s colours"
-                    }
-                )
+                Caption("${styles.size} designs in ${coloursOf(theme)}")
                 Spacer(Modifier.height(10.dp))
                 styles.chunked(3).forEach { row ->
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -376,20 +376,14 @@ private fun Preview(
     settings: ZenithSettings,
     home: SettingsPreview,
     dark: Boolean,
-    isCurrentTheme: Boolean,
     following: Boolean,
     locked: Boolean,
     startOnLock: Boolean,
-    onSet: (pinnedPalette: String, lockToo: Boolean, switchThemeTo: String?) -> Unit,
+    onSet: (colours: String, lockToo: Boolean) -> Unit,
     onPlus: () -> Unit,
 ) {
     val ui = LocalPalette.current
     var target by remember { mutableStateOf(if (startOnLock) "both" else "home") }
-    var match by remember { mutableStateOf(true) }
-    // In another theme's colours and Zenith not changing to it: the wallpaper keeps those colours.
-    val pinned = !isCurrentTheme && !match
-    // The colours the home screen on it will be in: the design's, if Zenith is changing to them.
-    val homeIn = if (isCurrentTheme || match) palette else ui
     val configuration = LocalConfiguration.current
     val screenWidth = home.screenWidth.takeIf { it > 0.dp } ?: configuration.screenWidthDp.dp
     val screenHeight = home.screenHeight.takeIf { it > 0.dp } ?: configuration.screenHeightDp.dp
@@ -419,7 +413,7 @@ private fun Preview(
                             Box(Modifier.matchParentSize().clip(RoundedCornerShape(corner)).background(ui.onGlass.copy(alpha = 0.06f)))
                         } else {
                             CompositionLocalProvider(
-                                LocalPalette provides remember(homeIn, night) { homeIn.toned(night) },
+                                LocalPalette provides NeutralLook.of(night),
                                 LocalGlassLevels provides null,
                                 LocalBackdrop provides null,
                             ) {
@@ -456,23 +450,12 @@ private fun Preview(
             selected = target,
             onSelect = { target = it },
         )
-        if (!isCurrentTheme) {
-            Spacer(Modifier.height(10.dp))
-            Group {
-                ToggleRow(
-                    title = "Use ${palette.name} in Zenith too",
-                    subtitle = "Glass, buttons and accents to match",
-                    checked = match,
-                    onChange = { match = it },
-                )
-            }
-        }
         Spacer(Modifier.height(10.dp))
         Caption(
-            when {
-                !following -> "Following is off, so it stays as it is until you set it again."
-                pinned -> "Stays in ${palette.name}'s colours, and still changes between light and dark."
-                else -> "Changes with your theme: its palette, and light or dark."
+            if (!following) {
+                "Following is off, so it stays as it is until you set it again."
+            } else {
+                "In ${coloursOf(palette)}. It changes between light and dark as Zenith does."
             }
         )
         Spacer(Modifier.height(12.dp))
@@ -482,11 +465,7 @@ private fun Preview(
                 if (locked) {
                     onPlus()
                 } else {
-                    onSet(
-                        if (pinned) palette.id else "",
-                        target == "both",
-                        if (!isCurrentTheme && match) palette.id else null,
-                    )
+                    onSet(palette.id, target == "both")
                 }
             },
         )
@@ -494,7 +473,17 @@ private fun Preview(
     }
 }
 
-/** A pill to choose with: a shelf of designs, or, with a [dot] of its two accents, a theme. */
+/**
+ * A colour set's colours, as a sentence names them. Your own and the wallpaper's are named for
+ * where they came from, since "Yours's colours" would not read.
+ */
+private fun coloursOf(set: ZenithPalette): String = when (set.id) {
+    Palettes.CUSTOM -> "your own colours"
+    Palettes.WALLPAPER -> "the colours taken from your wallpaper"
+    else -> "${set.name}'s colours"
+}
+
+/** A pill to choose with: a shelf of designs, or, with a [dot] of its two accents, a colour set. */
 @Composable
 private fun Chip(label: String, selected: Boolean, dot: ZenithPalette? = null, onClick: () -> Unit) {
     val palette = LocalPalette.current
@@ -625,8 +614,8 @@ private fun WallpaperImage(style: WallStyle, palette: ZenithPalette, widthPx: In
 }
 
 /**
- * Painted thumbnails, kept by how much memory they take and not by how many there are: twenty-two
- * designs in every theme, light and dark, would otherwise be a great many pictures.
+ * Painted thumbnails, kept by how much memory they take and not by how many there are:
+ * thirty-three designs in every colour set, light and dark, would otherwise be a great many pictures.
  */
 private val thumbCache = object : LruCache<String, ImageBitmap>(24 * 1024 * 1024) {
     override fun sizeOf(key: String, value: ImageBitmap): Int = value.width * value.height * 4

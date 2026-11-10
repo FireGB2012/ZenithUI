@@ -18,8 +18,8 @@ import androidx.core.graphics.ColorUtils
 import kotlin.random.Random
 
 /**
- * The five colours a wallpaper is painted from: a theme's two accents and its three backdrop
- * tones, and whether they are the theme's dark colours or its light ones. Every design paints a
+ * The five colours a wallpaper is painted from: a colour set's two accents and its three backdrop
+ * tones, and whether they are the set's dark colours or its light ones. Every design paints a
  * light picture and a dark one.
  */
 data class WallColors(val accent: Int, val accentAlt: Int, val deep: Int, val mid: Int, val base: Int, val dark: Boolean = true)
@@ -33,7 +33,7 @@ enum class WallGroup(val label: String) {
 }
 
 /**
- * The designs Zenith can paint. Every one of them works in any theme's colours, light and dark.
+ * The designs Zenith can paint. Every one of them works in any colour set, light and dark.
  * Those marked [plus] are for Zenith Plus; each shelf keeps designs anyone can use, and they come
  * first on it. A design is remembered by its name, so the names stay as they are; the order here
  * is the order in the picker.
@@ -80,11 +80,11 @@ enum class WallStyle(val label: String, val group: WallGroup, val plus: Boolean 
 
 /**
  * Wallpapers painted on the phone rather than shipped as pictures: nothing to download, nothing
- * to fall behind a new screen size, and every design can be drawn in the colours of any theme.
+ * to fall behind a new screen size, and every design can be drawn in any colour set.
  *
  * Everything is placed as a fraction of the canvas and seeded from the design alone, so a
  * thumbnail and the full-size wallpaper are the same picture at two sizes, and a design keeps its
- * shape when the theme changes under it: only the colours move.
+ * shape between light and dark, or in another colour set: only the colours move.
  */
 object WallpaperArt {
 

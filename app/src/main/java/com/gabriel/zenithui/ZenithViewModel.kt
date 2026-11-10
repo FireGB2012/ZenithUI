@@ -193,6 +193,10 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
             if (wallpaperSource.levels.value == null) readWallpaperPalette(null)
         }
         viewModelScope.launch { wallpaperSource.levels.collect { readWallpaperPalette(it) } }
+        // A design that followed the theme keeps the colours it was painted in: settings from
+        // before the themes went have no colour set for it, so it is given paletteId's, once and
+        // before anything is painted. Those are the colours it already has, so nothing repaints.
+        if (settings.value.wallpaperPalette.isEmpty()) store.update { it.copy(wallpaperPalette = it.paletteId) }
         director.start()
         viewModelScope.launch {
             val current = settings.value
@@ -741,9 +745,10 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
     )
 
     /**
-     * Works out the palette in the wallpaper: from Zenith's copy of it, or, without one, from the
-     * colours Android reads in it. Never for one of Zenith's own designs: those are painted in the
-     * palette, and a palette taken from them would only chase its own tail.
+     * Works out the colours in the wallpaper, which are the "wallpaper" colour set a design can be
+     * painted in: from Zenith's copy of it, or, without one, from the colours Android reads in it.
+     * Never for one of Zenith's own designs: those are painted from a colour set, and a set taken
+     * from them would only chase its own tail.
      */
     private fun readWallpaperPalette(levels: com.gabriel.zenithui.data.GlassLevels?) {
         if (settings.value.wallpaperStyle.isNotEmpty()) return
@@ -857,23 +862,23 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
     fun refreshWallpaper() = viewModelScope.launch { wallpaperSource.refresh() }
 
     /**
-     * Makes one of Zenith's designs the wallpaper, from now on kept in step with the theme.
-     * [pinnedPalette] is the palette to paint it in whatever the theme is, or empty to follow the
-     * theme's own; [switchThemeTo] changes the theme as well, to match.
+     * Makes one of Zenith's designs the wallpaper, painted in the colour set [colours] (its id) and
+     * from now on changing between light and dark with Zenith; on the lock screen too if [lockToo].
+     * The set is always written, so the wallpaper never depends on paletteId, which nothing sets
+     * any more.
      */
-    fun setWallpaper(style: WallStyle, pinnedPalette: String, lockToo: Boolean, switchThemeTo: String?) {
+    fun setWallpaper(style: WallStyle, colours: String, lockToo: Boolean) {
         store.update {
             it.copy(
                 wallpaperStyle = style.name,
-                wallpaperPalette = pinnedPalette,
+                wallpaperPalette = colours,
                 wallpaperLock = lockToo,
-                paletteId = switchThemeTo ?: it.paletteId,
             )
         }
         director.request()
     }
 
-    /** A photo is the wallpaper now: no design of Zenith's is in use, and nothing follows the theme. */
+    /** A photo is the wallpaper now: no design of Zenith's is in use, and nothing follows light and dark. */
     fun photoWallpaperSet() = store.update { it.copy(wallpaperStyle = "") }
 
     /** Whether the home screen is on show, which is when a new wallpaper can be faded in. */

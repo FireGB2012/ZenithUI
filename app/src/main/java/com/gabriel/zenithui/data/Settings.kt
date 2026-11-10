@@ -12,6 +12,11 @@ import org.json.JSONObject
 data class ZenithSettings(
     val onboarded: Boolean = false,
     val userName: String = "",
+    /**
+     * The colour theme Zenith was drawn in, before there was only one look. Nothing draws in it now;
+     * it is kept so old settings, Looks and backups read, and it is the colour set a design that
+     * followed the theme was pinned to (see [wallpaperPalette]).
+     */
     val paletteId: String = "midnight",
     /** auto | light | dark */
     val appearance: String = "dark",
@@ -49,9 +54,12 @@ data class ZenithSettings(
     val numberFont: String = "same",
     /** The Glass studio's changes to the glass (Plus): see [GlassTuning]. */
     val glassTuning: GlassTuning = GlassTuning(),
-    /** A palette for each part of the day, by part (Plus); empty when the palette stays put. */
+    /**
+     * A palette for each part of the day, from the gone "By time of day" (Plus). Nothing reads it:
+     * it is kept so old settings, Looks and backups read.
+     */
     val dayPalettes: Map<String, String> = emptyMap(),
-    /** Which part of the day last changed the palette, so each changes it once. */
+    /** Which part of the day last changed the palette, from "By time of day" too; nothing reads it. */
     val paletteOccasion: String = "",
     /** How an app grows out of its icon: colour (a card in the icon's colour) | glass (grey liquid glass). */
     val openAnimation: String = "colour",
@@ -100,11 +108,15 @@ data class ZenithSettings(
     val island: IslandSettings = IslandSettings(),
     /** The Zenith design in use as the wallpaper, by its WallStyle name; empty for a photo or one set elsewhere. */
     val wallpaperStyle: String = "",
-    /** The palette that wallpaper is pinned to, or empty to paint it in the theme's own. */
+    /**
+     * The colour set that design is painted in, by id (see `Palettes.setById`). Empty only in
+     * settings from before the themes went, where it meant [paletteId]'s set; the first run after
+     * them writes that set in.
+     */
     val wallpaperPalette: String = "",
     /** Whether it is on the lock screen too. */
     val wallpaperLock: Boolean = false,
-    /** Paint it again when the palette, or light and dark, changes. */
+    /** Paint it again when light and dark changes. */
     val wallpaperFollow: Boolean = true,
     /** How much moves: full | reduced. The phone's own "Remove animations" reduces it too. */
     val motion: String = "full",
@@ -179,7 +191,7 @@ data class ZenithSettings(
     val streak: Int = 0,
     /** The day the streak was last counted, as an epoch day. 0 means never. */
     val lastCheckIn: Long = 0L,
-    /** Themes bought with aura. */
+    /** The Aura sets bought with points before the themes went, offered now as wallpaper colours. */
     val unlockedThemes: List<String> = emptyList(),
     /** This install's own code, made once and kept. */
     val referralCode: String = "",
@@ -193,12 +205,18 @@ data class ZenithSettings(
      */
     val referralsPaid: Map<String, Int> = emptyMap(),
 
-    /** The palette you built yourself, used when [paletteId] is "custom". ARGB. */
+    /**
+     * The colours you made in the theme maker, while there was one: the "custom" wallpaper colour
+     * set, which a design can still be painted in. ARGB.
+     */
     val customAccent: Long = 0xFF7C6CFF,
     val customAccentAlt: Long = 0xFF3ED2FF,
     val customBackdrop: Long = 0xFF0A0B18,
     val customDark: Boolean = true,
-    /** The palette taken from the wallpaper, as it was last worked out: see [WallpaperPalette]. */
+    /**
+     * The "wallpaper" colour set: the colours taken from the wallpaper, as they were last worked
+     * out (see [WallpaperPalette]).
+     */
     val wallAccent: Long = 0xFF7C6CFF,
     val wallAccentAlt: Long = 0xFF3ED2FF,
     val wallBackdrop: Long = 0xFF0A0B18,

@@ -133,9 +133,10 @@ fun ZenithPalette.wallColors(): WallColors = WallColors(
 
 /**
  * The colour sets Zenith's painted wallpapers are made from, and nothing else now: the six free
- * ones, the ones bought with Aura points, your own from the theme maker and the one taken from the
- * wallpaper. They were the app's themes once; Zenith itself is drawn in [NeutralLook] whatever is
- * stored. Their values are kept exactly, since a wallpaper painted from one is known by its colours.
+ * ones, the ones bought with Aura points, your own, made in the theme maker while there was one,
+ * and the one taken from the wallpaper. They were the app's themes once; Zenith itself is drawn in
+ * [NeutralLook] whatever is stored. Their values are kept exactly, since a wallpaper painted from
+ * one is known by its colours.
  */
 object Palettes {
 
@@ -202,9 +203,9 @@ object Palettes {
 
     val all = listOf(Midnight, Aurora, Sunset, Frost, Sakura, Graphite)
 
-    // ---------------------------------------------------------------- aura themes
-    // Bought with points rather than money. Kept apart from [all] so they never appear in the
-    // free row, and looked up by the same id the store sells.
+    // ---------------------------------------------------------------- aura sets
+    // Bought with points rather than money, while Aura had a shop. Kept apart from [all], so only
+    // those who bought one are offered it, and looked up by the id it was sold under.
 
     val Ember = ZenithPalette(
         id = "ember",
@@ -258,16 +259,16 @@ object Palettes {
 
     val aura = listOf(Ember, Tide, Orchid, Solstice, Obsidian)
 
-    /** The id of the palette you built yourself, in the Plus theme maker. */
+    /** The id of the colour set you made yourself, in the Plus theme maker while there was one. */
     const val CUSTOM = "custom"
 
     fun byId(id: String): ZenithPalette =
         (all + aura).firstOrNull { it.id == id } ?: Midnight
 
     /**
-     * The palette built from your own three colours. The backdrop is a gradient from the
-     * background you chose towards your accent, so the glass still has something to catch —
-     * a flat single colour behind frosted panels looks like a bug rather than a choice.
+     * The colour set made from your own three colours. The backdrop is a gradient from the
+     * background you chose towards your accent, as it was when the set was a theme the glass had
+     * to catch something of; it stays so, since a wallpaper painted in it is known by its colours.
      */
     fun custom(settings: ZenithSettings): ZenithPalette {
         val accent = Color(settings.customAccent.toInt())
@@ -285,13 +286,12 @@ object Palettes {
         )
     }
 
-    /** The id of the palette taken from your wallpaper. */
+    /** The id of the colour set taken from your wallpaper. */
     const val WALLPAPER = "wallpaper"
 
     /**
-     * The palette taken from the wallpaper, as it was last worked out (`WallpaperPalette`): its
-     * liveliest colour to glow, a second for gradients, and its main colour, kept deep or pale,
-     * behind the glass.
+     * The colour set taken from the wallpaper, as it was last worked out (`WallpaperPalette`): its
+     * liveliest colour, a second to go with it, and its main colour, kept deep or pale.
      */
     fun fromWallpaper(settings: ZenithSettings): ZenithPalette {
         val accent = Color(settings.wallAccent.toInt())
@@ -309,17 +309,21 @@ object Palettes {
         )
     }
 
-    /** Every palette by id, including your own and the wallpaper's when they are the one in use. */
-    fun resolve(settings: ZenithSettings): ZenithPalette = when (settings.paletteId) {
+    /**
+     * A wallpaper colour set by its id: one of the six, an Aura set, your own ([CUSTOM]) or the one
+     * taken from the wallpaper ([WALLPAPER]). An id it does not know is Midnight, as it always was.
+     */
+    fun setById(id: String, settings: ZenithSettings): ZenithPalette = when (id) {
         CUSTOM -> custom(settings)
         WALLPAPER -> fromWallpaper(settings)
-        else -> byId(settings.paletteId)
+        else -> byId(id)
     }
 
-    /** The palette a Zenith wallpaper is painted in: the one it was pinned to, or the theme's, in the tone in use. */
-    fun forWallpaper(settings: ZenithSettings, dark: Boolean): ZenithPalette = when (settings.wallpaperPalette) {
-        "" -> resolve(settings)
-        CUSTOM -> custom(settings)
-        else -> byId(settings.wallpaperPalette)
-    }.toned(dark)
+    /**
+     * The colours one of Zenith's designs is painted in, in the tone in use: the set it was given.
+     * Settings saved before every design was given one have none, and take the set paletteId
+     * names, which is what such a design was painted in, so it comes out exactly as it did.
+     */
+    fun forWallpaper(settings: ZenithSettings, dark: Boolean): ZenithPalette =
+        setById(settings.wallpaperPalette.ifEmpty { settings.paletteId }, settings).toned(dark)
 }

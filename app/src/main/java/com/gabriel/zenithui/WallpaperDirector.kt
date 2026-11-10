@@ -44,8 +44,8 @@ import kotlinx.coroutines.withTimeoutOrNull
 data class Incoming(val image: ImageBitmap, val leaving: Boolean, val since: Long)
 
 /**
- * Keeps one of Zenith's own wallpapers in step with the theme. When the palette changes, or light
- * turns to dark, the design in use is painted again in the new colours and faded in.
+ * Keeps one of Zenith's own wallpapers in step with light and dark, in its own colour set. When
+ * light turns to dark, or the design is set again in other colours, it is painted again and faded in.
  *
  * It only ever repaints a wallpaper Zenith set and that is still on screen: a photo, or anything
  * chosen in another app, is left alone, and choosing one ends the following ([forget]).
@@ -103,7 +103,7 @@ class WallpaperDirector(
         scope.launch {
             combine(settings.map(::wanted).distinctUntilChanged(), systemDark, requests) { _, _, request -> request }
                 .collectLatest { request ->
-                    // Tapping through palettes: each tap cancels the one before, here or anywhere
+                    // Tapping through choices: each tap cancels the one before, here or anywhere
                     // below, so only where the tapping stops is painted and set.
                     delay(SETTLE_MS)
                     try {
@@ -212,7 +212,7 @@ class WallpaperDirector(
         configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
 
     companion object {
-        /** How long the theme has to hold still before its wallpaper is painted. */
+        /** How long the settings have to hold still before their wallpaper is painted. */
         private const val SETTLE_MS = 200L
 
         /** The new picture's fade in, and the old layer's fade out. */

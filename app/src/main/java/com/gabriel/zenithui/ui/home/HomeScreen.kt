@@ -2350,9 +2350,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     settings = settings,
                     home = homePreview,
                     plusActive = plus.active,
-                    onSet = { style, pinnedPalette, lockToo, switchThemeTo ->
-                        viewModel.setWallpaper(style, pinnedPalette, lockToo, switchThemeTo)
-                    },
+                    onSet = { style, colours, lockToo -> viewModel.setWallpaper(style, colours, lockToo) },
                     onPhoto = {
                         viewModel.photoWallpaperSet()
                         // The glass is drawn from the wallpaper, so read the new one straight away.

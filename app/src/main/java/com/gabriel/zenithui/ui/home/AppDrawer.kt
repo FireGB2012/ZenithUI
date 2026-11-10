@@ -87,6 +87,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.gabriel.zenithui.data.AppInfo
+import com.gabriel.zenithui.data.AppSearch
 import com.gabriel.zenithui.data.ZenithSettings
 import com.gabriel.zenithui.ui.common.AppIcon
 import com.gabriel.zenithui.ui.common.LocalMotionLevel
@@ -168,8 +169,9 @@ fun AppDrawer(
     val filtered = remember(query, apps, shownGroup, tab, tabs, workApps) {
         when {
             shownGroup != null -> shownGroup.apps
-            // A search looks everywhere, work apps too.
-            query.isNotBlank() -> (apps + workApps).filter { it.label.contains(query.trim(), ignoreCase = true) }
+            // A search looks everywhere, work apps too, the names that start with what was typed
+            // first. The drawer lists every app it finds, not only a first few.
+            query.isNotBlank() -> AppSearch.match(query, apps + workApps, limit = Int.MAX_VALUE)
             tab == TabChoice.Work -> workApps
             tab is TabChoice.Made -> tabs[(tab as TabChoice.Made).index].keys.toSet().let { keys -> apps.filter { it.key in keys } }
             else -> apps
@@ -594,7 +596,9 @@ fun AppDrawer(
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
                     keyboardActions = KeyboardActions(
                         onGo = {
-                            val first = filtered.firstOrNull()
+                            // The app the search found first; an empty box opens nothing, rather
+                            // than whichever app happens to head the list.
+                            val first = AppSearch.go(query, apps + workApps)
                             if (first != null) onOpen(first.key) else searchWeb()
                         },
                     ),

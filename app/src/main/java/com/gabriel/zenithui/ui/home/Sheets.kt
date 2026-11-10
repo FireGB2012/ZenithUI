@@ -522,7 +522,7 @@ fun ItemMenuSheet(
                         }
                     }
                 }
-                MenuRow(Icons.Rounded.Palette, "Colour", if (item.accent == 0L) "The theme's, or one of its own" else "Its own, not the theme's", index = row++) { onColour() }
+                MenuRow(Icons.Rounded.Palette, "Colour", if (item.accent == 0L) "Plain, or a colour of its own" else "A colour of its own", index = row++) { onColour() }
                 if (!locked) MenuRow(Icons.Rounded.OpenInFull, "Resize and move", "Pull its corner, pick a size, or move it a cell at a time", index = row++) { onResize() }
                 if (!locked) MenuRow(Icons.Rounded.Layers, "Stack another widget here", "Swipe up and down between them, in this one spot", index = row++) { onStack() }
                 if (!locked) MenuRow(Icons.Rounded.Home, "Remove widget", "It can be added again from Widgets", danger = true, index = row++) { onRemove(); onDismiss() }
@@ -600,7 +600,7 @@ fun CustomizeSheet(
         }
         Spacer(Modifier.height(TILE_GAP))
         Row(horizontalArrangement = Arrangement.spacedBy(TILE_GAP)) {
-            QuickTile(Icons.Rounded.Tune, "Settings", "Colours, grid, glass, motion and backup", index = 2, modifier = Modifier.weight(1f)) { onSettings() }
+            QuickTile(Icons.Rounded.Tune, "Settings", "Light or dark, grid, glass, motion and backup", index = 2, modifier = Modifier.weight(1f)) { onSettings() }
             QuickTile(Icons.Rounded.Bedtime, "Bedside clock", "A dim full-screen clock for the night", index = 3, modifier = Modifier.weight(1f)) { onAmbient() }
         }
         Spacer(Modifier.height(18.dp))
@@ -633,7 +633,7 @@ private val TILE_GAP = 12.dp
 /**
  * A big square-ish button: the icon in the corner, the name underneath with a line saying what is
  * behind it, lit with the accent. Given a [picture] it shows that behind it, under a wash of the
- * theme's own ground that thickens towards the foot so the words read on any picture: the
+ * page's own ground that thickens towards the foot so the words read on any picture: the
  * Wallpaper tile shows the wallpaper you have.
  */
 @Composable
@@ -686,7 +686,7 @@ private fun QuickTile(
                 Modifier
                     .size(36.dp)
                     .clip(RoundedCornerShape(11.dp))
-                    // On a picture the plate is the theme's ground, so the icon stands off it.
+                    // On a picture the plate is the page's ground, so the icon stands off it.
                     .background(if (picture != null) ground.copy(alpha = 0.72f) else palette.accent.copy(alpha = 0.18f)),
                 contentAlignment = Alignment.Center,
             ) {

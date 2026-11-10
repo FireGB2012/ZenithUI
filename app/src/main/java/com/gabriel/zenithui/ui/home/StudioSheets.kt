@@ -315,18 +315,18 @@ private val WIDGET_COLOURS = listOf(
     0xFF8B6CFFL to "Violet", 0xFFD66CFFL to "Orchid", 0xFFFF5FD2L to "Magenta", 0xFFE8EDF5L to "Frost",
 )
 
-/** A colour of its own for one of Zenith's widgets, or the theme's: it changes as you tap. */
+/** A colour of its own for one of Zenith's widgets, or none: it changes as you tap. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun WidgetColourSheet(visible: Boolean, current: Long, onPick: (Long) -> Unit, onDismiss: () -> Unit) {
-    val palette = LocalPalette.current
     ZenithSheet(visible = visible, onDismiss = onDismiss, title = "Colour") {
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier.fillMaxWidth().appearIn(delayMillis = staggerDelay(0), riseFrom = 14f),
         ) {
-            Swatch("Theme", listOf(palette.accent, palette.accentAlt), selected = current == 0L) { onPick(0L) }
+            // None is the plain look, so it is the empty ring rather than a colour.
+            Swatch("None", null, selected = current == 0L) { onPick(0L) }
             WIDGET_COLOURS.forEach { (argb, name) ->
                 Swatch(name, listOf(Color(argb.toInt()), Color(argb.toInt())), selected = current == argb) { onPick(argb) }
             }

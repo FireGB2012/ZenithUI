@@ -393,7 +393,7 @@ fun HomePage(
     val departures = remember { Departures(items) }
     val haptics = LocalHapticFeedback.current
 
-    // Everything on the page stands on the wallpaper, so its names are white, whatever the palette.
+    // Everything on the page stands on the wallpaper, so its names are white, in Light as in Dark.
     OnWallpaper {
     BoxWithConstraints(modifier.fillMaxSize()) {
         val geometry = remember(constraints.maxWidth, constraints.maxHeight, settings.columns, settings.rows, density.density, settings.showLabels, settings.gridDensity) {
@@ -591,7 +591,8 @@ fun HomePage(
                     settle.animateTo(1f, Motion.drop())
                 }
             }
-            // And it settles with a ring that spreads from it and fades.
+            // And it settles with a ring that spreads from it and fades: white, as it is drawn on
+            // the wallpaper.
             val ring = remember { Animatable(1f) }
             LaunchedEffect(landing) {
                 if (landing != null) {
@@ -689,7 +690,7 @@ fun HomePage(
                             val fade = 0.6f * (1f - spread)
                             if (ringRound) {
                                 drawCircle(
-                                    color = palette.accent,
+                                    color = Color.White,
                                     radius = ringFrame.width / 2f + grow,
                                     center = Offset((ringFrame.left + ringFrame.right) / 2f, (ringFrame.top + ringFrame.bottom) / 2f),
                                     alpha = fade,
@@ -698,7 +699,7 @@ fun HomePage(
                             } else {
                                 val corner = 26.dp.toPx() + grow
                                 drawRoundRect(
-                                    color = palette.accent,
+                                    color = Color.White,
                                     topLeft = Offset(ringFrame.left - grow, ringFrame.top - grow),
                                     size = Size(ringFrame.width + 2f * grow, ringFrame.height + 2f * grow),
                                     cornerRadius = CornerRadius(corner, corner),
@@ -1432,7 +1433,6 @@ private fun BoxScope.ResizeFrame(
     leaving: Boolean = false,
     onGone: () -> Unit = {},
 ) {
-    val palette = LocalPalette.current
     val haptics = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
     val finish by rememberUpdatedState(onDone)
@@ -1542,14 +1542,14 @@ private fun BoxScope.ResizeFrame(
             // typing in a note or flipping a toggle. On its way out it is only a picture.
             .then(if (leaving) Modifier else Modifier.pointerInput(Unit) { detectTapGestures(onTap = { finish() }) }),
     ) {
-        // The outline, with a soft glow of the accent round it.
+        // The outline, with a soft white glow round it: it is drawn on the wallpaper.
         Canvas(Modifier.matchParentSize()) {
             val out = grow.toPx()
             val frame = Rect(side - out, frameTop - out, right.value + out, bottom.value + out)
             val radius = CornerRadius(radius() + out)
             val fade = appear.value.coerceIn(0f, 1f)
             drawRoundRect(
-                color = palette.accent.copy(alpha = 0.28f * fade),
+                color = Color.White.copy(alpha = 0.28f * fade),
                 topLeft = frame.topLeft, size = frame.size, cornerRadius = radius,
                 style = Stroke(width = 7.dp.toPx()),
             )
@@ -1577,7 +1577,7 @@ private fun BoxScope.ResizeFrame(
                     // Grows from its tip, so it never slides off the corner.
                     transformOrigin = TransformOrigin(POINTER_TIP, POINTER_TIP)
                 },
-        ) { drawPointer(palette.accent) }
+        ) { drawPointer() }
 
         // What your finger takes hold of: a generous square over the pointer and the corner.
         val touch = 56.dp
@@ -1685,9 +1685,9 @@ private const val POINTER_TIP = 0.5f + 0.46f * 0.7071f
 
 /**
  * The resize pointer: a rounded arrowhead aimed at the bottom-right corner, white with a dark rim
- * and a soft shadow so it reads on any wallpaper, and a touch of the accent at its heart.
+ * and a soft shadow so it reads on any wallpaper.
  */
-private fun DrawScope.drawPointer(accent: Color) {
+private fun DrawScope.drawPointer() {
     val w = size.width
     // Drawn pointing straight up in a unit square, then turned to aim down and to the right.
     val shape = Path().apply {
@@ -1703,10 +1703,6 @@ private fun DrawScope.drawPointer(accent: Color) {
     }
     rotate(135f, pivot) {
         drawPath(shape, Color.White)
-        drawPath(
-            shape,
-            Brush.verticalGradient(listOf(accent.copy(alpha = 0f), accent.copy(alpha = 0.35f)), startY = 0.3f * w, endY = 0.9f * w),
-        )
         drawPath(shape, Color.Black.copy(alpha = 0.45f), style = Stroke(width = 1.2.dp.toPx(), join = StrokeJoin.Round))
     }
 }

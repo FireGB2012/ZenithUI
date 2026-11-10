@@ -211,7 +211,7 @@ private fun SharedCode(code: String, old: Boolean) {
             .fillMaxWidth()
             .padding(vertical = 6.dp)
             .clip(RoundedCornerShape(20.dp))
-            .background(palette.accent.copy(alpha = 0.12f))
+            .background(palette.onGlass.copy(alpha = 0.08f))
             .padding(start = 16.dp, end = 8.dp, top = 10.dp, bottom = 10.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {

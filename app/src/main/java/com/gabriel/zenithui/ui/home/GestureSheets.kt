@@ -173,7 +173,7 @@ private fun ChoiceLine(
             if (detail != null) Text(detail, color = palette.onGlassMuted, fontSize = 12.sp)
         }
         if (note != null) {
-            Text(note, color = palette.accent, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+            Text(note, color = palette.onGlassMuted, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.width(8.dp))
         }
         AnimatedVisibility(visible = selected, enter = popIn(reduced), exit = popOut(reduced)) {

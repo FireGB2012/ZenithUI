@@ -1992,7 +1992,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             modifier = Modifier.align(Alignment.TopCenter),
         )
 
-        // The ring a double tap sends out from under the finger.
+        // The ring a double tap sends out from under the finger: white, as it is drawn on the wallpaper.
         Box(
             Modifier
                 .fillMaxSize()
@@ -2001,7 +2001,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     val out = tapRingOut.value
                     if (out >= 1f) return@drawBehind
                     drawCircle(
-                        color = palette.accent,
+                        color = Color.White,
                         radius = 14.dp.toPx() + 74.dp.toPx() * out,
                         center = at,
                         alpha = 0.6f * (1f - out),

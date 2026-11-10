@@ -73,7 +73,7 @@ fun StreakStrip(state: CheckIn?, onShown: () -> Unit, modifier: Modifier = Modif
             Icon(
                 imageVector = Icons.Rounded.LocalFireDepartment,
                 contentDescription = null,
-                tint = if (broken) palette.onGlassMuted else palette.accent,
+                tint = if (broken) palette.onGlassMuted else palette.onGlass,
                 modifier = Modifier
                     .size(17.dp)
                     // A streak kept going: the flame catches a beat after the strip lands. One

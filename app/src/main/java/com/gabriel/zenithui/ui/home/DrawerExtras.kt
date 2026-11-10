@@ -313,7 +313,7 @@ fun SearchAnswers(
                     .padding(horizontal = 18.dp, vertical = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(if (sum != null) Icons.Rounded.Calculate else Icons.Rounded.SwapHoriz, contentDescription = null, tint = palette.accent, modifier = Modifier.size(22.dp))
+                Icon(if (sum != null) Icons.Rounded.Calculate else Icons.Rounded.SwapHoriz, contentDescription = null, tint = palette.onGlass, modifier = Modifier.size(22.dp))
                 Spacer(Modifier.width(14.dp))
                 Column(Modifier.weight(1f)) {
                     AnimatedContent(targetState = shown[0].first, transitionSpec = { rollOver(reduced) }, label = "answer") { value ->

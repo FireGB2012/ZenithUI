@@ -106,7 +106,6 @@ import com.gabriel.zenithui.data.Playing
 import com.gabriel.zenithui.ui.common.LocalMotionLevel
 import com.gabriel.zenithui.ui.common.Motion
 import com.gabriel.zenithui.ui.common.pressBounce
-import com.gabriel.zenithui.ui.theme.LocalPalette
 import kotlinx.coroutines.delay
 
 /**
@@ -228,6 +227,9 @@ private val ISLAND = Color.Black
 val ISLAND_GREEN = Color(0xFF30D158)
 val ISLAND_ORANGE = Color(0xFFFF9F0A)
 val ISLAND_RED = Color(0xFFFF453A)
+
+/** The music's colour when a song gives none: white, since the island is black in Light and in Dark. */
+private val MUSIC_PLAIN = Color.White
 
 /**
  * The island's type: the phone's own sans, as the status bar beside it is set in, whatever font
@@ -394,7 +396,7 @@ fun IslandCompact(
                             contentAlignment = Alignment.Center,
                         ) {
                             when (state.secondary) {
-                                IslandKind.MUSIC -> Bars(state.musicColour ?: LocalPalette.current.accent, state.music?.playing == true, geometry.item * 0.62f)
+                                IslandKind.MUSIC -> Bars(state.musicColour ?: MUSIC_PLAIN, state.music?.playing == true, geometry.item * 0.62f)
                                 IslandKind.LIVE -> LiveMark(state.live, state.secondaryIcon, geometry.item * 0.82f)
                                 else -> Unit
                             }
@@ -416,14 +418,13 @@ private fun sender(state: IslandState): String = state.moment?.title.orEmpty().i
 private fun Sides(kind: IslandKind?, state: IslandState, geometry: IslandGeometry) {
     val item = geometry.item
     val style = sideText()
-    val accent = LocalPalette.current.accent
     Box(Modifier.fillMaxSize().padding(horizontal = geometry.end)) {
         val start = Modifier.align(Alignment.CenterStart)
         val end = Modifier.align(Alignment.CenterEnd)
         when (kind) {
             IslandKind.MUSIC -> {
-                Box(start) { Cover(state.music?.art, item, item * 0.3f, state.musicColour ?: accent) }
-                Box(end.padding(end = 2.dp)) { Bars(state.musicColour ?: accent, state.music?.playing == true, item * 0.86f) }
+                Box(start) { Cover(state.music?.art, item, item * 0.3f, state.musicColour ?: MUSIC_PLAIN) }
+                Box(end.padding(end = 2.dp)) { Bars(state.musicColour ?: MUSIC_PLAIN, state.music?.playing == true, item * 0.86f) }
             }
             IslandKind.LIVE -> {
                 Box(start) { LiveMark(state.live, state.appIcon, item) }
@@ -636,7 +637,7 @@ private data class Quad(val a: Float, val b: Float, val c: Float, val d: Float)
 @Composable
 private fun MusicCard(state: IslandState, actions: IslandActions) {
     val music = state.music
-    val colour = state.musicColour ?: LocalPalette.current.accent
+    val colour = state.musicColour ?: MUSIC_PLAIN
     Column(Modifier.fillMaxSize().padding(start = 18.dp, end = 18.dp, top = 16.dp, bottom = 10.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { actions.openMusic() }) {

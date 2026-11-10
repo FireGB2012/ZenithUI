@@ -242,10 +242,20 @@ private fun Art(now: Playing, modifier: Modifier) {
         if (art != null) {
             Image(art, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
         } else {
+            // A grey tile, so the white note reads in Light and in Dark; in a widget's own colour,
+            // that colour, eased in from the grey and back to it as the colour is.
+            val grey = Color(0xFF8E8E93).copy(alpha = 0.55f)
             Box(
                 Modifier
                     .fillMaxSize()
-                    .background(Brush.linearGradient(listOf(palette.accent.copy(alpha = 0.55f), palette.accentAlt.copy(alpha = 0.4f)))),
+                    .background(
+                        Brush.linearGradient(
+                            listOf(
+                                lerp(grey, palette.accent.copy(alpha = 0.55f), palette.ownColour),
+                                lerp(grey, palette.accentAlt.copy(alpha = 0.4f), palette.ownColour),
+                            )
+                        )
+                    ),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(Icons.Rounded.MusicNote, contentDescription = null, tint = Color.White.copy(alpha = 0.9f), modifier = Modifier.fillMaxSize(0.4f))
@@ -293,7 +303,7 @@ private fun Progress(now: Playing) {
                 .fillMaxHeight()
                 .fillMaxWidth(shown)
                 .clip(CircleShape)
-                .background(Brush.horizontalGradient(listOf(palette.accent, palette.accentAlt))),
+                .background(Brush.horizontalGradient(listOf(palette.decor(palette.accent), palette.decor(palette.accentAlt)))),
         )
     }
 }
@@ -615,9 +625,10 @@ internal fun TodoWidget(form: WidgetForm, width: Dp, height: Dp) {
             }
             AddLine { text -> change(Todos.add(todos, text)) }
             if (form == WidgetForm.Big && todos.any { it.done }) {
+                // A link, so in the colour of actions.
                 Text(
                     "Clear what is done",
-                    color = accentInk(),
+                    color = palette.accent,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
                     modifier = Modifier
@@ -781,7 +792,7 @@ private fun WeekDots(streak: Int) {
                 Modifier
                     .size(9.dp)
                     .clip(CircleShape)
-                    .background(lerp(palette.onGlass.copy(alpha = 0.16f), palette.accent, on)),
+                    .background(lerp(palette.onGlass.copy(alpha = 0.16f), palette.decor(palette.accent), on)),
             )
         }
     }

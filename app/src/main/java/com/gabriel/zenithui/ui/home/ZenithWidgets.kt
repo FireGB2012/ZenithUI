@@ -310,17 +310,18 @@ internal fun tight(size: TextUnit, weight: FontWeight = FontWeight.Light, keepWe
 internal fun quiet(): Color = LocalPalette.current.onGlass.copy(alpha = if (LocalBare.current) 0.94f else 0.82f)
 
 /**
- * The accent as ink on a pane. A palette's accent is chosen to glow as a fill; as small letters on
- * glass of nearly its own colour, Frost's blue over a blue wallpaper, it is hard to read. So words
- * take it part of the way towards the pane's own ink: still the theme's colour, and legible.
+ * The ink of a widget's headings: the words' own ink, as on an iPhone, or the widget's own colour
+ * when it has one. A colour chosen to glow as a fill is hard to read as small letters on glass of
+ * nearly its own colour, so the heading takes it part of the way towards the pane's ink: still the
+ * widget's colour, and legible.
  */
 @Composable
 internal fun accentInk(): Color {
     val palette = LocalPalette.current
-    return lerp(palette.accent, palette.onGlass, if (palette.dark) 0.4f else 0.3f)
+    return palette.decor(lerp(palette.accent, palette.onGlass, if (palette.dark) 0.4f else 0.3f))
 }
 
-/** The small upper-case accent label that heads most widgets. White on the wallpaper, to be read. */
+/** The small upper-case label that heads most widgets, in [accentInk]. White on the wallpaper, to be read. */
 @Composable
 internal fun Caps(text: String, size: TextUnit = 11.sp, modifier: Modifier = Modifier) {
     Text(
@@ -335,20 +336,28 @@ internal fun Caps(text: String, size: TextUnit = 11.sp, modifier: Modifier = Mod
     )
 }
 
+/**
+ * The ink of a widget's big numbers: plain ink in the plain look, and running from the ink into
+ * the widget's own colour when it has one.
+ */
 @Composable
 internal fun accentBrush(): Brush {
     val palette = LocalPalette.current
-    // The accents a little towards the pane's ink, so the far end of a number is as easy to read
+    // The own colour a little towards the pane's ink, so the far end of a number is as easy to read
     // as the near one.
     val towards = if (palette.dark) 0.22f else 0.12f
     return Brush.linearGradient(
-        listOf(palette.onGlass, lerp(palette.accent, palette.onGlass, towards), lerp(palette.accentAlt, palette.onGlass, towards))
+        listOf(
+            palette.onGlass,
+            palette.decor(lerp(palette.accent, palette.onGlass, towards)),
+            palette.decor(lerp(palette.accentAlt, palette.onGlass, towards)),
+        )
     )
 }
 
 /**
- * A widget's headline number. On a pane it is ink, in the accent gradient or plain; in a
- * "No glass" widget it is the glass itself, set heavier so there is body for the light to bend in.
+ * A widget's headline number. On a pane it is ink, in [accentBrush] or plain; in a "No glass"
+ * widget it is the glass itself, set heavier so there is body for the light to bend in.
  */
 @Composable
 internal fun Figure(
@@ -385,7 +394,10 @@ internal fun Figure(
     }
 }
 
-/** A small symbol in a widget: glass in a "No glass" widget, accent ink on a pane. */
+/**
+ * A small symbol in a widget: glass in a "No glass" widget; on a pane, the words' ink, or the
+ * widget's own colour when it has one.
+ */
 @Composable
 internal fun Symbol(icon: ImageVector, size: Dp, modifier: Modifier = Modifier, tint: Color = Color.Unspecified) {
     val bare = LocalBare.current
@@ -395,7 +407,7 @@ internal fun Symbol(icon: ImageVector, size: Dp, modifier: Modifier = Modifier, 
         tint = when {
             tint.isSpecified -> tint
             bare -> Color.White
-            else -> LocalPalette.current.accent
+            else -> LocalPalette.current.let { it.decor(it.accent) }
         },
         modifier = modifier
             .size(size)
@@ -593,10 +605,12 @@ internal fun AnalogFace(now: LocalDateTime, modifier: Modifier) {
         }
         val minute = now.minute + now.second / 60f
         val hour = (now.hour % 12) + minute / 60f
+        // Every hand in the words' ink; in a widget's own colour, the minute and second hands and
+        // the hub wear it.
         val hands = listOf(
             Triple(hour * 30f, radius * 0.5f, Pair(4.dp, palette.onGlass)),
-            Triple(minute * 6f, radius * 0.72f, Pair(3.dp, palette.accent)),
-            Triple(now.second * 6f, radius * 0.8f, Pair(1.dp, palette.accentAlt)),
+            Triple(minute * 6f, radius * 0.72f, Pair(3.dp, palette.decor(palette.accent))),
+            Triple(now.second * 6f, radius * 0.8f, Pair(1.dp, palette.decor(palette.accentAlt))),
         )
         for ((degrees, length, look) in hands) {
             val angle = Math.toRadians(degrees - 90.0)
@@ -608,7 +622,7 @@ internal fun AnalogFace(now: LocalDateTime, modifier: Modifier) {
                 cap = StrokeCap.Round,
             )
         }
-        drawCircle(palette.accent, 3.5.dp.toPx(), middle)
+        drawCircle(palette.decor(palette.accent), 3.5.dp.toPx(), middle)
     }
 }
 
@@ -667,11 +681,12 @@ private fun BatteryWidget(form: WidgetForm, width: Dp, height: Dp) {
     val palette = LocalPalette.current
     val battery = rememberBattery()
     val bare = LocalBare.current
-    // On a pane the bolt lights up while charging; with no pane it is the battery itself, in glass.
+    // On a pane the bolt lights up while charging, from the muted ink to the full ink or the
+    // widget's own colour; with no pane it is the battery itself, in glass.
     val symbol = if (bare) batteryIcon(battery) else Icons.Rounded.Bolt
     val symbolTint = when {
         bare -> Color.Unspecified
-        battery.charging -> palette.accent
+        battery.charging -> palette.decor(palette.accent)
         else -> palette.onGlassMuted
     }
 
@@ -764,6 +779,13 @@ private fun BatteryWidget(form: WidgetForm, width: Dp, height: Dp) {
                 Spacer(Modifier.height(8.dp))
                 Figure(battery.percent, fit(width * 0.12f, 22.dp), accent = false, animated = true)
             } else {
+                // In the plain look the liquid is a faint ink, so the number written on it in the ink
+                // still reads. In a widget's own colour it is that colour, eased in from the faint ink
+                // and back to it, so the number is never lost under a full-strength ink on the way.
+                val faint = palette.onGlass.copy(alpha = 0.28f)
+                val liquid = Brush.verticalGradient(
+                    listOf(lerp(faint, palette.accentAlt, palette.ownColour), lerp(faint, palette.accent, palette.ownColour))
+                )
                 Box(
                     Modifier
                         .weight(1f)
@@ -777,7 +799,7 @@ private fun BatteryWidget(form: WidgetForm, width: Dp, height: Dp) {
                             .align(Alignment.BottomCenter)
                             .fillMaxWidth()
                             .heightShare { level.value.coerceAtLeast(0.04f) }
-                            .background(Brush.verticalGradient(listOf(palette.accentAlt, palette.accent))),
+                            .background(liquid),
                     )
                     Text(battery.percent, style = tight(fit(width * 0.11f, 20.dp), FontWeight.SemiBold).copy(color = palette.onGlass))
                 }
@@ -806,8 +828,8 @@ private fun BatteryWidget(form: WidgetForm, width: Dp, height: Dp) {
 }
 
 /**
- * The charge as an arc. On a pane it is an accent gradient over a faint track; with no pane the
- * track stays a faint line on the wallpaper and the charge is a band of glass.
+ * The charge as an arc. On a pane it is the words' ink, or the widget's own colour, over a faint
+ * track; with no pane the track stays a faint line on the wallpaper and the charge is a band of glass.
  */
 @Composable
 internal fun Ring(fraction: Float, stroke: Dp, modifier: Modifier, charging: Boolean = false) {
@@ -827,7 +849,9 @@ internal fun Ring(fraction: Float, stroke: Dp, modifier: Modifier, charging: Boo
     } else {
         null
     }
-    val fill = remember(palette.accent, palette.accentAlt) { Brush.linearGradient(listOf(palette.accent, palette.accentAlt)) }
+    val fill = remember(palette.accent, palette.accentAlt, palette.onGlass, palette.ownColour) {
+        Brush.linearGradient(listOf(palette.decor(palette.accent), palette.decor(palette.accentAlt)))
+    }
     fun DrawScope.arc(sweep: Float, brush: Brush) {
         val width = stroke.toPx()
         val side = size.minDimension - width
@@ -917,7 +941,7 @@ private fun Capsule(fraction: Float, modifier: Modifier) {
                     } else {
                         Modifier
                             .clip(RoundedCornerShape(percent = 50))
-                            .background(Brush.horizontalGradient(listOf(palette.accent, palette.accentAlt)))
+                            .background(Brush.horizontalGradient(listOf(palette.decor(palette.accent), palette.decor(palette.accentAlt))))
                     }
                 ),
         )
@@ -937,7 +961,7 @@ private fun Segments(fraction: Float, modifier: Modifier) {
                 val colour by animateColorAsState(
                     targetValue = when {
                         bare -> palette.onGlass.copy(alpha = 0.16f)
-                        index < lit -> palette.accent
+                        index < lit -> palette.decor(palette.accent)
                         else -> palette.onGlass.copy(alpha = 0.12f)
                     },
                     animationSpec = tween(200),
@@ -1132,7 +1156,7 @@ private fun MonthGrid(today: LocalDate, fontSize: TextUnit, dot: Dp, modifier: M
                                                         if (drawn < 1f) {
                                                             val out = 3.dp.toPx()
                                                             drawArc(
-                                                                color = palette.accent,
+                                                                color = palette.decor(palette.accent),
                                                                 startAngle = -90f,
                                                                 sweepAngle = 360f * drawn,
                                                                 useCenter = false,
@@ -1154,9 +1178,10 @@ private fun MonthGrid(today: LocalDate, fontSize: TextUnit, dot: Dp, modifier: M
                                         )
                                         .then(
                                             if (isToday && !bare) {
+                                                // A disc in the words' ink, or in the widget's own colour.
                                                 Modifier
                                                     .clip(RoundedCornerShape(percent = 50))
-                                                    .background(Brush.linearGradient(listOf(palette.accent, palette.accentAlt)))
+                                                    .background(Brush.linearGradient(listOf(palette.decor(palette.accent), palette.decor(palette.accentAlt))))
                                             } else {
                                                 Modifier
                                             }
@@ -1177,7 +1202,8 @@ private fun MonthGrid(today: LocalDate, fontSize: TextUnit, dot: Dp, modifier: M
                                         style = dayStyle.copy(
                                             color = when {
                                                 isToday && bare -> Color.White
-                                                isToday -> Color(0xFF0A0B12)
+                                                // Dark on a pale disc, white on a dark one.
+                                                isToday -> inkOnTint(palette.decor(palette.accent))
                                                 dow >= 5 -> palette.onGlass.copy(alpha = 0.62f)
                                                 else -> palette.onGlass.copy(alpha = 0.92f)
                                             },
@@ -1249,7 +1275,7 @@ private fun NotesWidget(form: WidgetForm, note: String, onNoteChange: (String) -
             NoteField(note, onNoteChange, 14.sp, 19.sp, singleLine = false, ruled = false, placeholder = "Tap to jot something down", modifier = Modifier.weight(1f))
         }
 
-        // A coloured margin down the side, like a sticky note.
+        // A margin down the side, like a sticky note's: in the words' ink, or the widget's own colour.
         WidgetForm.Wide -> Row(Modifier.fillMaxSize().padding(14.dp)) {
             Box(
                 Modifier
@@ -1262,7 +1288,7 @@ private fun NotesWidget(form: WidgetForm, note: String, onNoteChange: (String) -
                         } else {
                             Modifier
                                 .clip(RoundedCornerShape(percent = 50))
-                                .background(Brush.verticalGradient(listOf(palette.accent, palette.accentAlt)))
+                                .background(Brush.verticalGradient(listOf(palette.decor(palette.accent), palette.decor(palette.accentAlt))))
                         }
                     ),
             )

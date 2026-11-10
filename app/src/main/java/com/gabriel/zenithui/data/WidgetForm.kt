@@ -113,9 +113,11 @@ object WidgetLayouts {
     /**
      * [kind] is the widget's type without its "No glass" prefix ([Widgets.baseType]); [width] and
      * [height] are its size on the home page, in dp; [toggles] is how many controls the Quick
-     * Toggles widget has been given. Null for a kind that has no layouts of its own.
+     * Toggles widget has been given. [bare] is whether it is the "No glass" version, which keeps
+     * the layouts Weather and Calendar had before they were set out the iOS way. Null for a kind
+     * that has no layouts of its own.
      */
-    fun note(kind: String, width: Float, height: Float, toggles: Int = 4): String? {
+    fun note(kind: String, width: Float, height: Float, toggles: Int = 4, bare: Boolean = false): String? {
         val form = WidgetForm.of(width, height)
         return when (kind) {
             "clock" -> when (form) {
@@ -202,10 +204,16 @@ object WidgetLayouts {
             "weather" -> when (form) {
                 WidgetForm.Mini -> "The temperature and the sky."
                 WidgetForm.Strip -> "The temperature, the sky and the place, in a line."
-                WidgetForm.Square -> "The temperature large, the sky, and today's high and low."
-                WidgetForm.Wide -> "Now on the left, the next hours on the right."
+                WidgetForm.Square ->
+                    if (bare) "The temperature large, the sky, and today's high and low."
+                    else "The place, the temperature large, the sky, and today's high and low."
+                WidgetForm.Wide ->
+                    if (bare) "Now on the left, the next hours on the right."
+                    else "The place, the temperature and the sky, with now and the next five hours under them."
                 WidgetForm.Tall -> "Now at the top, the next hours down the widget."
-                WidgetForm.Big -> "Now, today's high and low, and the next hours with their skies."
+                WidgetForm.Big ->
+                    if (bare) "Now, today's high and low, and the next hours with their skies."
+                    else "Now and the next hours, and the next five days, each with its low and high on a bar."
             }
             else -> null
         }

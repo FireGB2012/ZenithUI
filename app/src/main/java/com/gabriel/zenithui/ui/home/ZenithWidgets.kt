@@ -122,6 +122,8 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.Placeable
+import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -134,9 +136,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import com.gabriel.zenithui.data.HomeGeometry
 import com.gabriel.zenithui.data.ToggleGrid
@@ -595,6 +600,116 @@ internal fun rememberNow(): LocalDateTime {
     }
     return now
 }
+
+/**
+ * Small, Medium and Large, the sizes an iPhone's widgets come in. Weather and Calendar are set out
+ * the iOS way in these; their other forms, and "No glass" widgets, keep the layouts they had.
+ */
+private val IPHONE_FORMS = setOf(WidgetForm.Square, WidgetForm.Wide, WidgetForm.Big)
+
+/**
+ * The room, in dp across and down, an iPhone layout for [form] is set out in: as tight as an
+ * iPhone's own, which a Small, Medium and Large on a phone of an iPhone's width all have. Large's
+ * lists take whatever room it has over that.
+ */
+private fun iphoneRoom(form: WidgetForm): Pair<Float, Float> = when (form) {
+    WidgetForm.Square -> 140f to 150f
+    WidgetForm.Wide -> 300f to 160f
+    else -> 300f to 230f
+}
+
+/** As far as an iPhone layout is drawn smaller before a widget's own layout for the room serves it better. */
+private const val IPHONE_LEAST = 0.8f
+
+/**
+ * How much smaller an iPhone layout for [form] is drawn in a widget [width] by [height]: 1 where
+ * it has its room ([iphoneRoom]), less on a smaller phone, whose widgets are smaller, and null for a
+ * form that has none, or a widget squatter than any iPhone's (a Small one row and a half tall, say),
+ * where it would have to shrink past [IPHONE_LEAST].
+ */
+internal fun iphoneShrink(form: WidgetForm, width: Dp, height: Dp): Float? {
+    if (form !in IPHONE_FORMS) return null
+    val (across, down) = iphoneRoom(form)
+    val shrink = minOf(1f, width.value / across, height.value / down)
+    return shrink.takeIf { it >= IPHONE_LEAST }
+}
+
+/**
+ * [content], an iPhone layout, set out in the room [iphoneShrink] gives it and drawn [shrink] times
+ * its size, everything in it together, so it always fits as it was set out. [content] is told the
+ * room it has. Its words are set as close as an iPhone's widgets set theirs, a line a quarter taller
+ * than its letters, where a page's text is given more.
+ */
+@Composable
+internal fun AtIphoneSize(shrink: Float, width: Dp, height: Dp, content: @Composable (width: Dp, height: Dp) -> Unit) {
+    val density = LocalDensity.current
+    CompositionLocalProvider(
+        LocalDensity provides Density(density.density * shrink, density.fontScale),
+        LocalTextStyle provides LocalTextStyle.current.merge(TextStyle(lineHeight = 1.25.em)),
+    ) {
+        content(width / shrink, height / shrink)
+    }
+}
+
+/**
+ * [items] one under another, [gap] apart, as many of them as there is room for and no more than
+ * [most]: none is cut off at the foot. When some are left out and there is a [more], it says under
+ * the rest how many. Measured rather than counted, so larger text in the phone's settings shows
+ * fewer rows instead of clipped ones.
+ */
+@Composable
+internal fun <T> AsManyAsFit(
+    items: List<T>,
+    modifier: Modifier = Modifier,
+    gap: Dp = 0.dp,
+    most: Int = Int.MAX_VALUE,
+    more: (@Composable (left: Int) -> Unit)? = null,
+    row: @Composable (T) -> Unit,
+) {
+    SubcomposeLayout(modifier) { constraints ->
+        // Each row at its own height, however little room there is, so one that would not fit whole
+        // is known, and left out.
+        val loose = constraints.copy(minWidth = 0, minHeight = 0, maxHeight = Constraints.Infinity)
+        val space = gap.roundToPx()
+        val rows = items.take(most.coerceAtLeast(0)).mapIndexed { index, item ->
+            subcompose(index) { row(item) }.map { it.measure(loose) }
+        }
+        fun tall(slot: List<Placeable>): Int = slot.maxOfOrNull { it.height } ?: 0
+        fun stack(count: Int): Int = (0 until count).sumOf { tall(rows[it]) } + space * (count - 1).coerceAtLeast(0)
+        fun under(count: Int, footer: Int): Int = stack(count) + (if (count > 0) space else 0) + footer
+        val room = constraints.maxHeight
+        var shown = rows.size
+        while (shown > 0 && stack(shown) > room) shown--
+        var footer: List<Placeable> = emptyList()
+        if (more != null && shown < items.size) {
+            // The line saying how many more is as tall whatever the number, so it is measured once
+            // to make room for it, and then written with the number that is left out.
+            val probe = tall(subcompose(MORE_PROBE) { more(items.size) }.map { it.measure(loose) })
+            while (shown > 0 && under(shown, probe) > room) shown--
+            if (under(shown, probe) <= room) {
+                footer = subcompose(MORE_LINE) { more(items.size - shown) }.map { it.measure(loose) }
+            }
+        }
+        val used = if (footer.isEmpty()) stack(shown) else under(shown, tall(footer))
+        val width = if (constraints.hasBoundedWidth) {
+            constraints.maxWidth
+        } else {
+            (rows.take(shown).flatten() + footer).maxOfOrNull { it.width } ?: 0
+        }
+        layout(width.coerceAtLeast(constraints.minWidth), used.coerceIn(constraints.minHeight, constraints.maxHeight)) {
+            var y = 0
+            for (index in 0 until shown) {
+                rows[index].forEach { it.placeRelative(0, y) }
+                y += tall(rows[index]) + space
+            }
+            footer.forEach { it.placeRelative(0, y) }
+        }
+    }
+}
+
+/** The slots [AsManyAsFit] writes its "more" line in: once to measure it, and once as it is shown. */
+private const val MORE_PROBE = "moreProbe"
+private const val MORE_LINE = "moreLine"
 
 // ---------------------------------------------------------------------- clock
 

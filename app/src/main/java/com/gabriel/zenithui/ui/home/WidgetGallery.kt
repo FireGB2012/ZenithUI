@@ -566,8 +566,8 @@ private fun Showcase(
         }
         // What each size shows: every one is a design of its own, and says which.
         val kind = Widgets.baseType(spec.type)
-        val notes = remember(real, kind, settings.toggles.size) {
-            real.map { WidgetLayouts.note(kind, it.width.value, it.height.value, settings.toggles.size) }
+        val notes = remember(real, kind, settings.toggles.size, bare) {
+            real.map { WidgetLayouts.note(kind, it.width.value, it.height.value, settings.toggles.size, bare) }
         }
 
         Column(

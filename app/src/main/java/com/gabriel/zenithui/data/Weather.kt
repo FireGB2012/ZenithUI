@@ -11,14 +11,25 @@ import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
+import java.time.LocalDate
+import java.time.format.TextStyle
+import java.util.Locale
 
 /** A place to have the weather for, as the search finds it. */
 @Immutable
 data class Place(val name: String, val region: String, val lat: Double, val lon: Double)
 
-/** One hour ahead, for the row of hours on the bigger Weather widgets. */
+/**
+ * One hour ahead, for the row of hours on the bigger Weather widgets. [day] is whether it falls in
+ * daylight, so a clear night shows a moon; an hour kept from before Zenith asked is daylight, as all
+ * of them were drawn then.
+ */
 @Immutable
-data class WeatherHour(val hour: String, val temperature: Double, val code: Int)
+data class WeatherHour(val hour: String, val temperature: Double, val code: Int, val day: Boolean = true)
+
+/** One day ahead, for the days on the Large Weather widget: its weekday's short name, its sky, and its high and low. */
+@Immutable
+data class WeatherDay(val day: String, val code: Int, val high: Double, val low: Double)
 
 /** The weather for one place, as last fetched. */
 @Immutable
@@ -34,6 +45,11 @@ data class Forecast(
     val low: Double,
     val hours: List<WeatherHour>,
     val fetchedAt: Long,
+    /**
+     * The next days, from tomorrow, at most [WeatherParse.DAYS]. None in a forecast kept from before
+     * Zenith asked for them, which still reads, until the next one is fetched.
+     */
+    val days: List<WeatherDay> = emptyList(),
 ) {
     /** Whether this is the forecast for what has been chosen, rather than for somewhere chosen before. */
     fun isFor(place: String, lat: Double, lon: Double, units: String): Boolean =
@@ -74,8 +90,22 @@ object WeatherCodes {
 /** Reading what Open-Meteo answers. Plain functions, so they are tried against real answers in tests. */
 object WeatherParse {
 
-    /** The forecast in an answer from Open-Meteo's forecast, or null if it is not one. */
-    fun forecast(json: String, place: String, lat: Double, lon: Double, units: String, now: Long): Forecast? = runCatching {
+    /** How many days ahead a forecast keeps: the Large Weather widget lists five, as an iPhone's does. */
+    const val DAYS = 5
+
+    /**
+     * The forecast in an answer from Open-Meteo's forecast, or null if it is not one. The next days'
+     * names are their weekdays' short names in [locale].
+     */
+    fun forecast(
+        json: String,
+        place: String,
+        lat: Double,
+        lon: Double,
+        units: String,
+        now: Long,
+        locale: Locale = Locale.getDefault(),
+    ): Forecast? = runCatching {
         val root = JSONObject(json)
         val current = root.getJSONObject("current")
         val currentTime = current.optString("time")
@@ -86,11 +116,20 @@ object WeatherParse {
                 val times = hourly.getJSONArray("time")
                 val temps = hourly.getJSONArray("temperature_2m")
                 val codes = hourly.getJSONArray("weather_code")
+                // Whether each hour is in daylight; an answer without it has every hour in daylight.
+                val daylight = hourly.optJSONArray("is_day")
                 // The hours after this one: ISO times in one zone sort as their text does.
                 var start = 0
                 while (start < times.length() && times.getString(start) <= currentTime) start++
                 for (i in start until minOf(start + 5, times.length())) {
-                    add(WeatherHour(times.getString(i).substringAfter('T').take(2), temps.getDouble(i), codes.getInt(i)))
+                    add(
+                        WeatherHour(
+                            times.getString(i).substringAfter('T').take(2),
+                            temps.getDouble(i),
+                            codes.getInt(i),
+                            day = daylight?.optInt(i, 1) != 0,
+                        )
+                    )
                 }
             }
         }
@@ -106,8 +145,36 @@ object WeatherParse {
             low = daily.getJSONArray("temperature_2m_min").getDouble(0),
             hours = hours,
             fetchedAt = now,
+            days = days(daily, currentTime.substringBefore('T'), locale),
         )
     }.getOrNull()
+
+    /**
+     * The days after [today] (an ISO date) in an answer's daily forecast, [DAYS] at most, each named
+     * by its weekday in [locale]. A day with anything missing is left out, and an answer without the
+     * days' skies has none: the days are extra, and must never cost the forecast for now.
+     */
+    private fun days(daily: JSONObject, today: String, locale: Locale): List<WeatherDay> = runCatching {
+        val dates = daily.getJSONArray("time")
+        val codes = daily.getJSONArray("weather_code")
+        val highs = daily.getJSONArray("temperature_2m_max")
+        val lows = daily.getJSONArray("temperature_2m_min")
+        buildList {
+            for (i in 0 until dates.length()) {
+                if (size == DAYS) break
+                val date = dates.optString(i)
+                // Today is the widget's top line, so the list starts tomorrow. ISO dates sort as
+                // their text does, as the hours do.
+                if (date <= today) continue
+                val weekday = runCatching { LocalDate.parse(date).dayOfWeek }.getOrNull() ?: continue
+                val code = codes.optInt(i, -1)
+                val high = highs.optDouble(i)
+                val low = lows.optDouble(i)
+                if (code < 0 || high.isNaN() || low.isNaN()) continue
+                add(WeatherDay(weekday.getDisplayName(TextStyle.SHORT, locale), code, high, low))
+            }
+        }
+    }.getOrDefault(emptyList())
 
     /** The places in an answer from Open-Meteo's place search. None when nothing was found. */
     fun places(json: String): List<Place> = runCatching {
@@ -126,22 +193,34 @@ object WeatherParse {
         put("temperature", f.temperature); put("code", f.code); put("day", f.day)
         put("high", f.high); put("low", f.low); put("fetchedAt", f.fetchedAt)
         put("hours", org.json.JSONArray().apply {
-            f.hours.forEach { h -> put(JSONObject().apply { put("hour", h.hour); put("t", h.temperature); put("c", h.code) }) }
+            f.hours.forEach { h -> put(JSONObject().apply { put("hour", h.hour); put("t", h.temperature); put("c", h.code); put("d", h.day) }) }
+        })
+        put("days", org.json.JSONArray().apply {
+            f.days.forEach { d -> put(JSONObject().apply { put("day", d.day); put("c", d.code); put("hi", d.high); put("lo", d.low) }) }
         })
     }.toString()
 
+    /**
+     * A forecast kept by [toJson], or null if it is not one. One kept before the hours knew daylight
+     * and before there were days reads too, with every hour in daylight and no days.
+     */
     fun fromJson(text: String): Forecast? = runCatching {
         val o = JSONObject(text)
         val hours = o.optJSONArray("hours")
+        val days = o.optJSONArray("days")
         Forecast(
             place = o.getString("place"), lat = o.getDouble("lat"), lon = o.getDouble("lon"), units = o.optString("units", "c"),
             temperature = o.getDouble("temperature"), code = o.getInt("code"), day = o.optBoolean("day", true),
             high = o.getDouble("high"), low = o.getDouble("low"),
             hours = if (hours == null) emptyList() else (0 until hours.length()).map { i ->
                 val h = hours.getJSONObject(i)
-                WeatherHour(h.getString("hour"), h.getDouble("t"), h.getInt("c"))
+                WeatherHour(h.getString("hour"), h.getDouble("t"), h.getInt("c"), h.optBoolean("d", true))
             },
             fetchedAt = o.optLong("fetchedAt"),
+            days = if (days == null) emptyList() else (0 until days.length()).map { i ->
+                val d = days.getJSONObject(i)
+                WeatherDay(d.getString("day"), d.getInt("c"), d.getDouble("hi"), d.getDouble("lo"))
+            },
         )
     }.getOrNull()
 
@@ -171,9 +250,11 @@ class WeatherRepository(context: Context) {
         val now = System.currentTimeMillis()
         if (!force && kept != null && kept.isFor(place, lat, lon, units) && now - kept.fetchedAt < STALE_MS) return
         val unit = if (units == "f") "&temperature_unit=fahrenheit" else ""
+        // Only the place goes, as its latitude and longitude; the rest says what to answer with:
+        // now, the hours and whether each is in daylight, and today and the next days.
         val url = "https://api.open-meteo.com/v1/forecast?latitude=$lat&longitude=$lon" +
-            "&current=temperature_2m,weather_code,is_day&hourly=temperature_2m,weather_code" +
-            "&daily=temperature_2m_max,temperature_2m_min&forecast_days=2&timezone=auto$unit"
+            "&current=temperature_2m,weather_code,is_day&hourly=temperature_2m,weather_code,is_day" +
+            "&daily=weather_code,temperature_2m_max,temperature_2m_min&forecast_days=${WeatherParse.DAYS + 1}&timezone=auto$unit"
         val text = get(url) ?: return
         val fresh = WeatherParse.forecast(text, place, lat, lon, units, now) ?: return
         _forecast.value = fresh

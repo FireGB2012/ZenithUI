@@ -486,6 +486,15 @@ internal fun quiet(): Color =
     LocalWidgetFill.current?.quiet ?: LocalPalette.current.onGlass.copy(alpha = if (LocalBare.current) 0.94f else 0.82f)
 
 /**
+ * The shadow of words a widget sets in a style of its own (a time, a toggle's name, a to-do), which
+ * takes nothing from the words around it: on glass on the wallpaper, the soft shadow of the names
+ * under the icons, which WordsOnWallpaper gives every other word there, and none on a colour card or
+ * a page. A "No glass" widget's own styles are left as they were, with none.
+ */
+@Composable
+internal fun wordShadow(): Shadow? = if (LocalBare.current) null else LocalTextStyle.current.shadow
+
+/**
  * The ink of a widget's headings: the words' own ink, as on an iPhone, or the widget's own colour
  * when it has one. A colour chosen to glow as a fill is hard to read as small letters on glass of
  * nearly its own colour, so the heading takes it part of the way towards the pane's ink: still the
@@ -1109,7 +1118,7 @@ private fun BatteryWidget(form: WidgetForm, width: Dp, height: Dp) {
                             .heightShare { level.value.coerceAtLeast(0.04f) }
                             .background(liquid),
                     )
-                    Text(battery.percent, style = tight(fit(width * 0.11f, 20.dp), FontWeight.SemiBold).copy(color = palette.onGlass))
+                    Text(battery.percent, style = tight(fit(width * 0.11f, 20.dp), FontWeight.SemiBold).copy(color = palette.onGlass, shadow = wordShadow()))
                 }
             }
             Spacer(Modifier.height(10.dp))
@@ -1160,6 +1169,10 @@ internal fun Ring(fraction: Float, stroke: Dp, modifier: Modifier, charging: Boo
     val fill = remember(palette.accent, palette.accentAlt, palette.onGlass, palette.ownColour) {
         Brush.linearGradient(listOf(palette.decor(palette.accent), palette.decor(palette.accentAlt)))
     }
+    // The glint is whichever of white and Zenith's near-black stands out on the ring: the ring is in
+    // the words' ink, which is white on glass and on a dark card, where a white glint would not show.
+    // Under a "No glass" widget's band of glass it is white, as it was.
+    val glintInk = if (bare) Color.White else inkOnTint(palette.decor(palette.accent))
     fun DrawScope.arc(sweep: Float, brush: Brush) {
         val width = stroke.toPx()
         val side = size.minDimension - width
@@ -1180,7 +1193,7 @@ internal fun Ring(fraction: Float, stroke: Dp, modifier: Modifier, charging: Boo
                 val width = stroke.toPx()
                 val side = size.minDimension - width
                 drawArc(
-                    color = Color.White,
+                    color = glintInk,
                     startAngle = 130f + (sweep - GLINT) * along,
                     sweepAngle = GLINT,
                     useCenter = false,
@@ -1865,8 +1878,9 @@ private fun NoteField(
     DisposableEffect(Unit) { onDispose { if (focused) HomeTypingArea.bounds = null } }
     val bare = LocalBare.current
     val ruleColour = palette.onGlass.copy(alpha = if (bare) 0.16f else 0.08f)
-    // Written straight on the wallpaper, the words carry the same shadow as the rest of the widget.
-    val shade = if (bare) LocalTextStyle.current.shadow else null
+    // The words carry the shadow the rest of the widget's words have: straight on the wallpaper, and
+    // on the wallpaper's glass. On a colour card there is none.
+    val shade = LocalTextStyle.current.shadow
 
     BasicTextField(
         value = note,
@@ -2040,6 +2054,7 @@ private fun TogglesWidget(form: WidgetForm, chosen: List<String>, width: Dp, hei
         fontSize = TOGGLE_NAME * names.scale,
         lineHeight = TOGGLE_NAME_LINE * names.scale,
         color = palette.onGlass,
+        shadow = wordShadow(),
     )
     // Buttons never grow past a comfortable size.
     val button = when {

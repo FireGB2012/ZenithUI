@@ -103,6 +103,7 @@ import androidx.compose.ui.unit.sp
 import com.gabriel.zenithui.data.AuraThemes
 import com.gabriel.zenithui.data.Countdown
 import com.gabriel.zenithui.data.Forecast
+import com.gabriel.zenithui.data.HomeGeometry
 import com.gabriel.zenithui.data.NotificationDots
 import com.gabriel.zenithui.data.NowPlaying
 import com.gabriel.zenithui.data.Playing
@@ -246,23 +247,24 @@ private fun Art(now: Playing, modifier: Modifier) {
         if (art != null) {
             Image(art, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
         } else {
-            // A grey tile, so the white note reads in Light and in Dark; in a widget's own colour,
-            // that colour, eased in from the grey and back to it as the colour is.
-            val grey = Color(0xFF8E8E93).copy(alpha = 0.55f)
+            // A faint tile of the words' ink, with the note in the ink of a second line, so it reads
+            // on glass and on every colour card, in Light and in Dark; in a widget's own colour, that
+            // colour, eased in from the faint ink and back to it as the colour is.
+            val faint = palette.onGlass.copy(alpha = 0.14f)
             Box(
                 Modifier
                     .fillMaxSize()
                     .background(
                         Brush.linearGradient(
                             listOf(
-                                lerp(grey, palette.accent.copy(alpha = 0.55f), palette.ownColour),
-                                lerp(grey, palette.accentAlt.copy(alpha = 0.4f), palette.ownColour),
+                                lerp(faint, palette.accent.copy(alpha = 0.55f), palette.ownColour),
+                                lerp(faint, palette.accentAlt.copy(alpha = 0.4f), palette.ownColour),
                             )
                         )
                     ),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Rounded.MusicNote, contentDescription = null, tint = Color.White.copy(alpha = 0.9f), modifier = Modifier.fillMaxSize(0.4f))
+                Icon(Icons.Rounded.MusicNote, contentDescription = null, tint = quiet(), modifier = Modifier.fillMaxSize(0.4f))
             }
         }
     }
@@ -352,7 +354,8 @@ private fun PlayButton(now: Playing, size: Dp, solid: Boolean = false) {
             .size(size)
             .pressBounce(0.86f)
             .clip(CircleShape)
-            .then(if (solid) Modifier.background(Brush.linearGradient(listOf(palette.accent, palette.accentAlt))) else Modifier.background(palette.onGlass.copy(alpha = 0.12f)))
+            // Solid, it is the one colour of actions, the colour its symbol is worked out on.
+            .background(if (solid) palette.accent else palette.onGlass.copy(alpha = 0.12f))
             .clickable { NowPlaying.playPause() },
         contentAlignment = Alignment.Center,
     ) {
@@ -400,7 +403,7 @@ internal fun WorldClockWidget(form: WidgetForm, width: Dp, height: Dp) {
             zones.take(3).forEach { zone ->
                 Column {
                     Caps(WorldClocks.city(zone), size = 10.sp)
-                    Text(timeIn(zone), style = tight(fit(height * 0.34f, 30.dp)), color = palette.onGlass)
+                    Text(timeIn(zone), style = tight(fit(height * 0.34f, 30.dp)).copy(shadow = wordShadow()), color = palette.onGlass)
                 }
             }
         }
@@ -419,7 +422,7 @@ internal fun WorldClockWidget(form: WidgetForm, width: Dp, height: Dp) {
                         Text(WorldClocks.city(zone), color = palette.onGlass, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text(WorldClocks.offset(zone, here, instant), color = quiet(), fontSize = 11.sp, maxLines = 1)
                     }
-                    Text(timeIn(zone), style = tight(18.sp, FontWeight.Medium), color = palette.onGlass)
+                    Text(timeIn(zone), style = tight(18.sp, FontWeight.Medium).copy(shadow = wordShadow()), color = palette.onGlass)
                 }
             }
         }
@@ -534,6 +537,9 @@ internal fun PhotoFrameWidget(form: WidgetForm, width: Dp, height: Dp) {
     // A different one each time the home screen is come back to, and the next at a tap.
     var tapped by remember { mutableIntStateOf(0) }
     val name = photos[((world.visits + tapped) % photos.size + photos.size) % photos.size]
+    // On a pane or a card the photo stands in from the widget's edge, its corners following the
+    // widget's, so the frame round it is as wide at the corners as along the sides.
+    val inset = if (bare) 0.dp else 6.dp
     val density = LocalDensity.current
     val longest = with(density) { maxOf(width, height).roundToPx() }
     val picture by produceState<ImageBitmap?>(initialValue = null, name, longest) {
@@ -547,8 +553,8 @@ internal fun PhotoFrameWidget(form: WidgetForm, width: Dp, height: Dp) {
         },
         modifier = Modifier
             .fillMaxSize()
-            .padding(if (bare) 0.dp else 6.dp)
-            .clip(RoundedCornerShape(if (bare) 20.dp else 18.dp))
+            .padding(inset)
+            .clip(RoundedCornerShape(if (bare) 20.dp else HomeGeometry.WIDGET_CORNER_DP.dp - inset))
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { tapped++ },
         label = "framePhoto",
     ) { image ->
@@ -622,7 +628,7 @@ internal fun TodoWidget(form: WidgetForm, width: Dp, height: Dp) {
                             fontSize = 13.sp,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
-                            style = TextStyle(fontFamily = LocalZenithFont.current, textDecoration = if (item.done) TextDecoration.LineThrough else TextDecoration.None),
+                            style = TextStyle(fontFamily = LocalZenithFont.current, textDecoration = if (item.done) TextDecoration.LineThrough else TextDecoration.None, shadow = wordShadow()),
                         )
                     }
                 }
@@ -663,7 +669,7 @@ private fun Tick(done: Boolean, onClick: () -> Unit) {
         Canvas(Modifier.fillMaxSize()) {
             val r = size.minDimension / 2f
             drawCircle(palette.onGlass.copy(alpha = 0.45f * (1f - fill)), r - 1.dp.toPx(), style = Stroke(1.5.dp.toPx()))
-            drawCircle(lerp(palette.accent, palette.accentAlt, 0.3f), r * fill.coerceIn(0f, 1f))
+            drawCircle(palette.accent, r * fill.coerceIn(0f, 1f))
             if (fill > 0.05f) {
                 // The check draws itself in from its foot as the circle fills.
                 val draw = fill.coerceIn(0f, 1f)
@@ -695,7 +701,7 @@ private fun AddLine(onAdd: (String) -> Unit) {
                 value = text,
                 onValueChange = { text = it.take(80) },
                 singleLine = true,
-                textStyle = TextStyle(fontFamily = LocalZenithFont.current, color = palette.onGlass, fontSize = 13.sp),
+                textStyle = TextStyle(fontFamily = LocalZenithFont.current, color = palette.onGlass, fontSize = 13.sp, shadow = wordShadow()),
                 cursorBrush = SolidColor(palette.accent),
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done),
                 keyboardActions = KeyboardActions(onDone = {

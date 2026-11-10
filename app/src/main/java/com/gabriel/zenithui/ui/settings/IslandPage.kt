@@ -267,19 +267,21 @@ private fun IslandPreview(island: IslandSettings) {
                             Spacer(Modifier.height(12.dp))
                         }
                     }
-                    // The status bar, as tall as this phone's.
+                    // The status bar, as tall as this phone's, in the page's ink as a phone's is over
+                    // an app: white over Dark's page, dark over Light's, where white would be lost.
+                    val bar = palette.onGlass
                     Row(
                         Modifier.fillMaxWidth().height(geometry.statusBar).padding(horizontal = 22.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         // In the phone's own sans, as a status bar is, whatever font the home screen is in.
-                        Text("9:41", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, fontFamily = FontFamily.SansSerif)
+                        Text("9:41", color = bar, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, fontFamily = FontFamily.SansSerif)
                         Spacer(Modifier.weight(1f))
-                        Icon(Icons.Rounded.SignalCellularAlt, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp))
+                        Icon(Icons.Rounded.SignalCellularAlt, contentDescription = null, tint = bar, modifier = Modifier.size(14.dp))
                         Spacer(Modifier.width(4.dp))
-                        Icon(Icons.Rounded.Wifi, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp))
+                        Icon(Icons.Rounded.Wifi, contentDescription = null, tint = bar, modifier = Modifier.size(14.dp))
                         Spacer(Modifier.width(5.dp))
-                        Box(Modifier.size(width = 20.dp, height = 10.dp).clip(RoundedCornerShape(3.dp)).background(Color.White.copy(alpha = 0.9f)))
+                        Box(Modifier.size(width = 20.dp, height = 10.dp).clip(RoundedCornerShape(3.dp)).background(bar.copy(alpha = 0.9f)))
                     }
                     Box(
                         Modifier.fillMaxWidth().offset(x = geometry.centreX - geometry.width / 2, y = geometry.top),

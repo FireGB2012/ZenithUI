@@ -78,6 +78,7 @@ import com.gabriel.zenithui.ui.home.SlotArrangement
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.LocalBackdrop
 import com.gabriel.zenithui.ui.theme.LocalGlassLevels
+import com.gabriel.zenithui.ui.theme.NeutralLook
 import com.gabriel.zenithui.ui.theme.ZenithShapes
 import kotlin.math.min
 
@@ -246,12 +247,14 @@ private fun MiniHome(
     shown: Int,
     backgroundAlpha: () -> Float,
 ) {
-    val palette = LocalPalette.current
     val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    // Where there is no wallpaper picture, the page's own neutral grey, as setup's backdrop is.
+    // Where there is no wallpaper picture, Dark's neutral page, in Light as in Dark: it stands in for
+    // the wallpaper, which does not change with the mode, and what stands on it (the names, the
+    // glass and the words on the glass) is white in both, so Light's pale page would lose them.
+    val ground = NeutralLook.Dark.backdrop
     val backdrop = Brush.verticalGradient(
-        listOf(palette.backdrop.first(), palette.backdrop.getOrElse(1) { palette.backdrop.first() }, palette.backdrop.last())
+        listOf(ground.first(), ground.getOrElse(1) { ground.first() }, ground.last())
     )
     // The page settles where everything sits; the dock stands on the same lines.
     var page by remember { mutableStateOf<HomeGeometry?>(null) }

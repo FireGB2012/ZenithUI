@@ -77,6 +77,7 @@ import com.gabriel.zenithui.ui.common.pressBounce
 import com.gabriel.zenithui.ui.common.staggerDelay
 import com.gabriel.zenithui.ui.common.unfoldIn
 import com.gabriel.zenithui.ui.common.unfoldOut
+import com.gabriel.zenithui.ui.theme.LocalOnWallpaper
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.ZenithShapes
 import com.gabriel.zenithui.ui.theme.glass
@@ -114,7 +115,9 @@ fun HostedWidget(
             .clip(ZenithShapes.tile),
     ) {
         when {
-            info == null -> MissingWidget(provider = cell.provider, onRestore = onRestore)
+            // On its pane of glass on the wallpaper, the same glass in Light and in Dark, Zenith's
+            // words are white, as on its own widgets there.
+            info == null -> MissingWidget(provider = cell.provider, onRestore = onRestore, white = cell.glass && LocalOnWallpaper.current)
             !live -> WidgetPicture(info)
             else -> LiveHostedView(cell.appWidgetId, info)
         }
@@ -183,11 +186,12 @@ private fun WidgetPicture(info: AppWidgetProviderInfo) {
 
 /**
  * A widget that is not on this phone in the way it was: brought by a backup from another, or one
- * whose app has gone. If its app is here it can be put back with a tap, in the same place.
+ * whose app has gone. If its app is here it can be put back with a tap, in the same place. Its
+ * words are [white] on glass that stands on the wallpaper, and in the mode's ink anywhere else.
  */
 @Composable
-private fun MissingWidget(provider: String, onRestore: (AppWidgetProviderInfo) -> Unit) {
-    val palette = LocalPalette.current
+private fun MissingWidget(provider: String, onRestore: (AppWidgetProviderInfo) -> Unit, white: Boolean = false) {
+    val palette = LocalPalette.current.let { if (white) it.copy(dark = true) else it }
     val context = LocalContext.current
     val found = remember(provider) {
         runCatching {

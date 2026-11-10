@@ -7,6 +7,11 @@ import androidx.compose.ui.graphics.toArgb
 import com.gabriel.zenithui.data.WallColors
 import com.gabriel.zenithui.data.ZenithSettings
 
+/**
+ * The colours something is drawn in. Zenith itself has one look, [NeutralLook], in Light or in
+ * Dark, and a widget or folder may wear a colour of its own inside it. The other palettes, in
+ * [Palettes], are only the colour sets Zenith's painted wallpapers are made from.
+ */
 @Immutable
 data class ZenithPalette(
     val id: String,
@@ -17,6 +22,8 @@ data class ZenithPalette(
     val backdrop: List<Color>,
     val glassTint: Color,
     val dark: Boolean = true,
+    /** How much of a widget's own colour this carries, 0 to 1; only InOwnColour sets it. */
+    val ownColour: Float = 0f,
 ) {
     val onGlass: Color get() = if (dark) Color.White else Color(0xFF10131A)
 
@@ -26,13 +33,61 @@ data class ZenithPalette(
      * in Settings hard to pick out from the dark. At 74% it holds six to one on every backdrop.
      */
     val onGlassMuted: Color get() = onGlass.copy(alpha = 0.74f)
+
+    /** A switch that is on: iOS's green, as an iPhone's switches are, rather than the blue of actions. */
+    val switchOn: Color get() = if (dark) Color(0xFF30D158) else Color(0xFF34C759)
+
+    /** What cannot be undone, and notification dots: iOS's red, deeper in Light so it holds on white. */
+    val destructive: Color get() = if (dark) Color(0xFFFF453A) else Color(0xFFFF3B30)
+
+    /**
+     * Decoration: a widget's own colour where it has one, else the words' ink. A heading or a gauge
+     * in the plain look is in the ink, as on an iPhone, and only a colour somebody chose for a widget
+     * shows in it, eased in and out as [ownColour] is.
+     */
+    fun decor(colour: Color): Color = if (ownColour <= 0f) onGlass else lerp(onGlass, colour, ownColour.coerceAtMost(1f))
 }
 
 /**
- * This palette in light or in dark. Its accents stay. When the tone asked for is not the palette's
- * own, the backdrop is made from those accents — a near-white or near-black base with a little of
- * each mixed in — rather than borrowed from another palette, so the interface and a wallpaper
- * painted from it still belong to this one.
+ * Zenith's one look: iOS 26's own colours, in Light or in Dark, made by ZenithTheme from
+ * Appearance. Words in the ink; actions in iOS blue, with white words on it, the same blue at both
+ * ends so nothing is a two-colour gradient; pages from black to iOS's dark grey, or from its pale
+ * grey to white; and a grey that is no colour at all for the glass's veil.
+ */
+object NeutralLook {
+
+    val Dark = ZenithPalette(
+        id = "neutral",
+        name = "Dark",
+        tagline = "",
+        accent = Color(0xFF0A84FF),
+        accentAlt = Color(0xFF0A84FF),
+        backdrop = listOf(Color(0xFF000000), Color(0xFF0E0E10), Color(0xFF1C1C1E)),
+        glassTint = Color(0xFF8E8E93),
+        dark = true,
+    )
+
+    val Light = ZenithPalette(
+        id = "neutral",
+        name = "Light",
+        tagline = "",
+        accent = Color(0xFF007AFF),
+        accentAlt = Color(0xFF007AFF),
+        backdrop = listOf(Color(0xFFF2F2F7), Color(0xFFF8F8FB), Color.White),
+        glassTint = Color(0xFF8E8E93),
+        dark = false,
+    )
+
+    fun of(dark: Boolean): ZenithPalette = if (dark) Dark else Light
+}
+
+/**
+ * A wallpaper's colour set in light or in dark. Its accents stay. When the tone asked for is not
+ * the set's own, the backdrop is made from those accents — a near-white or near-black base with a
+ * little of each mixed in — rather than borrowed from another set, so a wallpaper painted from it
+ * still belongs to this one. Only Zenith's painted wallpapers use it now, and its sums are kept as
+ * they were, to the bit: a wallpaper is known by the colours it was painted in, so any change here
+ * would paint every one again.
  */
 fun ZenithPalette.toned(dark: Boolean): ZenithPalette {
     if (dark == this.dark) return this
@@ -63,7 +118,10 @@ fun ZenithPalette.withAccent(accent: Color): ZenithPalette {
     return copy(accent = accent, accentAlt = Color(android.graphics.Color.HSVToColor(hsv)), glassTint = accent)
 }
 
-/** The five colours a wallpaper is painted from, and whether it is the light or the dark picture. */
+/**
+ * The five colours a wallpaper is painted from, and whether it is the light or the dark picture.
+ * Made from a wallpaper's colour set, never from the look Zenith itself is in.
+ */
 fun ZenithPalette.wallColors(): WallColors = WallColors(
     accent = accent.toArgb(),
     accentAlt = accentAlt.toArgb(),
@@ -73,6 +131,12 @@ fun ZenithPalette.wallColors(): WallColors = WallColors(
     dark = dark,
 )
 
+/**
+ * The colour sets Zenith's painted wallpapers are made from, and nothing else now: the six free
+ * ones, the ones bought with Aura points, your own from the theme maker and the one taken from the
+ * wallpaper. They were the app's themes once; Zenith itself is drawn in [NeutralLook] whatever is
+ * stored. Their values are kept exactly, since a wallpaper painted from one is known by its colours.
+ */
 object Palettes {
 
     val Midnight = ZenithPalette(

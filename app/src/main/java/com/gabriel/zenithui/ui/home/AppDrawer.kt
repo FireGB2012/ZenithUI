@@ -108,6 +108,7 @@ import com.gabriel.zenithui.ui.theme.GlassMaterial
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.ZenithShapes
 import com.gabriel.zenithui.ui.theme.glass
+import com.gabriel.zenithui.ui.theme.inkOnTint
 import kotlin.math.roundToInt
 
 /**
@@ -648,7 +649,7 @@ fun AppDrawer(
                             Icon(
                                 Icons.Rounded.TravelExplore,
                                 contentDescription = "Search the web",
-                                tint = androidx.compose.ui.graphics.Color(0xFF0A0B12),
+                                tint = inkOnTint(palette.accent),
                                 modifier = Modifier.size(18.dp),
                             )
                         }

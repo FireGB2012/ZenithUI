@@ -115,6 +115,7 @@ import com.gabriel.zenithui.ui.common.pressBounce
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.LocalZenithFont
 import com.gabriel.zenithui.ui.theme.glassInk
+import com.gabriel.zenithui.ui.theme.inkOnTint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -352,7 +353,7 @@ private fun PlayButton(now: Playing, size: Dp, solid: Boolean = false) {
             Icon(
                 if (going) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
                 contentDescription = if (going) "Pause" else "Play",
-                tint = if (solid) Color(0xFF0A0B12) else palette.onGlass,
+                tint = if (solid) inkOnTint(palette.accent) else palette.onGlass,
                 modifier = Modifier.size(size * 0.55f),
             )
         }
@@ -634,6 +635,8 @@ private fun Tick(done: Boolean, onClick: () -> Unit) {
     val palette = LocalPalette.current
     val reduced = LocalMotionLevel.current.reduced
     val fill by animateFloatAsState(if (done) 1f else 0f, if (reduced) tween(Motion.REDUCED_MS) else Motion.snappy(), label = "tick")
+    // White on the blue, and dark on a widget's own colour where that is pale.
+    val checkInk = inkOnTint(palette.accent)
     Box(
         Modifier
             .size(20.dp)
@@ -653,8 +656,8 @@ private fun Tick(done: Boolean, onClick: () -> Unit) {
                 val b = Offset(size.width * 0.44f, size.height * 0.68f)
                 val c = Offset(size.width * 0.74f, size.height * 0.36f)
                 val first = (draw * 2f).coerceAtMost(1f)
-                drawLine(Color(0xFF0A0B12), a, a + (b - a) * first, 2.dp.toPx(), StrokeCap.Round)
-                if (draw > 0.5f) drawLine(Color(0xFF0A0B12), b, b + (c - b) * ((draw - 0.5f) * 2f), 2.dp.toPx(), StrokeCap.Round)
+                drawLine(checkInk, a, a + (b - a) * first, 2.dp.toPx(), StrokeCap.Round)
+                if (draw > 0.5f) drawLine(checkInk, b, b + (c - b) * ((draw - 0.5f) * 2f), 2.dp.toPx(), StrokeCap.Round)
             }
         }
     }

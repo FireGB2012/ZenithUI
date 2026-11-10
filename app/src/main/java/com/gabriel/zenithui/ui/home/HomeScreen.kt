@@ -152,6 +152,7 @@ import com.gabriel.zenithui.ui.settings.SettingsScreen
 import com.gabriel.zenithui.ui.theme.LocalWallpaperOffset
 import com.gabriel.zenithui.ui.theme.ZenithShapes
 import com.gabriel.zenithui.ui.theme.glass
+import com.gabriel.zenithui.ui.theme.inkOnTint
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -2647,8 +2648,8 @@ private fun RemoveTarget(armed: Boolean, hovering: Boolean, modifier: Modifier =
     val palette = LocalPalette.current
     val fill by animateColorAsState(
         targetValue = when {
-            armed -> Color(0xFFFF6B6B).copy(alpha = 0.55f)
-            hovering -> Color(0xFFFF6B6B).copy(alpha = 0.18f)
+            armed -> palette.destructive.copy(alpha = 0.55f)
+            hovering -> palette.destructive.copy(alpha = 0.18f)
             else -> Color.Transparent
         },
         animationSpec = tween(450),
@@ -2751,7 +2752,7 @@ private fun PullHint(progress: () -> Float, armed: Boolean, label: String, modif
     val shown by remember { derivedStateOf { progress() > 0.001f } }
     if (!shown) return
     val fill by animateColorAsState(if (armed) palette.accent.copy(alpha = 0.88f) else Color.Transparent, tween(160), label = "pullFill")
-    val ink by animateColorAsState(if (armed) Color(0xFF0A0B12) else palette.onGlass, tween(160), label = "pullInk")
+    val ink by animateColorAsState(if (armed) inkOnTint(palette.accent) else palette.onGlass, tween(160), label = "pullInk")
     Row(
         modifier
             .statusBarsPadding()

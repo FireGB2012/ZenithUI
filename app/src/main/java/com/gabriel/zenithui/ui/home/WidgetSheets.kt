@@ -66,6 +66,7 @@ import com.gabriel.zenithui.ui.common.unfoldOut
 import com.gabriel.zenithui.ui.onboarding.Segmented
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.LocalZenithFont
+import com.gabriel.zenithui.ui.theme.inkOnTint
 import kotlinx.coroutines.delay
 import java.time.Instant
 import java.time.LocalDate
@@ -254,11 +255,11 @@ fun CountdownSheet(
                     navigationContentColor = palette.onGlass,
                     yearContentColor = palette.onGlass,
                     currentYearContentColor = palette.accent,
-                    selectedYearContentColor = Color(0xFF0A0B12),
+                    selectedYearContentColor = inkOnTint(palette.accent),
                     selectedYearContainerColor = palette.accent,
                     dayContentColor = palette.onGlass,
                     disabledDayContentColor = palette.onGlass.copy(alpha = 0.3f),
-                    selectedDayContentColor = Color(0xFF0A0B12),
+                    selectedDayContentColor = inkOnTint(palette.accent),
                     selectedDayContainerColor = palette.accent,
                     todayContentColor = palette.accent,
                     todayDateBorderColor = palette.accent,

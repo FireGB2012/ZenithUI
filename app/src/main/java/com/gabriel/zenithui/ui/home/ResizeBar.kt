@@ -35,7 +35,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
@@ -51,6 +50,7 @@ import com.gabriel.zenithui.ui.common.rememberHaptics
 import com.gabriel.zenithui.ui.common.shake
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.glass
+import com.gabriel.zenithui.ui.theme.inkOnTint
 
 /**
  * What can be done to the thing being resized without pulling its corner or dragging it: for a
@@ -126,7 +126,7 @@ fun ResizeBar(
                     .padding(horizontal = 22.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Text("Done", color = if (palette.dark) Color(0xFF0A0B12) else Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                Text("Done", color = inkOnTint(palette.accent), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
             }
         }
     }
@@ -141,7 +141,7 @@ private fun SizeChip(size: WidgetSize, columns: Int, tallest: Int, selected: Boo
     val palette = LocalPalette.current
     // The light moves from the size it was to the size it is, rather than one going out and another on.
     val ink by animateColorAsState(
-        if (selected) (if (palette.dark) Color(0xFF0A0B12) else Color.White) else palette.onGlass,
+        if (selected) inkOnTint(palette.accent) else palette.onGlass,
         tween(220),
         label = "sizeInk",
     )

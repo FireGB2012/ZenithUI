@@ -85,6 +85,7 @@ import com.gabriel.zenithui.ui.theme.GlassMaterial
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.LocalZenithFont
 import com.gabriel.zenithui.ui.theme.glass
+import com.gabriel.zenithui.ui.theme.inkOnTint
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -146,7 +147,7 @@ private fun TabPill(
 ) {
     val palette = LocalPalette.current
     val fill by animateColorAsState(if (selected) palette.accent else palette.onGlass.copy(alpha = 0.08f), tween(220), label = "tabFill")
-    val ink by animateColorAsState(if (selected) Color(0xFF0A0B12) else palette.onGlass, tween(220), label = "tabInk")
+    val ink by animateColorAsState(if (selected) inkOnTint(palette.accent) else palette.onGlass, tween(220), label = "tabInk")
     Row(
         Modifier
             .height(34.dp)
@@ -444,7 +445,7 @@ fun DrawerTabSheet(
                         Icon(
                             Icons.Rounded.Check,
                             contentDescription = if (on) "In the tab" else null,
-                            tint = Color(0xFF0A0B12),
+                            tint = inkOnTint(palette.accent),
                             modifier = Modifier.size(16.dp).graphicsLayer {
                                 alpha = fill
                                 scaleX = 0.5f + 0.5f * fill

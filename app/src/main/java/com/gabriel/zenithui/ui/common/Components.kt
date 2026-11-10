@@ -1,12 +1,7 @@
 package com.gabriel.zenithui.ui.common
 
 import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -69,52 +64,8 @@ import com.gabriel.zenithui.ui.theme.GlassMaterial
 import com.gabriel.zenithui.ui.theme.GlassMotion
 import com.gabriel.zenithui.ui.theme.glass
 import com.gabriel.zenithui.ui.theme.inkOnTint
-import kotlin.math.cos
-import kotlin.math.sin
 
 val LocalIconLoader = staticCompositionLocalOf<IconLoader> { error("IconLoader not provided") }
-
-/** Slow drifting light, used behind onboarding and the app drawer. */
-@Composable
-fun AuroraBackdrop(modifier: Modifier = Modifier, intensity: Float = 1f) {
-    val palette = LocalPalette.current
-    val transition = rememberInfiniteTransition(label = "aurora")
-    val phase by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = (2.0 * Math.PI).toFloat(),
-        animationSpec = infiniteRepeatable(tween(26_000, easing = LinearEasing), RepeatMode.Restart),
-        label = "phase",
-    )
-    val accent = palette.accent
-    val accentAlt = palette.accentAlt
-    val tint = palette.glassTint
-
-    Box(
-        modifier
-            .fillMaxSize()
-            .background(Brush.verticalGradient(palette.backdrop))
-            .drawBehind {
-                val orbs = listOf(
-                    Triple(accent, Offset(0.22f + 0.10f * cos(phase), 0.16f + 0.06f * sin(phase * 1.3f)), 0.80f),
-                    Triple(accentAlt, Offset(0.86f + 0.08f * sin(phase * 0.8f), 0.36f + 0.09f * cos(phase)), 0.66f),
-                    Triple(tint, Offset(0.44f + 0.12f * cos(phase * 0.6f), 0.88f + 0.05f * sin(phase)), 0.95f),
-                )
-                orbs.forEach { (color, unit, radiusFraction) ->
-                    val center = Offset(unit.x * size.width, unit.y * size.height)
-                    val radius = radiusFraction * size.width
-                    drawCircle(
-                        brush = Brush.radialGradient(
-                            colors = listOf(color.copy(alpha = 0.32f * intensity), Color.Transparent),
-                            center = center,
-                            radius = radius,
-                        ),
-                        radius = radius,
-                        center = center,
-                    )
-                }
-            }
-    )
-}
 
 /** A super icon: the app's icon stretched to fill [modifier]'s width, as HyperOS draws them. */
 @Composable
@@ -243,8 +194,9 @@ fun AppIcon(
 }
 
 /**
- * The app's symbol on a tile: in the accent on the theme's tint, or in the ink of the page on a
- * tile of clear glass. Its symbol fades in once it is drawn, over the tile, which is there at once.
+ * The app's symbol on a tile: in the words' ink on a plain tile, iOS's dark grey in Dark and white
+ * in Light, or in the ink of the page on a tile of clear glass. Its symbol fades in once it is
+ * drawn, over the tile, which is there at once.
  */
 @Composable
 private fun StyledIcon(key: String, label: String, px: Int, shape: Shape, style: String, onGlass: Boolean, version: Int) {
@@ -256,17 +208,14 @@ private fun StyledIcon(key: String, label: String, px: Int, shape: Shape, style:
     }
     val appear by animateFloatAsState(if (glyph != null) 1f else 0f, tween(340), label = "glyphFade")
     val glass = style == IconStyles.GLASS
-    val ink = when {
-        glass -> palette.onGlass
-        palette.dark -> lerp(palette.accent, Color.White, 0.42f)
-        else -> lerp(palette.accent, Color.Black, 0.38f)
-    }
+    // No theme's colour in it: the symbol is in the ink, whatever the tile.
+    val ink = palette.onGlass
     val tile = when {
         // Glass inside glass would show the wallpaper through a hole in it: a pale plate instead.
         glass && onGlass -> Modifier.clip(shape).background(palette.onGlass.copy(alpha = 0.12f))
         glass -> Modifier.glass(shape, strength = 1.2f, material = GlassMaterial.Clear, interactive = true)
-        palette.dark -> Modifier.clip(shape).background(lerp(Color(0xFF14151B), palette.accent, 0.22f))
-        else -> Modifier.clip(shape).background(lerp(Color.White, palette.accent, 0.18f))
+        palette.dark -> Modifier.clip(shape).background(Color(0xFF1C1C1E))
+        else -> Modifier.clip(shape).background(Color.White)
     }
     Box(Modifier.fillMaxSize().then(tile), contentAlignment = Alignment.Center) {
         val image = glyph
@@ -289,9 +238,9 @@ private fun StyledIcon(key: String, label: String, px: Int, shape: Shape, style:
 }
 
 /**
- * A notification dot: a small bead of glass in the accent at the icon's top corner, with the count
- * in it if counts are asked for. It springs up with the first notification and shrinks away with
- * the last, still saying what it said as it goes.
+ * A notification dot: a small bead of glass in iOS's red at the icon's top corner, with the count
+ * in white in it if counts are asked for, as an iPhone's badges are. It springs up with the first
+ * notification and shrinks away with the last, still saying what it said as it goes.
  */
 @Composable
 fun BoxScope.IconBadge(count: Int, iconSize: Dp) {
@@ -311,7 +260,7 @@ fun BoxScope.IconBadge(count: Int, iconSize: Dp) {
     val side = iconSize * (if (counting) 0.34f else 0.24f)
     val words = Badges.text(said[0])
     val width = if (counting && words.length > 1) side * (0.55f + 0.32f * words.length) else side
-    val accent = palette.accent
+    val red = palette.destructive
     Box(
         Modifier
             .align(Alignment.TopEnd)
@@ -326,7 +275,7 @@ fun BoxScope.IconBadge(count: Int, iconSize: Dp) {
                 // A bead: deeper at its foot, a rim of light round it and a spot of light near its top.
                 val round = CornerRadius(size.height / 2f)
                 drawRoundRect(
-                    brush = Brush.verticalGradient(listOf(lerp(accent, Color.White, 0.35f), accent, lerp(accent, Color.Black, 0.25f))),
+                    brush = Brush.verticalGradient(listOf(lerp(red, Color.White, 0.35f), red, lerp(red, Color.Black, 0.25f))),
                     cornerRadius = round,
                 )
                 drawRoundRect(color = Color.White.copy(alpha = 0.55f), cornerRadius = round, style = Stroke(width = size.height * 0.07f))
@@ -341,7 +290,7 @@ fun BoxScope.IconBadge(count: Int, iconSize: Dp) {
         if (counting) {
             Text(
                 text = words,
-                color = Color(0xFF0A0B12),
+                color = Color.White,
                 fontSize = (side.value * 0.56f).sp,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
@@ -381,20 +330,17 @@ private fun PlainIcon(key: String, label: String, size: Dp, px: Int, shape: Shap
                     },
             )
         } else {
+            // While the icon loads, a plain plate with the app's initial, as a super icon's is.
             Box(
                 Modifier
                     .fillMaxSize()
                     .clip(shape)
-                    .background(
-                        Brush.linearGradient(
-                            listOf(palette.accent.copy(alpha = 0.55f), palette.accentAlt.copy(alpha = 0.35f))
-                        )
-                    ),
+                    .background(palette.onGlass.copy(alpha = 0.12f)),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
                     text = label.take(1).uppercase(),
-                    color = Color.White,
+                    color = palette.onGlass,
                     fontWeight = FontWeight.SemiBold,
                     fontSize = (size.value * 0.36f).sp,
                 )

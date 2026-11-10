@@ -3,9 +3,10 @@ package com.gabriel.zenithui.data
 /**
  * How every app icon is drawn. Original is as the app draws it. Tinted and Glass are made from the
  * app's one-colour symbol — Android 13's themed icon — or, for an app that has none, from what
- * stands out of its icon: Tinted puts it in the accent on a tile of the theme's tint, as Android
- * does; Glass puts it in white on a tile of clear glass that bends the wallpaper, the way iOS draws
- * clear icons. An icon you chose for an app yourself is always shown as you chose it.
+ * stands out of its icon: Tinted puts it in the words' colour on a plain dark or white tile, as
+ * Zenith has one neutral look and no theme's colour to tint it with; Glass puts it in white on a
+ * tile of clear glass that bends the wallpaper, the way iOS draws clear icons. An icon you chose for
+ * an app yourself is always shown as you chose it.
  */
 object IconStyles {
     const val ORIGINAL = "original"
@@ -23,7 +24,7 @@ object IconStyles {
     }
 
     fun detail(id: String): String = when (of(id)) {
-        TINTED -> "Every app's symbol in your colour, on a tile of the theme's tint."
+        TINTED -> "Every app's symbol in the words' colour, on a plain dark or white tile."
         GLASS -> "Every app's symbol in white, on a tile of clear glass over your wallpaper."
         else -> "Icons as their apps draw them."
     }

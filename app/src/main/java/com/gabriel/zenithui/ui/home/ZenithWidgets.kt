@@ -148,6 +148,7 @@ import com.gabriel.zenithui.ui.theme.LocalZenithFont
 import com.gabriel.zenithui.ui.theme.ZenithShapes
 import com.gabriel.zenithui.ui.theme.glass
 import com.gabriel.zenithui.ui.theme.glassInk
+import com.gabriel.zenithui.ui.theme.inkOnTint
 import kotlinx.coroutines.delay
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -1590,7 +1591,7 @@ private fun ToggleChoice(option: ToggleOption, on: Boolean, onFlip: () -> Boolea
         animationSpec = tween(260),
         label = "choiceDisc",
     )
-    val ink by animateColorAsState(if (on) Color(0xFF0A0B12) else palette.onGlass, tween(260), label = "choiceInk")
+    val ink by animateColorAsState(if (on) inkOnTint(palette.accent) else palette.onGlass, tween(260), label = "choiceInk")
     // Not as the list arrives: only when this one is chosen or let go while it is on show.
     val bounce = remember { Animatable(1f) }
     val shownAs = remember { booleanArrayOf(on) }
@@ -1669,7 +1670,7 @@ private fun ToggleButton(toggle: Toggle, size: Dp) {
         label = "toggleBg",
     )
     val tint by animateColorAsState(
-        targetValue = if (toggle.active) Color(0xFF0A0B12) else palette.onGlass,
+        targetValue = if (toggle.active) inkOnTint(palette.accent) else palette.onGlass,
         animationSpec = tween(420),
         label = "toggleTint",
     )
@@ -1720,7 +1721,7 @@ private fun ToggleTile(toggle: Toggle, modifier: Modifier, detail: Boolean) {
         animationSpec = tween(420),
         label = "tileBg",
     )
-    val ink = if (toggle.active) Color(0xFF0A0B12) else palette.onGlass
+    val ink = if (toggle.active) inkOnTint(palette.accent) else palette.onGlass
     Column(
         modifier
             .pressBounce(0.94f)
@@ -1818,7 +1819,7 @@ private fun SearchBar(onSearch: () -> Unit) {
             Icon(
                 Icons.Rounded.TravelExplore,
                 contentDescription = "Search the web",
-                tint = Color(0xFF0A0B12),
+                tint = inkOnTint(palette.accent),
                 modifier = Modifier.size(20.dp),
             )
         }

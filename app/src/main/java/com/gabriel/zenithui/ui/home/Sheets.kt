@@ -319,7 +319,7 @@ fun MenuRow(
     onClick: () -> Unit,
 ) {
     val palette = LocalPalette.current
-    val tint = if (danger) Color(0xFFFF6B6B) else palette.onGlass
+    val tint = if (danger) palette.destructive else palette.onGlass
     Row(
         Modifier
             .fillMaxWidth()

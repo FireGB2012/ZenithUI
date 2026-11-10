@@ -42,12 +42,13 @@ import com.gabriel.zenithui.ui.common.rememberTick
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.NumberFont
 import com.gabriel.zenithui.ui.theme.ZenithFonts
+import com.gabriel.zenithui.ui.theme.inkOnTint
 import kotlinx.coroutines.launch
 
 /**
  * One typeface to choose: a tile showing [sample] set in it, its name under it. The chosen one
- * is ringed and its tile fills with the accent, the way a palette dot is ringed; the tiles pop up
- * one after another as the page arrives.
+ * is ringed in the ink and its tile takes a little of the blue that marks what is chosen; the
+ * tiles pop up one after another as the page arrives.
  */
 @Composable
 private fun FontTile(name: String, sample: String, family: FontFamily, weight: FontWeight, selected: Boolean, turn: Int, onClick: () -> Unit) {
@@ -193,7 +194,8 @@ private fun PageTurnTile(style: String, name: String, selected: Boolean, turn: I
             contentAlignment = Alignment.Center,
         ) {
             val page = palette.onGlass.copy(alpha = 0.22f)
-            val dot = palette.accent.copy(alpha = 0.9f)
+            // One page's dot in the ink and the other's fainter, so the two are told apart without a colour.
+            val dot = palette.onGlass.copy(alpha = 0.9f)
             for (which in 0..1) {
                 Box(
                     Modifier
@@ -251,7 +253,7 @@ internal fun ChoiceChips(options: List<Pair<String, String>>, selected: String, 
             val fill by animateColorAsState(if (on) palette.accent else palette.onGlass.copy(alpha = 0.08f), tween(220), label = "chipFill")
             Text(
                 label,
-                color = if (on) Color(0xFF0A0B12) else palette.onGlass,
+                color = if (on) inkOnTint(palette.accent) else palette.onGlass,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Medium,
                 modifier = Modifier

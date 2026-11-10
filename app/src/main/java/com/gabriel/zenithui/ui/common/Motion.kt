@@ -238,7 +238,8 @@ fun Modifier.pressBounce(pressedScale: Float = 0.88f, enabled: Boolean = true): 
     val from = remember { arrayOf(Offset.Zero) }
     val scope = rememberCoroutineScope()
     val palette = com.gabriel.zenithui.ui.theme.LocalPalette.current
-    val light = if (palette.dark) Color.White else palette.accent
+    // The ripple's light is no colour at all: white in Dark, the words' ink in Light.
+    val light = if (palette.dark) Color.White else palette.onGlass
     return this
         .pointerInput(style) {
             awaitPointerEventScope {

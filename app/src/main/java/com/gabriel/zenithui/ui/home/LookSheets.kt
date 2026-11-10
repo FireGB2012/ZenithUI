@@ -70,6 +70,7 @@ import com.gabriel.zenithui.ui.common.unfoldIn
 import com.gabriel.zenithui.ui.common.unfoldOut
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.LocalZenithFont
+import com.gabriel.zenithui.ui.theme.inkOnTint
 import kotlinx.coroutines.launch
 
 /** One line to type in, ringed in the accent while it has the keyboard. */
@@ -259,7 +260,7 @@ fun LookRuleSheet(visible: Boolean, looks: List<Look>, onAdd: (LookRule) -> Unit
                 val fill by animateColorAsState(if (on) palette.accent else palette.onGlass.copy(alpha = 0.08f), tween(220), label = "ruleLook")
                 Text(
                     look.name,
-                    color = if (on) Color(0xFF0A0B12) else palette.onGlass,
+                    color = if (on) inkOnTint(palette.accent) else palette.onGlass,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Medium,
                     modifier = Modifier
@@ -292,7 +293,7 @@ fun LookRuleSheet(visible: Boolean, looks: List<Look>, onAdd: (LookRule) -> Unit
                         .clickable { days = if (on && days.size > 1) days - day else days + day },
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text(letter, color = if (on) Color(0xFF0A0B12) else palette.onGlass, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    Text(letter, color = if (on) inkOnTint(palette.accent) else palette.onGlass, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                 }
             }
         }

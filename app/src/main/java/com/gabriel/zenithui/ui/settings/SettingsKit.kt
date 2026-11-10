@@ -279,7 +279,7 @@ internal fun ActionRow(
 ) {
     val palette = LocalPalette.current
     val reduced = LocalMotionLevel.current.reduced
-    val tint by animateColorAsState(if (danger) Color(0xFFFF6B6B) else palette.onGlass, tween(200), label = "actionTint")
+    val tint by animateColorAsState(if (danger) palette.destructive else palette.onGlass, tween(200), label = "actionTint")
     val turned by animateFloatAsState(
         targetValue = 360f * spin,
         animationSpec = if (reduced) snap() else spring(dampingRatio = 0.62f, stiffness = 110f),
@@ -333,7 +333,8 @@ internal fun ActionRow(
             enter = if (reduced) fadeIn(tween(Motion.REDUCED_MS)) else fadeIn(tween(160)) + scaleIn(Motion.snappy(), initialScale = 0.5f),
             exit = fadeOut(tween(120)),
         ) {
-            Text(status.orEmpty(), color = palette.accent, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+            // A row's value in grey, as iOS shows one: it says how things stand, it is not a button.
+            Text(status.orEmpty(), color = palette.onGlassMuted, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
         }
     }
 }
@@ -378,9 +379,9 @@ internal fun ToggleRow(title: String, subtitle: String?, checked: Boolean, onCha
 }
 
 /**
- * The switch itself: the knob springs across and the track fills with the accent. While it is
- * [pressed] the knob spreads out towards the side it is about to go to, as something soft does
- * under a finger, and draws itself up again as it gets there.
+ * The switch itself: the knob springs across and the track fills with iOS's green, as an iPhone's
+ * switches do. While it is [pressed] the knob spreads out towards the side it is about to go to, as
+ * something soft does under a finger, and draws itself up again as it gets there.
  */
 @Composable
 internal fun Toggle(checked: Boolean, pressed: Boolean = false) {
@@ -391,7 +392,7 @@ internal fun Toggle(checked: Boolean, pressed: Boolean = false) {
         label = "toggle",
     )
     val spread by animateFloatAsState(if (pressed) 1f else 0f, spring(dampingRatio = 0.7f, stiffness = 600f), label = "toggleSpread")
-    val track = lerp(palette.onGlass.copy(alpha = 0.16f), palette.accent, progress.coerceIn(0f, 1f))
+    val track = lerp(palette.onGlass.copy(alpha = 0.16f), palette.switchOn, progress.coerceIn(0f, 1f))
     Box(
         Modifier
             .size(width = 50.dp, height = 30.dp)
@@ -746,7 +747,8 @@ internal fun Spot(id: String, content: @Composable ColumnScope.() -> Unit) {
 @OptIn(ExperimentalFoundationApi::class)
 internal fun Modifier.pulseWhen(active: Boolean): Modifier = composed {
     if (!active) return@composed this
-    val accent = LocalPalette.current.accent
+    // A flash of the words' ink, not of a colour: it only says "here".
+    val ink = LocalPalette.current.onGlass
     val glow = remember { Animatable(0f) }
     val place = remember { BringIntoViewRequester() }
     LaunchedEffect(Unit) {
@@ -760,6 +762,6 @@ internal fun Modifier.pulseWhen(active: Boolean): Modifier = composed {
     }
     bringIntoViewRequester(place).drawWithContent {
         drawContent()
-        if (glow.value > 0f) drawRect(accent, alpha = glow.value * 0.22f)
+        if (glow.value > 0f) drawRect(ink, alpha = glow.value * 0.22f)
     }
 }

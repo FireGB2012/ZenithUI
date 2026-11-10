@@ -39,9 +39,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
@@ -59,6 +57,7 @@ import com.gabriel.zenithui.ui.theme.STRETCH_THIN
 import com.gabriel.zenithui.ui.theme.ZenithShapes
 import com.gabriel.zenithui.ui.theme.dragStretch
 import com.gabriel.zenithui.ui.theme.glass
+import com.gabriel.zenithui.ui.theme.inkOnTint
 import com.gabriel.zenithui.ui.theme.pressSpring
 import com.gabriel.zenithui.ui.theme.pressTarget
 import com.gabriel.zenithui.ui.theme.snapSpring
@@ -118,8 +117,8 @@ fun Segmented(
             val thumb = remember { SegmentThumb(scope, itemPx * index, itemPx) }
             LaunchedEffect(index, itemPx) { thumb.goTo(index, itemPx, reduced) }
 
-            // Dark words on a light accent, white on a deep one: dark on violet was hard to read.
-            val activeInk = if (palette.accent.luminance() > 0.3f) Color(0xFF0A0B12) else Color.White
+            // The chosen word in white on the blue, the same ink every fill of the accent gets.
+            val activeInk = inkOnTint(palette.accent)
             val fill = palette.accent.copy(alpha = 0.9f)
 
             Box(

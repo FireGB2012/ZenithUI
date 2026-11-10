@@ -67,6 +67,7 @@ import com.gabriel.zenithui.ui.common.wordsChange
 import com.gabriel.zenithui.ui.settings.ToggleRow
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.LocalZenithFont
+import com.gabriel.zenithui.ui.theme.inkOnTint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -246,7 +247,7 @@ fun IconPickerSheet(
 private fun SourcePill(label: String, selected: Boolean, icon: androidx.compose.ui.graphics.vector.ImageVector? = null, onClick: () -> Unit) {
     val palette = LocalPalette.current
     val fill by animateColorAsState(if (selected) palette.accent else palette.onGlass.copy(alpha = 0.08f), tween(220), label = "pillFill")
-    val ink by animateColorAsState(if (selected) Color(0xFF0A0B12) else palette.onGlass, tween(220), label = "pillInk")
+    val ink by animateColorAsState(if (selected) inkOnTint(palette.accent) else palette.onGlass, tween(220), label = "pillInk")
     Row(
         Modifier
             .pressBounce(0.95f)

@@ -1,7 +1,5 @@
 package com.gabriel.zenithui.ui.theme
 
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
@@ -10,7 +8,6 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.State
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.staticCompositionLocalOf
@@ -34,7 +31,8 @@ import com.gabriel.zenithui.ui.common.LocalIconStyle
 import com.gabriel.zenithui.ui.common.LocalLabelStyle
 import com.gabriel.zenithui.ui.common.LocalPressStyle
 
-val LocalPalette = staticCompositionLocalOf { Palettes.Midnight }
+/** The colours everything is drawn in: Zenith's one look in Light or Dark, or a widget's own colour inside it. */
+val LocalPalette = staticCompositionLocalOf { NeutralLook.Dark }
 
 /**
  * The wallpaper frosted: what glass shows where there is no shader to draw it, and how anything
@@ -102,41 +100,28 @@ fun ZenithTheme(
     glassTuning: GlassTuning = GlassTuning(),
     content: @Composable () -> Unit,
 ) {
-    val base = Palettes.resolve(settings)
+    // One look, iOS's own, in Light or in Dark. The palette once chosen (paletteId) is still kept
+    // in the settings, so old settings, Looks and backups read, but nothing here reads it. With no
+    // palette to cross-fade, Light and Dark change at once, as an iPhone's do.
     val dark = settings.isDark(isSystemInDarkTheme())
-    // In the other tone a palette keeps its accents and gets a backdrop of its own (see toned).
-    val target = base.toned(dark)
+    val palette = NeutralLook.of(dark)
 
-    // Switching palette should look like the light changing, not like a page reload.
-    val spec = tween<Color>(durationMillis = 750)
-    val accent by animateColorAsState(target.accent, spec, label = "accent")
-    val accentAlt by animateColorAsState(target.accentAlt, spec, label = "accentAlt")
-    val glassTint by animateColorAsState(target.glassTint, spec, label = "glassTint")
-    val backdropTop by animateColorAsState(target.backdrop[0], spec, label = "backdropTop")
-    val backdropMid by animateColorAsState(target.backdrop.getOrElse(1) { target.backdrop[0] }, spec, label = "backdropMid")
-    val backdropEnd by animateColorAsState(target.backdrop.last(), spec, label = "backdropEnd")
-
-    val palette = target.copy(
-        accent = accent,
-        accentAlt = accentAlt,
-        glassTint = glassTint,
-        backdrop = listOf(backdropTop, backdropMid, backdropEnd),
-    )
-
+    // The blue for Material's own controls too (the date picker, the handles that select text),
+    // with white words on it.
     val scheme = if (palette.dark) {
         darkColorScheme(
             primary = palette.accent,
-            secondary = palette.accentAlt,
+            secondary = palette.accent,
             background = palette.backdrop.first(),
             surface = Color(0x1FFFFFFF),
-            onPrimary = Color(0xFF0B0B12),
+            onPrimary = Color.White,
             onBackground = Color.White,
             onSurface = Color.White,
         )
     } else {
         lightColorScheme(
             primary = palette.accent,
-            secondary = palette.accentAlt,
+            secondary = palette.accent,
             background = palette.backdrop.first(),
             surface = Color(0x33FFFFFF),
             onPrimary = Color.White,

@@ -238,7 +238,7 @@ fun ZenithApp(viewModel: ZenithViewModel) {
     // Light or dark exactly as ZenithTheme works it out, so the bar icons never disagree with the page.
     val lightBars = !settings.isDark(isSystemInDarkTheme())
     SideEffect {
-        // Until setup is done it owns the bar colours, since it previews palettes that are not saved yet.
+        // Until setup is done it owns the bar colours, since it previews a Light or Dark that is not saved yet.
         if (!settings.onboarded) return@SideEffect
         val window = (view.context as? Activity)?.window ?: return@SideEffect
         WindowCompat.getInsetsController(window, view).apply {

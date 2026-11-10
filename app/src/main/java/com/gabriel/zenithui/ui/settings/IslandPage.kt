@@ -74,6 +74,7 @@ import com.gabriel.zenithui.ui.common.rememberTick
 import com.gabriel.zenithui.ui.common.unfoldIn
 import com.gabriel.zenithui.ui.common.unfoldOut
 import com.gabriel.zenithui.ui.theme.LocalPalette
+import com.gabriel.zenithui.ui.theme.inkOnTint
 import kotlinx.coroutines.delay
 
 /**
@@ -354,7 +355,7 @@ private fun DemoChip(label: String, on: Boolean, onClick: () -> Unit) {
     val fill by animateColorAsState(if (on) palette.accent else palette.onGlass.copy(alpha = 0.08f), tween(220), label = "demoChip")
     Text(
         label,
-        color = if (on) Color(0xFF0A0B12) else palette.onGlass,
+        color = if (on) inkOnTint(palette.accent) else palette.onGlass,
         fontSize = 14.sp,
         fontWeight = FontWeight.Medium,
         modifier = Modifier

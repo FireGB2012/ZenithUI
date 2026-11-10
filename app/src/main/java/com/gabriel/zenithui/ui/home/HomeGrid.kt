@@ -1174,15 +1174,16 @@ private fun FolderInside(folder: FolderCell, appsByKey: Map<String, AppInfo>, ic
 }
 
 /**
- * [content] in a widget's own colour, [accent], or the theme's when it is 0. A change of colour is
- * eased in, and back out to the theme's, rather than switched. With no colour of its own a widget
- * wears the theme's palette itself, so it changes with the theme to the frame.
+ * [content] in a widget's own colour, [accent], or in the plain look when it is 0. A change of
+ * colour is eased in, and back out to the plain look, rather than switched. Its decoration follows
+ * through [com.gabriel.zenithui.ui.theme.ZenithPalette.decor]: in its own colour as far as that has
+ * eased in, and in the words' ink with none.
  */
 @Composable
 private fun InOwnColour(accent: Long, content: @Composable () -> Unit) {
     val palette = LocalPalette.current
     val ease = if (LocalMotionLevel.current.reduced) tween<Float>(Motion.REDUCED_MS) else tween(420)
-    // The colour it last had of its own: going back to the theme's fades out of it, not out of nothing.
+    // The colour it last had of its own: going back to the plain look fades out of it, not out of nothing.
     val lastOwn = remember { arrayOf(palette.accent) }
     if (accent != 0L) lastOwn[0] = Color(accent.toInt())
     val own by androidx.compose.animation.animateColorAsState(
@@ -1199,6 +1200,7 @@ private fun InOwnColour(accent: Long, content: @Composable () -> Unit) {
             accent = androidx.compose.ui.graphics.lerp(palette.accent, its.accent, mix),
             accentAlt = androidx.compose.ui.graphics.lerp(palette.accentAlt, its.accentAlt, mix),
             glassTint = androidx.compose.ui.graphics.lerp(palette.glassTint, its.glassTint, mix),
+            ownColour = mix,
         )
     }
     CompositionLocalProvider(LocalPalette provides wearing, content = content)
@@ -1814,10 +1816,11 @@ fun DragGhost(
                 Modifier
                     .size(24.dp)
                     .clip(androidx.compose.foundation.shape.CircleShape)
-                    .background(palette.accent),
+                    // A count on a corner is a badge, and badges are iOS's red with white in them.
+                    .background(palette.destructive),
                 contentAlignment = Alignment.Center,
             ) {
-                Text("$shown", color = Color(0xFF0A0B12), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Text("$shown", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
             }
         }
     }

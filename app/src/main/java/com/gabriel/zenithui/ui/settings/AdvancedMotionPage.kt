@@ -65,6 +65,7 @@ import com.gabriel.zenithui.ui.common.unfoldIn
 import com.gabriel.zenithui.ui.common.unfoldOut
 import com.gabriel.zenithui.ui.home.springOf
 import com.gabriel.zenithui.ui.theme.LocalPalette
+import com.gabriel.zenithui.ui.theme.inkOnTint
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -187,7 +188,7 @@ private fun StyleChip(label: String, selected: Boolean, onClick: () -> Unit) {
     val fill by animateColorAsState(if (selected) palette.accent.copy(alpha = 0.9f) else Color.Transparent, tween(220), label = "styleFill")
     val rim by animateColorAsState(palette.onGlass.copy(alpha = if (selected) 0f else 0.18f), tween(220), label = "styleRim")
     val ink by animateColorAsState(
-        if (selected) (if (palette.dark) Color(0xFF0A0B12) else Color.White) else palette.onGlass,
+        if (selected) inkOnTint(palette.accent) else palette.onGlass,
         tween(220),
         label = "styleInk",
     )

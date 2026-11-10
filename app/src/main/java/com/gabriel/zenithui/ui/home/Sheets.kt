@@ -153,6 +153,11 @@ fun ZenithSheet(
     title: String? = null,
     /** How much of the screen the sheet may take. Settings, with its pages, gets more. */
     maxHeightFraction: Float = 0.72f,
+    /**
+     * False for a question that needs an answer: pulled down and let go, however far or fast, it
+     * springs back to its place, and a tap beside it does nothing.
+     */
+    dismissible: Boolean = true,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val palette = LocalPalette.current
@@ -160,6 +165,8 @@ fun ZenithSheet(
     val maxHeight = LocalConfiguration.current.screenHeightDp.dp * maxHeightFraction
     val scope = rememberCoroutineScope()
     val dismiss by rememberUpdatedState(onDismiss)
+    // Read when a finger lets go, which the scrolling inside can report long after this was composed.
+    val mayDismiss by rememberUpdatedState(dismissible)
     val give = with(LocalDensity.current) { SHEET_GIVE.toPx() }
 
     // Closed to begin with, even when it is first shown already open: a sheet is opened by being
@@ -192,7 +199,7 @@ fun ZenithSheet(
             // Handed from the finger to the spring between two frames, at the same spot.
             settling.snapTo(from)
             held = false
-            if (SheetPull.dismisses(from, height, velocity)) {
+            if (mayDismiss && SheetPull.dismisses(from, height, velocity)) {
                 // Closed from the moment it is thrown, so nothing unseen is left in the way of
                 // the next touch; it carries on down at the speed it was thrown at as it goes.
                 dismiss()
@@ -258,7 +265,8 @@ fun ZenithSheet(
                     // It clears as the sheet is pulled away, so nothing is left dimmed behind a
                     // sheet that has already gone.
                     .drawBehind { drawRect(Color.Black, alpha = 0.35f * (1f - (down() / height).coerceIn(0f, 1f))) }
-                    .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) { onDismiss() },
+                    // Still catches the tap when the sheet may not be put away, so nothing behind it gets it.
+                    .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) { if (dismissible) onDismiss() },
             )
         }
 

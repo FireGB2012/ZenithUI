@@ -204,6 +204,12 @@ private val BAR_ROOM = 28.dp
 /** How long the home screen must be left alone before a scheduled Look goes on. */
 private const val LOOK_DUE_WAIT_MS = 1500L
 
+/**
+ * How long the home screen must be at rest before the new look is offered: well past the icons'
+ * arrival, so the question comes up over a page that has settled.
+ */
+private const val NEW_LOOK_WAIT_MS = 1200L
+
 private sealed interface HomeSheet {
     data class Item(val id: String) : HomeSheet
     data class DrawerApp(val key: String) : HomeSheet
@@ -558,15 +564,35 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             }
         }
     }
+    // A phone that had Zenith before the new look is asked once whether to take it (NewLook.due),
+    // over the home screen at rest with nothing open on it, so the question is not lost among
+    // icons still arriving. Once it is up it stays until it is answered: meanwhile nothing else on
+    // the home screen answers a touch or Back, and the home button runs no gesture, only bringing
+    // the first page round under it. Read through a state, since the two-finger gestures and the
+    // home button read it long after it was composed.
+    var newLookReady by remember { mutableStateOf(false) }
+    val askingNewLook by androidx.compose.runtime.rememberUpdatedState(newLookReady && NewLook.due(settings))
     // A Look the schedule has due waits for a moment with nothing under the finger and nothing
     // open over the home screen, and then goes on as one put on by hand does.
     val lookDue by viewModel.lookDue.collectAsState()
     val idle = !dragging && drag.item == null && !sheetVisible && !settingsOpen && !widgetsOpen &&
-        drawerProgress < 0.002f && folderUp == null && card == null && resizingId == null && !ambient && !overview
+        drawerProgress < 0.002f && folderUp == null && card == null && resizingId == null && !ambient && !overview &&
+        !askingNewLook
     LaunchedEffect(lookDue, idle) {
         if (lookDue != null && idle) {
             delay(LOOK_DUE_WAIT_MS)
             viewModel.applyDueLook()
+        }
+    }
+    // Answered either way, it is not due any more, and the next time it is (a backup from before
+    // the new look, restored) it waits for the home screen to be at rest again.
+    val newLookDue = NewLook.due(settings)
+    LaunchedEffect(newLookDue, idle) {
+        if (!newLookDue) {
+            newLookReady = false
+        } else if (idle) {
+            delay(NEW_LOOK_WAIT_MS)
+            newLookReady = true
         }
     }
     // The drawer is put together a moment after the home screen has arrived, out of sight, rather
@@ -1335,7 +1361,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             val again = viewModel.homeAgain.value != seenAgain[0]
             seenAgain[0] = viewModel.homeAgain.value
             val busy = (card != null && cardOpening) || sheetVisible || settingsOpen || widgetsOpen ||
-                folderUp != null || drawer.value > 0.02f || resizingId != null || ambient
+                folderUp != null || drawer.value > 0.02f || resizingId != null || ambient || askingNewLook
             val action = Gestures.actionFor(Gestures.HOME, viewModel.settings.value.gestures)
             // Home while an app is still opening sends it straight back into its icon.
             if (card != null && cardOpening) closeCard()
@@ -1473,7 +1499,8 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                         // an app on its way open, what it opens would be under those, and Back
                         // would go to them first.
                         val idle = !fired && !drag.isDragging && !settingsOpen && !widgetsOpen &&
-                            !sheetVisible && folderUp == null && card == null && !dragging && drawer.value < 0.02f
+                            !sheetVisible && folderUp == null && card == null && !dragging && drawer.value < 0.02f &&
+                            !askingNewLook
                         if (!idle) continue
                         val travel = centre - startCentre
                         val gesture = when {
@@ -2616,6 +2643,20 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 null -> Unit
             }
         }
+
+        // ------------------------------------------------------------ the new look
+        // Over everything else, since it has to be answered first. Either answer means it is not
+        // due any more, which is what takes it away.
+        NewLookSheet(
+            visible = askingNewLook,
+            settings = settings,
+            // As Customise's "Use the new look": the grid is worked out for this screen and the
+            // home screen settled into it, as for any grid.
+            onSwitch = { viewModel.updateSettings { NewLook.apply(it) } },
+            onKeep = { viewModel.updateSettings { it.copy(newLookAsked = true) } },
+            home = homePreview,
+            free = settings.freeform && plus.active,
+        )
     }
     }
 }

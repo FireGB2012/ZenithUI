@@ -84,6 +84,7 @@ import androidx.compose.material3.LocalTextStyle
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Immutable
@@ -99,6 +100,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.graphics.graphicsLayer
 import com.gabriel.zenithui.ui.common.LocalMotionLevel
 import androidx.compose.ui.focus.onFocusChanged
@@ -108,12 +110,17 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.isSpecified
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.layout
@@ -131,9 +138,11 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.gabriel.zenithui.data.HomeGeometry
 import com.gabriel.zenithui.data.ToggleGrid
 import com.gabriel.zenithui.data.ToggleNames
 import com.gabriel.zenithui.data.WidgetForm
+import com.gabriel.zenithui.data.WidgetLooks
 import com.gabriel.zenithui.data.Widgets
 import com.gabriel.zenithui.ui.common.labelShadow
 import com.gabriel.zenithui.ui.common.pressBounce
@@ -146,8 +155,11 @@ import com.gabriel.zenithui.ui.theme.glassPress
 import com.gabriel.zenithui.ui.theme.LocalNumberFont
 import com.gabriel.zenithui.ui.theme.LocalOnWallpaper
 import com.gabriel.zenithui.ui.theme.LocalPalette
+import com.gabriel.zenithui.ui.theme.LocalWidgetLook
 import com.gabriel.zenithui.ui.theme.LocalZenithFont
+import com.gabriel.zenithui.ui.theme.WALLPAPER_VEIL
 import com.gabriel.zenithui.ui.theme.ZenithShapes
+import com.gabriel.zenithui.ui.theme.addOutline
 import com.gabriel.zenithui.ui.theme.glass
 import com.gabriel.zenithui.ui.theme.glassInk
 import com.gabriel.zenithui.ui.theme.inkOnTint
@@ -169,6 +181,34 @@ private fun formOf(width: Dp, height: Dp): WidgetForm = WidgetForm.of(width.valu
  * its words white with a soft shadow, and its big numbers, rings and icons made of glass.
  */
 internal val LocalBare = staticCompositionLocalOf { false }
+
+/**
+ * The corners of every widget on the home screen, whatever its size: Zenith's own in either look,
+ * and other apps' too. See [HomeGeometry.WIDGET_CORNER_DP].
+ */
+internal val WidgetShape = RoundedCornerShape(HomeGeometry.WIDGET_CORNER_DP.dp)
+
+/**
+ * A widget's own colour as InOwnColour eases it in and out: [colour], and how far it has come in,
+ * [mix], from 0 for none to 1. The colour look fills its card with it; the glass look tints its pane.
+ */
+@Immutable
+internal data class OwnColour(val colour: Color, val mix: Float) {
+    /** Whether any of a colour has come in yet. */
+    val shows: Boolean get() = mix > 0f && colour.isSpecified
+
+    companion object {
+        val None = OwnColour(Color.Unspecified, 0f)
+    }
+}
+
+internal val LocalOwnColour = compositionLocalOf { OwnColour.None }
+
+/**
+ * The card of the colour widget being drawn, or null for one on glass or straight on the wallpaper:
+ * its second lines are the card's own quiet shade ([quiet]), worked out to read on it.
+ */
+internal val LocalWidgetFill = staticCompositionLocalOf<WidgetFill?> { null }
 
 /** Renders one of Zenith's built-in widgets into whatever space the grid gave it. */
 @Composable
@@ -215,15 +255,135 @@ fun ZenithWidget(
         return
     }
 
+    // One switch for every one of Zenith's widgets: a card in colours of its own, as iOS's widgets
+    // are, or a pane of the wallpaper's glass. A colour somebody chose is the card in the one and
+    // tints the pane in the other.
+    val own = LocalOwnColour.current
+    if (LocalWidgetLook.current == WidgetLooks.COLOUR) {
+        val fill = rememberFill(kind, own)
+        BoxWithConstraints(modifier.colourCard(fill)) {
+            WordsOnCard(fill) {
+                WidgetBody(kind, formOf(maxWidth, maxHeight), maxWidth, maxHeight, userName, note, onNoteChange, toggles)
+            }
+        }
+        return
+    }
+
+    // A widget with a colour of its own is on a home page, whose glass has the wallpaper's grey veil,
+    // so its colour comes in from that grey and goes back to it.
+    val tint = if (own.shows) lerp(WALLPAPER_VEIL, own.colour, own.mix.coerceAtMost(1f)) else Color.Unspecified
     BoxWithConstraints(
         modifier
-            .glass(ZenithShapes.card, strength = 1f, interactive = true)
-            .clip(ZenithShapes.card)
+            .glass(WidgetShape, tint = tint, strength = 1f, interactive = true)
+            .clip(WidgetShape)
     ) {
         WordsOnWallpaper {
             WidgetBody(kind, formOf(maxWidth, maxHeight), maxWidth, maxHeight, userName, note, onNoteChange, toggles)
         }
     }
+}
+
+/**
+ * The card a widget of [kind] wears in the colour look, in Light or Dark as the page is: its kind's
+ * own colours, the weather's sky as it is now, and a colour of its own eased in over them.
+ */
+@Composable
+private fun rememberFill(kind: String, own: OwnColour): WidgetFill {
+    val dark = LocalPalette.current.dark
+    val sky = if (kind == Widgets.Weather.type) skyNow() else Sky.Day
+    return remember(kind, dark, sky, own) {
+        val plain = WidgetColours.of(kind, dark, sky)
+        if (!own.shows) plain else plain.towards(WidgetColours.of(kind, dark, sky, own.colour), own.mix.coerceAtMost(1f))
+    }
+}
+
+/**
+ * Part of the way from this card to [other]: its colours blend, and its words are the nearer card's,
+ * so they are always one of the two inks a palette carries, and change over halfway.
+ */
+private fun WidgetFill.towards(other: WidgetFill, fraction: Float): WidgetFill {
+    val words = if (fraction < 0.5f) this else other
+    return words.copy(top = lerp(top, other.top, fraction), bottom = lerp(bottom, other.bottom, fraction))
+}
+
+/**
+ * The sky over the weather widget's place, for its card in the colour look: the forecast's, read as
+ * WeatherWidget reads it, or a clear day until there is a forecast for the place chosen.
+ */
+@Composable
+private fun skyNow(): Sky {
+    val world = LocalWidgetWorld.current ?: return Sky.Day
+    val settings = world.settings
+    val forecast = world.forecast
+        ?.takeIf { it.isFor(settings.weatherPlace, settings.weatherLat, settings.weatherLon, settings.weatherUnits) }
+        ?: return Sky.Day
+    return WidgetColours.skyFor(forecast.code, forecast.day)
+}
+
+/**
+ * A colour widget's card: [fill]'s colours from top to foot, standing on a soft shadow, with what is
+ * drawn on it kept inside its corners.
+ */
+private fun Modifier.colourCard(fill: WidgetFill): Modifier = this
+    .cardShadow(WidgetShape)
+    .background(
+        if (fill.top == fill.bottom) SolidColor(fill.top) else Brush.verticalGradient(listOf(fill.top, fill.bottom)),
+        WidgetShape,
+    )
+    .clip(WidgetShape)
+
+/**
+ * The soft shadow a colour widget stands on, in two parts as a pane of glass's is: a wide, faint one
+ * that lifts it off the wallpaper, and a close one under its edge that says it is solid. It is the
+ * same in Light and in Dark, as the wallpaper it falls on is.
+ */
+private fun Modifier.cardShadow(shape: Shape): Modifier = drawWithCache {
+    val outline = shape.createOutline(size, layoutDirection, this)
+    val path = android.graphics.Path().apply { addOutline(outline) }
+    fun layer(blur: Dp, fall: Dp, alpha: Float) = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+        color = android.graphics.Color.BLACK
+        setShadowLayer(blur.toPx(), CARD_SHADOW_FALL.x * fall.toPx(), CARD_SHADOW_FALL.y * fall.toPx(), Color.Black.copy(alpha = alpha).toArgb())
+    }
+    val shadows = listOf(layer(18.dp, 7.dp, 0.16f), layer(3.dp, 1.5.dp, 0.14f))
+    onDrawBehind {
+        drawIntoCanvas {
+            val canvas = it.nativeCanvas
+            canvas.save()
+            // Only the shadow is wanted: the card is drawn over where the path itself would be.
+            canvas.clipOutPath(path)
+            for (paint in shadows) canvas.drawPath(path, paint)
+            canvas.restore()
+        }
+    }
+}
+
+/** Which way a card's shadow falls: down and a little to the right, as glass's shadows fall from the light. */
+private val CARD_SHADOW_FALL = Offset(0.41f, 0.91f)
+
+/**
+ * Words on a colour widget's card: in the card's ink and its quiet shade, with its accent for what can
+ * be pressed. Its decoration is in the ink too, as the card itself wears the colour, and nothing on it
+ * stands on the wallpaper, so its words need no shadow.
+ */
+@Composable
+private fun WordsOnCard(fill: WidgetFill, content: @Composable () -> Unit) {
+    val palette = LocalPalette.current
+    val onCard = remember(palette, fill) {
+        palette.copy(
+            // A palette's words are white when it is dark and Zenith's near-black when it is light,
+            // and a card's ink is always one of the two.
+            dark = fill.ink.luminance() > 0.5f,
+            accent = fill.accent,
+            accentAlt = fill.accent,
+            ownColour = 0f,
+        )
+    }
+    CompositionLocalProvider(
+        LocalPalette provides onCard,
+        LocalWidgetFill provides fill,
+        LocalOnWallpaper provides false,
+        content = content,
+    )
 }
 
 /**
@@ -304,10 +464,12 @@ internal fun tight(size: TextUnit, weight: FontWeight = FontWeight.Light, keepWe
 /**
  * The colour of a widget's second line: the date under the time, "On battery", "25 days left".
  * Stronger than the muted grey a page uses, because a widget is read at a glance and over a
- * wallpaper, and stronger still with no pane behind it.
+ * wallpaper, and stronger still with no pane behind it. On a colour widget's card it is the card's
+ * own quiet shade, as strong as that card needs it to be to read.
  */
 @Composable
-internal fun quiet(): Color = LocalPalette.current.onGlass.copy(alpha = if (LocalBare.current) 0.94f else 0.82f)
+internal fun quiet(): Color =
+    LocalWidgetFill.current?.quiet ?: LocalPalette.current.onGlass.copy(alpha = if (LocalBare.current) 0.94f else 0.82f)
 
 /**
  * The ink of a widget's headings: the words' own ink, as on an iPhone, or the widget's own colour

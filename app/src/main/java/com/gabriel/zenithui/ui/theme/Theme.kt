@@ -25,6 +25,7 @@ import com.gabriel.zenithui.data.GlassLevels
 import com.gabriel.zenithui.data.GlassTuning
 import com.gabriel.zenithui.data.IconStyles
 import com.gabriel.zenithui.data.LabelSizes
+import com.gabriel.zenithui.data.WidgetLooks
 import com.gabriel.zenithui.data.ZenithSettings
 import com.gabriel.zenithui.ui.common.LabelStyle
 import com.gabriel.zenithui.ui.common.LocalIconStyle
@@ -54,6 +55,12 @@ val LocalGlassStrength = staticCompositionLocalOf { 0.8f }
 
 /** How much body every pane has: whether it is lifted off a wallpaper of its own tone. */
 val LocalGlassBody = staticCompositionLocalOf { GlassBody.Clear }
+
+/**
+ * How Zenith's own widgets are drawn, colour or glass ([WidgetLooks]): one switch for every one of
+ * them. Glass when nothing says otherwise, as the widgets were before there was a choice.
+ */
+val LocalWidgetLook = staticCompositionLocalOf { WidgetLooks.GLASS }
 
 private val ZenithTypography = Typography(
     displayLarge = TextStyle(fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.Light, fontSize = 64.sp, letterSpacing = (-2).sp),
@@ -145,6 +152,7 @@ fun ZenithTheme(
         LocalScreenSize provides screenSize,
         LocalGlassStrength provides settings.glass,
         LocalGlassBody provides GlassBody.byId(settings.glassBody),
+        LocalWidgetLook provides WidgetLooks.of(settings.widgetLook),
         LocalIconStyle provides IconStyles.of(settings.iconStyle),
         LocalLabelStyle provides LabelStyle(LabelSizes.sp(settings.labelSize).sp, settings.labelShadow),
         LocalZenithFont provides font.family,

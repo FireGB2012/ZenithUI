@@ -25,8 +25,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -47,13 +45,10 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.gabriel.zenithui.R
-import com.gabriel.zenithui.data.DayParts
 import com.gabriel.zenithui.data.GlassTuning
-import com.gabriel.zenithui.data.LookSchedule
 import com.gabriel.zenithui.ui.common.GlassButton
 import com.gabriel.zenithui.ui.common.LocalMotionLevel
 import com.gabriel.zenithui.ui.common.SectionLabel
@@ -68,7 +63,6 @@ import com.gabriel.zenithui.ui.settings.PillSlider
 import com.gabriel.zenithui.ui.settings.ToggleRow
 import com.gabriel.zenithui.ui.theme.GlassMaterial
 import com.gabriel.zenithui.ui.theme.LocalPalette
-import com.gabriel.zenithui.ui.theme.ZenithPalette
 import com.gabriel.zenithui.ui.theme.glass
 import com.gabriel.zenithui.ui.theme.lightFrom
 import kotlin.math.atan2
@@ -206,58 +200,6 @@ private fun LightDial(angle: Float, onChange: (Float) -> Unit) {
         )
         drawCircle(palette.accent.copy(alpha = 0.35f), radius = 11.dp.toPx(), center = dot)
         drawCircle(palette.accent, radius = 6.dp.toPx(), center = dot)
-    }
-}
-
-/**
- * A palette for each part of the day (Zenith Plus): for each, the palettes to choose from in a
- * row, None first. A part with none leaves the palette as it is.
- */
-@Composable
-fun DayPaletteSheet(
-    visible: Boolean,
-    options: List<ZenithPalette>,
-    chosen: Map<String, String>,
-    onChange: (Map<String, String>) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    val palette = LocalPalette.current
-    ZenithSheet(visible = visible, onDismiss = onDismiss, title = "By time of day", maxHeightFraction = 0.86f) {
-        Text(
-            "As each part of the day begins, its palette comes on. One you choose by hand stays until the next part.",
-            color = palette.onGlassMuted,
-            fontSize = 13.sp,
-            modifier = Modifier.padding(horizontal = 4.dp),
-        )
-        Spacer(Modifier.height(12.dp))
-        Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
-            DayParts.all.forEachIndexed { index, part ->
-                Column(Modifier.padding(vertical = 8.dp).appearIn(delayMillis = staggerDelay(index), riseFrom = 14f)) {
-                    Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.padding(start = 6.dp, bottom = 8.dp)) {
-                        Text(part.label, color = palette.onGlass, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            "${LookSchedule.clock(part.start)}–${LookSchedule.clock(DayParts.until(part))}",
-                            color = palette.onGlassMuted,
-                            fontSize = 12.sp,
-                        )
-                    }
-                    val current = chosen[part.id]
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        item(key = "none") {
-                            Swatch(label = "None", colours = null, selected = current == null) { onChange(chosen - part.id) }
-                        }
-                        items(options, key = { it.id }) { option ->
-                            Swatch(label = option.name, colours = listOf(option.accent, option.accentAlt), selected = current == option.id) {
-                                onChange(chosen + (part.id to option.id))
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        Spacer(Modifier.height(10.dp))
-        GlassButton(text = "Turn it off", enabled = chosen.isNotEmpty(), onClick = { onChange(emptyMap()) }, modifier = Modifier.fillMaxWidth())
     }
 }
 

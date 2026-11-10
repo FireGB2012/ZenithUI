@@ -83,7 +83,7 @@ private fun QuickTip(icon: ImageVector, lead: String, rest: String, order: Int, 
                 .glass(CircleShape, strength = 0.9f),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(icon, contentDescription = null, tint = palette.accent, modifier = Modifier.size(20.dp))
+            Icon(icon, contentDescription = null, tint = palette.onGlass, modifier = Modifier.size(20.dp))
         }
         Spacer(Modifier.width(14.dp))
         Text(
@@ -109,7 +109,7 @@ private val TIPS = listOf(
     Tip(Icons.Rounded.Dashboard, "Add more any time", "Long press an empty spot for wallpaper, widgets and settings."),
     Tip(Icons.Rounded.Gesture, "Gestures your way", "Swipe down for notifications and pinch in for Customise. Double tap, two fingers, pinch out and the home button can do what you like, under Settings → Gestures."),
     Tip(Icons.Rounded.Edit, "Any app, any name", "Long press an app and tap Edit for a name, an icon from an icon pack or a photo of your own. Its shortcuts are at the top of the same menu."),
-    Tip(Icons.Rounded.Tune, "Make it yours", "Palette, glass, grid size, icon shape, icon style and icon packs all live in Zenith settings."),
+    Tip(Icons.Rounded.Tune, "Make it yours", "Light or dark, glass, grid size, icon shape, icon style and icon packs all live in Zenith settings."),
 )
 
 /** Every gesture, for the How it works sheet. */
@@ -137,7 +137,7 @@ private fun TipCard(tip: Tip, delayMillis: Int) {
                 .glass(ZenithShapes.tile, strength = 1.1f),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(tip.icon, contentDescription = null, tint = palette.accent, modifier = Modifier.size(20.dp))
+            Icon(tip.icon, contentDescription = null, tint = palette.onGlass, modifier = Modifier.size(20.dp))
         }
         Spacer(Modifier.size(14.dp))
         Column(Modifier.weight(1f)) {

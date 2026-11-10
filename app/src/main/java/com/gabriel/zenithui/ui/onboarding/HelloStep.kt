@@ -36,7 +36,6 @@ import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.TileMode
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -68,19 +67,17 @@ fun greetingFor(index: Int, name: String): String {
     return if (first.isEmpty()) "$word!" else "$word, $first!"
 }
 
-/** The colours that flow through the greeting: the accents lifted towards white, or deepened on a light palette. */
+/**
+ * The colours that flow through the greeting: the words' own ink, all three, so the greeting is
+ * in plain words, as an iPhone's is. Kept as a list so the flow through the letters stays as it is.
+ */
 @Composable
 fun greetingColours(): List<Color> {
     val palette = LocalPalette.current
-    return if (palette.dark) {
-        listOf(lerp(palette.accent, Color.White, 0.25f), lerp(palette.accentAlt, Color.White, 0.25f), Color.White)
-    } else {
-        val ink = palette.onGlass
-        listOf(lerp(palette.accent, ink, 0.3f), lerp(palette.accentAlt, ink, 0.3f), ink)
-    }
+    return List(3) { palette.onGlass }
 }
 
-/** A line in the greeting's colours, held still. Used to say hello again on the name screen. */
+/** A line in the greeting's colour, held still. Used to say hello again on the name screen. */
 @Composable
 fun GreetingLine(text: String, modifier: Modifier = Modifier) {
     val colours = greetingColours()
@@ -113,9 +110,9 @@ private const val SMALLEST_WORD_SP = 36
 private val WORD_PADDING = 16.dp
 
 /**
- * The first thing you see: "hey there", written large in flowing colour, cycling through other
- * languages while the light rises behind it. Nothing to fill in; the button arrives after a beat,
- * and a tap anywhere brings it sooner. Tapping the word itself moves on to the next one.
+ * The first thing you see: "hey there", written large, cycling through other languages while the
+ * light rises behind it. Nothing to fill in; the button arrives after a beat, and a tap anywhere
+ * brings it sooner. Tapping the word itself moves on to the next one.
  */
 @Composable
 fun HelloStep(

@@ -2,7 +2,6 @@ package com.gabriel.zenithui.ui.onboarding
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
-import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -10,11 +9,8 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.background
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -22,33 +18,17 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.selection.selectableGroup
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -57,10 +37,7 @@ import com.gabriel.zenithui.data.AppInfo
 import com.gabriel.zenithui.data.GridDensity
 import com.gabriel.zenithui.data.HomeItem
 import com.gabriel.zenithui.data.ZenithSettings
-import com.gabriel.zenithui.ui.common.pressBounce
 import com.gabriel.zenithui.ui.theme.LocalPalette
-import com.gabriel.zenithui.ui.theme.Palettes
-import com.gabriel.zenithui.ui.theme.ZenithPalette
 
 /** The widgets on offer, in the order they are worth trying, with short everyday names. */
 private val WIDGET_CHOICES = listOf(
@@ -81,9 +58,9 @@ private class Spot {
 }
 
 /**
- * Everything from picking a colour to the last tips happens on one stage with your phone in the
- * middle of it. Only the words above and the controls below change; the phone stays put, updates
- * as you go, and grows into any space the controls give up.
+ * Everything from choosing light or dark to the last tips happens on one stage with your phone in
+ * the middle of it. Only the words above and the controls below change; the phone stays put,
+ * updates as you go, and grows into any space the controls give up.
  *
  * [chrome] fades the words and controls away for the hand-off, leaving the phone alone on screen.
  */
@@ -104,7 +81,6 @@ fun StudioStep(
     density: GridDensity,
     playIntro: Boolean,
     deviceCorner: Dp,
-    onPalette: (String, Offset) -> Unit,
     onAppearance: (String, Offset) -> Unit,
     onToggleWidget: (String) -> Unit,
     onDensity: (GridDensity) -> Unit,
@@ -137,7 +113,7 @@ fun StudioStep(
             when (key) {
                 Steps.LOOK -> ScreenTitle(
                     eyebrow = if (first.isEmpty()) "Your look" else "Nice to meet you, $first",
-                    headline = "Pick a colour.",
+                    headline = "Light or dark?",
                     lede = null,
                     play = playIntro,
                 )
@@ -208,9 +184,7 @@ fun StudioStep(
         ) { current ->
             when (current) {
                 Steps.LOOK -> LookControls(
-                    paletteId = settings.paletteId,
                     appearance = settings.appearance,
-                    onPalette = onPalette,
                     onAppearance = onAppearance,
                 )
 
@@ -235,14 +209,15 @@ fun StudioStep(
 private const val DONE = 100
 private const val NO_CONTROLS = -1
 
+/**
+ * Light or dark, the step's one choice: Zenith has one look, so there is no colour to pick. The
+ * tap tells the backdrop where to start its ring of light.
+ */
 @Composable
 private fun LookControls(
-    paletteId: String,
     appearance: String,
-    onPalette: (String, Offset) -> Unit,
     onAppearance: (String, Offset) -> Unit,
 ) {
-    val palette = LocalPalette.current
     val segment = remember { Spot() }
     Column(
         Modifier
@@ -250,55 +225,6 @@ private fun LookControls(
             .padding(bottom = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        // Full size wherever six fit in a row; on a very narrow screen they shrink together
-        // rather than the last one being squashed into an oval.
-        BoxWithConstraints(
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            val gap = 6.dp
-            val count = Palettes.all.size
-            val swatch = minOf(52.dp, (maxWidth - gap * (count - 1)) / count)
-            Row(
-                Modifier.selectableGroup(),
-                horizontalArrangement = Arrangement.spacedBy(gap),
-            ) {
-                Palettes.all.forEach { option ->
-                    Swatch(
-                        option = option,
-                        selected = option.id == paletteId,
-                        size = swatch,
-                        onPick = { origin -> onPalette(option.id, origin) },
-                    )
-                }
-            }
-        }
-        Spacer(Modifier.height(10.dp))
-        AnimatedContent(
-            targetState = paletteId,
-            // Every caption gets the full width, centred, so a longer one never slides or clips.
-            modifier = Modifier.fillMaxWidth(),
-            contentAlignment = Alignment.Center,
-            transitionSpec = { fadeIn(tween(200)).togetherWith(fadeOut(tween(200))).using(SizeTransform(clip = false)) },
-            label = "paletteCaption",
-        ) { id ->
-            val picked = Palettes.byId(id)
-            Text(
-                text = buildAnnotatedString {
-                    withStyle(SpanStyle(color = palette.onGlass, fontWeight = FontWeight.SemiBold)) { append(picked.name) }
-                    withStyle(SpanStyle(color = palette.onGlassMuted)) { append("  ·  ${picked.tagline}") }
-                },
-                fontSize = 13.sp,
-                lineHeight = 18.sp,
-                textAlign = TextAlign.Center,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp),
-            )
-        }
-        Spacer(Modifier.height(16.dp))
         Box(
             Modifier
                 .padding(horizontal = 24.dp)
@@ -310,52 +236,6 @@ private fun LookControls(
                 onSelect = { onAppearance(it, segment.centre) },
             )
         }
-    }
-}
-
-/**
- * One colour to pick: a round swatch of the palette's two accents, ringed when chosen. The ring
- * pops in with a little overshoot, and the tap tells the backdrop where to start its colour wave.
- */
-@Composable
-private fun Swatch(option: ZenithPalette, selected: Boolean, size: Dp, onPick: (Offset) -> Unit) {
-    val palette = LocalPalette.current
-    val ringColour = palette.onGlass
-    val ring = remember { Animatable(if (selected) 1f else 0f) }
-    LaunchedEffect(selected) {
-        ring.animateTo(if (selected) 1f else 0f, spring(dampingRatio = 0.6f, stiffness = 500f))
-    }
-    val spot = remember { Spot() }
-    Box(
-        Modifier
-            .size(size)
-            .onGloballyPositioned { spot.centre = it.boundsInRoot().center }
-            .pressBounce(0.92f)
-            // No ripple: the squeeze is the feedback, and a square ripple would fight the circle.
-            .selectable(
-                selected = selected,
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                role = Role.RadioButton,
-                onClick = { onPick(spot.centre) },
-            )
-            .semantics { contentDescription = option.name }
-            .drawBehind {
-                val r = ring.value
-                if (r > 0.01f) {
-                    // Swatch, a small gap, then a 2dp ring centred on the target's edge.
-                    val radius = (size / 2).toPx() * (0.85f + 0.15f * r)
-                    drawCircle(ringColour, radius = radius, style = Stroke(2.dp.toPx()), alpha = r.coerceIn(0f, 1f))
-                }
-            },
-        contentAlignment = Alignment.Center,
-    ) {
-        Box(
-            Modifier
-                .size(size * (44f / 52f))
-                .clip(CircleShape)
-                .background(Brush.linearGradient(listOf(option.accent, option.accentAlt)))
-        )
     }
 }
 

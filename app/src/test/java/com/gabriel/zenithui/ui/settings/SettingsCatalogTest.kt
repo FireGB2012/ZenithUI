@@ -54,8 +54,6 @@ class SettingsCatalogTest {
     fun `an option is found by other words for it`() {
         assertEquals("appearance", found("dark").first())
         assertEquals("appearance", found("night").first())
-        assertTrue("palette" in found("color"))
-        assertTrue("palette" in found("colour"))
         assertEquals("haptics", found("vibrate").first())
         assertEquals("keepLoaded", found("battery").first())
         assertEquals("reset", found("start over").first())

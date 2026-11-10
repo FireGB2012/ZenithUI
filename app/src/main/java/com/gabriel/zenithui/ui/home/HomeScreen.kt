@@ -223,8 +223,6 @@ private sealed interface HomeSheet {
     data class LookCode(val code: String) : HomeSheet
     /** The glass made your own. */
     data object GlassStudio : HomeSheet
-    /** A palette for each part of the day. */
-    data object DayPalettes : HomeSheet
     /** One of Zenith's widgets in a colour of its own. */
     data class WidgetColour(val id: String) : HomeSheet
     /** The fonts Zenith carries, and their licence. */
@@ -2089,7 +2087,6 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     openFeatured = { shared -> showSheet(HomeSheet.LookCode(shared.shown)) },
                 ),
                 glassStudio = { withPlus { showSheet(HomeSheet.GlassStudio) } },
-                dayPalettes = { withPlus { showSheet(HomeSheet.DayPalettes) } },
                 fontLicences = { showSheet(HomeSheet.FontLicences) },
                 // A build with no server has no account, and nothing of one is shown.
                 account = if (!ServerConfig.enabled) null else AccountActions(
@@ -2551,27 +2548,6 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     onChange = viewModel::setGlassTuning,
                     onDismiss = { hideSheet() },
                 )
-
-                HomeSheet.DayPalettes -> {
-                    // The palettes this phone can use, as on the Theme page, and yours once you have made it.
-                    val options = remember(settings.unlockedThemes, settings.customAccent, settings.customAccentAlt, settings.customBackdrop, settings.wallAccent) {
-                        buildList {
-                            addAll(com.gabriel.zenithui.ui.theme.Palettes.all)
-                            addAll(com.gabriel.zenithui.ui.theme.Palettes.aura.filter { it.id in settings.unlockedThemes })
-                            if (settings.customAccent != com.gabriel.zenithui.data.ZenithSettings().customAccent || settings.paletteId == com.gabriel.zenithui.ui.theme.Palettes.CUSTOM) {
-                                add(com.gabriel.zenithui.ui.theme.Palettes.custom(settings))
-                            }
-                            add(com.gabriel.zenithui.ui.theme.Palettes.fromWallpaper(settings))
-                        }
-                    }
-                    DayPaletteSheet(
-                        visible = up,
-                        options = options,
-                        chosen = settings.dayPalettes,
-                        onChange = viewModel::setDayPalettes,
-                        onDismiss = { hideSheet() },
-                    )
-                }
 
                 is HomeSheet.WidgetColour -> {
                     val target = layout.firstOrNull { it.id == current.id }

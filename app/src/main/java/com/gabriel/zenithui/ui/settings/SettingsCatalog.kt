@@ -2,7 +2,8 @@ package com.gabriel.zenithui.ui.settings
 
 /** The groups on the first page of Settings. Zenith Plus opens a sheet of its own, not a page. */
 enum class SettingsPage(val title: String, val opensSheet: Boolean = false) {
-    Theme("Wallpaper & theme"),
+    // Theme in the code, as it always was, though there are no themes on the page now.
+    Theme("Wallpaper & appearance"),
     Home("Home screen"),
     Motion("Motion & feel"),
     /** A page of Motion & feel rather than a group of its own: it is reached from there, and goes back there. */
@@ -40,13 +41,11 @@ data class SettingsEntry(
 object SettingsCatalog {
 
     val entries: List<SettingsEntry> = listOf(
-        SettingsEntry("palette", SettingsPage.Theme, "Colour", "color palette theme accent tint make your own theme maker"),
-        SettingsEntry("appearance", SettingsPage.Theme, "Light or dark", "auto night day mode appearance"),
-        SettingsEntry("dayPalettes", SettingsPage.Theme, "By time of day", "palette dawn dusk night morning evening schedule automatic colour color plus"),
+        SettingsEntry("appearance", SettingsPage.Theme, "Light or dark", "auto night day mode appearance theme"),
         SettingsEntry("font", SettingsPage.Theme, "Font", "typeface text letters inter serif mono condensed hand casual"),
         SettingsEntry("numberFont", SettingsPage.Theme, "Numbers", "clock digits font thin typeface time"),
         SettingsEntry("wallpaper", SettingsPage.Theme, "Wallpaper", "background picture photo design"),
-        SettingsEntry("wallpaperFollow", SettingsPage.Theme, "Wallpaper follows theme", "repaint match colour color"),
+        SettingsEntry("wallpaperFollow", SettingsPage.Theme, "Wallpaper follows light and dark", "repaint match light dark night day"),
         SettingsEntry("glass", SettingsPage.Theme, "Glass", "blur frost transparency strength liquid"),
         SettingsEntry("glassBody", SettingsPage.Theme, "Glass panels", "clear frosted solid contrast readable see through transparent blend wallpaper stand out"),
         SettingsEntry("tiltShine", SettingsPage.Theme, "Tilt shine", "highlight light reflection gyro"),

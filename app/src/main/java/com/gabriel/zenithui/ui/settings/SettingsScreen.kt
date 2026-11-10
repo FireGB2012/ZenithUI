@@ -99,7 +99,6 @@ import com.gabriel.zenithui.ui.common.popOut
 import com.gabriel.zenithui.ui.common.pressBounce
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.LocalZenithFont
-import com.gabriel.zenithui.ui.theme.Palettes
 import kotlinx.coroutines.delay
 import androidx.compose.material.icons.rounded.AccountCircle
 import com.gabriel.zenithui.data.server.Signed
@@ -141,8 +140,6 @@ class SettingsActions(
     val looks: LookActions? = null,
     /** The Glass studio's sheet (Plus). */
     val glassStudio: () -> Unit = {},
-    /** The sheet of a palette for each part of the day (Plus). */
-    val dayPalettes: () -> Unit = {},
     /** The fonts Zenith carries, and their licence. */
     val fontLicences: () -> Unit = {},
 )
@@ -524,13 +521,11 @@ private fun SettingsPage.tile(): List<Color> = when (this) {
 
 /** How a group is set right now, in a line: what the first page is for. */
 private fun summary(page: SettingsPage, settings: ZenithSettings, plus: PlusStatus, isHome: Boolean, signed: Signed?): String = when (page) {
-    SettingsPage.Theme -> {
-        val appearance = when (settings.appearance) {
-            "light" -> "light"
-            "dark" -> "dark"
-            else -> "follows the phone"
-        }
-        "${Palettes.resolve(settings).name}, $appearance"
+    // Zenith has one look, so light or dark is all there is to say about it.
+    SettingsPage.Theme -> when (settings.appearance) {
+        "light" -> "Light"
+        "dark" -> "Dark"
+        else -> "Light or dark with the phone"
     }
     SettingsPage.Home -> "${settings.columns} × ${settings.rows}, ${IconShapes.label(settings.iconShape).lowercase()} icons"
     SettingsPage.Motion -> buildString {

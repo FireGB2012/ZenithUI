@@ -260,7 +260,7 @@ private fun IslandPreview(island: IslandSettings) {
                     },
                 ) {
                     // An app under it: a backdrop and a few lines, so the island is seen over something.
-                    Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(palette.backdrop.first(), palette.accent.copy(alpha = 0.35f), palette.backdrop.last()))))
+                    Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(palette.backdrop.first(), palette.backdrop.last()))))
                     Column(Modifier.padding(start = 16.dp, end = 16.dp, top = geometry.statusBar + 14.dp)) {
                         listOf(0.9f, 0.6f, 0.75f).forEach { share ->
                             Box(Modifier.fillMaxWidth(share).height(16.dp).clip(RoundedCornerShape(8.dp)).background(palette.onGlass.copy(alpha = 0.10f)))

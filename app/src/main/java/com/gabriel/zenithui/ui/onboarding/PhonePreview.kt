@@ -92,7 +92,7 @@ private class PhoneSpot {
  * you see here is exactly what you get, down to the curve of your phone's own screen corners.
  *
  * [shown] lets the page assemble itself: grid items first, then the dock, each counted in order.
- * [halo] is the strength of the coloured light behind it, [sweep] runs a band of light across it
+ * [halo] is the strength of the soft white light behind it, [sweep] runs a band of light across it
  * once (0 to 1), and [zoom] grows it until it fills the whole screen (0 to 1), for the hand-off to
  * the real home screen. All three are read while drawing only.
  */
@@ -114,9 +114,10 @@ fun PhonePreview(
 ) {
     val palette = LocalPalette.current
     val edge = palette.onGlass.copy(alpha = 0.16f)
-    val accent = palette.accent
-    // A black shadow under a pale phone reads as a smudge; a deep blue one reads as depth.
-    val shadow = if (palette.dark) Color.Black else Color(0xFF1C2B4A).copy(alpha = 0.28f)
+    // Soft white light, with no colour in it: Zenith has one look.
+    val glowColour = Color.White
+    // A full black shadow under a pale phone reads as a smudge; a lighter one reads as depth.
+    val shadow = if (palette.dark) Color.Black else Color.Black.copy(alpha = 0.22f)
     val sweepAlpha = if (palette.dark) 0.22f else 0.30f
     val spot = remember { PhoneSpot() }
 
@@ -136,7 +137,7 @@ fun PhonePreview(
                 .drawWithCache {
                     val radius = phoneWidth.toPx() * 0.9f
                     val glow = Brush.radialGradient(
-                        listOf(accent, accent.copy(alpha = 0f)),
+                        listOf(glowColour, glowColour.copy(alpha = 0f)),
                         center = size.center,
                         radius = radius,
                     )
@@ -248,8 +249,9 @@ private fun MiniHome(
     val palette = LocalPalette.current
     val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    // Where there is no wallpaper picture, the page's own neutral grey, as setup's backdrop is.
     val backdrop = Brush.verticalGradient(
-        listOf(palette.accent.copy(alpha = 0.55f), palette.backdrop.getOrElse(1) { palette.backdrop.first() }, palette.backdrop.last())
+        listOf(palette.backdrop.first(), palette.backdrop.getOrElse(1) { palette.backdrop.first() }, palette.backdrop.last())
     )
     // The page settles where everything sits; the dock stands on the same lines.
     var page by remember { mutableStateOf<HomeGeometry?>(null) }

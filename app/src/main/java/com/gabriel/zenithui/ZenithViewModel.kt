@@ -703,11 +703,6 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
         if (!plus.value.active) return
         val clock = java.time.LocalDateTime.now()
         checkLooks(clock, now)
-        // The palette for this part of the day, as the part begins: with the theme's own fade.
-        val s = settings.value
-        com.gabriel.zenithui.data.DayParts.due(s.dayPalettes, clock, s.paletteOccasion)?.let { (palette, occasion) ->
-            store.update { it.copy(paletteId = palette, paletteOccasion = occasion) }
-        }
     }
 
     private fun checkLooks(clock: java.time.LocalDateTime, now: Boolean) {
@@ -742,13 +737,7 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
 
     fun setLookRules(rules: List<com.gabriel.zenithui.data.LookRule>) = store.update { it.copy(lookRules = rules, lookOccasion = "") }
 
-    // ---------------------------------------------------------------- the theme and glass studio
-
-    /** A palette for each part of the day, or none: the part it is now takes its palette at once. */
-    fun setDayPalettes(chosen: Map<String, String>) {
-        store.update { it.copy(dayPalettes = chosen, paletteOccasion = "") }
-        checkSchedule(now = true)
-    }
+    // ---------------------------------------------------------------- the glass studio
 
     fun setGlassTuning(tuning: com.gabriel.zenithui.data.GlassTuning) = store.update { it.copy(glassTuning = tuning) }
 
@@ -1003,7 +992,6 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
     /** The real work behind the setup screen: read the device, then compose a home screen. */
     suspend fun buildHome(
         name: String,
-        paletteId: String,
         appearance: String,
         widgets: List<String>,
         density: GridDensity,
@@ -1019,7 +1007,6 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
             // is the one picked in setup, which starts on the iPhone's.
             NewLook.apply(it).copy(
                 userName = name.trim(),
-                paletteId = paletteId,
                 appearance = appearance,
                 gridDensity = density.id,
                 columns = columns,

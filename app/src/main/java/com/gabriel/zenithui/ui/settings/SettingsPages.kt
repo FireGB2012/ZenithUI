@@ -31,7 +31,6 @@ import androidx.compose.material.icons.rounded.Save
 import androidx.compose.material.icons.rounded.TextFields
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.VisibilityOff
-import androidx.compose.material.icons.rounded.WbTwilight
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -45,7 +44,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.gabriel.zenithui.data.AnimationPreset
 import com.gabriel.zenithui.data.Badges
-import com.gabriel.zenithui.data.DayParts
 import com.gabriel.zenithui.data.DrawerSort
 import com.gabriel.zenithui.data.GlassBody
 import com.gabriel.zenithui.data.GridDensity
@@ -64,7 +62,6 @@ import com.gabriel.zenithui.ui.common.LocalMotionLevel
 import com.gabriel.zenithui.ui.common.shake
 import com.gabriel.zenithui.ui.onboarding.PhonePreview
 import com.gabriel.zenithui.ui.onboarding.Segmented
-import com.gabriel.zenithui.ui.theme.Palettes
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -92,7 +89,7 @@ private fun MiniPhone(settings: ZenithSettings, preview: SettingsPreview) {
     val reduced = LocalMotionLevel.current.reduced
     val sweep = remember { Animatable(1f) }
     val look = listOf(
-        settings.paletteId, settings.appearance, settings.gridDensity, settings.columns, settings.rows,
+        settings.appearance, settings.gridDensity, settings.columns, settings.rows,
         settings.iconShape, settings.iconPack, settings.iconStyle, settings.glassBody,
         settings.showLabels, settings.labelSize, settings.labelShadow, settings.showDock, settings.searchBar, settings.header,
     )
@@ -128,61 +125,11 @@ private fun MiniPhone(settings: ZenithSettings, preview: SettingsPreview) {
 @Composable
 internal fun ThemeOptions(settings: ZenithSettings, plus: PlusStatus, preview: SettingsPreview, actions: SettingsActions) {
     val change = actions.change
-    // Every palette you can use right now: the six everyone has, the ones bought with aura, your
-    // own once you have made one, and the one in your wallpaper.
-    val options = remember(
-        settings.unlockedThemes, settings.paletteId, settings.customAccent, settings.customAccentAlt, settings.customBackdrop,
-        settings.wallAccent, settings.wallAccentAlt, settings.wallBackdrop, settings.wallDark,
-    ) {
-        buildList {
-            addAll(Palettes.all)
-            addAll(Palettes.aura.filter { it.id in settings.unlockedThemes })
-            if (settings.paletteId == Palettes.CUSTOM) add(Palettes.custom(settings))
-            add(Palettes.fromWallpaper(settings))
-        }
-    }
     val design = WallStyle.byName(settings.wallpaperStyle)
 
     MiniPhone(settings, preview)
+    // Zenith has one look, so there is no colour to choose: only light or dark.
     Group(rise = 1) {
-        Spot("palette") {
-            Column(Modifier.padding(14.dp)) {
-                Caption("Colour")
-                Spacer(Modifier.height(12.dp))
-                PaletteGrid(
-                    options = options,
-                    selectedId = settings.paletteId,
-                    onSelect = { option -> change { it.copy(paletteId = option.id) } },
-                    onMake = actions.themeMaker,
-                )
-                Spacer(Modifier.height(10.dp))
-                Note(
-                    when {
-                        settings.paletteId != Palettes.WALLPAPER -> "Colours the glass, the highlights and Zenith's own wallpapers."
-                        design != null -> "The colours of the last photo you had as wallpaper. With a photo up, they follow it."
-                        else -> "Taken from your wallpaper, and changed along with it."
-                    }
-                )
-            }
-        }
-        GroupDivider()
-        Spot("dayPalettes") {
-            ActionRow(
-                icon = if (plus.active) Icons.Rounded.WbTwilight else Icons.Rounded.Lock,
-                title = "By time of day",
-                subtitle = when {
-                    !plus.active && settings.dayPalettes.isEmpty() -> "Plus: a palette for dawn, day, dusk and night"
-                    settings.dayPalettes.isEmpty() -> "A palette for dawn, day, dusk and night"
-                    !plus.active -> "Kept, but resting: it changes the palette while you have Plus"
-                    else -> DayParts.all.filter { it.id in settings.dayPalettes }.joinToString(" · ") { part ->
-                        part.label + " " + Palettes.resolve(settings.copy(paletteId = settings.dayPalettes.getValue(part.id))).name
-                    }
-                },
-                onClick = actions.dayPalettes,
-            )
-        }
-    }
-    Group(rise = 2) {
         Spot("appearance") {
             Column(Modifier.padding(14.dp)) {
                 Caption("Light or dark")
@@ -196,14 +143,14 @@ internal fun ThemeOptions(settings: ZenithSettings, plus: PlusStatus, preview: S
                 Note(
                     when (settings.appearance) {
                         "auto" -> "Follows the phone: light by day and dark at night, if the phone is set that way."
-                        "light" -> "Pale panels and dark words, whatever the phone is set to."
-                        else -> "Dark panels and white words, whatever the phone is set to."
+                        "light" -> "Light pages and dark words, whatever the phone is set to. The home screen's glass stays the same."
+                        else -> "Dark pages and white words, whatever the phone is set to. The home screen's glass stays the same."
                     }
                 )
             }
         }
     }
-    Group(rise = 3) {
+    Group(rise = 2) {
         Spot("font") {
             Column(Modifier.padding(start = 14.dp, end = 14.dp, top = 14.dp, bottom = 10.dp)) {
                 Caption("Font")
@@ -222,7 +169,7 @@ internal fun ThemeOptions(settings: ZenithSettings, plus: PlusStatus, preview: S
             }
         }
     }
-    Group(rise = 4) {
+    Group(rise = 3) {
         Spot("wallpaper") {
             ActionRow(
                 icon = Icons.Rounded.Image,
@@ -234,17 +181,17 @@ internal fun ThemeOptions(settings: ZenithSettings, plus: PlusStatus, preview: S
         GroupDivider()
         Spot("wallpaperFollow") {
             ToggleRow(
-                title = "Wallpaper follows theme",
+                title = "Wallpaper follows light and dark",
                 subtitle = if (design == null) {
                     "Works with Zenith's own wallpapers"
                 } else {
-                    "${design.label} repaints in the colour above, light or dark"
+                    "${design.label} repaints when Zenith goes light or dark"
                 },
                 checked = settings.wallpaperFollow,
             ) { value -> change { it.copy(wallpaperFollow = value) } }
         }
     }
-    Group(rise = 5) {
+    Group(rise = 4) {
         Spot("glass") {
             Column(Modifier.padding(14.dp)) {
                 PillSlider(

@@ -24,12 +24,9 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -92,7 +89,6 @@ import com.gabriel.zenithui.ui.common.rememberTick
 import com.gabriel.zenithui.ui.common.rollOver
 import com.gabriel.zenithui.ui.common.wordsChange
 import com.gabriel.zenithui.ui.theme.LocalPalette
-import com.gabriel.zenithui.ui.theme.ZenithPalette
 import com.gabriel.zenithui.ui.theme.ZenithShapes
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
@@ -605,87 +601,6 @@ internal fun ChoiceRow(label: String, selected: Boolean, onClick: () -> Unit) {
         }
         Spacer(Modifier.width(14.dp))
         Text(label, color = palette.onGlass, fontSize = 15.sp)
-    }
-}
-
-/**
- * Every palette you can use, as dots that wrap onto as many lines as they need, so none is cut
- * off at the edge. [onMake], when given, adds a last dot that opens the theme maker.
- */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-internal fun PaletteGrid(
-    options: List<ZenithPalette>,
-    selectedId: String,
-    onSelect: (ZenithPalette) -> Unit,
-    onMake: (() -> Unit)? = null,
-) {
-    FlowRow(
-        Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        options.forEachIndexed { index, option ->
-            PaletteDot(option.name, listOf(option.accent, option.accentAlt), selected = option.id == selectedId, turn = index) { onSelect(option) }
-        }
-        if (onMake != null) {
-            val palette = LocalPalette.current
-            PaletteDot(
-                "Your own",
-                listOf(palette.onGlass.copy(alpha = 0.14f), palette.onGlass.copy(alpha = 0.14f)),
-                selected = false,
-                turn = options.size,
-                icon = Icons.Rounded.Add,
-                onClick = onMake,
-            )
-        }
-    }
-}
-
-@Composable
-private fun PaletteDot(name: String, colours: List<Color>, selected: Boolean, turn: Int, icon: ImageVector? = null, onClick: () -> Unit) {
-    val palette = LocalPalette.current
-    val tick = rememberTick()
-    // As the page arrives the dots pop up one after another, like a row of lights coming on.
-    val arrival = LocalSettingsRise.current
-    val pop = if (arrival != null) {
-        Modifier.appearIn(delayMillis = 140 + 26 * turn.coerceAtMost(12), fromScale = 0.4f, riseFrom = 0f, replay = arrival)
-    } else {
-        Modifier
-    }
-    val ring by animateColorAsState(if (selected) palette.onGlass else Color.Transparent, tween(220), label = "dotRing")
-    val inner by animateDpAsState(if (selected) 34.dp else 40.dp, spring(dampingRatio = 0.7f, stiffness = 420f), label = "dotInner")
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier
-            .width(58.dp)
-            .then(pop)
-            .pressBounce(0.9f)
-            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
-                if (!selected) tick()
-                onClick()
-            },
-    ) {
-        Box(Modifier.size(46.dp).border(2.dp, ring, CircleShape), contentAlignment = Alignment.Center) {
-            Box(
-                Modifier
-                    .size(inner)
-                    .clip(CircleShape)
-                    .background(Brush.linearGradient(colours)),
-                contentAlignment = Alignment.Center,
-            ) {
-                if (icon != null) Icon(icon, contentDescription = null, tint = palette.onGlass, modifier = Modifier.size(20.dp))
-            }
-        }
-        Spacer(Modifier.height(5.dp))
-        Text(
-            name,
-            color = if (selected) palette.onGlass else palette.onGlassMuted,
-            fontSize = 11.sp,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
     }
 }
 

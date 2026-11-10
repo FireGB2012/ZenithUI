@@ -48,7 +48,6 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.semantics.contentDescription
@@ -386,23 +385,23 @@ private fun SignedIn(signed: Signed, account: AccountActions, scope: CoroutineSc
     val keyboard = LocalSoftwareKeyboardController.current
     val reduced = LocalMotionLevel.current.reduced
     val name = signed.account.username?.let { "@$it" } ?: signed.email ?: "Google account"
-    // The letter on the accent: whichever of dark and white reads.
-    val onAccent = if (palette.accent.luminance() > 0.3f) Color(0xFF0B0C10) else Color.White
 
     Group(padding = 16.dp, rise = 0) {
         Row(verticalAlignment = Alignment.CenterVertically) {
+            // A grey disc with a white letter, as an iPhone shows somebody with no photo: the
+            // avatar is not an action, so it is not in the blue.
             Box(
                 Modifier
                     .size(48.dp)
                     .clip(CircleShape)
-                    .background(Brush.linearGradient(listOf(palette.accent, palette.accentAlt))),
+                    .background(Brush.linearGradient(listOf(Color(0xFFA5A5AA), Color(0xFF86868B)))),
                 contentAlignment = Alignment.Center,
             ) {
                 val letter = name.firstOrNull { it.isLetterOrDigit() }?.uppercase()
                 if (letter != null) {
-                    Text(letter, color = onAccent, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    Text(letter, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                 } else {
-                    Icon(Icons.Rounded.Person, contentDescription = null, tint = onAccent, modifier = Modifier.size(24.dp))
+                    Icon(Icons.Rounded.Person, contentDescription = null, tint = Color.White, modifier = Modifier.size(24.dp))
                 }
             }
             Spacer(Modifier.width(14.dp))

@@ -29,7 +29,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.lifecycle.Lifecycle
@@ -54,8 +53,8 @@ enum class BackdropScene(val anchors: List<Offset>, val energy: Float) {
 }
 
 /**
- * Seconds of drift, shared by the lights and the colour flowing through the greeting. It is only
- * ever read while drawing, so the whole screen moves without recomposing anything.
+ * Seconds of drift, shared by the lights and the greeting. It is only ever read while drawing, so
+ * the whole screen moves without recomposing anything.
  */
 @Stable
 class BackdropClock {
@@ -91,7 +90,7 @@ fun rememberBackdropClock(running: Boolean): BackdropClock {
     return clock
 }
 
-/** A ring of the new colour spreading out from wherever you picked it. */
+/** A ring of light spreading out from wherever you chose light or dark. */
 @Stable
 class BackdropPulse {
     internal val progress = Animatable(1f)
@@ -114,8 +113,8 @@ private val ANCHOR_SETTLE = Offset(0.0005f, 0.0005f)
 
 /** Size of each light as a share of the screen's width, and how strongly it shows. */
 private val ORB_RADIUS = floatArrayOf(0.90f, 0.70f, 0.60f)
-private val ORB_ALPHA_DARK = floatArrayOf(0.38f, 0.28f, 0.22f)
-private val ORB_ALPHA_LIGHT = floatArrayOf(0.30f, 0.24f, 0.18f)
+private val ORB_ALPHA_DARK = floatArrayOf(0.15f, 0.11f, 0.09f)
+private val ORB_ALPHA_LIGHT = floatArrayOf(0.12f, 0.10f, 0.07f)
 
 /** Drift periods in seconds, across and down, for each light; none share a beat. */
 private val ORB_PERIOD = arrayOf(doubleArrayOf(23.0, 29.0), doubleArrayOf(31.0, 37.0), doubleArrayOf(41.0, 19.0))
@@ -126,8 +125,9 @@ private const val TAU = 6.2831855f
 private const val PULSE_UNIT = 1000f
 
 /**
- * The light behind setup: the palette's gradient with three soft lights drifting over it in the
- * accent colours. The first time setup opens they rise up from below the screen, like a sunrise.
+ * The light behind setup: a neutral page, black to iOS's dark grey or its pale grey to white, with
+ * three soft white lights drifting over it. The first time setup opens they rise up from below the
+ * screen, like a sunrise.
  */
 @Composable
 fun OnboardingBackdrop(
@@ -180,8 +180,8 @@ fun OnboardingBackdrop(
     }
 
     val dark = palette.dark
-    val lights = listOf(palette.accent, palette.accentAlt, palette.glassTint)
-        .map { if (dark) it else lerp(it, Color.White, 0.35f) }
+    // White light, with no colour in it: Zenith has one look, and the lights are only light.
+    val lights = List(3) { Color.White }
     val strength = if (dark) ORB_ALPHA_DARK else ORB_ALPHA_LIGHT
     val backdrop = palette.backdrop
 

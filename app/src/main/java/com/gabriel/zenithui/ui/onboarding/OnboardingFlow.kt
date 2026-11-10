@@ -25,6 +25,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -89,7 +90,7 @@ import com.gabriel.zenithui.data.findActivity
 import com.gabriel.zenithui.ui.common.pressBounce
 import com.gabriel.zenithui.ui.common.rememberAnimationsEnabled
 import com.gabriel.zenithui.ui.theme.LocalPalette
-import com.gabriel.zenithui.ui.theme.Palettes
+import com.gabriel.zenithui.ui.theme.NeutralLook
 import com.gabriel.zenithui.ui.theme.ZenithTheme
 import com.gabriel.zenithui.ui.theme.glass
 import kotlinx.coroutines.Dispatchers
@@ -130,11 +131,11 @@ private object Phase {
 }
 
 /**
- * First run: a hello, your name, a colour, what goes on the page, and then the page itself being
- * put together in front of you — before it grows to fill the screen and becomes your home screen.
- * Soft light drifts behind all of it and follows you from step to step. The button at the bottom
- * never moves; only what is above it changes, so it feels like one place rather than a stack of
- * screens.
+ * First run: a hello, your name, light or dark, what goes on the page, and then the page itself
+ * being put together in front of you — before it grows to fill the screen and becomes your home
+ * screen. Soft light drifts behind all of it and follows you from step to step. The button at the
+ * bottom never moves; only what is above it changes, so it feels like one place rather than a
+ * stack of screens.
  */
 @Composable
 fun OnboardingFlow(
@@ -155,7 +156,6 @@ fun OnboardingFlow(
 
     var step by rememberSaveable { mutableIntStateOf(Steps.HELLO) }
     var name by rememberSaveable { mutableStateOf("") }
-    var paletteId by rememberSaveable { mutableStateOf("midnight") }
     var appearance by rememberSaveable { mutableStateOf("dark") }
     // Setup starts on the new look's grid, the iPhone's, which it offers first.
     var densityId by rememberSaveable { mutableStateOf(GridDensity.Four.id) }
@@ -198,7 +198,6 @@ fun OnboardingFlow(
     val preview = NewLook.apply(
         ZenithSettings(
             userName = name,
-            paletteId = paletteId,
             appearance = appearance,
             glass = 0.85f,
             columns = columns,
@@ -238,7 +237,7 @@ fun OnboardingFlow(
     LaunchedEffect(step) {
         if (step != Steps.BUILD || built) return@LaunchedEffect
         val work = launch(Dispatchers.Default) {
-            viewModel.buildHome(name, paletteId, appearance, chosen, gridDensity, columns, rows)
+            viewModel.buildHome(name, appearance, chosen, gridDensity, columns, rows)
         }
         // Clear the page while the controls fold away and the phone grows into their space…
         shown = 0
@@ -318,9 +317,12 @@ fun OnboardingFlow(
 
     ZenithTheme(settings = preview, screenSize = screenSize) {
         val palette = LocalPalette.current
+        // Whether Auto is dark just now, as ZenithTheme reads it, for the ring that choosing light
+        // or dark sends out.
+        val systemDark = isSystemInDarkTheme()
 
-        // Setup owns the status bar until it is done: on a light palette the icons go dark, so
-        // they do not vanish white on white.
+        // Setup owns the status bar until it is done: in Light the icons go dark, so they do not
+        // vanish white on white.
         LaunchedEffect(palette.dark) {
             val window = context.findActivity()?.window ?: return@LaunchedEffect
             WindowCompat.getInsetsController(window, view).apply {
@@ -448,13 +450,12 @@ fun OnboardingFlow(
                                 density = gridDensity,
                                 playIntro = !lookSeen,
                                 deviceCorner = deviceCorner,
-                                onPalette = { id, origin ->
-                                    paletteId = id
-                                    scope.launch { pulse.fire(origin, Palettes.byId(id).accent) }
-                                },
                                 onAppearance = { mode, origin ->
                                     appearance = mode
-                                    scope.launch { pulse.fire(origin, Palettes.byId(paletteId).accent) }
+                                    // In the words' colour of the look being turned to: the page
+                                    // changes at once, and the ring has to show on the new one.
+                                    val ink = NeutralLook.of(preview.copy(appearance = mode).isDark(systemDark)).onGlass
+                                    scope.launch { pulse.fire(origin, ink) }
                                 },
                                 onToggleWidget = { type -> if (type in widgets) widgets.remove(type) else widgets.add(type) },
                                 onDensity = { densityId = it.id },
@@ -533,7 +534,7 @@ fun OnboardingFlow(
                 Box(
                     Modifier
                         .fillMaxSize()
-                        .background(if (palette.dark) Color.Black.copy(alpha = 0.40f) else Color(0xFF0B1A33).copy(alpha = 0.16f))
+                        .background(if (palette.dark) Color.Black.copy(alpha = 0.40f) else Color.Black.copy(alpha = 0.18f))
                         // Takes the touches, so the button underneath cannot be pressed through it.
                         .pointerInput(Unit) { detectTapGestures { } },
                 )

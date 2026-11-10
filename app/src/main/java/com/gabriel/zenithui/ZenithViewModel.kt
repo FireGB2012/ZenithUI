@@ -1004,8 +1004,8 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
                 columns = columns,
                 rows = rows,
                 dock = dock,
-                // Choosing Search in setup is kept as it always was, for Looks and backups, though
-                // the home screen no longer draws a bar: Search is its pill, always there.
+                // Still written, for Looks and backups, though setup no longer offers Search and the
+                // home screen draws no bar for it: Search is its pill, always there.
                 searchBar = Widgets.Search.type in widgets,
                 // Built just now, so already under today's rules. Without this a rerun of setup
                 // left the version behind, and the next launch upgraded the new layout as if it

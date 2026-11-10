@@ -7,6 +7,7 @@ import android.os.PowerManager
 import android.provider.Settings
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -40,6 +41,7 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.gabriel.zenithui.data.AnimationPreset
@@ -259,39 +261,26 @@ internal fun HomeOptions(settings: ZenithSettings, plus: PlusStatus, preview: Se
     MiniPhone(settings, preview)
     Group(rise = 1) {
         Spot("grid") {
+            val custom = settings.gridDensity == GridDensity.CUSTOM
+            // The four presets share the row and a grid of your own has a switch under it: five
+            // segments were too narrow for their names. Under a grid of your own the row shows,
+            // dimmed, the preset that switching it off picks: the one it was switched on from, or,
+            // on a visit that found it on, the one nearest it, so as little as possible moves.
+            var cameFrom by remember { mutableStateOf<GridDensity?>(null) }
+            val nearest = remember { GridDensity.nearest(settings.columns, settings.rows, preview.screenWidth.value, preview.screenHeight.value) }
+            val preset = if (custom) cameFrom ?: nearest else GridDensity.byId(settings.gridDensity)
+            val presetsShown = animateFloatAsState(if (custom) 0.5f else 1f, tween(220), label = "gridPresets")
             Column(Modifier.padding(14.dp)) {
                 Caption("Grid")
                 Spacer(Modifier.height(10.dp))
-                val custom = settings.gridDensity == GridDensity.CUSTOM
-                Segmented(
-                    options = GridDensity.entries.map { it.id to it.label } + (GridDensity.CUSTOM to "Custom"),
-                    selected = if (custom) GridDensity.CUSTOM else GridDensity.byId(settings.gridDensity).id,
-                    onSelect = { value ->
-                        change {
-                            // A grid of your own starts as the grid you have, so choosing Custom
-                            // moves nothing until a number is changed.
-                            if (value == GridDensity.CUSTOM && (it.gridColumns <= 0 || it.gridRows <= 0)) {
-                                it.copy(gridDensity = value, gridColumns = it.columns, gridRows = it.rows)
-                            } else {
-                                it.copy(gridDensity = value)
-                            }
-                        }
-                    },
-                )
-                // The two numbers of a grid of your own open out under the choice, and fold away
-                // again when one of Zenith's is chosen instead.
-                AnimatedVisibility(visible = custom, enter = unfoldIn(reduced), exit = unfoldOut(reduced)) {
-                    Column {
-                        Spacer(Modifier.height(10.dp))
-                        // Set straight onto the page as well as kept: the grid follows the finger
-                        // rather than the moment the screen is next measured.
-                        StepperRow("Columns", settings.columns, GridDensity.columnChoices(preview.screenWidth.value)) { n ->
-                            change { it.copy(gridColumns = n, columns = n) }
-                        }
-                        StepperRow("Rows", settings.rows, GridDensity.rowChoices(preview.screenHeight.value)) { n ->
-                            change { it.copy(gridRows = n, rows = n) }
-                        }
-                    }
+                // Read while drawing, so the row fades without being composed again.
+                Box(Modifier.graphicsLayer { alpha = presetsShown.value }) {
+                    Segmented(
+                        options = GridDensity.offered.map { it.id to it.label },
+                        selected = preset.id,
+                        // Any preset, the dimmed one too, puts a grid of your own away.
+                        onSelect = { value -> change { it.copy(gridDensity = value) } },
+                    )
                 }
                 Spacer(Modifier.height(8.dp))
                 // For a preset, how many cells that works out to depends on the screen, so it is
@@ -305,6 +294,37 @@ internal fun HomeOptions(settings: ZenithSettings, plus: PlusStatus, preview: Se
                         else -> "$counts on this screen. Icons size themselves to fit."
                     }
                 )
+            }
+            GroupDivider(inset = 16.dp)
+            ToggleRow(
+                title = "Custom grid",
+                subtitle = if (custom) "Set below. Switching it off picks ${preset.label}" else "Pick the columns and rows yourself",
+                checked = custom,
+            ) { on ->
+                if (on) cameFrom = preset
+                change {
+                    when {
+                        !on -> it.copy(gridDensity = preset.id)
+                        // A grid of your own starts as the grid you have, so switching it on moves
+                        // nothing until a number is changed.
+                        it.gridColumns <= 0 || it.gridRows <= 0 -> it.copy(gridDensity = GridDensity.CUSTOM, gridColumns = it.columns, gridRows = it.rows)
+                        else -> it.copy(gridDensity = GridDensity.CUSTOM)
+                    }
+                }
+            }
+            // The two numbers of a grid of your own open out under the switch, and fold away again
+            // when it is switched off or one of Zenith's is chosen instead.
+            AnimatedVisibility(visible = custom, enter = unfoldIn(reduced), exit = unfoldOut(reduced)) {
+                Column(Modifier.padding(start = 14.dp, end = 14.dp, bottom = 8.dp)) {
+                    // Set straight onto the page as well as kept: the grid follows the finger
+                    // rather than the moment the screen is next measured.
+                    StepperRow("Columns", settings.columns, GridDensity.columnChoices(preview.screenWidth.value)) { n ->
+                        change { it.copy(gridColumns = n, columns = n) }
+                    }
+                    StepperRow("Rows", settings.rows, GridDensity.rowChoices(preview.screenHeight.value)) { n ->
+                        change { it.copy(gridRows = n, rows = n) }
+                    }
+                }
             }
         }
     }
@@ -379,16 +399,17 @@ internal fun HomeOptions(settings: ZenithSettings, plus: PlusStatus, preview: Se
             Spot("dockStyle") {
                 Column(Modifier.padding(start = 14.dp, end = 14.dp, bottom = 14.dp)) {
                     Segmented(
-                        options = listOf("glass" to "Glass bar", "floating" to "Floating", "none" to "Icons only"),
+                        options = listOf("glass" to "Glass", "floating" to "Floating", "none" to "Icons only"),
                         selected = settings.dockStyle,
                         onSelect = { value -> change { it.copy(dockStyle = value) } },
                     )
                     Spacer(Modifier.height(8.dp))
+                    // Glass and Floating are the same slab: see HomeGeometry.dockSlabWidth.
                     Note(
                         when (settings.dockStyle) {
-                            "floating" -> "A pill of glass that hugs its icons, however few."
+                            "floating" -> "The same slab, closing up round its apps when there are fewer than four."
                             "none" -> "The icons on the wallpaper, with nothing behind them."
-                            else -> "A bar of glass the width of the page."
+                            else -> "A slab of glass across the foot of the screen, however many apps it holds."
                         }
                     )
                 }

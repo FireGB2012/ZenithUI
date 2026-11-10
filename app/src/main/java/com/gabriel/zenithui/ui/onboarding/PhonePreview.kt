@@ -54,6 +54,7 @@ import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.findRootCoordinates
 import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalDensity
@@ -344,9 +345,11 @@ private fun MiniHome(
                     }
                 }
 
-                // Search, the pill in the middle of its band, as on the home screen.
+                // Search, the pill in the middle of its band, as on the home screen. A picture of it
+                // only: its semantics are cleared at the head of its chain, so TalkBack is not
+                // offered a button that does nothing, or the word on it.
                 Box(Modifier.fillMaxWidth().height(HomeGeometry.SEARCH_BAND_DP.dp), contentAlignment = Alignment.Center) {
-                    SearchPill(onOpen = {}, dots = { 0f }, pageCount = 1, position = { 0f })
+                    SearchPill(onOpen = {}, dots = { 0f }, pageCount = 1, position = { 0f }, modifier = Modifier.clearAndSetSemantics {})
                 }
 
                 if (settings.showDock && dock.isNotEmpty()) {

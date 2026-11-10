@@ -524,7 +524,8 @@ private fun summary(page: SettingsPage, settings: ZenithSettings, plus: PlusStat
         "dark" -> "Dark"
         else -> "Light or dark with the phone"
     }
-    SettingsPage.Home -> "${settings.columns} × ${settings.rows}, ${IconShapes.label(settings.iconShape).lowercase()} icons"
+    // Only the capital a shape's name starts with goes mid-line, so iPhone keeps its own.
+    SettingsPage.Home -> "${settings.columns} × ${settings.rows}, ${IconShapes.label(settings.iconShape).replaceFirstChar { it.lowercaseChar() }} icons"
     SettingsPage.Motion -> buildString {
         append(if (settings.motion == "reduced") "Reduced" else "Full")
         append(if (settings.haptics) ", haptics on" else ", haptics off")

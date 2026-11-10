@@ -39,18 +39,21 @@ import com.gabriel.zenithui.data.HomeItem
 import com.gabriel.zenithui.data.ZenithSettings
 import com.gabriel.zenithui.ui.theme.LocalPalette
 
-/** The widgets on offer, in the order they are worth trying, with short everyday names. */
+/**
+ * The widgets on offer, in the order they are worth trying, with short everyday names. Search is
+ * not one of them: it is the pill under the page, on every home screen, so a chip for it would
+ * change nothing.
+ */
 private val WIDGET_CHOICES = listOf(
     "clock" to "Clock",
     "toggles" to "Toggles",
     "battery" to "Battery",
     "calendar" to "Calendar",
     "notes" to "Note",
-    "search" to "Search",
 )
 
 /** The grids on offer: the iPhone's first, which setup starts on, then the others as they come. */
-private val GRID_CHOICES = listOf(GridDensity.Four) + GridDensity.entries.filter { it != GridDensity.Four }
+private val GRID_CHOICES = GridDensity.offered
 
 /** A point on screen, remembered without being state: taps read it, nothing redraws on it. */
 private class Spot {

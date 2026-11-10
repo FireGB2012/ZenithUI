@@ -1,5 +1,6 @@
 package com.gabriel.zenithui.data
 
+import kotlin.math.abs
 import kotlin.math.floor
 import kotlin.math.roundToInt
 
@@ -104,5 +105,20 @@ enum class GridDensity(
             rows <= 4 -> Roomy
             else -> Balanced
         }
+
+        /** The presets in the order setup and Settings offer them: the iPhone's first, which a new install starts on. */
+        val offered: List<GridDensity> = listOf(Four, Compact, Balanced, Roomy)
+
+        /**
+         * The preset nearest a [columns] x [rows] grid on a [widthDp] x [heightDp] screen: the first
+         * of [offered] that gives that grid there, or else the one fewest columns and rows away from
+         * it. A grid of your own goes back to it when it is switched off, so as little as possible
+         * moves.
+         */
+        fun nearest(columns: Int, rows: Int, widthDp: Float, heightDp: Float): GridDensity =
+            offered.minBy { preset ->
+                val (presetColumns, presetRows) = preset.gridFor(widthDp, heightDp)
+                abs(presetColumns - columns) + abs(presetRows - rows)
+            }
     }
 }

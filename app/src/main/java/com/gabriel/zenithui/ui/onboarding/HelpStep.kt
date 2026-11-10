@@ -103,7 +103,7 @@ private data class Tip(val icon: ImageVector, val title: String, val body: Strin
 private val TIPS = listOf(
     Tip(Icons.Rounded.Apps, "Swipe up for everything", "All your apps live one swipe up. The search bar sits at the bottom and searches apps or Google."),
     Tip(Icons.Rounded.DragIndicator, "Hold and drag to arrange", "Long press any icon and drag it to any free cell, or down into the dock. Hold it against the side of the screen to carry it to the next page."),
-    Tip(Icons.Rounded.Add, "More pages when you need them", "Tap the + beside the page dots for another page. Pages you leave empty tidy themselves away."),
+    Tip(Icons.Rounded.Add, "More pages when you need them", "Pinch out to see every page and tap + for another, or carry an icon past the last page. Pages you leave empty tidy themselves away."),
     Tip(Icons.Rounded.Folder, "Drop to make a folder", "Drop one app onto another and Zenith makes a folder. Drag to the top to remove."),
     Tip(Icons.Rounded.OpenInFull, "Resize your widgets", "Long press a widget, tap Resize, then drag its handles. It snaps to the grid."),
     Tip(Icons.Rounded.Dashboard, "Add more any time", "Long press an empty spot for wallpaper, widgets and settings."),

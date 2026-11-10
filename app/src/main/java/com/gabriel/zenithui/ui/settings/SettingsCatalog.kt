@@ -54,6 +54,7 @@ object SettingsCatalog {
         SettingsEntry("grid", SettingsPage.Home, "Grid", "density compact balanced roomy custom columns rows size icons layout cells iphone four"),
         SettingsEntry("iconShape", SettingsPage.Home, "Icon shape", "squircle circle rounded square pebble teardrop hexagon clover iphone"),
         SettingsEntry("iconStyle", SettingsPage.Home, "Icon style", "themed tinted monochrome glass clear original colour color symbol"),
+        SettingsEntry("widgetLook", SettingsPage.Home, "Widget look", "colour color glass solid widgets"),
         SettingsEntry("iconPack", SettingsPage.Home, "Icon pack", "icons nova adw"),
         SettingsEntry("labels", SettingsPage.Home, "Labels", "names text app names"),
         SettingsEntry("labelSize", SettingsPage.Home, "Name size", "label text font bigger smaller large small"),

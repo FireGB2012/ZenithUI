@@ -135,6 +135,7 @@ import com.gabriel.zenithui.data.FolderCell
 import com.gabriel.zenithui.data.HomeItem
 import com.gabriel.zenithui.data.LaunchMotion
 import com.gabriel.zenithui.data.LayoutBuilder
+import com.gabriel.zenithui.data.NewLook
 import com.gabriel.zenithui.data.ROW_UNITS
 import com.gabriel.zenithui.data.Tune
 import com.gabriel.zenithui.data.WallStyle
@@ -2338,6 +2339,12 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     visible = up,
                     wallpaper = glassLevels?.sharp,
                     wallpaperName = WallStyle.byName(settings.wallpaperStyle)?.label,
+                    widgetLook = settings.widgetLook,
+                    onWidgetLook = { look -> viewModel.updateSettings { it.copy(widgetLook = look) } },
+                    newLookOn = NewLook.isOn(settings),
+                    // The grid it sets is worked out for this screen and the home screen settled
+                    // into it, as for any grid: nothing is lost, though some may move to another page.
+                    onNewLook = { viewModel.updateSettings { NewLook.apply(it) } },
                     onWallpaper = { showSheet(HomeSheet.Wallpapers) },
                     onHelp = { showSheet(HomeSheet.Help) },
                     onAmbient = {

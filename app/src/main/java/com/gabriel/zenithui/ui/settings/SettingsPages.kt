@@ -59,6 +59,7 @@ import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.runtime.DisposableEffect
 import com.gabriel.zenithui.data.PlusStatus
 import com.gabriel.zenithui.data.WallStyle
+import com.gabriel.zenithui.data.WidgetLooks
 import com.gabriel.zenithui.data.ZenithSettings
 import com.gabriel.zenithui.ui.common.LocalMotionLevel
 import com.gabriel.zenithui.ui.common.shake
@@ -94,6 +95,7 @@ private fun MiniPhone(settings: ZenithSettings, preview: SettingsPreview) {
         settings.appearance, settings.gridDensity, settings.columns, settings.rows,
         settings.iconShape, settings.iconPack, settings.iconStyle, settings.glassBody,
         settings.showLabels, settings.labelSize, settings.labelShadow, settings.showDock, settings.searchBar, settings.header,
+        settings.widgetLook,
     )
     val shown = remember { arrayOf<List<Any>?>(null) }
     LaunchedEffect(look) {
@@ -357,6 +359,21 @@ internal fun HomeOptions(settings: ZenithSettings, plus: PlusStatus, preview: Se
                 )
                 Spacer(Modifier.height(8.dp))
                 Note(IconStyles.detail(settings.iconStyle) + if (settings.iconStyle != IconStyles.ORIGINAL) " An icon you chose for an app stays as you chose it." else "")
+            }
+        }
+        GroupDivider(inset = 16.dp)
+        // The same switch as in Customise: every one of Zenith's own widgets, colour or glass.
+        Spot("widgetLook") {
+            Column(Modifier.padding(14.dp)) {
+                Caption("Widget look")
+                Spacer(Modifier.height(10.dp))
+                Segmented(
+                    options = WidgetLooks.ids.map { it to WidgetLooks.label(it) },
+                    selected = WidgetLooks.of(settings.widgetLook),
+                    onSelect = { value -> change { it.copy(widgetLook = value) } },
+                )
+                Spacer(Modifier.height(8.dp))
+                Note(WidgetLooks.detail(settings.widgetLook) + " Other apps' widgets draw themselves either way.")
             }
         }
     }

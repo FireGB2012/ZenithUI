@@ -51,6 +51,7 @@ import androidx.compose.material.icons.rounded.LockOpen
 import androidx.compose.material.icons.rounded.OpenInFull
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.Palette
+import androidx.compose.material.icons.rounded.PhoneIphone
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -98,6 +99,7 @@ import com.gabriel.zenithui.data.StackCell
 import com.gabriel.zenithui.data.StackMember
 import com.gabriel.zenithui.data.StackRules
 import com.gabriel.zenithui.data.WidgetCell
+import com.gabriel.zenithui.data.WidgetLooks
 import com.gabriel.zenithui.data.Widgets
 import androidx.compose.material.icons.automirrored.rounded.Logout
 import androidx.compose.material.icons.rounded.DoneAll
@@ -111,10 +113,14 @@ import androidx.compose.material.icons.rounded.Public
 import com.gabriel.zenithui.ui.common.AppIcon
 import com.gabriel.zenithui.ui.common.LocalMotionLevel
 import com.gabriel.zenithui.ui.common.Motion
+import com.gabriel.zenithui.ui.common.SectionLabel
 import com.gabriel.zenithui.ui.common.SheetPull
 import com.gabriel.zenithui.ui.common.appearIn
 import com.gabriel.zenithui.ui.common.pressBounce
 import com.gabriel.zenithui.ui.common.staggerDelay
+import com.gabriel.zenithui.ui.common.unfoldIn
+import com.gabriel.zenithui.ui.common.unfoldOut
+import com.gabriel.zenithui.ui.onboarding.Segmented
 import com.gabriel.zenithui.ui.onboarding.TipList
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.glass
@@ -566,6 +572,13 @@ fun CustomizeSheet(
     wallpaper: ImageBitmap?,
     /** What the wallpaper is called, when it is one of Zenith's own designs. */
     wallpaperName: String?,
+    /** How Zenith's own widgets are drawn, colour or glass: see [WidgetLooks]. */
+    widgetLook: String,
+    onWidgetLook: (String) -> Unit,
+    /** Whether the home screen is on the new look already ([com.gabriel.zenithui.data.NewLook.isOn]). */
+    newLookOn: Boolean,
+    /** Puts the home screen on the new look ([com.gabriel.zenithui.data.NewLook.apply]). */
+    onNewLook: () -> Unit,
     onWallpaper: () -> Unit,
     onHelp: () -> Unit,
     onAmbient: () -> Unit,
@@ -580,49 +593,84 @@ fun CustomizeSheet(
             ?.isRoleHeld(android.app.role.RoleManager.ROLE_HOME) == true
     }
     val palette = LocalPalette.current
-    ZenithSheet(visible = visible, onDismiss = onDismiss, title = "Customise") {
-        // The four things people come here for, as big targets with room between them; the rest
-        // underneath, in a group of their own with a line between each.
-        Row(horizontalArrangement = Arrangement.spacedBy(TILE_GAP)) {
-            QuickTile(Icons.Rounded.Dashboard, "Widgets", "Add a clock, calendar, note, battery or toggles", index = 0, modifier = Modifier.weight(1f)) { onWidgets() }
-            QuickTile(
-                icon = Icons.Rounded.Image,
-                label = "Wallpaper",
-                detail = when {
-                    wallpaperName != null -> "$wallpaperName, one of Zenith's own"
-                    wallpaper != null -> "A photo of yours"
-                    else -> "Zenith's own designs, or a photo of yours"
-                },
-                picture = wallpaper,
-                index = 1,
-                modifier = Modifier.weight(1f),
-            ) { onWallpaper() }
-        }
-        Spacer(Modifier.height(TILE_GAP))
-        Row(horizontalArrangement = Arrangement.spacedBy(TILE_GAP)) {
-            QuickTile(Icons.Rounded.Tune, "Settings", "Light or dark, grid, glass, motion and backup", index = 2, modifier = Modifier.weight(1f)) { onSettings() }
-            QuickTile(Icons.Rounded.Bedtime, "Bedside clock", "A dim full-screen clock for the night", index = 3, modifier = Modifier.weight(1f)) { onAmbient() }
-        }
-        Spacer(Modifier.height(18.dp))
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(22.dp))
-                .background(palette.onGlass.copy(alpha = 0.07f))
-                .padding(horizontal = 6.dp, vertical = 2.dp),
-        ) {
-            if (!isHome) {
-                MenuRow(Icons.Rounded.Home, "Make Zenith your home screen", "So the home button always comes back here", index = 4) { onDefaultLauncher(); onDismiss() }
-                // Under the words, not under the icon, as between the rows of Settings.
-                Box(
-                    Modifier
-                        .padding(start = 58.dp, end = 8.dp)
-                        .fillMaxWidth()
-                        .height(1.dp)
-                        .background(palette.onGlass.copy(alpha = 0.08f))
+    val reduced = LocalMotionLevel.current.reduced
+    ZenithSheet(visible = visible, onDismiss = onDismiss, title = "Customise", maxHeightFraction = 0.86f) {
+        // It scrolls on a phone too short to show all of it, rather than cutting off what is at
+        // its foot.
+        Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
+            // The four things people come here for, as big targets with room between them; the rest
+            // underneath, in a group of their own with a line between each.
+            Row(horizontalArrangement = Arrangement.spacedBy(TILE_GAP)) {
+                QuickTile(Icons.Rounded.Dashboard, "Widgets", "Add a clock, calendar, note, battery or toggles", index = 0, modifier = Modifier.weight(1f)) { onWidgets() }
+                QuickTile(
+                    icon = Icons.Rounded.Image,
+                    label = "Wallpaper",
+                    detail = when {
+                        wallpaperName != null -> "$wallpaperName, one of Zenith's own"
+                        wallpaper != null -> "A photo of yours"
+                        else -> "Zenith's own designs, or a photo of yours"
+                    },
+                    picture = wallpaper,
+                    index = 1,
+                    modifier = Modifier.weight(1f),
+                ) { onWallpaper() }
+            }
+            Spacer(Modifier.height(TILE_GAP))
+            Row(horizontalArrangement = Arrangement.spacedBy(TILE_GAP)) {
+                QuickTile(Icons.Rounded.Tune, "Settings", "Light or dark, grid, glass, motion and backup", index = 2, modifier = Modifier.weight(1f)) { onSettings() }
+                QuickTile(Icons.Rounded.Bedtime, "Bedside clock", "A dim full-screen clock for the night", index = 3, modifier = Modifier.weight(1f)) { onAmbient() }
+            }
+            Spacer(Modifier.height(18.dp))
+            // Colour or glass, for every one of Zenith's own widgets at once.
+            Column(Modifier.appearIn(delayMillis = staggerDelay(4), riseFrom = 18f)) {
+                SectionLabel("Widget look", Modifier.padding(start = 6.dp, bottom = 8.dp))
+                Segmented(
+                    options = WidgetLooks.ids.map { it to WidgetLooks.label(it) },
+                    selected = WidgetLooks.of(widgetLook),
+                    onSelect = onWidgetLook,
                 )
             }
-            MenuRow(Icons.Rounded.HelpOutline, "How it works", "Every gesture in one page", index = 5) { onHelp() }
+            Spacer(Modifier.height(18.dp))
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(22.dp))
+                    .background(palette.onGlass.copy(alpha = 0.07f))
+                    .padding(horizontal = 6.dp, vertical = 2.dp),
+            ) {
+                // Offered while the home screen is not on the new look, however it got that way: a
+                // phone that kept its home screen when asked, or one of the look's settings changed
+                // since. It says what moves before anything does.
+                AnimatedVisibility(visible = !newLookOn, enter = unfoldIn(reduced), exit = unfoldOut(reduced)) {
+                    Column {
+                        MenuRow(
+                            Icons.Rounded.PhoneIphone,
+                            "Use the new look",
+                            "The iPhone's grid and icons, colour widgets and the glass dock. Some apps may move to another page",
+                            index = 5,
+                        ) { onNewLook(); onDismiss() }
+                        Box(
+                            Modifier
+                                .padding(start = 58.dp, end = 8.dp)
+                                .fillMaxWidth()
+                                .height(1.dp)
+                                .background(palette.onGlass.copy(alpha = 0.08f))
+                        )
+                    }
+                }
+                if (!isHome) {
+                    MenuRow(Icons.Rounded.Home, "Make Zenith your home screen", "So the home button always comes back here", index = 6) { onDefaultLauncher(); onDismiss() }
+                    // Under the words, not under the icon, as between the rows of Settings.
+                    Box(
+                        Modifier
+                            .padding(start = 58.dp, end = 8.dp)
+                            .fillMaxWidth()
+                            .height(1.dp)
+                            .background(palette.onGlass.copy(alpha = 0.08f))
+                    )
+                }
+                MenuRow(Icons.Rounded.HelpOutline, "How it works", "Every gesture in one page", index = 7) { onHelp() }
+            }
         }
     }
 }

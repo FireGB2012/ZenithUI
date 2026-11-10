@@ -160,7 +160,7 @@ fun Modifier.glass(
         tinted = tinted,
         onWallpaper = onWallpaper,
     ).tuned(tuning)
-    val lens = rememberLens(levels)
+    val lens = sharedLens(levels)
     var origin by remember { mutableStateOf(Offset.Zero) }
     // Where the pane was laid out, kept to work out where it is drawn while something moves it.
     val placed = remember { arrayOfNulls<LayoutCoordinates>(1) }
@@ -386,7 +386,10 @@ internal val SYSTEM_WALLPAPER_ZOOM: Float = if (Build.VERSION.SDK_INT >= 34) 1.1
 internal fun systemWallpaperOffset(launcher: Offset): Offset =
     if (Build.VERSION.SDK_INT >= 34) Offset(0.5f, 0.5f) else launcher
 
-/** One shader per pane, rebuilt only when the wallpaper itself changes. */
+/**
+ * A lens of its own for [levels], rebuilt only when the wallpaper itself changes: what [ZenithTheme]
+ * makes the shared one with, and what a pane falls back to where none was made (see [sharedLens]).
+ */
 @Composable
 internal fun rememberLens(levels: GlassLevels?): LiquidGlassShader? =
     remember(levels) {
@@ -397,6 +400,20 @@ internal fun rememberLens(levels: GlassLevels?): LiquidGlassShader? =
             null
         }
     }
+
+/**
+ * The lens for [levels]: the one [ZenithTheme] made for them ([LocalLens]), which every pane shares,
+ * so a page of panes coming into view, or a new wallpaper, compiles the shader once and not once a
+ * pane. Where none was made for these levels (a preview, PinItemActivity, the island), the pane
+ * makes its own, as every pane once did.
+ */
+@Composable
+internal fun sharedLens(levels: GlassLevels?): LiquidGlassShader? {
+    val shared = LocalLens.current
+    // Before Android 13 there is no lens, shared or not, and nothing to ask what one was made for.
+    val made = Build.VERSION.SDK_INT >= 33 && levels != null && shared != null && shared.levels === levels
+    return if (made) shared else rememberLens(levels)
+}
 
 /** The recipe for one pane. Kept apart from drawing so the launch card can use the same glass. */
 internal fun glassLook(

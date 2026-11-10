@@ -45,6 +45,13 @@ val LocalBackdrop = staticCompositionLocalOf<ImageBitmap?> { null }
 /** The wallpaper at every softness the lens shows it: bent at a pane's rim, softened in its face, thrown back by its edge. */
 val LocalGlassLevels = staticCompositionLocalOf<GlassLevels?> { null }
 
+/**
+ * The lens made for [LocalGlassLevels], once for each wallpaper, which every pane shares (see
+ * `sharedLens`). Null where none was made: before Android 13, without a copy of the wallpaper, and
+ * outside [ZenithTheme].
+ */
+internal val LocalLens = staticCompositionLocalOf<LiquidGlassShader?> { null }
+
 /** Android's current wallpaper scroll, read during drawing so paging only invalidates the material. */
 val LocalWallpaperOffset = staticCompositionLocalOf<State<Offset>> { mutableStateOf(Offset(0.5f, 0.5f)) }
 
@@ -140,12 +147,17 @@ fun ZenithTheme(
     // floats the home screen, which it does not with movement reduced.
     val tilt = rememberTilt(settings.glassShine, floats = !MotionLevel.of(settings.motion, rememberAnimationsEnabled()).reduced)
 
+    // One lens for the wallpaper, shared by every pane of glass, made again only when the wallpaper
+    // changes: a page of panes coming into view no longer compiles the shader once for each.
+    val lens = rememberLens(glass)
+
     CompositionLocalProvider(
         LocalTilt provides tilt.light,
         LocalParallax provides tilt.parallax,
         LocalPalette provides palette,
         LocalBackdrop provides glass?.frost,
         LocalGlassLevels provides glass,
+        LocalLens provides lens,
         LocalScreenSize provides screenSize,
         LocalGlassStrength provides settings.glass,
         LocalGlassBody provides GlassBody.byId(settings.glassBody),

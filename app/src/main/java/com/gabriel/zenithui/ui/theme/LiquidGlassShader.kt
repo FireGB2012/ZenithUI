@@ -42,10 +42,14 @@ import kotlin.math.max
  * polished edge mirrors the lamp there is a glint, with a fainter one opposite.
  *
  * A finger on the glass lights it from within, the glow starting under the fingertip and spreading
- * out. One shader per pane, built once; each frame only sets numbers on it.
+ * out.
+ *
+ * One shader for the wallpaper in [levels], built once and shared by every pane (see `sharedLens`):
+ * each pane sets every number on it before it draws, and Android copies those numbers into the
+ * drawing as it is recorded, so no pane is drawn with another's.
  */
 @RequiresApi(33)
-internal class LiquidGlassShader(levels: GlassLevels) {
+internal class LiquidGlassShader(val levels: GlassLevels) {
     private val sharpSize = sizeOf(levels.sharp)
     private val mistSize = sizeOf(levels.mist)
     private val frostSize = sizeOf(levels.frost)

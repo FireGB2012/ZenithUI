@@ -361,7 +361,7 @@ internal fun HomeOptions(settings: ZenithSettings, plus: PlusStatus, preview: Se
                 }
                 GroupDivider(inset = 16.dp)
                 Spot("labelShadow") {
-                    ToggleRow("Name shadow", "A soft shadow under the names, for a busy wallpaper", settings.labelShadow) { value ->
+                    ToggleRow("Name shadow", "A darker shadow under the names and Search, for a pale or busy wallpaper", settings.labelShadow) { value ->
                         change { it.copy(labelShadow = value) }
                     }
                 }

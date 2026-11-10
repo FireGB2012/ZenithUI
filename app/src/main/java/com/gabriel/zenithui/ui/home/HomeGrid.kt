@@ -2174,14 +2174,15 @@ fun DockBar(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 if (keys.isEmpty()) {
-                    // White, with the soft shadow the names on the wallpaper have, as Search's word
-                    // is: it stands on clear glass that only mists the wallpaper, or on the wallpaper.
+                    // White, with the shadow the names on the wallpaper have, darker with Name shadow
+                    // on, as Search's word is: it stands on clear glass that only mists the
+                    // wallpaper, or on the wallpaper.
                     Text(
                         text = if (highlight) "Let go to add it" else "Drag an app here to add it to the dock",
                         color = Color.White.copy(alpha = 0.85f),
                         fontSize = 12.sp,
                         style = LocalTextStyle.current.merge(
-                            TextStyle(shadow = labelShadow(onWallpaper = true, legacyShadow = false, density = density.density))
+                            TextStyle(shadow = labelShadow(onWallpaper = true, legacyShadow = LocalLabelStyle.current.shadow, density = density.density))
                         ),
                         modifier = Modifier.padding(vertical = 10.dp),
                     )

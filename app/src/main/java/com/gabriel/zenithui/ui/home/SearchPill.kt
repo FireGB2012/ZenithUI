@@ -33,7 +33,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.gabriel.zenithui.data.HomeGeometry
+import com.gabriel.zenithui.ui.common.LocalLabelStyle
 import com.gabriel.zenithui.ui.common.labelShadow
+import com.gabriel.zenithui.ui.common.symbolShadowColour
 import com.gabriel.zenithui.ui.theme.GlassMaterial
 import com.gabriel.zenithui.ui.theme.GlassMotion
 import com.gabriel.zenithui.ui.theme.LocalOnWallpaper
@@ -62,6 +64,9 @@ fun SearchPill(
     tracking: (() -> Unit)? = null,
 ) {
     val density = LocalDensity.current.density
+    // The shadow the names on the wallpaper have, darker with Name shadow on: the word, the
+    // magnifier beside it, and the names are all white on the same pictures.
+    val shadow = labelShadow(onWallpaper = true, legacyShadow = LocalLabelStyle.current.shadow, density = density)
     // The pill stands on the wallpaper: the same clear glass in Light and in Dark.
     CompositionLocalProvider(LocalOnWallpaper provides true) {
         Box(
@@ -96,17 +101,34 @@ fun SearchPill(
                     scaleY = s
                 },
             ) {
-                Icon(Icons.Rounded.Search, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                Box {
+                    // The word's shadow under the magnifier too: a copy of it in the shadow's colour,
+                    // as far down, so the symbol reads wherever the word does.
+                    if (shadow != null) {
+                        Icon(
+                            Icons.Rounded.Search,
+                            contentDescription = null,
+                            tint = symbolShadowColour(shadow),
+                            modifier = Modifier
+                                .size(16.dp)
+                                .graphicsLayer {
+                                    translationX = shadow.offset.x
+                                    translationY = shadow.offset.y
+                                },
+                        )
+                    }
+                    Icon(Icons.Rounded.Search, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                }
                 Spacer(Modifier.width(6.dp))
-                // White whatever the palette, with the soft shadow the names on the wallpaper have, so
-                // the word reads on a pale wallpaper through glass that only mists it.
+                // White in Light and in Dark, with the names' shadow, so the word reads on a pale
+                // wallpaper through glass that only mists it.
                 Text(
                     text = "Search",
                     color = Color.White,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
-                    style = LocalTextStyle.current.merge(TextStyle(shadow = labelShadow(onWallpaper = true, legacyShadow = false, density = density))),
+                    style = LocalTextStyle.current.merge(TextStyle(shadow = shadow)),
                 )
             }
         }

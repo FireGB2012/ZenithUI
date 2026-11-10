@@ -21,11 +21,16 @@ class LabelInkTest {
     }
 
     @Test
-    fun `names on the wallpaper have a soft shadow, with Name shadow on or off`() {
-        for (density in densities) for (legacy in listOf(false, true)) {
+    fun `names on the wallpaper have a soft shadow, and a darker, closer one with Name shadow on`() {
+        for (density in densities) {
             assertEquals(
                 Shadow(Color.Black.copy(alpha = 0.45f), Offset(0f, 1f * density), 3f * density),
-                labelShadow(onWallpaper = true, legacyShadow = legacy, density = density),
+                labelShadow(onWallpaper = true, legacyShadow = false, density = density),
+            )
+            // For a pale or busy wallpaper: darker and tighter, not wider, which only thins it out.
+            assertEquals(
+                Shadow(Color.Black.copy(alpha = 0.75f), Offset(0f, 1f * density), 1.5f * density),
+                labelShadow(onWallpaper = true, legacyShadow = true, density = density),
             )
         }
     }

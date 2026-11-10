@@ -153,6 +153,10 @@ import com.gabriel.zenithui.ui.theme.LocalWallpaperOffset
 import com.gabriel.zenithui.ui.theme.ZenithShapes
 import com.gabriel.zenithui.ui.theme.glass
 import com.gabriel.zenithui.ui.theme.inkOnTint
+import com.gabriel.zenithui.ui.theme.GlassRing
+import com.gabriel.zenithui.ui.theme.LocalGlassRing
+import com.gabriel.zenithui.ui.theme.ringOfLight
+import androidx.compose.ui.layout.positionInWindow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -974,16 +978,21 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         }
     }
 
-    // A double tap sends a ring out from under the finger, as the thing it was set to do happens.
-    var tapRing by remember { mutableStateOf<Offset?>(null) }
-    val tapRingOut = remember { Animatable(1f) }
+    // A tap on the wallpaper sends a ring of light out from under the finger, across the whole
+    // screen: every pane of glass lights up as it passes, and the icons catch a gleam. It takes the
+    // place of the small ring a double tap used to send, and a double tap sends it too. None with
+    // movement reduced.
+    val glassRing = remember { GlassRing() }
+    LaunchedEffect(glassRing) { glassRing.play() }
+    val ringDensity = LocalDensity.current.density
+    /** A ring from [at], on the screen in pixels. */
     fun ringAt(at: Offset) {
         if (motion.reduced) return
-        tapRing = at
-        scope.launch {
-            tapRingOut.snapTo(0f)
-            tapRingOut.animateTo(1f, tween(560, easing = androidx.compose.animation.core.LinearOutSlowInEasing))
-        }
+        // The screen as the home screen is measured now, which is the whole window.
+        glassRing.screen = androidx.compose.ui.geometry.Size(drawerWidthPx, drawerHeightPx)
+        glassRing.density = ringDensity
+        // The frame clock counts in System.nanoTime's nanoseconds, as Android's frames do.
+        glassRing.start(at, System.nanoTime())
     }
 
     // In library mode the pager hands over whatever it cannot use: a swipe left from the last page
@@ -1492,12 +1501,15 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 // recreating a full screen RenderEffect on every drag frame is what made the
                 // drawer feel like it was lagging behind the finger.
                 .then(if (homeBlur > 0.5.dp) Modifier.blur(homeBlur) else Modifier)
+                // The ring of light from a tap, on the wallpaper under everything on the home screen.
+                .ringOfLight(glassRing)
         ) {
             // Picking something up on the home screen answers a beat sooner than Android's usual
             // long press, so moving things feels immediate rather than like waiting for permission.
             val baseConfiguration = androidx.compose.ui.platform.LocalViewConfiguration.current
             val quickHold = remember(baseConfiguration) { QuickHold(baseConfiguration) }
-            androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalViewConfiguration provides quickHold) {
+            // Every pane of glass on the home screen, and every icon, reads the ring while drawing.
+            androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalViewConfiguration provides quickHold, LocalGlassRing provides glassRing) {
             HomeLayout(
                 // The page and the gestures made on it. Nothing is written above it any more; while
                 // Zenith is not the home app the hint to make it so stands there instead, above the
@@ -1535,7 +1547,8 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                         Box(
                             Modifier
                                 .weight(1f)
-                                .onGloballyPositioned { pageOrigin = it.positionInRoot() }
+                                // On the screen as the glass has it, which is where a ring is sent from.
+                                .onGloballyPositioned { pageOrigin = it.positionInWindow() }
                                 .draggable(
                                     orientation = Orientation.Vertical,
                                     // With the library on the side, swiping up is left alone; swiping
@@ -1548,7 +1561,11 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                                 // is only listened for when it has been given something to do.
                                 .pointerInput(resizingId, doubleTap != GestureActions.NONE) {
                                     detectTapGestures(
-                                        onTap = { if (resizingId != null) resizingId = null },
+                                        // Only a tap on the wallpaper itself comes here: the icons and
+                                        // widgets on the page take their own, and Search and the dock
+                                        // are not on the page. It sends a ring of light out, or, while
+                                        // something is being resized, puts that down instead.
+                                        onTap = { at -> if (resizingId != null) resizingId = null else ringAt(pageOrigin + at) },
                                         onDoubleTap = if (doubleTap == GestureActions.NONE) null else { at ->
                                             if (resizingId == null) {
                                                 ringAt(pageOrigin + at)
@@ -1988,24 +2005,6 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             armed = pulling && pullDown >= pullFirePx,
             label = GestureActions.label(swipeDownAction) { key -> appsByKey[key]?.label },
             modifier = Modifier.align(Alignment.TopCenter),
-        )
-
-        // The ring a double tap sends out from under the finger: white, as it is drawn on the wallpaper.
-        Box(
-            Modifier
-                .fillMaxSize()
-                .drawBehind {
-                    val at = tapRing ?: return@drawBehind
-                    val out = tapRingOut.value
-                    if (out >= 1f) return@drawBehind
-                    drawCircle(
-                        color = Color.White,
-                        radius = 14.dp.toPx() + 74.dp.toPx() * out,
-                        center = at,
-                        alpha = 0.6f * (1f - out),
-                        style = Stroke(3.dp.toPx() * (1f - out) + 0.5.dp.toPx()),
-                    )
-                }
         )
 
         // The bedside clock is a room going dark, not a page turning: it fades in slowly, and out

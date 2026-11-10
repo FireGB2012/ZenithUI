@@ -158,20 +158,28 @@ internal class PressMotion(private val scope: CoroutineScope) {
 /**
  * Glass that moves like glass under a finger: [motion] says how. Only how it is drawn changes, never
  * where it is laid out, and the finger is watched, not taken, so taps, long presses and drags still
- * belong to whatever the pane is part of. One tick as the finger comes down.
+ * belong to whatever the pane is part of. One tick as the finger comes down, unless [haptic] is off
+ * (see [pressTicks]).
  *
  * For a pane of glass use `glass(motion = ...)`, which does this and keeps the wallpaper behind the
  * pane where it is on screen while the pane swells and leans. This is for anything else.
  */
 @Composable
-fun Modifier.glassPress(motion: GlassMotion, enabled: Boolean = true): Modifier {
+fun Modifier.glassPress(motion: GlassMotion, enabled: Boolean = true, haptic: Boolean = true): Modifier {
     val scope = rememberCoroutineScope()
     val state = remember { PressMotion(scope) }
-    return pressMotion(state, motion, enabled)
+    return pressMotion(state, motion, enabled, haptic)
 }
 
+/**
+ * Whether a press ticks as the finger comes down. A button does, to say it was felt. A home screen
+ * icon does not ([haptic] off): a finger lands on one at the start of nearly every swipe between
+ * pages, and a page turned that way must not buzz.
+ */
+internal fun pressTicks(haptic: Boolean): Boolean = haptic
+
 @Composable
-internal fun Modifier.pressMotion(state: PressMotion, motion: GlassMotion, enabled: Boolean): Modifier {
+internal fun Modifier.pressMotion(state: PressMotion, motion: GlassMotion, enabled: Boolean, haptic: Boolean = true): Modifier {
     if (!enabled) return this
     val reduced = LocalMotionLevel.current.reduced
     val haptics by rememberUpdatedState(rememberHaptics())
@@ -185,11 +193,11 @@ internal fun Modifier.pressMotion(state: PressMotion, motion: GlassMotion, enabl
             translationX = lean.x
             translationY = lean.y
         }
-        .pointerInput(motion, reduced) {
+        .pointerInput(motion, reduced, haptic) {
             awaitEachGesture {
                 val down = awaitFirstDown(requireUnconsumed = false)
                 state.press(motion, reduced)
-                haptics.tick()
+                if (pressTicks(haptic)) haptics.tick()
                 val leans = motion == GlassMotion.Lean && !reduced
                 val centre = Offset(size.width / 2f, size.height / 2f)
                 try {

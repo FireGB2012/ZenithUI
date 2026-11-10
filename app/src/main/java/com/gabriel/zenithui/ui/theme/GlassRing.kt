@@ -1,12 +1,27 @@
 package com.gabriel.zenithui.ui.theme
 
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.isSpecified
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.drawOutline
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.channels.Channel
 import kotlin.math.abs
 import kotlin.math.exp
@@ -16,7 +31,8 @@ import kotlin.math.max
 // A drop on the glass, the home screen's fourth twist: tap an empty bit of wallpaper and a ring of
 // light runs out from the finger across the screen, and every pane of glass lights up, rim and face,
 // as it passes over it. There is one ring for the whole screen, read by every pane while drawing, as
-// the tilt is. These are its rules, kept apart from drawing so they can be tested without a phone.
+// the tilt is. Its rules are kept apart from drawing so they can be tested without a phone; how it is
+// drawn on the wallpaper, and the gleam it puts on what is not glass, are at the end.
 
 /**
  * A ring as it is at one moment: where it started, [centre]; how far it has run, [radius]; how wide
@@ -155,6 +171,83 @@ class GlassRing(var screen: Size = Size.Zero, var density: Float = 1f) {
  * draws ([GlassRing.drawn]). Null where no ring is sent out: everywhere but the home screen.
  */
 val LocalGlassRing = staticCompositionLocalOf<GlassRing?> { null }
+
+/**
+ * Draws [ring] behind what this holds, on the wallpaper itself: a soft band of white with a fine line
+ * of light along it, fading as it runs out, under everything standing on the wallpaper. Glass shows
+ * the wallpaper and not what Zenith draws on it, so the ring is not seen through a pane: each pane
+ * lights up of itself as the ring passes, and icons and colour widgets gleam ([ringGleam]).
+ */
+@Composable
+fun Modifier.ringOfLight(ring: GlassRing): Modifier {
+    // Where this is on screen, kept from its layout, to bring the ring's centre into its own pixels.
+    val origin = remember { arrayOf(Offset.Zero) }
+    return this
+        .onGloballyPositioned { origin[0] = it.positionInWindow() }
+        .drawBehind {
+            val now = ring.drawn() ?: return@drawBehind
+            drawRingOfLight(now, now.centre - origin[0])
+        }
+}
+
+/** [ring] as the wallpaper shows it, round [centre] in this scope's pixels. */
+private fun DrawScope.drawRingOfLight(ring: RingNow, centre: Offset) {
+    val reach = ring.radius + 3f * ring.width
+    if (ring.strength <= 0f || reach <= 0f) return
+    // The band falls away either side of the ring as the light it puts on a pane does (paneLight),
+    // taken at whole widths for the gradient to blend between. While the ring has hardly left the
+    // finger, what would lie nearer than the middle is the middle.
+    val stops = ArrayList<Pair<Float, Color>>(8)
+    stops += 0f to Color.White.copy(alpha = RING_BAND * paneLight(0f, ring))
+    for (step in -3..3) {
+        val out = ring.radius + step * ring.width
+        if (out > 0f) stops += (out / reach) to Color.White.copy(alpha = RING_BAND * ring.strength * exp(-(step * step).toFloat()))
+    }
+    drawCircle(Brush.radialGradient(*stops.toTypedArray(), center = centre, radius = reach), radius = reach, center = centre)
+    if (ring.radius > 1f) {
+        drawCircle(
+            color = Color.White.copy(alpha = RING_LINE * ring.strength),
+            radius = ring.radius,
+            center = centre,
+            style = Stroke(RING_LINE_DP.dp.toPx()),
+        )
+    }
+}
+
+/**
+ * The faint gleam a ring of light from a tap on the wallpaper puts on what is not glass as it passes
+ * over it, an icon or a colour widget's card: white, inside [shape], as much as [GLEAM] of it where
+ * the ring is brightest. It is as bright as the ring is where the middle of this is. Glass lights up
+ * of itself and takes none of this; away from the home screen ([LocalGlassRing]) nothing is drawn.
+ */
+@Composable
+fun Modifier.ringGleam(shape: Shape): Modifier {
+    val ring = LocalGlassRing.current ?: return this
+    // The middle of this on screen, kept from its layout and read while drawing.
+    val middle = remember { arrayOf(Offset.Unspecified) }
+    return this
+        .onGloballyPositioned { middle[0] = it.positionInWindow() + Offset(it.size.width / 2f, it.size.height / 2f) }
+        .drawWithCache {
+            val outline = shape.createOutline(size, layoutDirection, this)
+            onDrawWithContent {
+                drawContent()
+                // Read here, while drawing, so a ring passing redraws this and composes nothing.
+                val now = ring.drawn() ?: return@onDrawWithContent
+                val at = middle[0]
+                if (!at.isSpecified) return@onDrawWithContent
+                val lit = paneLight((at - now.centre).getDistance(), now)
+                if (lit > 0.004f) drawOutline(outline, Color.White.copy(alpha = GLEAM * lit))
+            }
+        }
+}
+
+/** How much white the ring's band is on the wallpaper at its brightest, and the line along it. */
+private const val RING_BAND = 0.26f
+private const val RING_LINE = 0.6f
+private const val RING_LINE_DP = 1.5f
+
+/** The most white a passing ring puts on an icon or a colour widget. */
+private const val GLEAM = 0.18f
 
 /** How long a ring takes to run out and fade, in milliseconds. */
 internal const val RING_MS = 1200f

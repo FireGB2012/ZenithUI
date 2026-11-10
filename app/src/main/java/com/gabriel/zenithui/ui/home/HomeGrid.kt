@@ -112,9 +112,13 @@ import com.gabriel.zenithui.data.HostedWidgetCell
 import com.gabriel.zenithui.data.ShortcutCell
 import com.gabriel.zenithui.data.StackCell
 import com.gabriel.zenithui.data.WidgetCell
+import com.gabriel.zenithui.data.WidgetLooks
 import com.gabriel.zenithui.data.Widgets
 import com.gabriel.zenithui.data.ZenithSettings
+import com.gabriel.zenithui.data.IconStyles
 import com.gabriel.zenithui.ui.common.AppIcon
+import com.gabriel.zenithui.ui.common.LocalIconStyle
+import com.gabriel.zenithui.ui.theme.ringGleam
 import com.gabriel.zenithui.ui.common.IconBadge
 import com.gabriel.zenithui.ui.common.IconLabel
 import com.gabriel.zenithui.ui.common.LocalBadges
@@ -1037,7 +1041,7 @@ fun HomeItemContent(
                         onNoteChange = onNoteChange,
                         onSearch = onSearch,
                         onAmbient = onAmbient,
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier.fillMaxSize().widgetGleam(member.type, settings.widgetLook),
                     )
                 }
             }
@@ -1105,7 +1109,8 @@ fun HomeItemContent(
                     onAmbient = onAmbient,
                     modifier = Modifier
                         .fillMaxSize()
-                        .pixelFrame(geometry.widgetFrame(item.spanX, item.spanY)),
+                        .pixelFrame(geometry.widgetFrame(item.spanX, item.spanY))
+                        .widgetGleam(item.type, settings.widgetLook),
                 )
             }
             WidgetName(Widgets.shortName(item.type), geometry.widgetNameStrip(item.spanX, item.spanY))
@@ -1251,7 +1256,10 @@ private fun SuperAppTile(key: String, label: String, frame: PxRect, showLabel: B
                 .padding(start = with(density) { frame.left.toDp() })
                 .size(with(density) { frame.width.toDp() }, with(density) { frame.height.toDp() })
                 .launchOrigin(key)
-                .pressBounce(0.9f),
+                // Jelly, as every icon on a page is, whatever Pressing says. Its picture is never
+                // glass, so a ring of light from the wallpaper puts a gleam on it as it passes.
+                .jellyIcon(SuperIconShape)
+                .ringGleam(SuperIconShape),
         )
         if (showLabel) {
             Box(Modifier.fillMaxWidth().height(LABEL_LINE_HEIGHT), contentAlignment = Alignment.BottomCenter) {
@@ -1272,6 +1280,30 @@ fun Modifier.pixelFrame(frame: PxRect): Modifier = layout { measurable, constrai
     val placeable = measurable.measure(Constraints.fixed(frame.width.coerceAtLeast(0), frame.height.coerceAtLeast(0)))
     layout(constraints.maxWidth, constraints.maxHeight) { placeable.placeRelative(frame.left, frame.top) }
 }
+
+/** A super icon's outline: its picture is cut with corners a quarter of its short side, as IconLoader cuts it. */
+private val SuperIconShape = RoundedCornerShape(percent = 26)
+
+/**
+ * The gleam a ring of light from the wallpaper puts on an icon in [shape] as it passes ([ringGleam]).
+ * Under the Glass icon style icons are tiles of glass, which light up of themselves as the ring
+ * passes, so they take none.
+ */
+@Composable
+private fun Modifier.iconGleam(shape: androidx.compose.ui.graphics.Shape): Modifier =
+    if (LocalIconStyle.current == IconStyles.GLASS) this else ringGleam(shape)
+
+/**
+ * The gleam a ring of light from the wallpaper puts on one of Zenith's widgets of [type] in the
+ * colour look, a card and not glass ([ringGleam]). A glass widget lights up of itself as the ring
+ * passes, and an old "No glass" one stands on the wallpaper with no card to catch it.
+ */
+@Composable
+private fun Modifier.widgetGleam(type: String, look: String): Modifier =
+    if (WidgetLooks.of(look) == WidgetLooks.COLOUR && !type.startsWith(Widgets.BARE_PREFIX)) ringGleam(WidgetCardShape) else this
+
+/** The corners of a widget's card, as every widget on the home screen has them. */
+private val WidgetCardShape = RoundedCornerShape(HomeGeometry.WIDGET_CORNER_DP.dp)
 
 @Composable
 fun AppTile(
@@ -1305,7 +1337,9 @@ fun AppTile(
             modifier = Modifier
                 .then(if (frame != null) Modifier.padding(start = with(density) { frame.left.toDp() }) else Modifier)
                 .launchOrigin(key)
-                .pressBounce(),
+                // On a home page an icon is jelly, whatever Pressing says, and gleams as a ring of light
+                // from the wallpaper passes; in the drawer and a folder's panel it keeps Pressing.
+                .then(if (frame != null) Modifier.jellyIcon(shape).iconGleam(shape) else Modifier.pressBounce()),
         )
         if (showLabel) {
             // Always exactly LABEL_LINE_HEIGHT tall, so every icon's top edge sits on one line and
@@ -1347,7 +1381,8 @@ fun ShortcutTile(
                 .then(if (frame != null) Modifier.padding(start = with(density) { frame.left.toDp() }) else Modifier)
                 .size(iconSize)
                 .launchOrigin(item.key)
-                .pressBounce(),
+                // Jelly on a home page, as an app's icon is.
+                .then(if (frame != null) Modifier.jellyIcon(shape).iconGleam(shape) else Modifier.pressBounce()),
         ) {
             AppIcon(key = item.key, label = item.label, size = iconSize, shape = shape)
             if (owner != null) {
@@ -1398,7 +1433,9 @@ fun FolderTile(
             Modifier
                 .then(if (frame != null) Modifier.padding(start = with(density) { frame.left.toDp() }) else Modifier)
                 .size(iconSize)
-                .pressBounce(),
+                // Jelly on a home page, as an app's icon is. A folder is glass, which lights up of
+                // itself as a ring of light from the wallpaper passes, so it takes no gleam.
+                .then(if (frame != null) Modifier.jellyIcon(ZenithShapes.icon) else Modifier.pressBounce()),
         ) {
             Box(
                 Modifier
@@ -2286,15 +2323,18 @@ fun DockBar(
                             },
                         contentAlignment = Alignment.Center,
                     ) {
+                        val iconShape = ZenithShapes.forIconShape(settings.iconShape)
                         AppIcon(
                             key = key,
                             label = appsByKey[key]?.label ?: "",
                             size = iconSize,
-                            shape = ZenithShapes.forIconShape(settings.iconShape),
+                            shape = iconShape,
                             badge = true,
                             modifier = Modifier
                                 .launchOrigin(key)
-                                .pressBounce()
+                                // Jelly, as the icons on the page are, whatever Pressing says.
+                                .jellyIcon(iconShape)
+                                .iconGleam(iconShape)
                                 .graphicsLayer {
                                     // A dock app that has just been closed lands back into its place.
                                     val landing = AppLanding.scaleFor(key)

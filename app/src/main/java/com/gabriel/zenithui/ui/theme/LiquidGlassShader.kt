@@ -42,7 +42,8 @@ import kotlin.math.max
  * polished edge mirrors the lamp there is a glint, with a fainter one opposite.
  *
  * A finger on the glass lights it from within, the glow starting under the fingertip and spreading
- * out.
+ * out. A ring of light from a tap on the wallpaper (see [GlassRing]) lights its rim, and a little of
+ * its face, where the ring's band crosses it.
  *
  * One shader for the wallpaper in [levels], built once and shared by every pane (see `sharedLens`):
  * each pane sets every number on it before it draws, and Android copies those numbers into the
@@ -82,6 +83,8 @@ internal class LiquidGlassShader(val levels: GlassLevels) {
         lean: Offset = Offset.Zero,
         /** The exponent of a free-form outline's superellipse: see [squircleExponent]. */
         squircleN: Float = SQUIRCLE_EXPONENT,
+        /** A ring of light from a tap on the wallpaper, its centre in pane pixels, or null for none. */
+        ring: RingNow? = null,
     ) {
         if (size.width <= 0f || size.height <= 0f || screen.width <= 0 || screen.height <= 0) return
         // The wallpaper as Android shows it: centre-cropped to fill the screen, zoomed a little
@@ -122,6 +125,11 @@ internal class LiquidGlassShader(val levels: GlassLevels) {
         shader.setFloatUniform("wallTint", look.wallTint.coerceIn(0f, 1f))
         // Set on every draw, whatever the outline, so a pane is never left with another pane's.
         shader.setFloatUniform("squircleN", squircleN)
+        // Set on every draw too, so a pane the ring is not crossing never keeps another pane's band.
+        shader.setFloatUniform("ringCentre", ring?.centre?.x ?: 0f, ring?.centre?.y ?: 0f)
+        shader.setFloatUniform("ringRadius", ring?.radius ?: 0f)
+        shader.setFloatUniform("ringWidth", ring?.width ?: 1f)
+        shader.setFloatUniform("ringStrength", (ring?.strength ?: 0f).coerceIn(0f, 1f))
         when (outline) {
             is Outline.Rounded -> {
                 val r = outline.roundRect
@@ -190,6 +198,10 @@ internal class LiquidGlassShader(val levels: GlassLevels) {
             uniform float presence;
             uniform float4 touch;
             uniform float wallTint;
+            uniform float2 ringCentre;
+            uniform float ringRadius;
+            uniform float ringWidth;
+            uniform float ringStrength;
 
             // Signed distance to the outline: negative inside, in pixels.
             float edgeDistance(float2 point) {
@@ -354,6 +366,15 @@ internal class LiquidGlassShader(val levels: GlassLevels) {
                 // In the light the pane is pale already, and the same glow would whiten its whole edge.
                 color += lamp * shine * (rim * (1.0 - 0.12 * dark) + (band + bloom) * (0.5 + 0.22 * dark)
                     + relief * (1.1 * glint + sheen + mix(0.40, 0.90, dark) * max(form, 0.0)));
+
+                // A ring of light from a tap on the wallpaper, running out across the screen: where
+                // its band crosses the pane the face brightens a little, and the rim and the glow just
+                // inside it catch the light, as a rim catches any light that passes over it.
+                if (ringStrength > 0.0) {
+                    float ringOff = (length(point - ringCentre) - ringRadius) / max(ringWidth, 1.0);
+                    float ringLit = ringStrength * exp(-ringOff * ringOff);
+                    color += lamp * ringLit * (0.10 + rimmed * (0.85 * hairline + 0.30 * near * near) + 0.16 * t * t);
+                }
 
                 // A finger lights the glass from within: brightest under the fingertip, spreading
                 // through the pane, and flaring the rim where the glow reaches it.

@@ -75,8 +75,9 @@ enum class GlassMaterial { Regular, Clear }
  * opposite, in the colour of the wallpaper round it, and it moves as the phone tilts. The pane is
  * a solid slab and looks it: its shoulders are shaded by that light, its polished edge glints, and
  * it casts a shadow, wide where it floats and close and dark under its edge, deeper in the dark.
- * An [interactive] pane lights up from within under your finger. Labels and icons drawn on top
- * stay sharp.
+ * An [interactive] pane lights up from within under your finger, and on the home screen every pane
+ * lights up, rim and face, as a ring of light from a tap on the wallpaper passes ([LocalGlassRing]).
+ * Labels and icons drawn on top stay sharp.
  *
  * Glass standing on the wallpaper ([LocalOnWallpaper]: everything on a home page, the dock, the
  * Search pill) is the same in Light and in Dark, since the picture it stands on does not change with
@@ -160,6 +161,8 @@ fun Modifier.glass(
     val wallTinted = wallpaperTint && onWallpaper && !tinted && !tint.isSpecified
     // The wallpaper's colour for when there is no copy of it to read from: none, if never read.
     val savedWall = LocalWallColour.current
+    // The ring of light a tap on the wallpaper sends out, on the home screen: read while drawing.
+    val glassRing = LocalGlassRing.current
     val look = glassLook(
         material = material,
         strength = amount,
@@ -270,6 +273,7 @@ fun Modifier.glass(
                     tuning = tuning,
                     squircleN = squircleN,
                     wall = wall,
+                    ring = glassRing?.drawn(),
                 )
             }
         }
@@ -687,6 +691,12 @@ internal fun DrawScope.drawLiquidGlass(
      * wallpaper's colour under each point itself.
      */
     wall: Color = Color.Unspecified,
+    /**
+     * A ring of light from a tap on the wallpaper ([GlassRing]), its centre where the screen has it,
+     * or null for none. The lens lights the band where it crosses the pane; without the lens the
+     * rim brightens as the ring passes the pane's middle ([paneLight]).
+     */
+    ring: RingNow? = null,
 ) {
     if (paneSize.width <= 0f || paneSize.height <= 0f || look.opacity <= 0f) return
     // The light sits up and to the left, and swings the other way as the phone tips.
@@ -694,10 +704,12 @@ internal fun DrawScope.drawLiquidGlass(
     val leaning = if (tuning.lightTilt) lean else Offset.Zero
     val canSee = softened != null && screen.width > 0 && screen.height > 0
     val shown = systemWallpaperOffset(wallpaperOffset)
+    // The ring in the pane's own pixels, as everything about the pane is drawn.
+    val ringHere = ring?.let { it.copy(centre = it.centre - origin) }
 
     if (canSee && lens != null && Build.VERSION.SDK_INT >= 33) {
         drawIntoCanvas {
-            lens.draw(it.nativeCanvas, paneSize, outline, origin, screen, shown, density, look, light, dark, touch, leaning, squircleN)
+            lens.draw(it.nativeCanvas, paneSize, outline, origin, screen, shown, density, look, light, dark, touch, leaning, squircleN, ringHere)
         }
         return
     }
@@ -793,7 +805,10 @@ internal fun DrawScope.drawLiquidGlass(
             size = paneSize,
         )
     }
-    drawRim(paneSize, outline, look, light, dark)
+    // Without the lens there is one light for the whole pane: as bright as the ring is where the
+    // pane's middle is.
+    val ringLight = ringHere?.let { paneLight(hypot(it.centre.x - paneSize.width / 2f, it.centre.y - paneSize.height / 2f), it) } ?: 0f
+    drawRim(paneSize, outline, look, light, dark, ringLight)
 }
 
 /**
@@ -804,8 +819,11 @@ internal fun DrawScope.drawLiquidGlass(
  *
  * The slab's form ([GlassLook.relief]) is drawn the same way and under the rim: light falling away
  * evenly across the pane, and the edge turned from the lamp in its own shade.
+ *
+ * A ring of light from a tap on the wallpaper passing the pane, [ringLight] of it, brightens the
+ * rim all the way round, since it comes from no one side.
  */
-private fun DrawScope.drawRim(paneSize: Size, outline: Outline, look: GlassLook, light: Offset, dark: Boolean) {
+private fun DrawScope.drawRim(paneSize: Size, outline: Outline, look: GlassLook, light: Offset, dark: Boolean, ringLight: Float = 0f) {
     val centre = Offset(paneSize.width / 2f, paneSize.height / 2f)
     val length = kotlin.math.hypot(light.x, light.y).coerceAtLeast(0.001f)
     val towards = Offset(light.x / length, light.y / length)
@@ -855,7 +873,18 @@ private fun DrawScope.drawRim(paneSize: Size, outline: Outline, look: GlassLook,
     val glow = lit(0.085f * strength)
     for (width in RIM_GLOW_WIDTHS) drawOutline(outline, glow, style = Stroke(min(width.dp.toPx(), widest)))
     drawOutline(outline, lit(strength), style = Stroke(2.5.dp.toPx()))
+
+    val ring = ringLight.coerceIn(0f, 1f) * look.opacity
+    if (ring > 0.004f) {
+        val ringGlow = Color.White.copy(alpha = RING_RIM_GLOW * ring)
+        for (width in RIM_GLOW_WIDTHS) drawOutline(outline, ringGlow, style = Stroke(min(width.dp.toPx(), widest)))
+        drawOutline(outline, Color.White.copy(alpha = RING_RIM * ring), style = Stroke(2.5.dp.toPx()))
+    }
 }
+
+/** How bright a passing ring of light makes the rim, and the glow just inside it, at its brightest. */
+private const val RING_RIM = 0.85f
+private const val RING_RIM_GLOW = 0.10f
 
 /** The strokes that make the glow inside the rim, in dp; the pane's clip shows the inner half of each. */
 private val RIM_GLOW_WIDTHS = floatArrayOf(14f, 9f, 5f)

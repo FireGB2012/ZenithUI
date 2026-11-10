@@ -3,7 +3,9 @@ package com.gabriel.zenithui.ui.settings
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -50,7 +52,7 @@ import com.gabriel.zenithui.ui.common.appearIn
 import com.gabriel.zenithui.ui.common.pressBounce
 import com.gabriel.zenithui.ui.common.staggerDelay
 import com.gabriel.zenithui.ui.theme.LocalPalette
-import com.gabriel.zenithui.ui.theme.Palettes
+import com.gabriel.zenithui.ui.theme.NeutralLook
 import kotlinx.coroutines.launch
 
 /** What the Looks page can ask the home screen to do: each opens a sheet, or puts a Look on. */
@@ -89,7 +91,7 @@ internal fun LooksOptions(settings: ZenithSettings, plus: PlusStatus, looks: Lis
             ActionRow(
                 icon = if (plus.active) Icons.Rounded.AddCircleOutline else Icons.Rounded.Lock,
                 title = "Save this look",
-                subtitle = if (plus.active) "Your colours, glass, wallpaper, icons, grid and layout, under a name" else "Plus: keep looks, and switch between them in a tap",
+                subtitle = if (plus.active) "Light or dark, glass, wallpaper, icons, grid and layout, under a name" else "Plus: keep looks, and switch between them in a tap",
                 onClick = actions.save,
             )
         }
@@ -224,12 +226,17 @@ private fun ScheduleRow(name: String, rule: LookRule, arriving: Boolean, onRemov
     }
 }
 
-/** A saved Look: its colours as three dots, its name, and whether it is the one on now. */
+/**
+ * A saved Look: whether it is light or dark, as three dots of Zenith's look in that mode, its name,
+ * and whether it is the one on now.
+ */
 @Composable
 private fun LookRow(look: Look, inUse: Boolean, onPut: () -> Unit, onMenu: () -> Unit) {
     val palette = LocalPalette.current
-    // The palette it is in, your own one included: read from what the Look keeps.
-    val its = remember(look) { Palettes.resolve(Looks.apply(ZenithSettings(), look).first) }
+    // Light or dark, read from what the Look keeps; one that goes with the phone shows as the phone
+    // is now. Zenith has one look, so that is what the dots can tell Looks apart by.
+    val systemDark = isSystemInDarkTheme()
+    val its = remember(look, systemDark) { NeutralLook.of(Looks.apply(ZenithSettings(), look).first.isDark(systemDark)) }
     Row(
         Modifier
             .fillMaxWidth()
@@ -239,21 +246,29 @@ private fun LookRow(look: Look, inUse: Boolean, onPut: () -> Unit, onMenu: () ->
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.size(width = 44.dp, height = 28.dp)) {
-            val dots = listOfNotNull(its.backdrop.firstOrNull(), its.accentAlt, its.accent)
+            // Each is rimmed, so Dark's black on a dark page, or Light's white on a pale one, is
+            // still a dot.
+            val dots = listOf(its.backdrop.first(), its.backdrop.last(), its.accent)
             dots.forEachIndexed { i, colour ->
                 Box(
                     Modifier
                         .offset(x = (i * 10).dp)
                         .size(26.dp)
                         .clip(CircleShape)
-                        .background(colour),
+                        .background(colour)
+                        .border(1.dp, palette.onGlass.copy(alpha = 0.16f), CircleShape),
                 )
             }
         }
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(look.name, color = palette.onGlass, fontSize = 16.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(if (inUse) "On now" else "Tap to put it on", color = if (inUse) palette.accent else palette.onGlassMuted, fontSize = 13.sp)
+            Text(
+                if (inUse) "On now" else "Tap to put it on",
+                color = if (inUse) palette.onGlass else palette.onGlassMuted,
+                fontSize = 13.sp,
+                fontWeight = if (inUse) FontWeight.SemiBold else null,
+            )
         }
         Box(
             Modifier

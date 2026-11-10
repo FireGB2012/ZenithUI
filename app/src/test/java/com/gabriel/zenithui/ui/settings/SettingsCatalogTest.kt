@@ -94,8 +94,6 @@ class SettingsCatalogTest {
     @Test
     fun `Aura is a page of its own, and what is on it can be searched for`() {
         assertEquals("aura", found("streak").first())
-        assertEquals("auraThemes", found("unlock").first())
-        assertEquals("auraThemes", found("obsidian").first())
         assertEquals("auraCode", found("share").first())
         assertEquals("auraRedeem", found("redeem").first())
         SettingsCatalog.on(SettingsPage.Aura).forEach { assertTrue(it.id, it.id.startsWith("aura")) }

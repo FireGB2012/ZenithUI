@@ -97,7 +97,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.gabriel.zenithui.data.AuraThemes
 import com.gabriel.zenithui.data.Countdown
 import com.gabriel.zenithui.data.Forecast
 import com.gabriel.zenithui.data.NotificationDots
@@ -722,7 +721,6 @@ internal fun AuraWidget(form: WidgetForm, width: Dp, height: Dp) {
     val palette = LocalPalette.current
     val streak = settings.streak
     val pad = if (form == WidgetForm.Mini) 10.dp else 14.dp
-    val next = remember(settings.unlockedThemes) { AuraThemes.next(settings.unlockedThemes) }
     when (form) {
         WidgetForm.Mini -> Column(Modifier.fillMaxSize().padding(pad), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
             Symbol(Icons.Rounded.LocalFireDepartment, minOf(height, width) * 0.3f)
@@ -763,17 +761,6 @@ internal fun AuraWidget(form: WidgetForm, width: Dp, height: Dp) {
             WeekDots(streak)
             if (form == WidgetForm.Big || form == WidgetForm.Tall) {
                 Text("${settings.aura} aura", color = palette.onGlass, fontSize = 13.sp, fontWeight = FontWeight.Medium)
-                if (next != null && form == WidgetForm.Big) {
-                    val share = (settings.aura.toFloat() / next.price).coerceIn(0f, 1f)
-                    val filled = rememberFilled(share)
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("${next.name} at ${next.price}", color = quiet(), fontSize = 11.sp)
-                        Spacer(Modifier.height(4.dp))
-                        Box(Modifier.width(width * 0.6f).height(4.dp).clip(CircleShape).background(palette.onGlass.copy(alpha = 0.14f))) {
-                            Box(Modifier.fillMaxHeight().fillMaxWidth(filled.value).clip(CircleShape).background(Brush.horizontalGradient(listOf(palette.accent, palette.accentAlt))))
-                        }
-                    }
-                }
             }
         }
     }

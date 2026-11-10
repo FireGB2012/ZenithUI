@@ -67,7 +67,7 @@ fun PlusSheet(status: PlusStatus, onTry: () -> Unit, onNotNow: () -> Unit, modif
                     .glass(CircleShape, strength = 1.1f),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Rounded.AutoAwesome, contentDescription = null, tint = palette.accent, modifier = Modifier.size(26.dp))
+                Icon(Icons.Rounded.AutoAwesome, contentDescription = null, tint = palette.onGlass, modifier = Modifier.size(26.dp))
             }
             Spacer(Modifier.height(14.dp))
             Eyebrow("Zenith Plus", Modifier.rise(1))
@@ -113,7 +113,7 @@ fun PlusSheet(status: PlusStatus, onTry: () -> Unit, onNotNow: () -> Unit, modif
                             Icon(
                                 FEATURE_ICONS.getOrElse(index) { Icons.Rounded.AutoAwesome },
                                 contentDescription = null,
-                                tint = palette.accent,
+                                tint = palette.onGlass,
                                 modifier = Modifier.size(18.dp),
                             )
                         }

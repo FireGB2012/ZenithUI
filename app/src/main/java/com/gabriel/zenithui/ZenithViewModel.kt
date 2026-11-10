@@ -19,7 +19,6 @@ import com.gabriel.zenithui.data.ShortcutCell
 import kotlinx.coroutines.flow.receiveAsFlow
 import com.gabriel.zenithui.data.ShortcutKeys
 import com.gabriel.zenithui.data.Aura
-import com.gabriel.zenithui.data.AuraThemes
 import com.gabriel.zenithui.data.CheckIn
 import com.gabriel.zenithui.data.Backup
 import com.gabriel.zenithui.data.BillingRepository
@@ -310,18 +309,6 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
         if (settings.value.referralCode.isEmpty()) {
             store.update { it.copy(referralCode = Aura.newReferralCode()) }
         }
-    }
-
-    /** Buys a theme with points. False when it costs more than you have, or is already yours. */
-    fun unlockTheme(id: String): Boolean {
-        val theme = AuraThemes.byId(id) ?: return false
-        val current = settings.value
-        if (id in current.unlockedThemes) return false
-        if (current.aura < theme.price) return false
-        store.update {
-            it.copy(aura = it.aura - theme.price, unlockedThemes = it.unlockedThemes + id)
-        }
-        return true
     }
 
     /**

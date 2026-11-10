@@ -19,7 +19,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /**
- * Zenith Plus: the custom theme maker, hidden apps, and backup and restore.
+ * Zenith Plus: hidden apps, backup and restore, the island and the rest Plus unlocks.
  *
  * Everything that shipped free stays free. Plus is only ever additions, it runs for a week on
  * every install so you can judge it with your own home screen, and then it is one payment that
@@ -79,8 +79,11 @@ object Plus {
         return digest in CODE_HASHES
     }
 
+    /**
+     * What the Plus sheet and setup list. FEATURE_ICONS gives them their icons by position, so an
+     * entry comes out of both or neither.
+     */
     val FEATURES = listOf(
-        "Theme maker" to "Build your own palette: any accent, any glass, any background.",
         "Hidden apps" to "Keep chosen apps out of the drawer, behind a PIN.",
         "Backup & restore" to "Save your whole home screen to a file and put it back any time.",
         "Island" to "A pill round the camera, over every app: music, charging, notifications.",

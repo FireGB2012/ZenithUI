@@ -5,7 +5,7 @@ import java.time.LocalDate
 import kotlin.random.Random
 
 /**
- * Aura: the points you earn for turning up, and the themes you spend them on.
+ * Aura: the points you earn for turning up.
  *
  * It is entirely local. There is no account, no server and nothing sent anywhere — which is the
  * only way it can honestly sit inside a launcher that promises nothing leaves your phone. That
@@ -119,10 +119,12 @@ sealed interface CheckIn {
 }
 
 /**
- * The five themes aura buys, in the order they should be offered.
+ * The five themes aura bought, in the order they were offered.
  *
- * They are priced so the cheapest is about a week of turning up and the dearest is a month or so.
- * More can be added here later without touching anything else.
+ * Nothing is sold for aura now: the shop went with Zenith's colour themes, until Aura is rebuilt.
+ * What somebody bought is still theirs (`unlockedThemes`), and each set bought stays offered as
+ * colours for Zenith's painted wallpapers. They were priced so the cheapest was about a week of
+ * turning up and the dearest a month or so.
  */
 @Immutable
 data class AuraTheme(
@@ -144,8 +146,8 @@ object AuraThemes {
     fun byId(id: String): AuraTheme? = all.firstOrNull { it.id == id }
 
     /**
-     * What the points are being saved towards: the cheapest theme not yet among [unlocked]. Null
-     * once every one of them is owned.
+     * The cheapest theme not yet among [unlocked], which is what the points were saved towards
+     * while there was a shop. Null once every one of them is owned.
      */
     fun next(unlocked: List<String>): AuraTheme? = all.filter { it.id !in unlocked }.minByOrNull { it.price }
 

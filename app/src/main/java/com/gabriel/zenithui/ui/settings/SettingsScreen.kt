@@ -116,14 +116,11 @@ class SettingsPreview(
 class SettingsActions(
     val change: ((ZenithSettings) -> ZenithSettings) -> Unit,
     val wallpaper: () -> Unit,
-    val themeMaker: () -> Unit,
     val hiddenApps: () -> Unit,
     val freeform: (Boolean) -> Unit,
     val backup: () -> Unit,
     val restore: () -> Unit,
     val plus: () -> Unit,
-    /** Spends aura on a theme; false when there is not enough, or it is already owned. */
-    val unlockTheme: (String) -> Boolean,
     /** Takes somebody else's code; returns why not, or null when it was taken. With a server it is the server that is asked. */
     val redeem: suspend (String) -> String?,
     val help: () -> Unit,
@@ -547,7 +544,7 @@ private fun summary(page: SettingsPage, settings: ZenithSettings, plus: PlusStat
         plus.subscribed -> "Subscribed"
         plus.trialDaysLeft > 1 -> "${plus.trialDaysLeft} days of your trial left"
         plus.trialDaysLeft == 1 -> "Last day of your trial"
-        else -> "Wallpapers, theme maker, hidden apps, backup"
+        else -> "Wallpapers, hidden apps, backup, the island"
     }
     SettingsPage.Island -> when {
         !plus.active -> "Plus: your camera, stretched, over every app"

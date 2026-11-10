@@ -230,7 +230,6 @@ private sealed interface HomeSheet {
     data object Customize : HomeSheet
     data object Help : HomeSheet
     data object Plus : HomeSheet
-    data object ThemeMaker : HomeSheet
     data object HiddenApps : HomeSheet
     data object Toggles : HomeSheet
     data object Wallpapers : HomeSheet
@@ -2054,7 +2053,6 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             actions = SettingsActions(
                 change = { transform -> viewModel.updateSettings(transform) },
                 wallpaper = { showSheet(HomeSheet.Wallpapers) },
-                themeMaker = { withPlus { showSheet(HomeSheet.ThemeMaker) } },
                 hiddenApps = { withPlus { showSheet(HomeSheet.HiddenApps) } },
                 freeform = { on ->
                     // Turning it on is the Plus part; turning it off is always allowed.
@@ -2064,7 +2062,6 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 backup = { withPlus { saveBackup.launch(Backup.fileName()) } },
                 restore = { withPlus { openBackup.launch(arrayOf("*/*")) } },
                 plus = { showSheet(HomeSheet.Plus) },
-                unlockTheme = { id -> viewModel.unlockTheme(id) },
                 redeem = { code -> viewModel.redeemAuraCode(code) },
                 help = { showSheet(HomeSheet.Help) },
                 reset = { viewModel.resetEverything() },
@@ -2402,13 +2399,6 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     visible = up,
                     selected = settings.toggles,
                     onChange = { chosen -> viewModel.updateSettings { it.copy(toggles = chosen) } },
-                    onDismiss = { hideSheet() },
-                )
-
-                HomeSheet.ThemeMaker -> ThemeMakerSheet(
-                    visible = up,
-                    settings = settings,
-                    onChange = { transform -> viewModel.updateSettings(transform) },
                     onDismiss = { hideSheet() },
                 )
 

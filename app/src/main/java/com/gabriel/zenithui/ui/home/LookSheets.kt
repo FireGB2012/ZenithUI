@@ -157,7 +157,7 @@ fun LookMenuSheet(
 
     ZenithSheet(visible = visible, onDismiss = onDismiss, title = look.name) {
         var row = 0
-        MenuRow(Icons.Rounded.CheckCircle, "Put it on", "The home screen, its colours and its wallpaper become this look", index = row++) { onPut() }
+        MenuRow(Icons.Rounded.CheckCircle, "Put it on", "The home screen and its wallpaper become this look", index = row++) { onPut() }
         MenuRow(Icons.Rounded.Save, "Save the home screen over it", "Keeps its name; what is on the home screen now becomes the look", index = row++) { onUpdate(); onDismiss() }
         MenuRow(Icons.Rounded.Edit, "Rename", index = row++) { onRename() }
         if (canShare) {

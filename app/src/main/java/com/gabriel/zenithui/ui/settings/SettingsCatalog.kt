@@ -108,7 +108,6 @@ object SettingsCatalog {
         SettingsEntry("lookSchedule", SettingsPage.Looks, "Schedule", "look time night work automatic switch"),
         SettingsEntry("lookCode", SettingsPage.Looks, "Open a code", "look friend code import featured received", server = true),
         SettingsEntry("aura", SettingsPage.Aura, "Aura", "streak points daily reward balance flame"),
-        SettingsEntry("auraThemes", SettingsPage.Aura, "Themes to unlock", "ember tide orchid solstice obsidian buy spend"),
         SettingsEntry("auraCode", SettingsPage.Aura, "Your code", "referral share invite friend copy"),
         SettingsEntry("auraRedeem", SettingsPage.Aura, "Redeem a code", "referral gift friend enter"),
 

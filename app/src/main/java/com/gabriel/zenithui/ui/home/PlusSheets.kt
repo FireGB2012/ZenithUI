@@ -11,10 +11,6 @@ import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -40,7 +36,6 @@ import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Redeem
-import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Restore
 import androidx.compose.material.icons.rounded.Save
 import androidx.compose.material.icons.rounded.VisibilityOff
@@ -60,10 +55,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -78,12 +71,10 @@ import com.gabriel.zenithui.ui.common.GlassButton
 import com.gabriel.zenithui.ui.common.SectionLabel
 import com.gabriel.zenithui.ui.common.AppIcon
 import com.gabriel.zenithui.ui.common.LocalMotionLevel
-import com.gabriel.zenithui.ui.common.Motion
 import com.gabriel.zenithui.ui.common.appearIn
 import com.gabriel.zenithui.ui.common.popIn
 import com.gabriel.zenithui.ui.common.popOut
 import com.gabriel.zenithui.ui.common.pressBounce
-import com.gabriel.zenithui.ui.common.rememberTick
 import com.gabriel.zenithui.ui.common.shake
 import com.gabriel.zenithui.ui.common.staggerDelay
 import com.gabriel.zenithui.ui.common.unfoldIn
@@ -92,9 +83,9 @@ import com.gabriel.zenithui.ui.common.wordsChange
 import com.gabriel.zenithui.ui.settings.Toggle
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.LocalZenithFont
-import com.gabriel.zenithui.ui.theme.Palettes
 import com.gabriel.zenithui.ui.theme.ZenithShapes
 import com.gabriel.zenithui.ui.theme.glass
+import com.gabriel.zenithui.ui.theme.inkOnTint
 
 /**
  * The one paid thing in Zenith. It is shown as a description of what you get rather than as a
@@ -251,9 +242,11 @@ fun PlusSheet(
 private fun Modifier.arrive(turn: Int): Modifier =
     appearIn(delayMillis = staggerDelay(turn) * 2, fromScale = 0.985f, riseFrom = 40f, gentle = true)
 
-/** One icon per entry in Plus.FEATURES, in the same order. Setup shows them too. */
+/**
+ * One icon per entry in Plus.FEATURES, in the same order, so an entry taken out of one is taken out
+ * of the other. Setup shows them too. An entry with none here (the island) has the star.
+ */
 internal val FEATURE_ICONS: List<ImageVector> = listOf(
-    Icons.Rounded.Palette,
     Icons.Rounded.VisibilityOff,
     Icons.Rounded.Save,
 )
@@ -273,20 +266,14 @@ private fun PlusHero(status: PlusStatus, modifier: Modifier = Modifier) {
     }
     val inTrial = !status.purchased && !status.trialAvailable && status.trialDaysLeft > 0
 
+    // A plain plate in the words' ink, as the rest of the sheet is: the blue is kept for what can be
+    // tapped, and there is no theme's colour left to dress the card in.
     Column(
         modifier
             .fillMaxWidth()
             .clip(ZenithShapes.card)
-            .background(
-                Brush.linearGradient(
-                    listOf(
-                        palette.accent.copy(alpha = 0.42f),
-                        palette.accentAlt.copy(alpha = 0.18f),
-                        Color.Transparent,
-                    )
-                )
-            )
-            .border(1.dp, palette.accent.copy(alpha = 0.35f), ZenithShapes.card)
+            .background(palette.onGlass.copy(alpha = 0.06f))
+            .border(1.dp, palette.onGlass.copy(alpha = 0.10f), ZenithShapes.card)
             .padding(18.dp),
     ) {
         Box(
@@ -295,10 +282,10 @@ private fun PlusHero(status: PlusStatus, modifier: Modifier = Modifier) {
                 // The star lands a beat after the card it is on, with a bounce of its own.
                 .appearIn(delayMillis = 180, fromScale = 0.3f, riseFrom = 0f)
                 .clip(RoundedCornerShape(15.dp))
-                .background(Brush.linearGradient(listOf(palette.accent, palette.accentAlt))),
+                .background(palette.onGlass.copy(alpha = 0.10f)),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Rounded.AutoAwesome, contentDescription = null, tint = Color(0xFF0A0B12), modifier = Modifier.size(25.dp))
+            Icon(Icons.Rounded.AutoAwesome, contentDescription = null, tint = palette.onGlass, modifier = Modifier.size(25.dp))
         }
         Spacer(Modifier.height(14.dp))
         Text("Zenith Plus", color = palette.onGlass, fontSize = 26.sp, fontWeight = FontWeight.Bold)
@@ -325,7 +312,7 @@ private fun PlusHero(status: PlusStatus, modifier: Modifier = Modifier) {
                         .fillMaxWidth(run.value.coerceIn(0f, 1f))
                         .height(6.dp)
                         .clip(RoundedCornerShape(50))
-                        .background(Brush.horizontalGradient(listOf(palette.accent, palette.accentAlt)))
+                        .background(palette.onGlass)
                 )
             }
             Spacer(Modifier.height(6.dp))
@@ -351,14 +338,10 @@ private fun FeatureRow(icon: ImageVector, title: String, detail: String, unlocke
             Modifier
                 .size(38.dp)
                 .clip(RoundedCornerShape(12.dp))
-                .background(
-                    Brush.linearGradient(
-                        listOf(palette.accent.copy(alpha = 0.32f), palette.accentAlt.copy(alpha = 0.16f))
-                    )
-                ),
+                .background(palette.onGlass.copy(alpha = 0.08f)),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(icon, contentDescription = null, tint = palette.accent, modifier = Modifier.size(20.dp))
+            Icon(icon, contentDescription = null, tint = palette.onGlass, modifier = Modifier.size(20.dp))
         }
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
@@ -418,7 +401,7 @@ private fun PlanCard(
             Spacer(Modifier.height(6.dp))
             Text(
                 text = price,
-                color = if (featured) palette.accent else palette.onGlass,
+                color = palette.onGlass,
                 fontSize = 24.sp,
                 fontWeight = FontWeight.Bold,
             )
@@ -427,14 +410,14 @@ private fun PlanCard(
         if (badge != null) {
             Text(
                 text = badge,
-                color = Color(0xFF0A0B12),
+                color = inkOnTint(palette.accent),
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .padding(8.dp)
                     .clip(ZenithShapes.pill)
-                    .background(Brush.horizontalGradient(listOf(palette.accent, palette.accentAlt)))
+                    .background(palette.accent)
                     .padding(horizontal = 8.dp, vertical = 3.dp),
             )
         }
@@ -464,228 +447,6 @@ private fun SmallAction(icon: ImageVector, label: String, modifier: Modifier = M
 @Composable
 fun PlusLockedRow(label: String, subtitle: String, onClick: () -> Unit) {
     MenuRow(Icons.Rounded.Lock, label, subtitle, onClick = onClick)
-}
-
-// ---------------------------------------------------------------------- theme maker
-
-@Composable
-fun ThemeMakerSheet(
-    visible: Boolean,
-    settings: ZenithSettings,
-    onChange: ((ZenithSettings) -> ZenithSettings) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    val palette = LocalPalette.current
-    val preview = remember(settings) { Palettes.custom(settings) }
-
-    ZenithSheet(visible = visible, onDismiss = onDismiss, title = "Theme maker") {
-        Column(
-            Modifier.verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            // What you are building, drawn with the colours you have chosen so far.
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .height(96.dp)
-                    .clip(ZenithShapes.tile)
-                    .background(Brush.linearGradient(preview.backdrop)),
-                contentAlignment = Alignment.Center,
-            ) {
-                Row(
-                    Modifier
-                        .padding(horizontal = 18.dp)
-                        .fillMaxWidth()
-                        .glass(ZenithShapes.tile, strength = 1f, solid = 0.5f)
-                        .padding(14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Box(
-                        Modifier
-                            .size(34.dp)
-                            .clip(RoundedCornerShape(percent = 50))
-                            .background(Brush.linearGradient(listOf(preview.accent, preview.accentAlt)))
-                    )
-                    Spacer(Modifier.width(12.dp))
-                    Text(
-                        "Yours",
-                        color = if (settings.customDark) Color.White else Color(0xFF10131A),
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Medium,
-                    )
-                }
-            }
-
-            ColourField(
-                label = "Accent",
-                value = settings.customAccent,
-                onChange = { argb -> onChange { it.copy(customAccent = argb, paletteId = Palettes.CUSTOM) } },
-            )
-            ColourField(
-                label = "Second accent",
-                value = settings.customAccentAlt,
-                onChange = { argb -> onChange { it.copy(customAccentAlt = argb, paletteId = Palettes.CUSTOM) } },
-            )
-            ColourField(
-                label = "Background",
-                value = settings.customBackdrop,
-                onChange = { argb -> onChange { it.copy(customBackdrop = argb, paletteId = Palettes.CUSTOM) } },
-            )
-
-            SwitchRow(
-                title = "Light text",
-                detail = "On for dark backgrounds, off for pale ones.",
-                checked = settings.customDark,
-            ) { onChange { it.copy(customDark = !settings.customDark, paletteId = Palettes.CUSTOM) } }
-
-            // Offered until the theme is in use, and folded away once it is.
-            AnimatedVisibility(
-                visible = settings.paletteId != Palettes.CUSTOM,
-                enter = unfoldIn(LocalMotionLevel.current.reduced),
-                exit = unfoldOut(LocalMotionLevel.current.reduced),
-            ) {
-                GlassButton(
-                    text = "Use my theme",
-                    onClick = { onChange { it.copy(paletteId = Palettes.CUSTOM) } },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-        }
-    }
-}
-
-/** One colour, as a swatch and the three rails that make it. */
-@Composable
-private fun ColourField(label: String, value: Long, onChange: (Long) -> Unit) {
-    val palette = LocalPalette.current
-    val hsv = remember(value) { value.toHsv() }
-    var hue by remember(value) { mutableStateOf(hsv[0]) }
-    var saturation by remember(value) { mutableStateOf(hsv[1]) }
-    var brightness by remember(value) { mutableStateOf(hsv[2]) }
-
-    fun emit() = onChange(hsvToArgb(hue, saturation, brightness))
-
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                Modifier
-                    .size(28.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(Color(value.toInt()))
-                    .border(1.dp, palette.onGlass.copy(alpha = 0.20f), RoundedCornerShape(10.dp))
-            )
-            Spacer(Modifier.width(12.dp))
-            Text(label, color = palette.onGlass, fontSize = 14.sp, modifier = Modifier.weight(1f))
-            Text(
-                text = "#%06X".format(value.toInt() and 0xFFFFFF),
-                color = palette.onGlassMuted,
-                fontSize = 11.sp,
-            )
-        }
-
-        ColourRail(
-            colours = (0..12).map { Color(hsvToArgb(it * 30f, 1f, 1f).toInt()) },
-            fraction = hue / 360f,
-        ) { fraction ->
-            hue = fraction * 360f
-            emit()
-        }
-        ColourRail(
-            colours = listOf(Color(hsvToArgb(hue, 0f, brightness).toInt()), Color(hsvToArgb(hue, 1f, brightness).toInt())),
-            fraction = saturation,
-        ) { fraction ->
-            saturation = fraction
-            emit()
-        }
-        ColourRail(
-            colours = listOf(Color.Black, Color(hsvToArgb(hue, saturation, 1f).toInt())),
-            fraction = brightness,
-        ) { fraction ->
-            brightness = fraction
-            emit()
-        }
-    }
-}
-
-/**
- * A gradient bar you drag a knob along. Nicer to the thumb than a stock slider, and on brand. A
- * tap glides the knob to where you touched, a drag is followed almost exactly, and for as long as
- * a finger is on the bar the knob stands a little larger.
- */
-@Composable
-private fun ColourRail(colours: List<Color>, fraction: Float, onPick: (Float) -> Unit) {
-    var width by remember { mutableStateOf(1f) }
-    var held by remember { mutableStateOf(false) }
-    val at by animateFloatAsState(fraction.coerceIn(0f, 1f), spring(dampingRatio = 1f, stiffness = 1400f), label = "railKnob")
-    val grip = animateFloatAsState(if (held) 1f else 0f, Motion.press(), label = "railGrip")
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .height(26.dp)
-            .clip(RoundedCornerShape(percent = 50))
-            .background(Brush.horizontalGradient(colours))
-            // Only watches, for as long as a finger is down: the drag and the tap are below.
-            .pointerInput(Unit) {
-                awaitEachGesture {
-                    awaitFirstDown(requireUnconsumed = false)
-                    held = true
-                    try {
-                        do {
-                            val event = awaitPointerEvent()
-                        } while (event.changes.any { it.pressed })
-                    } finally {
-                        held = false
-                    }
-                }
-            }
-            .pointerInput(Unit) {
-                width = size.width.toFloat()
-                detectHorizontalDragGestures(
-                    onDragStart = { offset -> onPick((offset.x / size.width).coerceIn(0f, 1f)) },
-                ) { change, _ ->
-                    change.consume()
-                    onPick((change.position.x / size.width).coerceIn(0f, 1f))
-                }
-            }
-            .pointerInput(Unit) {
-                width = size.width.toFloat()
-                detectTapGestures { offset -> onPick((offset.x / size.width).coerceIn(0f, 1f)) }
-            },
-    ) {
-        Box(
-            Modifier
-                .fillMaxWidth(at)
-                .height(26.dp),
-            contentAlignment = Alignment.CenterEnd,
-        ) {
-            Box(
-                Modifier
-                    .padding(end = 2.dp)
-                    .size(20.dp)
-                    .graphicsLayer {
-                        val grown = 1f + 0.2f * grip.value
-                        scaleX = grown
-                        scaleY = grown
-                    }
-                    .clip(RoundedCornerShape(percent = 50))
-                    .background(Color.White)
-                    .border(2.dp, Color.Black.copy(alpha = 0.25f), RoundedCornerShape(percent = 50))
-            )
-        }
-    }
-}
-
-private fun Long.toHsv(): FloatArray {
-    val out = FloatArray(3)
-    android.graphics.Color.colorToHSV(this.toInt(), out)
-    return out
-}
-
-private fun hsvToArgb(hue: Float, saturation: Float, brightness: Float): Long {
-    val argb = android.graphics.Color.HSVToColor(
-        floatArrayOf(hue.coerceIn(0f, 360f), saturation.coerceIn(0f, 1f), brightness.coerceIn(0f, 1f))
-    )
-    return argb.toLong() and 0xFFFFFFFFL
 }
 
 // ---------------------------------------------------------------------- hidden apps
@@ -810,34 +571,6 @@ fun HiddenAppsSheet(
                 }
             }
         }
-    }
-}
-
-/**
- * A setting on or off, in a sheet: what it is, a line about it, and the same switch Settings has,
- * which the whole row works.
- */
-@Composable
-private fun SwitchRow(title: String, detail: String, checked: Boolean, onFlip: () -> Unit) {
-    val palette = LocalPalette.current
-    val tick = rememberTick()
-    val touch = remember { MutableInteractionSource() }
-    val pressed by touch.collectIsPressedAsState()
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clickable(interactionSource = touch, indication = null) {
-                tick()
-                onFlip()
-            },
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text(title, color = palette.onGlass, fontSize = 15.sp)
-            Text(detail, color = palette.onGlassMuted, fontSize = 12.sp)
-        }
-        Spacer(Modifier.width(12.dp))
-        Toggle(checked, pressed)
     }
 }
 

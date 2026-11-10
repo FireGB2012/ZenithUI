@@ -7,8 +7,8 @@ import java.time.DayOfWeek
 import java.time.LocalDateTime
 
 /**
- * A Look: everything you see on the home screen, saved under a name — the palette, light or dark,
- * the glass, the wallpaper design, the icons, the grid, the dock, the layout and the motion — and
+ * A Look: everything you see on the home screen, saved under a name — light or dark, the glass,
+ * the wallpaper design, the icons, the grid, the dock, the layout and the motion — and
  * nothing that is yours alone: not your name, your note or lists, your hidden apps, Aura or Plus.
  * Kept as the very JSON the settings and layout are saved as, so a Look made today still reads
  * when settings have grown by tomorrow.
@@ -69,7 +69,9 @@ object Looks {
     /**
      * What a Look keeps, by the names the settings are written under. Not `newLookAsked`: whether
      * this phone has been offered the new look is about the phone, so putting a Look on neither
-     * asks the question again nor stops it being asked.
+     * asks the question again nor stops it being asked. The palette and the colour sets stay,
+     * though Zenith is no longer drawn in them: they are the colours its wallpaper is painted in,
+     * and an old Look has to put on the wallpaper it was saved with.
      */
     val KEYS = listOf(
         "paletteId", "appearance", "glass", "glassPanels", "glassShine", "font", "numberFont",
@@ -166,7 +168,7 @@ object Looks {
         return settings.copy(dock = settings.dock.filter { it in installed }) to kept
     }
 
-    /** The palette a Look is in, for drawing its colours beside its name. */
+    /** The palette a Look was saved in; nothing draws it now. */
     fun paletteOf(look: Look): String = runCatching { JSONObject(look.settings).optString("paletteId") }.getOrDefault("")
 
     fun toJsonList(looks: List<Look>): String = JSONArray().apply { looks.forEach { put(it.toJson()) } }.toString()

@@ -197,7 +197,7 @@ object WidgetLayouts {
                 WidgetForm.Square -> "Your streak, large, and the week behind it as dots."
                 WidgetForm.Wide -> "The streak on the left; the week and your aura on the right."
                 WidgetForm.Tall -> "The flame, the streak, the week and your aura, down the widget."
-                WidgetForm.Big -> "The streak, the week, your aura and how close the next theme is."
+                WidgetForm.Big -> "The streak, the week and your aura."
             }
             "weather" -> when (form) {
                 WidgetForm.Mini -> "The temperature and the sky."

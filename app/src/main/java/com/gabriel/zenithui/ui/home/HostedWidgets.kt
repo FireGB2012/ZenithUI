@@ -79,7 +79,6 @@ import com.gabriel.zenithui.ui.common.unfoldIn
 import com.gabriel.zenithui.ui.common.unfoldOut
 import com.gabriel.zenithui.ui.theme.LocalOnWallpaper
 import com.gabriel.zenithui.ui.theme.LocalPalette
-import com.gabriel.zenithui.ui.theme.ZenithShapes
 import com.gabriel.zenithui.ui.theme.glass
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -90,7 +89,8 @@ val LocalWidgetHost = staticCompositionLocalOf<AppWidgetHost?> { null }
 
 /**
  * Another app's widget, in its frame on the page: drawn by that app, through Android's widget
- * host, at exactly the size of its cells, with a pane of glass behind it if asked for.
+ * host, at exactly the size of its cells, with a pane of glass behind it if asked for. It draws
+ * itself in either widget look, cut to the corners every widget has ([WidgetShape]).
  *
  * Only one view may draw a given widget at a time, so a copy of it — the grey one under a finger,
  * the small home screen in Settings — is [live] false and shows the widget's own preview picture
@@ -111,8 +111,8 @@ fun HostedWidget(
     }
     Box(
         modifier
-            .then(if (cell.glass) Modifier.glass(ZenithShapes.tile, strength = 1.1f, interactive = true) else Modifier)
-            .clip(ZenithShapes.tile),
+            .then(if (cell.glass) Modifier.glass(WidgetShape, strength = 1.1f, interactive = true) else Modifier)
+            .clip(WidgetShape),
     ) {
         when {
             // On its pane of glass on the wallpaper, the same glass in Light and in Dark, Zenith's

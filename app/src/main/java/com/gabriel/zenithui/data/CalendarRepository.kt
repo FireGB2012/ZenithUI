@@ -9,8 +9,10 @@ import androidx.compose.runtime.Immutable
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import java.time.ZoneOffset
 
 @Immutable
 data class CalendarEvent(
@@ -32,8 +34,9 @@ object CalendarRepository {
         if (!hasPermission(context)) return@withContext emptyList()
 
         val zone = ZoneId.systemDefault()
-        val startOfDay = LocalDate.now().atStartOfDay(zone).toInstant().toEpochMilli()
-        val endOfDay = LocalDate.now().plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
+        val day = LocalDate.now(zone)
+        val startOfDay = day.atStartOfDay(zone).toInstant().toEpochMilli()
+        val endOfDay = day.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
 
         val uri = CalendarContract.Instances.CONTENT_URI.buildUpon().let {
             ContentUris.appendId(it, startOfDay)
@@ -59,12 +62,19 @@ object CalendarRepository {
                 buildList {
                     while (cursor.moveToNext()) {
                         val title = cursor.getString(0)?.takeIf { it.isNotBlank() } ?: "Busy"
+                        val begin = cursor.getLong(1)
+                        val end = cursor.getLong(2)
+                        val allDay = cursor.getInt(3) == 1
+                        // Android keeps an all-day event's times as midnights in UTC, not the phone's,
+                        // so the phone's day also catches yesterday's or tomorrow's: kept only if it
+                        // is today's.
+                        if (allDay && !allDayOn(begin, end, day)) continue
                         add(
                             CalendarEvent(
                                 title = title,
-                                startMillis = cursor.getLong(1),
-                                endMillis = cursor.getLong(2),
-                                allDay = cursor.getInt(3) == 1,
+                                startMillis = begin,
+                                endMillis = end,
+                                allDay = allDay,
                                 colour = cursor.getInt(4),
                             )
                         )
@@ -73,4 +83,28 @@ object CalendarRepository {
             }
         }.getOrNull().orEmpty()
     }
+
+    /**
+     * Whether an all-day event from [begin] to [end] is on [day]. Android keeps the two as midnights
+     * in UTC, so they are read as dates in UTC: from the first up to, not including, the one it ends
+     * on (or the first alone, for one that ends where it begins).
+     */
+    fun allDayOn(begin: Long, end: Long, day: LocalDate): Boolean {
+        val first = Instant.ofEpochMilli(begin).atOffset(ZoneOffset.UTC).toLocalDate()
+        val last = Instant.ofEpochMilli(end).atOffset(ZoneOffset.UTC).toLocalDate()
+        return !day.isBefore(first) && (day.isBefore(last) || day == first)
+    }
+
+    /**
+     * What the Calendar widget lists of today's [events] at [nowMillis]: those not over yet, one under
+     * way among them, with the all-day ones first, as an iPhone lists them, and the rest by when they
+     * start, no more than [most]. An all-day event lasts the whole of its day wherever the phone is:
+     * its times are midnights in UTC, not the phone's, so they are not read against the clock, and
+     * [today] has already kept only today's.
+     */
+    fun upcoming(events: List<CalendarEvent>, nowMillis: Long, most: Int = 3): List<CalendarEvent> =
+        events
+            .filter { it.allDay || it.endMillis > nowMillis }
+            .sortedWith(compareBy<CalendarEvent>({ !it.allDay }, { it.startMillis }))
+            .take(most.coerceAtLeast(0))
 }

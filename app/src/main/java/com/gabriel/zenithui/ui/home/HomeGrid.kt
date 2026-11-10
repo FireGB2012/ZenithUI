@@ -490,7 +490,7 @@ fun HomePage(
                                 .fillMaxSize()
                                 .pixelFrame(geometry.widgetFrame(dragged.spanX, dragged.spanY))
                                 .appearIn(fromScale = 0.8f, riseFrom = 0f)
-                                .clip(ZenithShapes.tile)
+                                .clip(WidgetShape)
                                 .background(palette.onGlass.copy(alpha = 0.12f))
                         )
                     } else {
@@ -1184,7 +1184,9 @@ private fun FolderInside(folder: FolderCell, appsByKey: Map<String, AppInfo>, ic
  * [content] in a widget's own colour, [accent], or in the plain look when it is 0. A change of
  * colour is eased in, and back out to the plain look, rather than switched. Its decoration follows
  * through [com.gabriel.zenithui.ui.theme.ZenithPalette.decor]: in its own colour as far as that has
- * eased in, and in the words' ink with none.
+ * eased in, and in the words' ink with none. The colour, as far as it has come, is handed on as
+ * well ([LocalOwnColour]): the colour look fills the widget's card with it and the glass look
+ * tints its pane.
  */
 @Composable
 private fun InOwnColour(accent: Long, content: @Composable () -> Unit) {
@@ -1210,7 +1212,11 @@ private fun InOwnColour(accent: Long, content: @Composable () -> Unit) {
             ownColour = mix,
         )
     }
-    CompositionLocalProvider(LocalPalette provides wearing, content = content)
+    CompositionLocalProvider(
+        LocalPalette provides wearing,
+        LocalOwnColour provides OwnColour(own, mix),
+        content = content,
+    )
 }
 
 /**
@@ -1526,7 +1532,7 @@ private fun BoxScope.ResizeFrame(
      * as its stretched icon is drawn — so it rounds more the bigger the icon is pulled.
      */
     fun Density.radius(): Float =
-        if (isApp) 0.26f * minOf(right.value - side, bottom.value - frameTop).coerceAtLeast(0f) else 24.dp.toPx()
+        if (isApp) 0.26f * minOf(right.value - side, bottom.value - frameTop).coerceAtLeast(0f) else HomeGeometry.WIDGET_CORNER_DP.dp.toPx()
 
     /** Where the rounded corner of the outline comes closest to the corner of its box. */
     fun Density.tip(): Offset {

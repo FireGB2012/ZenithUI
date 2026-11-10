@@ -34,6 +34,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -84,6 +85,7 @@ import androidx.compose.material3.LocalTextStyle
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Immutable
@@ -99,6 +101,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.graphics.graphicsLayer
 import com.gabriel.zenithui.ui.common.LocalMotionLevel
 import androidx.compose.ui.focus.onFocusChanged
@@ -108,13 +111,20 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.isSpecified
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.Placeable
+import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -127,13 +137,18 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
+import com.gabriel.zenithui.data.HomeGeometry
 import com.gabriel.zenithui.data.ToggleGrid
 import com.gabriel.zenithui.data.ToggleNames
 import com.gabriel.zenithui.data.WidgetForm
+import com.gabriel.zenithui.data.WidgetLooks
 import com.gabriel.zenithui.data.Widgets
 import com.gabriel.zenithui.ui.common.labelShadow
 import com.gabriel.zenithui.ui.common.pressBounce
@@ -146,14 +161,25 @@ import com.gabriel.zenithui.ui.theme.glassPress
 import com.gabriel.zenithui.ui.theme.LocalNumberFont
 import com.gabriel.zenithui.ui.theme.LocalOnWallpaper
 import com.gabriel.zenithui.ui.theme.LocalPalette
+import com.gabriel.zenithui.ui.theme.LocalWidgetLook
 import com.gabriel.zenithui.ui.theme.LocalZenithFont
+import com.gabriel.zenithui.ui.theme.WALLPAPER_VEIL
 import com.gabriel.zenithui.ui.theme.ZenithShapes
+import com.gabriel.zenithui.ui.theme.addOutline
 import com.gabriel.zenithui.ui.theme.glass
 import com.gabriel.zenithui.ui.theme.glassInk
 import com.gabriel.zenithui.ui.theme.inkOnTint
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
+import com.gabriel.zenithui.data.CalendarEvent
+import com.gabriel.zenithui.data.CalendarRepository
 import kotlinx.coroutines.delay
+import java.time.Duration
+import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
+import java.time.ZoneId
+import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import java.util.Locale
@@ -169,6 +195,34 @@ private fun formOf(width: Dp, height: Dp): WidgetForm = WidgetForm.of(width.valu
  * its words white with a soft shadow, and its big numbers, rings and icons made of glass.
  */
 internal val LocalBare = staticCompositionLocalOf { false }
+
+/**
+ * The corners of every widget on the home screen, whatever its size: Zenith's own in either look,
+ * and other apps' too. See [HomeGeometry.WIDGET_CORNER_DP].
+ */
+internal val WidgetShape = RoundedCornerShape(HomeGeometry.WIDGET_CORNER_DP.dp)
+
+/**
+ * A widget's own colour as InOwnColour eases it in and out: [colour], and how far it has come in,
+ * [mix], from 0 for none to 1. The colour look fills its card with it; the glass look tints its pane.
+ */
+@Immutable
+internal data class OwnColour(val colour: Color, val mix: Float) {
+    /** Whether any of a colour has come in yet. */
+    val shows: Boolean get() = mix > 0f && colour.isSpecified
+
+    companion object {
+        val None = OwnColour(Color.Unspecified, 0f)
+    }
+}
+
+internal val LocalOwnColour = compositionLocalOf { OwnColour.None }
+
+/**
+ * The card of the colour widget being drawn, or null for one on glass or straight on the wallpaper:
+ * its second lines are the card's own quiet shade ([quiet]), worked out to read on it.
+ */
+internal val LocalWidgetFill = staticCompositionLocalOf<WidgetFill?> { null }
 
 /** Renders one of Zenith's built-in widgets into whatever space the grid gave it. */
 @Composable
@@ -215,15 +269,135 @@ fun ZenithWidget(
         return
     }
 
+    // One switch for every one of Zenith's widgets: a card in colours of its own, as iOS's widgets
+    // are, or a pane of the wallpaper's glass. A colour somebody chose is the card in the one and
+    // tints the pane in the other.
+    val own = LocalOwnColour.current
+    if (LocalWidgetLook.current == WidgetLooks.COLOUR) {
+        val fill = rememberFill(kind, own)
+        BoxWithConstraints(modifier.colourCard(fill)) {
+            WordsOnCard(fill) {
+                WidgetBody(kind, formOf(maxWidth, maxHeight), maxWidth, maxHeight, userName, note, onNoteChange, toggles)
+            }
+        }
+        return
+    }
+
+    // A widget with a colour of its own is on a home page, whose glass has the wallpaper's grey veil,
+    // so its colour comes in from that grey and goes back to it.
+    val tint = if (own.shows) lerp(WALLPAPER_VEIL, own.colour, own.mix.coerceAtMost(1f)) else Color.Unspecified
     BoxWithConstraints(
         modifier
-            .glass(ZenithShapes.card, strength = 1f, interactive = true)
-            .clip(ZenithShapes.card)
+            .glass(WidgetShape, tint = tint, strength = 1f, interactive = true)
+            .clip(WidgetShape)
     ) {
         WordsOnWallpaper {
             WidgetBody(kind, formOf(maxWidth, maxHeight), maxWidth, maxHeight, userName, note, onNoteChange, toggles)
         }
     }
+}
+
+/**
+ * The card a widget of [kind] wears in the colour look, in Light or Dark as the page is: its kind's
+ * own colours, the weather's sky as it is now, and a colour of its own eased in over them.
+ */
+@Composable
+private fun rememberFill(kind: String, own: OwnColour): WidgetFill {
+    val dark = LocalPalette.current.dark
+    val sky = if (kind == Widgets.Weather.type) skyNow() else Sky.Day
+    return remember(kind, dark, sky, own) {
+        val plain = WidgetColours.of(kind, dark, sky)
+        if (!own.shows) plain else plain.towards(WidgetColours.of(kind, dark, sky, own.colour), own.mix.coerceAtMost(1f))
+    }
+}
+
+/**
+ * Part of the way from this card to [other]: its colours blend, and its words are the nearer card's,
+ * so they are always one of the two inks a palette carries, and change over halfway.
+ */
+private fun WidgetFill.towards(other: WidgetFill, fraction: Float): WidgetFill {
+    val words = if (fraction < 0.5f) this else other
+    return words.copy(top = lerp(top, other.top, fraction), bottom = lerp(bottom, other.bottom, fraction))
+}
+
+/**
+ * The sky over the weather widget's place, for its card in the colour look: the forecast's, read as
+ * WeatherWidget reads it, or a clear day until there is a forecast for the place chosen.
+ */
+@Composable
+private fun skyNow(): Sky {
+    val world = LocalWidgetWorld.current ?: return Sky.Day
+    val settings = world.settings
+    val forecast = world.forecast
+        ?.takeIf { it.isFor(settings.weatherPlace, settings.weatherLat, settings.weatherLon, settings.weatherUnits) }
+        ?: return Sky.Day
+    return WidgetColours.skyFor(forecast.code, forecast.day)
+}
+
+/**
+ * A colour widget's card: [fill]'s colours from top to foot, standing on a soft shadow, with what is
+ * drawn on it kept inside its corners.
+ */
+private fun Modifier.colourCard(fill: WidgetFill): Modifier = this
+    .cardShadow(WidgetShape)
+    .background(
+        if (fill.top == fill.bottom) SolidColor(fill.top) else Brush.verticalGradient(listOf(fill.top, fill.bottom)),
+        WidgetShape,
+    )
+    .clip(WidgetShape)
+
+/**
+ * The soft shadow a colour widget stands on, in two parts as a pane of glass's is: a wide, faint one
+ * that lifts it off the wallpaper, and a close one under its edge that says it is solid. It is the
+ * same in Light and in Dark, as the wallpaper it falls on is.
+ */
+private fun Modifier.cardShadow(shape: Shape): Modifier = drawWithCache {
+    val outline = shape.createOutline(size, layoutDirection, this)
+    val path = android.graphics.Path().apply { addOutline(outline) }
+    fun layer(blur: Dp, fall: Dp, alpha: Float) = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+        color = android.graphics.Color.BLACK
+        setShadowLayer(blur.toPx(), CARD_SHADOW_FALL.x * fall.toPx(), CARD_SHADOW_FALL.y * fall.toPx(), Color.Black.copy(alpha = alpha).toArgb())
+    }
+    val shadows = listOf(layer(18.dp, 7.dp, 0.16f), layer(3.dp, 1.5.dp, 0.14f))
+    onDrawBehind {
+        drawIntoCanvas {
+            val canvas = it.nativeCanvas
+            canvas.save()
+            // Only the shadow is wanted: the card is drawn over where the path itself would be.
+            canvas.clipOutPath(path)
+            for (paint in shadows) canvas.drawPath(path, paint)
+            canvas.restore()
+        }
+    }
+}
+
+/** Which way a card's shadow falls: down and a little to the right, as glass's shadows fall from the light. */
+private val CARD_SHADOW_FALL = Offset(0.41f, 0.91f)
+
+/**
+ * Words on a colour widget's card: in the card's ink and its quiet shade, with its accent for what can
+ * be pressed. Its decoration is in the ink too, as the card itself wears the colour, and nothing on it
+ * stands on the wallpaper, so its words need no shadow.
+ */
+@Composable
+private fun WordsOnCard(fill: WidgetFill, content: @Composable () -> Unit) {
+    val palette = LocalPalette.current
+    val onCard = remember(palette, fill) {
+        palette.copy(
+            // A palette's words are white when it is dark and Zenith's near-black when it is light,
+            // and a card's ink is always one of the two.
+            dark = fill.ink.luminance() > 0.5f,
+            accent = fill.accent,
+            accentAlt = fill.accent,
+            ownColour = 0f,
+        )
+    }
+    CompositionLocalProvider(
+        LocalPalette provides onCard,
+        LocalWidgetFill provides fill,
+        LocalOnWallpaper provides false,
+        content = content,
+    )
 }
 
 /**
@@ -304,10 +478,21 @@ internal fun tight(size: TextUnit, weight: FontWeight = FontWeight.Light, keepWe
 /**
  * The colour of a widget's second line: the date under the time, "On battery", "25 days left".
  * Stronger than the muted grey a page uses, because a widget is read at a glance and over a
- * wallpaper, and stronger still with no pane behind it.
+ * wallpaper, and stronger still with no pane behind it. On a colour widget's card it is the card's
+ * own quiet shade, as strong as that card needs it to be to read.
  */
 @Composable
-internal fun quiet(): Color = LocalPalette.current.onGlass.copy(alpha = if (LocalBare.current) 0.94f else 0.82f)
+internal fun quiet(): Color =
+    LocalWidgetFill.current?.quiet ?: LocalPalette.current.onGlass.copy(alpha = if (LocalBare.current) 0.94f else 0.82f)
+
+/**
+ * The shadow of words a widget sets in a style of its own (a time, a toggle's name, a to-do), which
+ * takes nothing from the words around it: on glass on the wallpaper, the soft shadow of the names
+ * under the icons, which WordsOnWallpaper gives every other word there, and none on a colour card or
+ * a page. A "No glass" widget's own styles are left as they were, with none.
+ */
+@Composable
+internal fun wordShadow(): Shadow? = if (LocalBare.current) null else LocalTextStyle.current.shadow
 
 /**
  * The ink of a widget's headings: the words' own ink, as on an iPhone, or the widget's own colour
@@ -433,6 +618,138 @@ internal fun rememberNow(): LocalDateTime {
     }
     return now
 }
+
+/**
+ * Today's date, which turns over at midnight. It waits for the turn of the day, and looks again
+ * whenever the home screen comes back, since a phone asleep over midnight does not count the hours
+ * it sleeps and would wake the wait late; and at least every hour, so a clock or a time zone changed
+ * by hand is caught too. It changes once a day, so nothing reading it is drawn again in between.
+ */
+@Composable
+internal fun rememberToday(): LocalDate {
+    var today by remember { mutableStateOf(LocalDate.now()) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { today = LocalDate.now() }
+    LaunchedEffect(Unit) {
+        while (true) {
+            val now = ZonedDateTime.now()
+            val midnight = now.toLocalDate().plusDays(1).atStartOfDay(now.zone)
+            // A moment past midnight, so the date has surely moved on by then.
+            delay(minOf(Duration.between(now, midnight).toMillis() + 1_000L, 60 * 60_000L))
+            today = LocalDate.now()
+        }
+    }
+    return today
+}
+
+/**
+ * Small, Medium and Large, the sizes an iPhone's widgets come in. Weather and Calendar are set out
+ * the iOS way in these; their other forms, and "No glass" widgets, keep the layouts they had.
+ */
+private val IPHONE_FORMS = setOf(WidgetForm.Square, WidgetForm.Wide, WidgetForm.Big)
+
+/**
+ * The room, in dp across and down, an iPhone layout for [form] is set out in: as tight as an
+ * iPhone's own, which a Small, Medium and Large on a phone of an iPhone's width all have. Large's
+ * lists take whatever room it has over that.
+ */
+private fun iphoneRoom(form: WidgetForm): Pair<Float, Float> = when (form) {
+    WidgetForm.Square -> 140f to 150f
+    WidgetForm.Wide -> 300f to 160f
+    else -> 300f to 230f
+}
+
+/** As far as an iPhone layout is drawn smaller before a widget's own layout for the room serves it better. */
+private const val IPHONE_LEAST = 0.8f
+
+/**
+ * How much smaller an iPhone layout for [form] is drawn in a widget [width] by [height]: 1 where
+ * it has its room ([iphoneRoom]), less on a smaller phone, whose widgets are smaller, and null for a
+ * form that has none, or a widget squatter than any iPhone's (a Small one row and a half tall, say),
+ * where it would have to shrink past [IPHONE_LEAST].
+ */
+internal fun iphoneShrink(form: WidgetForm, width: Dp, height: Dp): Float? {
+    if (form !in IPHONE_FORMS) return null
+    val (across, down) = iphoneRoom(form)
+    val shrink = minOf(1f, width.value / across, height.value / down)
+    return shrink.takeIf { it >= IPHONE_LEAST }
+}
+
+/**
+ * [content], an iPhone layout, set out in the room [iphoneShrink] gives it and drawn [shrink] times
+ * its size, everything in it together, so it always fits as it was set out. [content] is told the
+ * room it has. Its words are set as close as an iPhone's widgets set theirs, a line a quarter taller
+ * than its letters, where a page's text is given more.
+ */
+@Composable
+internal fun AtIphoneSize(shrink: Float, width: Dp, height: Dp, content: @Composable (width: Dp, height: Dp) -> Unit) {
+    val density = LocalDensity.current
+    CompositionLocalProvider(
+        LocalDensity provides Density(density.density * shrink, density.fontScale),
+        LocalTextStyle provides LocalTextStyle.current.merge(TextStyle(lineHeight = 1.25.em)),
+    ) {
+        content(width / shrink, height / shrink)
+    }
+}
+
+/**
+ * [items] one under another, [gap] apart, as many of them as there is room for and no more than
+ * [most]: none is cut off at the foot. When some are left out and there is a [more], it says under
+ * the rest how many. Measured rather than counted, so larger text in the phone's settings shows
+ * fewer rows instead of clipped ones.
+ */
+@Composable
+internal fun <T> AsManyAsFit(
+    items: List<T>,
+    modifier: Modifier = Modifier,
+    gap: Dp = 0.dp,
+    most: Int = Int.MAX_VALUE,
+    more: (@Composable (left: Int) -> Unit)? = null,
+    row: @Composable (T) -> Unit,
+) {
+    SubcomposeLayout(modifier) { constraints ->
+        // Each row at its own height, however little room there is, so one that would not fit whole
+        // is known, and left out.
+        val loose = constraints.copy(minWidth = 0, minHeight = 0, maxHeight = Constraints.Infinity)
+        val space = gap.roundToPx()
+        val rows = items.take(most.coerceAtLeast(0)).mapIndexed { index, item ->
+            subcompose(index) { row(item) }.map { it.measure(loose) }
+        }
+        fun tall(slot: List<Placeable>): Int = slot.maxOfOrNull { it.height } ?: 0
+        fun stack(count: Int): Int = (0 until count).sumOf { tall(rows[it]) } + space * (count - 1).coerceAtLeast(0)
+        fun under(count: Int, footer: Int): Int = stack(count) + (if (count > 0) space else 0) + footer
+        val room = constraints.maxHeight
+        var shown = rows.size
+        while (shown > 0 && stack(shown) > room) shown--
+        var footer: List<Placeable> = emptyList()
+        if (more != null && shown < items.size) {
+            // The line saying how many more is as tall whatever the number, so it is measured once
+            // to make room for it, and then written with the number that is left out.
+            val probe = tall(subcompose(MORE_PROBE) { more(items.size) }.map { it.measure(loose) })
+            while (shown > 0 && under(shown, probe) > room) shown--
+            if (under(shown, probe) <= room) {
+                footer = subcompose(MORE_LINE) { more(items.size - shown) }.map { it.measure(loose) }
+            }
+        }
+        val used = if (footer.isEmpty()) stack(shown) else under(shown, tall(footer))
+        val width = if (constraints.hasBoundedWidth) {
+            constraints.maxWidth
+        } else {
+            (rows.take(shown).flatten() + footer).maxOfOrNull { it.width } ?: 0
+        }
+        layout(width.coerceAtLeast(constraints.minWidth), used.coerceIn(constraints.minHeight, constraints.maxHeight)) {
+            var y = 0
+            for (index in 0 until shown) {
+                rows[index].forEach { it.placeRelative(0, y) }
+                y += tall(rows[index]) + space
+            }
+            footer.forEach { it.placeRelative(0, y) }
+        }
+    }
+}
+
+/** The slots [AsManyAsFit] writes its "more" line in: once to measure it, and once as it is shown. */
+private const val MORE_PROBE = "moreProbe"
+private const val MORE_LINE = "moreLine"
 
 // ---------------------------------------------------------------------- clock
 
@@ -801,7 +1118,7 @@ private fun BatteryWidget(form: WidgetForm, width: Dp, height: Dp) {
                             .heightShare { level.value.coerceAtLeast(0.04f) }
                             .background(liquid),
                     )
-                    Text(battery.percent, style = tight(fit(width * 0.11f, 20.dp), FontWeight.SemiBold).copy(color = palette.onGlass))
+                    Text(battery.percent, style = tight(fit(width * 0.11f, 20.dp), FontWeight.SemiBold).copy(color = palette.onGlass, shadow = wordShadow()))
                 }
             }
             Spacer(Modifier.height(10.dp))
@@ -852,6 +1169,10 @@ internal fun Ring(fraction: Float, stroke: Dp, modifier: Modifier, charging: Boo
     val fill = remember(palette.accent, palette.accentAlt, palette.onGlass, palette.ownColour) {
         Brush.linearGradient(listOf(palette.decor(palette.accent), palette.decor(palette.accentAlt)))
     }
+    // The glint is whichever of white and Zenith's near-black stands out on the ring: the ring is in
+    // the words' ink, which is white on glass and on a dark card, where a white glint would not show.
+    // Under a "No glass" widget's band of glass it is white, as it was.
+    val glintInk = if (bare) Color.White else inkOnTint(palette.decor(palette.accent))
     fun DrawScope.arc(sweep: Float, brush: Brush) {
         val width = stroke.toPx()
         val side = size.minDimension - width
@@ -872,7 +1193,7 @@ internal fun Ring(fraction: Float, stroke: Dp, modifier: Modifier, charging: Boo
                 val width = stroke.toPx()
                 val side = size.minDimension - width
                 drawArc(
-                    color = Color.White,
+                    color = glintInk,
                     startAngle = 130f + (sweep - GLINT) * along,
                     sweepAngle = GLINT,
                     useCenter = false,
@@ -991,7 +1312,8 @@ private fun Segments(fraction: Float, modifier: Modifier) {
 @Composable
 private fun CalendarWidget(form: WidgetForm, width: Dp, height: Dp) {
     val palette = LocalPalette.current
-    val today = remember { LocalDate.now() }
+    // It turns over at midnight, rather than staying on the day the widget was drawn.
+    val today = rememberToday()
     val daysInMonth = remember(today) { today.lengthOfMonth() }
     val remaining = ChronoUnit.DAYS.between(today, today.withDayOfMonth(daysInMonth))
     val weekday = today.format(DateTimeFormatter.ofPattern("EEEE"))
@@ -999,6 +1321,14 @@ private fun CalendarWidget(form: WidgetForm, width: Dp, height: Dp) {
     val left = if (remaining <= 0) "Last day of the month" else "$remaining days left"
     val bare = LocalBare.current
     val day = "${today.dayOfMonth}"
+
+    // Small, Medium and Large are set out as an iPhone's Calendar widget is; "No glass" widgets keep
+    // the layouts they had.
+    val shrink = if (bare) null else iphoneShrink(form, width, height)
+    if (shrink != null) {
+        AtIphoneSize(shrink, width, height) { across, down -> IphoneCalendar(today, form, across, down) }
+        return
+    }
 
     when (form) {
         // The day of the week over today's date.
@@ -1220,6 +1550,208 @@ private fun MonthGrid(today: LocalDate, fontSize: TextUnit, dot: Dp, modifier: M
     }
 }
 
+/**
+ * The calendar as an iPhone's Calendar widget has it, at its three sizes: the weekday in red
+ * capitals over the date, large, and today's events from the next one on, each a bar in its
+ * calendar's colour, its name and its time. Small has the next event under the date; Medium the date
+ * on the left and up to three events beside it; Large the date across the top and the rest of the
+ * day's events under it, each in full. Until Zenith may read the calendar, "Show your events" stands
+ * where the events would, and asks for it when it is tapped.
+ */
+@Composable
+private fun IphoneCalendar(today: LocalDate, form: WidgetForm, width: Dp, height: Dp) {
+    val context = LocalContext.current
+    val world = LocalWidgetWorld.current
+    // Looked at again whenever the home screen comes back: an answer to Android's question, or the
+    // phone's settings, may have changed what can be read, and the calendar itself may have changed.
+    var back by remember { mutableIntStateOf(0) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { back++ }
+    val allowed = remember(back) { CalendarRepository.hasPermission(context) }
+    // Null until the calendar has been read, so it never says there are no events before it has looked.
+    val events by produceState<List<CalendarEvent>?>(null, allowed, today, back) {
+        value = if (allowed) CalendarRepository.today(context) else emptyList()
+    }
+    // What is listed changes only as an event finishes, so the clock is read again then, and not in between.
+    val now by produceState(System.currentTimeMillis(), events, back) {
+        while (true) {
+            val at = System.currentTimeMillis()
+            value = at
+            val next = events.orEmpty().filter { !it.allDay && it.endMillis > at }.minOfOrNull { it.endMillis } ?: break
+            delay(next - at + 1)
+        }
+    }
+    val next = remember(events, now) { events?.let { CalendarRepository.upcoming(it, now, most = it.size) } }
+    val weekday = remember(today) { today.format(DateTimeFormatter.ofPattern("EEEE")).uppercase() }
+    val date = "${today.dayOfMonth}"
+
+    @Composable
+    fun Weekday() = Text(
+        weekday,
+        color = weekdayInk(),
+        fontSize = 11.sp,
+        fontWeight = FontWeight.SemiBold,
+        letterSpacing = 0.6.sp,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+    )
+
+    /** Today's events, as many as there is room for and no more than [most], or why there are none. */
+    @Composable
+    fun Events(most: Int, full: Boolean, modifier: Modifier) {
+        val listed = next
+        when {
+            !allowed -> ShowYourEvents(modifier) { world?.setUp("calendar") }
+            listed == null -> Box(modifier)
+            listed.isEmpty() -> Text(
+                if (events.isNullOrEmpty()) "No events today" else "No more events today",
+                color = quiet(),
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                modifier = modifier,
+            )
+            else -> AsManyAsFit(
+                listed,
+                modifier,
+                gap = 8.dp,
+                most = most,
+                more = { left ->
+                    Text(
+                        if (left == 1) "1 more event" else "$left more events",
+                        color = quiet(),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                    )
+                },
+            ) { event -> EventLine(event, full) }
+        }
+    }
+
+    when (form) {
+        WidgetForm.Square -> Column(Modifier.fillMaxSize().padding(16.dp)) {
+            Weekday()
+            Figure(date, fit(height * 0.28f, width * 0.32f), FontWeight.Normal, accent = false)
+            Spacer(Modifier.height(6.dp))
+            Events(most = 1, full = false, modifier = Modifier.weight(1f).fillMaxWidth())
+        }
+        WidgetForm.Wide -> Row(Modifier.fillMaxSize().padding(16.dp)) {
+            Column(Modifier.weight(0.42f)) {
+                Weekday()
+                Figure(date, fit(height * 0.32f, 56.dp), FontWeight.Normal, accent = false)
+            }
+            Spacer(Modifier.width(12.dp))
+            Events(most = 3, full = false, modifier = Modifier.weight(0.58f).fillMaxHeight())
+        }
+        else -> Column(Modifier.fillMaxSize().padding(16.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
+                Column(Modifier.weight(1f)) {
+                    Weekday()
+                    Figure(date, fit(height * 0.15f, 56.dp), FontWeight.Normal, accent = false)
+                }
+                Text(
+                    remember(today) { today.format(DateTimeFormatter.ofPattern("MMMM")) },
+                    color = quiet(),
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                )
+            }
+            Spacer(Modifier.height(12.dp))
+            Box(Modifier.fillMaxWidth().height(1.dp).background(LocalPalette.current.onGlass.copy(alpha = 0.18f)))
+            Spacer(Modifier.height(10.dp))
+            Events(most = Int.MAX_VALUE, full = true, modifier = Modifier.weight(1f).fillMaxWidth())
+        }
+    }
+}
+
+/**
+ * The weekday heading the calendar, in iOS's red as on an iPhone's own. On a colour card it is the
+ * card's colour for actions: that red on the calendar's page, and the card's ink on a card in a
+ * colour of the widget's own. On glass a colour of the widget's own takes over from the red as it
+ * eases in, as it does in every heading ([accentInk]).
+ */
+@Composable
+private fun weekdayInk(): Color {
+    val palette = LocalPalette.current
+    if (LocalWidgetFill.current != null) return palette.accent
+    return lerp(palette.destructive, accentInk(), palette.ownColour.coerceIn(0f, 1f))
+}
+
+/**
+ * One of the day's events as an iPhone lists them: a bar in its calendar's colour, its name, and
+ * when it is, "All day" or from and to. [full] gives a long name a second line.
+ */
+@Composable
+private fun EventLine(event: CalendarEvent, full: Boolean) {
+    val palette = LocalPalette.current
+    val time = remember(event) {
+        if (event.allDay) {
+            "All day"
+        } else {
+            val zone = ZoneId.systemDefault()
+            val clock = DateTimeFormatter.ofPattern("HH:mm")
+            fun at(millis: Long): String = Instant.ofEpochMilli(millis).atZone(zone).format(clock)
+            "${at(event.startMillis)}–${at(event.endMillis)}"
+        }
+    }
+    // The calendar's own colour, as the calendar shows it; the words' ink for one that has none.
+    val bar = if (event.colour != 0) Color(event.colour).copy(alpha = 1f) else palette.decor(palette.accent)
+    Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
+        Box(
+            Modifier
+                .width(3.dp)
+                .fillMaxHeight()
+                .clip(RoundedCornerShape(percent = 50))
+                .background(bar)
+        )
+        Spacer(Modifier.width(7.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                event.title,
+                color = palette.onGlass,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = if (full) 2 else 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(time, color = quiet(), fontSize = 12.sp, maxLines = 1)
+        }
+    }
+}
+
+/**
+ * Where the events would be, until Zenith may read the calendar. A tap asks for it, and only a tap
+ * ([WidgetWorld.setUp]): Android's question is put, or, once Android has stopped asking, the phone's
+ * settings open, where it can still be allowed. It is an action, so in the card's colour for actions
+ * in the colour look, the calendar's red; on glass it is the words' ink, as a colour would be lost
+ * against the wallpaper.
+ */
+@Composable
+private fun ShowYourEvents(modifier: Modifier, onClick: () -> Unit) {
+    val palette = LocalPalette.current
+    val ink = if (LocalWidgetFill.current != null) palette.accent else palette.onGlass
+    Box(modifier) {
+        Row(
+            Modifier
+                .pressBounce(0.94f)
+                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
+                .padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Symbol(Icons.Rounded.CalendarMonth, 16.dp, tint = ink)
+            Spacer(Modifier.width(6.dp))
+            Text(
+                "Show your events",
+                color = ink,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
 // ---------------------------------------------------------------------- notes
 
 /**
@@ -1346,8 +1878,9 @@ private fun NoteField(
     DisposableEffect(Unit) { onDispose { if (focused) HomeTypingArea.bounds = null } }
     val bare = LocalBare.current
     val ruleColour = palette.onGlass.copy(alpha = if (bare) 0.16f else 0.08f)
-    // Written straight on the wallpaper, the words carry the same shadow as the rest of the widget.
-    val shade = if (bare) LocalTextStyle.current.shadow else null
+    // The words carry the shadow the rest of the widget's words have: straight on the wallpaper, and
+    // on the wallpaper's glass. On a colour card there is none.
+    val shade = LocalTextStyle.current.shadow
 
     BasicTextField(
         value = note,
@@ -1521,6 +2054,7 @@ private fun TogglesWidget(form: WidgetForm, chosen: List<String>, width: Dp, hei
         fontSize = TOGGLE_NAME * names.scale,
         lineHeight = TOGGLE_NAME_LINE * names.scale,
         color = palette.onGlass,
+        shadow = wordShadow(),
     )
     // Buttons never grow past a comfortable size.
     val button = when {

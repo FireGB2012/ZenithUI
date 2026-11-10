@@ -72,7 +72,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
@@ -92,6 +94,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -99,11 +102,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.gabriel.zenithui.data.Countdown
 import com.gabriel.zenithui.data.Forecast
+import com.gabriel.zenithui.data.HomeGeometry
 import com.gabriel.zenithui.data.NotificationDots
 import com.gabriel.zenithui.data.NowPlaying
 import com.gabriel.zenithui.data.Playing
 import com.gabriel.zenithui.data.Todos
 import com.gabriel.zenithui.data.WeatherCodes
+import com.gabriel.zenithui.data.WeatherDay
 import com.gabriel.zenithui.data.WeatherParse
 import com.gabriel.zenithui.data.WidgetForm
 import com.gabriel.zenithui.data.WorldClocks
@@ -241,23 +246,24 @@ private fun Art(now: Playing, modifier: Modifier) {
         if (art != null) {
             Image(art, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
         } else {
-            // A grey tile, so the white note reads in Light and in Dark; in a widget's own colour,
-            // that colour, eased in from the grey and back to it as the colour is.
-            val grey = Color(0xFF8E8E93).copy(alpha = 0.55f)
+            // A faint tile of the words' ink, with the note in the ink of a second line, so it reads
+            // on glass and on every colour card, in Light and in Dark; in a widget's own colour, that
+            // colour, eased in from the faint ink and back to it as the colour is.
+            val faint = palette.onGlass.copy(alpha = 0.14f)
             Box(
                 Modifier
                     .fillMaxSize()
                     .background(
                         Brush.linearGradient(
                             listOf(
-                                lerp(grey, palette.accent.copy(alpha = 0.55f), palette.ownColour),
-                                lerp(grey, palette.accentAlt.copy(alpha = 0.4f), palette.ownColour),
+                                lerp(faint, palette.accent.copy(alpha = 0.55f), palette.ownColour),
+                                lerp(faint, palette.accentAlt.copy(alpha = 0.4f), palette.ownColour),
                             )
                         )
                     ),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Rounded.MusicNote, contentDescription = null, tint = Color.White.copy(alpha = 0.9f), modifier = Modifier.fillMaxSize(0.4f))
+                Icon(Icons.Rounded.MusicNote, contentDescription = null, tint = quiet(), modifier = Modifier.fillMaxSize(0.4f))
             }
         }
     }
@@ -347,7 +353,8 @@ private fun PlayButton(now: Playing, size: Dp, solid: Boolean = false) {
             .size(size)
             .pressBounce(0.86f)
             .clip(CircleShape)
-            .then(if (solid) Modifier.background(Brush.linearGradient(listOf(palette.accent, palette.accentAlt))) else Modifier.background(palette.onGlass.copy(alpha = 0.12f)))
+            // Solid, it is the one colour of actions, the colour its symbol is worked out on.
+            .background(if (solid) palette.accent else palette.onGlass.copy(alpha = 0.12f))
             .clickable { NowPlaying.playPause() },
         contentAlignment = Alignment.Center,
     ) {
@@ -395,7 +402,7 @@ internal fun WorldClockWidget(form: WidgetForm, width: Dp, height: Dp) {
             zones.take(3).forEach { zone ->
                 Column {
                     Caps(WorldClocks.city(zone), size = 10.sp)
-                    Text(timeIn(zone), style = tight(fit(height * 0.34f, 30.dp)), color = palette.onGlass)
+                    Text(timeIn(zone), style = tight(fit(height * 0.34f, 30.dp)).copy(shadow = wordShadow()), color = palette.onGlass)
                 }
             }
         }
@@ -414,7 +421,7 @@ internal fun WorldClockWidget(form: WidgetForm, width: Dp, height: Dp) {
                         Text(WorldClocks.city(zone), color = palette.onGlass, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text(WorldClocks.offset(zone, here, instant), color = quiet(), fontSize = 11.sp, maxLines = 1)
                     }
-                    Text(timeIn(zone), style = tight(18.sp, FontWeight.Medium), color = palette.onGlass)
+                    Text(timeIn(zone), style = tight(18.sp, FontWeight.Medium).copy(shadow = wordShadow()), color = palette.onGlass)
                 }
             }
         }
@@ -529,6 +536,9 @@ internal fun PhotoFrameWidget(form: WidgetForm, width: Dp, height: Dp) {
     // A different one each time the home screen is come back to, and the next at a tap.
     var tapped by remember { mutableIntStateOf(0) }
     val name = photos[((world.visits + tapped) % photos.size + photos.size) % photos.size]
+    // On a pane or a card the photo stands in from the widget's edge, its corners following the
+    // widget's, so the frame round it is as wide at the corners as along the sides.
+    val inset = if (bare) 0.dp else 6.dp
     val density = LocalDensity.current
     val longest = with(density) { maxOf(width, height).roundToPx() }
     val picture by produceState<ImageBitmap?>(initialValue = null, name, longest) {
@@ -542,8 +552,8 @@ internal fun PhotoFrameWidget(form: WidgetForm, width: Dp, height: Dp) {
         },
         modifier = Modifier
             .fillMaxSize()
-            .padding(if (bare) 0.dp else 6.dp)
-            .clip(RoundedCornerShape(if (bare) 20.dp else 18.dp))
+            .padding(inset)
+            .clip(RoundedCornerShape(if (bare) 20.dp else HomeGeometry.WIDGET_CORNER_DP.dp - inset))
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { tapped++ },
         label = "framePhoto",
     ) { image ->
@@ -617,7 +627,7 @@ internal fun TodoWidget(form: WidgetForm, width: Dp, height: Dp) {
                             fontSize = 13.sp,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
-                            style = TextStyle(fontFamily = LocalZenithFont.current, textDecoration = if (item.done) TextDecoration.LineThrough else TextDecoration.None),
+                            style = TextStyle(fontFamily = LocalZenithFont.current, textDecoration = if (item.done) TextDecoration.LineThrough else TextDecoration.None, shadow = wordShadow()),
                         )
                     }
                 }
@@ -658,7 +668,7 @@ private fun Tick(done: Boolean, onClick: () -> Unit) {
         Canvas(Modifier.fillMaxSize()) {
             val r = size.minDimension / 2f
             drawCircle(palette.onGlass.copy(alpha = 0.45f * (1f - fill)), r - 1.dp.toPx(), style = Stroke(1.5.dp.toPx()))
-            drawCircle(lerp(palette.accent, palette.accentAlt, 0.3f), r * fill.coerceIn(0f, 1f))
+            drawCircle(palette.accent, r * fill.coerceIn(0f, 1f))
             if (fill > 0.05f) {
                 // The check draws itself in from its foot as the circle fills.
                 val draw = fill.coerceIn(0f, 1f)
@@ -690,7 +700,7 @@ private fun AddLine(onAdd: (String) -> Unit) {
                 value = text,
                 onValueChange = { text = it.take(80) },
                 singleLine = true,
-                textStyle = TextStyle(fontFamily = LocalZenithFont.current, color = palette.onGlass, fontSize = 13.sp),
+                textStyle = TextStyle(fontFamily = LocalZenithFont.current, color = palette.onGlass, fontSize = 13.sp, shadow = wordShadow()),
                 cursorBrush = SolidColor(palette.accent),
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done),
                 keyboardActions = KeyboardActions(onDone = {
@@ -801,6 +811,13 @@ internal fun WeatherWidget(form: WidgetForm, width: Dp, height: Dp) {
         SetUpPrompt(Icons.Rounded.Cloud, "Getting the weather for ${settings.weatherPlace}", form, null)
         return
     }
+    // Small, Medium and Large are set out as an iPhone's Weather widget is; "No glass" widgets keep
+    // the layouts they had.
+    val shrink = if (LocalBare.current) null else iphoneShrink(form, width, height)
+    if (shrink != null) {
+        AtIphoneSize(shrink, width, height) { across, down -> IphoneWeather(forecast, form, across, down) }
+        return
+    }
     val temp = WeatherParse.degrees(forecast.temperature)
     val words = WeatherCodes.words(forecast.code, forecast.day)
     val pad = if (form == WidgetForm.Mini) 10.dp else 14.dp
@@ -867,7 +884,7 @@ private fun Hours(forecast: Forecast, modifier: Modifier, across: Boolean) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(hour.hour, color = quiet(), fontSize = 11.sp)
                     Spacer(Modifier.height(4.dp))
-                    Symbol(skyIcon(hour.code, true), 18.dp)
+                    Symbol(skyIcon(hour.code, hour.day), 18.dp)
                     Spacer(Modifier.height(4.dp))
                     Text(WeatherParse.degrees(hour.temperature), color = palette.onGlass, fontSize = 12.sp, fontWeight = FontWeight.Medium)
                 }
@@ -878,12 +895,195 @@ private fun Hours(forecast: Forecast, modifier: Modifier, across: Boolean) {
             forecast.hours.forEach { hour ->
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(hour.hour, color = quiet(), fontSize = 12.sp, modifier = Modifier.width(28.dp))
-                    Symbol(skyIcon(hour.code, true), 18.dp)
+                    Symbol(skyIcon(hour.code, hour.day), 18.dp)
                     Spacer(Modifier.weight(1f))
                     Text(WeatherParse.degrees(hour.temperature), color = palette.onGlass, fontSize = 13.sp, fontWeight = FontWeight.Medium)
                 }
             }
         }
+    }
+}
+
+/**
+ * The weather as an iPhone's Weather widget has it, at its three sizes. Small: the place, the
+ * temperature large and light under it, and at the foot the sky's symbol, its words and the day's
+ * high and low. Medium: the place and the temperature on the left, the sky on the right, and now and
+ * the next five hours along the foot. Large: Medium's top, the hours where it is tall enough to keep
+ * the days as well, and the next days. In the colour look its card is the sky over the place.
+ */
+@Composable
+private fun IphoneWeather(forecast: Forecast, form: WidgetForm, width: Dp, height: Dp) {
+    val palette = LocalPalette.current
+    val temp = WeatherParse.degrees(forecast.temperature)
+
+    @Composable
+    fun Place() = Text(
+        forecast.place,
+        color = palette.onGlass,
+        fontSize = 15.sp,
+        fontWeight = FontWeight.SemiBold,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+    )
+
+    /** The sky's symbol, its words and the day's high and low, one under another. */
+    @Composable
+    fun Sky(align: Alignment.Horizontal) = Column(horizontalAlignment = align) {
+        Symbol(skyIcon(forecast.code, forecast.day), 16.dp)
+        Spacer(Modifier.height(4.dp))
+        Text(
+            WeatherCodes.words(forecast.code, forecast.day),
+            color = palette.onGlass,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            "H:${WeatherParse.degrees(forecast.high)} L:${WeatherParse.degrees(forecast.low)}",
+            color = palette.onGlass,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+        )
+    }
+
+    if (form == WidgetForm.Square) {
+        Column(Modifier.fillMaxSize().padding(16.dp)) {
+            Place()
+            Figure(temp, fit(height * 0.27f, width * 0.3f), animated = true)
+            Spacer(Modifier.weight(1f))
+            Sky(Alignment.Start)
+        }
+        return
+    }
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        Row(Modifier.fillMaxWidth()) {
+            Column(Modifier.weight(1f)) {
+                Place()
+                Figure(temp, fit(height * 0.25f, 46.dp), animated = true)
+            }
+            Spacer(Modifier.width(12.dp))
+            Sky(Alignment.End)
+        }
+        val days = forecast.days
+        if (form == WidgetForm.Wide) {
+            Spacer(Modifier.weight(1f))
+            HoursFromNow(forecast, Modifier.fillMaxWidth())
+        } else {
+            // An iPhone's Large has room for the hours and the days both; a shorter one keeps its
+            // room for the days. A forecast kept from before there were days shows the hours alone.
+            if (days.isEmpty() || height >= HOURS_AND_DAYS) {
+                Spacer(Modifier.height(14.dp))
+                HoursFromNow(forecast, Modifier.fillMaxWidth())
+            }
+            if (days.isNotEmpty()) {
+                Spacer(Modifier.height(12.dp))
+                Box(Modifier.fillMaxWidth().height(1.dp).background(palette.onGlass.copy(alpha = 0.18f)))
+                Spacer(Modifier.height(10.dp))
+                NextDays(days, Modifier.weight(1f).fillMaxWidth())
+            }
+        }
+    }
+}
+
+/** The height from which a Large Weather widget shows the next hours as well as the next days. */
+private val HOURS_AND_DAYS = 300.dp
+
+/** Now and the next five hours side by side, as an iPhone's Weather widget has them: each its hour, its sky and its temperature. */
+@Composable
+private fun HoursFromNow(forecast: Forecast, modifier: Modifier) {
+    Row(modifier) {
+        HourOf("Now", skyIcon(forecast.code, forecast.day), forecast.temperature, Modifier.weight(1f))
+        forecast.hours.take(5).forEach { hour ->
+            HourOf(hour.hour, skyIcon(hour.code, hour.day), hour.temperature, Modifier.weight(1f))
+        }
+    }
+}
+
+/** One of the hours: when, its sky and its temperature, one under another. */
+@Composable
+private fun HourOf(label: String, sky: ImageVector, temperature: Double, modifier: Modifier) {
+    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(label, color = quiet(), fontSize = 12.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+        Spacer(Modifier.height(5.dp))
+        Symbol(sky, 18.dp)
+        Spacer(Modifier.height(5.dp))
+        Text(
+            WeatherParse.degrees(temperature),
+            color = LocalPalette.current.onGlass,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+        )
+    }
+}
+
+/**
+ * The next days one under another, as an iPhone's Large Weather widget lists them: the day, its sky,
+ * its low, a bar and its high. Every bar runs from the coldest of the days to the warmest and is lit
+ * from the day's own low to its high, so the days can be told apart at a glance. As many as there is
+ * room for.
+ */
+@Composable
+private fun NextDays(days: List<WeatherDay>, modifier: Modifier) {
+    if (days.isEmpty()) return
+    val palette = LocalPalette.current
+    val coldest = days.minOf { it.low }
+    val warmest = days.maxOf { it.high }
+    AsManyAsFit(days, modifier, gap = 6.dp) { day ->
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                day.day,
+                color = palette.onGlass,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Clip,
+                modifier = Modifier.width(50.dp),
+            )
+            Box(Modifier.width(28.dp), contentAlignment = Alignment.Center) { Symbol(skyIcon(day.code, true), 18.dp) }
+            Text(
+                WeatherParse.degrees(day.low),
+                color = quiet(),
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Medium,
+                textAlign = TextAlign.End,
+                maxLines = 1,
+                modifier = Modifier.width(44.dp),
+            )
+            DayBar(day, coldest, warmest, Modifier.weight(1f).padding(horizontal = 10.dp))
+            Text(
+                WeatherParse.degrees(day.high),
+                color = palette.onGlass,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Medium,
+                textAlign = TextAlign.End,
+                maxLines = 1,
+                modifier = Modifier.width(40.dp),
+            )
+        }
+    }
+}
+
+/**
+ * A day's bar: a faint track from the coldest of the days to the warmest, lit in the words' ink (or
+ * the widget's own colour) from the day's low to its high, and never less than a dot.
+ */
+@Composable
+private fun DayBar(day: WeatherDay, coldest: Double, warmest: Double, modifier: Modifier) {
+    val palette = LocalPalette.current
+    val track = palette.onGlass.copy(alpha = 0.2f)
+    val lit = palette.decor(palette.accent)
+    val span = warmest - coldest
+    val from = if (span > 0.0) ((day.low - coldest) / span).toFloat().coerceIn(0f, 1f) else 0f
+    val to = if (span > 0.0) ((day.high - coldest) / span).toFloat().coerceIn(from, 1f) else 1f
+    Canvas(modifier.height(4.dp)) {
+        val round = CornerRadius(size.height / 2f)
+        drawRoundRect(track, cornerRadius = round)
+        val length = maxOf(size.width * (to - from), size.height).coerceAtMost(size.width)
+        val start = (size.width * from).coerceAtMost(size.width - length)
+        drawRoundRect(lit, topLeft = Offset(start, 0f), size = Size(length, size.height), cornerRadius = round)
     }
 }
 

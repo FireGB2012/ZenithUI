@@ -127,9 +127,12 @@ import com.gabriel.zenithui.ui.common.labelShadow
 import com.gabriel.zenithui.ui.common.pressBounce
 import com.gabriel.zenithui.ui.common.staggerDelay
 import com.gabriel.zenithui.ui.theme.GlassMaterial
+import com.gabriel.zenithui.ui.theme.GlassMovedBy
 import com.gabriel.zenithui.ui.theme.LocalOnWallpaper
 import com.gabriel.zenithui.ui.theme.LocalPalette
+import com.gabriel.zenithui.ui.theme.LocalParallax
 import com.gabriel.zenithui.ui.theme.PressLight
+import com.gabriel.zenithui.ui.theme.TiltRest
 import com.gabriel.zenithui.ui.theme.ZenithShapes
 import com.gabriel.zenithui.ui.theme.glass
 import androidx.compose.ui.unit.round
@@ -392,9 +395,15 @@ fun HomePage(
     // And ones taken off it are seen to go.
     val departures = remember { Departures(items) }
     val haptics = LocalHapticFeedback.current
+    // How far the tilt floats what is on the page (LocalParallax), read only in each item's layer
+    // and by its glass while drawing.
+    val parallax = LocalParallax.current
+    val floating: () -> Unit = remember(parallax) { { parallax.value } }
 
     // Everything on the page stands on the wallpaper, so its names are white, in Light as in Dark.
+    // It floats with the tilt, and every pane of glass on it follows its item as it goes.
     OnWallpaper {
+    GlassMovedBy(floating) {
     BoxWithConstraints(modifier.fillMaxSize()) {
         val geometry = remember(constraints.maxWidth, constraints.maxHeight, settings.columns, settings.rows, density.density, settings.showLabels, settings.gridDensity) {
             HomeGeometry(
@@ -661,6 +670,11 @@ fun HomePage(
                         )
                         translationX += aside.x
                         translationY += aside.y
+                        // Floating a hair above the wallpaper, against the way the phone leans
+                        // from how it is held, so the wallpaper reads as deeper.
+                        val float = TiltRest.parallaxShift(parallax.value, ITEM_FLOAT_DP, density.density)
+                        translationX += float.x
+                        translationY += float.y
                         val shake = jiggleStrength()
                         if (shake > 0f && !carried) {
                             rotationZ = jiggleAngle * shake *
@@ -877,6 +891,10 @@ fun HomePage(
                                 scaleX = shrunk
                                 scaleY = shrunk
                             }
+                            // Floating still, as it was while it stood here.
+                            val float = TiltRest.parallaxShift(parallax.value, ITEM_FLOAT_DP, density.density)
+                            translationX = float.x
+                            translationY = float.y
                         },
                     contentAlignment = Alignment.Center,
                 ) {
@@ -895,6 +913,7 @@ fun HomePage(
             }
         }
         }
+    }
     }
     }
 }
@@ -2030,6 +2049,10 @@ fun DockBar(
     // by a touch of the slab's own, so it still comes up under an app as it is pressed.
     val lightScope = rememberCoroutineScope()
     val light = remember { PressLight(lightScope) }
+    // How far the tilt floats the dock, read only in its layer (LocalParallax): less than the page's
+    // icons, as it sits lower. Its glass follows it as it goes.
+    val parallax = LocalParallax.current
+    val floating: () -> Unit = remember(parallax) { { parallax.value } }
 
     BoxWithConstraints(
         modifier
@@ -2101,6 +2124,7 @@ fun DockBar(
         val lifted = liftedNow()
         val target = targetNow()
 
+        GlassMovedBy(floating) {
         Box(
             Modifier
                 .fillMaxSize()
@@ -2108,6 +2132,9 @@ fun DockBar(
                     val grow = 1f + 0.03f * swell.value
                     scaleX = grow
                     scaleY = grow
+                    val float = TiltRest.parallaxShift(parallax.value, DOCK_FLOAT_DP, density.density)
+                    translationX = float.x
+                    translationY = float.y
                 }
                 .then(
                     if (paned) {
@@ -2281,6 +2308,7 @@ fun DockBar(
                 }
             }
         }
+        }
     }
 }
 
@@ -2340,6 +2368,13 @@ private const val DOCK_LIFT = 1.14f
 
 /** How far items spread apart, in cells per cell from the middle, as a page slides fully away. */
 private const val PAGE_PARALLAX = 0.35f
+
+/**
+ * How far the tilt floats things, in dp, when the phone leans all the way from how it is held (see
+ * TiltRest.parallaxShift): the icons and widgets on a page, and the dock, which sits lower, half as far.
+ */
+private const val ITEM_FLOAT_DP = 4f
+private const val DOCK_FLOAT_DP = 2f
 
 private const val TWO_PI = 6.2831855f
 

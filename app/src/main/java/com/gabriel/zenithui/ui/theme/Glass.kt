@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -116,7 +117,7 @@ fun Modifier.glass(
     /**
      * For a pane that something outside it moves or scales with a graphicsLayer, as a dragged lens
      * is: reads what moves it, while drawing, so the wallpaper behind is lined up again as it goes
-     * rather than travelling with the pane.
+     * rather than travelling with the pane. Inside [GlassMovedBy] it follows that as well.
      */
     tracking: (() -> Unit)? = null,
 ): Modifier {
@@ -128,6 +129,14 @@ fun Modifier.glass(
     val tilt = LocalTilt.current
     val tuning = LocalGlassTuning.current
     val onWallpaper = LocalOnWallpaper.current
+    // On something that moves its panes with a layer, as the tilt floats a home page's icons and
+    // widgets and the dock ([GlassMovedBy]), the pane follows that as well as what it was given.
+    val carried = LocalGlassTracking.current
+    val follows = when {
+        carried == null -> tracking
+        tracking == null -> carried
+        else -> ({ tracking(); carried() })
+    }
     // On the wallpaper the glass is made as Dark makes it, in Light too: the shader, the shadow and
     // the rim are told it is dark, so nothing about it follows the mode.
     val dark = onWallpaper || palette.dark
@@ -218,12 +227,16 @@ fun Modifier.glass(
                 val touch = press?.touch(size) ?: GlassTouch.None
                 // A pressed pane bends the light a little more, as the finger's light comes up.
                 val lit = if (touch.strength > 0f) look.copy(refraction = look.refraction * (1f + 0.22f * touch.strength)) else look
+                // Read even when where the pane is drawn is worked out from its layout below, so
+                // that being laid out somewhere new, as an icon gliding to another cell is, still
+                // draws it again there.
+                val laidOut = origin
                 drawLiquidGlass(
                     paneSize = size,
                     outline = outline,
                     lens = lens,
                     softened = backdrop,
-                    origin = if (moved != null || tracking != null) drawnOrigin(placed[0], moved, tracking) ?: origin else origin,
+                    origin = if (moved != null || follows != null) drawnOrigin(placed[0], moved, follows) ?: laidOut else laidOut,
                     screen = screen,
                     wallpaperOffset = wallpaperOffset.value,
                     look = lit,
@@ -482,6 +495,27 @@ val LocalGlassTuning = staticCompositionLocalOf { GlassTuning() }
  * that follows the mode.
  */
 val LocalOnWallpaper = staticCompositionLocalOf { false }
+
+/**
+ * What moves the panes here with a layer, read while drawing, as a pane's own `tracking` is, so the
+ * wallpaper behind each stays where it is on screen while the pane moves. Given by [GlassMovedBy];
+ * null where nothing moves them.
+ */
+internal val LocalGlassTracking = staticCompositionLocalOf<(() -> Unit)?> { null }
+
+/**
+ * [content] standing on something a layer moves, as the tilt floats the icons and widgets on a home
+ * page and the dock, [moves] reading whatever moves it: every pane of glass in it reads [moves] while
+ * drawing and lines its wallpaper up again as it goes, as a pane given `glass(tracking = ...)` does.
+ * Inside another it follows both. [moves] is best remembered, since a new one composes all of
+ * [content] again.
+ */
+@Composable
+fun GlassMovedBy(moves: () -> Unit, content: @Composable () -> Unit) {
+    val outer = LocalGlassTracking.current
+    val both = remember(outer, moves) { if (outer == null) moves else ({ outer(); moves() }) }
+    CompositionLocalProvider(LocalGlassTracking provides both, content = content)
+}
 
 /**
  * The veil of glass on the wallpaper, in Light and in Dark alike: a grey with no colour in it, and

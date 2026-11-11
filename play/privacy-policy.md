@@ -1,6 +1,6 @@
 # Privacy Policy — Zenith UI
 
-**Last updated: 31 October 2026**
+**Last updated: 11 November 2026**
 
 > The copy Play actually links to is `docs/index.html`, published from the public repo
 > github.com/FireGB2012/zenith-privacy at <https://firegb2012.github.io/zenith-privacy/>. Edit all
@@ -112,15 +112,15 @@ The app saves the following in its own private storage, readable only by Zenith 
 
 - The name you type during setup, used to greet you on your home screen.
 - Your home screen layout: which apps, folders and widgets you placed and where.
-- Your preferences: palette, light/dark mode, glass strength, grid size, icon size and shape, and
-  the icon pack you selected.
+- Your preferences: light/dark mode, your wallpaper's colours, glass strength, grid size, icon size
+  and shape, how widgets look, and the icon pack you selected.
 - The text of the Quick Note widget, the To-do widget's list, the Countdown's name and date, the
   World clock's cities and the Weather widget's place, if you use them.
 - Names you gave apps, icons you chose for them, and photos you picked for an app's icon or the
   Photo frame widget, copied small into the app's own storage.
 - Whether you own Zenith Plus, and the date your free trial began.
-- The palette you built, the apps you chose to hide, and the PIN you set for them, if you use those
-  features. The PIN keeps a list tidy; it is not a device security measure and is stored as typed.
+- Colours you built in an earlier version, the apps you chose to hide, and the PIN you set for them,
+  if you use those features. The PIN keeps a list tidy; it is not a device security measure and is stored as typed.
 - Your Aura points, your daily streak and the day you last checked in, the themes you unlocked with
   points, your Aura code, and whether you have already used someone else's. Without a Zenith account
   none of this is sent anywhere.
@@ -135,8 +135,8 @@ permanently.
 
 ## Payments
 
-Zenith Plus is optional and sold through Google Play in two forms: a monthly subscription and a
-one-time lifetime pass. Google handles the payment and tells the app one thing: whether this Google
+Zenith Plus is optional and sold through Google Play in three forms: a subscription billed every
+month, the same subscription billed every three months, and a one-time lifetime pass. Google handles the payment and tells the app one thing: whether this Google
 account currently owns Plus. Zenith UI never sees your card, your name or your address, and stores
 nothing about the payment beyond that yes or no. Subscriptions are managed and cancelled in the
 Google Play app. Google's own privacy policy covers what Play does with the transaction.
@@ -161,11 +161,12 @@ To work as a launcher, the app reads:
 - **Your wallpaper**, once you have made Zenith UI your default home app, so glass panels can show a
   blurred copy of it. The image is used only for drawing and is never stored or transmitted.
 - **Battery level and charging state**, for the Power widget, via a standard system broadcast.
-- **Today's calendar entries**, but only if you open the bedside clock and grant calendar access.
-  The titles and times are read each time the screen is shown, displayed on your device, and never
-  stored by Zenith UI or sent anywhere. Declining leaves every other feature working.
+- **Today's calendar entries**, but only if you grant calendar access, from the Calendar widget's
+  "Show your events" or the bedside clock's "Allow calendar". The titles, times and calendar colours
+  are read each time they are shown, displayed on your device, and never stored by Zenith UI or sent
+  anywhere. Declining leaves every other feature working.
 - **The motion sensor (accelerometer)**, only while the home screen is showing, so the light on the
-  glass panels moves as you tilt the phone. Readings are used for drawing and are never stored or
+  glass panels moves, and the icons float, as you tilt the phone. Readings are used for drawing and are never stored or
   sent anywhere.
 - **Notifications, only if you give Zenith notification access** in Android's settings, for
   notification dots and the Now playing widget. Zenith counts how many notifications each app has
@@ -183,7 +184,7 @@ To work as a launcher, the app reads:
 | --- | --- |
 | `SET_WALLPAPER` | Sets a wallpaper you pick from Zenith's own gallery, which the app paints on the phone. Choosing your own photo opens the system wallpaper picker instead |
 | `VIBRATE` | Provides a short haptic tick when you pick up an icon or resize a widget |
-| `READ_CALENDAR` | Optional. Asked for only when you tap "Allow calendar" on the bedside clock, so it can list today's events |
+| `READ_CALENDAR` | Optional. Asked for only when you tap "Show your events" on the Calendar widget or "Allow calendar" on the bedside clock, so they can list today's events |
 | `com.android.vending.BILLING` | Lets Google Play sell Zenith Plus inside the app |
 | `INTERNET`, `ACCESS_NETWORK_STATE` | Lets the app reach Zenith's server once you make or sign in to a Zenith account, lets Google's Play Billing library reach Google Play, and lets the Weather widget reach Open-Meteo once you choose a place for it. Otherwise Zenith UI itself opens no network connections |
 | `EXPAND_STATUS_BAR` | Lets a swipe down on the home screen pull down the notification shade, as a phone's own launcher does |
@@ -191,14 +192,14 @@ To work as a launcher, the app reads:
 | Accessibility: the lock helper (optional) | Switched on in Android's settings, only to lock the phone with a gesture you chose |
 
 Zenith UI does not request location, contacts, storage, camera or microphone permissions. Calendar
-access is optional, requested only in the bedside clock, and can be revoked at any time in Android
-Settings without affecting the rest of the launcher. The torch tile uses the system camera flash API,
+access is optional, requested only by the Calendar widget and the bedside clock, and can be revoked
+at any time in Android Settings without affecting the rest of the launcher. The torch tile uses the system camera flash API,
 which needs no permission.
 
 ## Leaving the app
 
-Searching the web from the search bar hands your query to the search app or browser you already
-have installed. What happens after that is covered by that app's own privacy policy, not this one.
+Searching the web from Search or the app drawer hands your query to the search app or browser you
+already have installed. What happens after that is covered by that app's own privacy policy, not this one.
 The same applies to any app you launch from Zenith UI.
 
 ## Children

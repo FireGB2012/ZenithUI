@@ -25,57 +25,63 @@ Paste these into Play Console → Grow → Store presence → Main store listing
 ## Short description (80 characters max)
 
 ```
-Liquid glass launcher: matching wallpapers, widgets and thumb-first menus.
+Liquid glass home screen: square widgets, a glass dock and light that moves.
 ```
+
+(Kept free of other companies' product names: a listing that sells an app with another brand's name
+risks Play's metadata and trademark rules, so it never says what the look is modelled on.)
 
 ## Full description (4000 characters max)
 
 ```
-Zenith UI is a home screen that pairs the calm of frosted glass with Android's freedom.
+Zenith UI is a home screen made of liquid glass, with all of Android's freedom.
+
+A CALM, FAMILIAR HOME SCREEN
+Four icons across, rounded squares with their names under them. Square widgets, each with its name. A small glass Search pill, and a floating glass dock. Nothing else in the way.
 
 LIQUID GLASS
-Panels are translucent, tinted and lit from the top edge, and once Zenith is your default home app they blur a copy of your own wallpaper - so the launcher looks made of your background, not painted over it. Tilt the phone and the light travels round the edge of every panel.
+Once Zenith is your default home app, every pane is clear glass that bends and blurs your own wallpaper, tinted with its colour where it sits, the same in light and dark. Tilt the phone and the light moves round the glass as icons float above the wallpaper. Tap the wallpaper and a ring of light runs through it all.
+
+WIDGETS IN COLOUR OR IN GLASS
+Twelve widgets, from weather with the days ahead and a calendar with today's events to a to-do list, a photo frame and quick toggles with a working torch. Show them in Colour, solid and bright, or in Glass, clear over your wallpaper. Your other apps' widgets work too, and stack. Hold any widget, tap Resize and pull its corner - any size, up to the whole page.
+
+SEARCH THAT STRETCHES
+Tap Search and its glass stretches into a field above your keyboard: apps, sums, conversions, settings and the web.
 
 WALLPAPERS MADE TO MATCH
-Zenith paints its own: thirty-three designs - soft glows, flowing lines, glass shapes and whole scenes - in every theme's colours, light and dark. And the wallpaper follows your theme: change the palette, or let the phone go dark in the evening, and the same design is repainted to match and faded in. Your own photos are one row away, and never touched.
+Zenith paints its own: thirty-three designs - soft glows, flowing lines, glass shapes and whole scenes - in a choice of colours, each with a light picture and a dark one. Let the phone go dark in the evening and the same design is repainted to match and faded in. Your own photos are one row away, and never touched.
 
 BUILT FOR ONE HAND
-Menus are bottom sheets. The app drawer's search field sits at the bottom where your thumb already is, and the drawer follows your finger up and down.
+Menus are bottom sheets, the app drawer follows your finger, and its search sits at the bottom, by your thumb.
 
-SET UP IN TWENTY SECONDS
-Tell Zenith your name, pick a colour and watch a live picture of your own phone change with it, choose your widgets, and it builds the first page for you.
-
-PLACEMENT THAT JUST WORKS
-Icons size themselves to your grid: no size slider to fiddle with. Drop one over an edge and it slides in rather than bouncing back; drop one on a full page and it carries on to the next page with room.
-
-WIDGETS THAT FIT
-Five widgets: an oversized clock, a live battery ring, a month calendar, a quick note and quick toggles with a working torch, plus a search bar for apps or Google above the dock. A gallery shows each one live on your wallpaper, in every size, glass or not. Long press any widget or app, tap Resize and pull its corner - any size, up to the whole page.
+SET UP IN A FEW TAPS
+Tell Zenith your name, choose light or dark and your widgets, and watch it build your first page in front of you.
 
 SETTINGS YOU CAN READ
-One page with a search box: type "dark" or "vibrate" and it takes you to the switch. Nine groups say how they are set before you open them, and a small live copy of your home screen shows each change as you make it. To get there, pinch the home screen or hold your name.
+One page with a search box: type "dark" or "vibrate" and it takes you to the switch, with a small live copy of your home screen showing each change. Hold an empty spot or pinch to get there.
 
 ZENITH PLUS
-Try the extras free for a week: seven more wallpapers, a theme maker that builds a palette from any three colours you like, hidden apps that stay out of the drawer behind a PIN, and a backup, in a file or in your Zenith account, to restore on any phone. After that it is $4 a month, $8 every 3 months, or a $10 lifetime pass. No ads either way, and nothing that was free before is ever taken away.
+Try the extras free for a week: seven more wallpapers, the island round your camera, the Glass studio, Looks to save, schedule and share, free placement, hidden apps behind a PIN, and backups to a file or your account. Then $4 a month, $8 every 3 months, or a $10 lifetime pass. No ads either way, and nothing that was free is ever taken away.
 
 AS MANY PAGES AS YOU LIKE
-Tap the + beside the page dots for another page, or hold an icon against the side of the screen to carry it across.
+Pinch out to see every page and tap + for another, or hold an icon against the side of the screen to carry it across.
 
 AURA
-Open Zenith once a day and the streak pays you: ten points on day one, more for every day in a row, up to fifty. Points buy themes - five to start with, from Ember to Obsidian. Miss a day and the streak starts again; what you earned stays. With a Zenith account, a friend who uses your code gets 150 points, and so do you.
+Open Zenith once a day and the streak pays you: ten points on day one, more for every day in a row, up to fifty. Miss a day and the streak starts again; what you earned stays. With a Zenith account, a friend who uses your code gets 150 points, and so do you.
 
 MAKE IT YOURS
-Six palettes, light, dark or automatic, adjustable glass, Compact, Balanced, Roomy or your own grid, labels on or off, four icon shapes, and support for any Nova or ADW compatible icon pack.
+Light, dark or automatic, adjustable glass, four across or Compact, Balanced, Roomy or your own grid, nine icon shapes, three icon styles, fonts, labels on or off, and support for any Nova or ADW compatible icon pack.
 
 BEDSIDE CLOCK
 Tap the clock widget for a dimmed full screen clock with the date and today's calendar.
 
 SMOOTH BY DESIGN, FOR EVERYONE
-Unlock and the home screen flies in. Turn pages your way: Depth, Slide, Cube or Stack. Pick up an icon and the rest jiggle; put it down and it lands with a ring. Folders open out of their own icon. All at your screen's full rate, up to 120Hz - and one switch turns it down to plain fades.
+Unlock and the home screen flies in. Turn pages your way: Depth, Slide, Cube or Stack. Icons squish like jelly; pick one up and the rest jiggle. Folders open out of their own icon. All at up to 120Hz - and one switch turns it down to plain fades.
 
 PRIVATE BY DEFAULT
-No analytics, no ads, and no account unless you want one. Without one, nothing leaves your phone but Google Play checking whether you own Zenith Plus. An account keeps your sign-in, your Aura code and the backup you choose to send; delete it any time, in the app or on the web.
+No analytics, no ads, and no account unless you want one. Without one, nothing leaves your phone but Google Play checking whether you own Zenith Plus, and the weather for a place you pick, if you add the Weather widget. An account keeps your sign-in, your Aura code and the backup you choose to send; delete it any time, in the app or on the web.
 
-Zenith UI asks to set your wallpaper, to vibrate, and for the internet (Google Play's billing, and your account if you make one). Calendar access is optional, for the bedside clock.
+Zenith UI asks to set your wallpaper, to vibrate, and for the internet (Google Play's billing, the weather if you add it, and your account if you make one). Calendar access is optional, for the Calendar widget's events and the bedside clock.
 ```
 
 ## What's new (500 characters max)
@@ -130,6 +136,20 @@ Make every part of it yours.
 - Island: your camera, stretched, over every app
 ```
 
+For the update with the new home screen (check it is under 500 characters):
+
+```
+A whole new look.
+- Four across, square widgets with names, a Search pill, a glass dock
+- Widgets in Colour or in clear Glass
+- Glass tinted by your wallpaper, and light that moves as you tilt
+- Search stretches into a field above the keyboard
+- Tap the wallpaper for a ring of light; icons squish like jelly
+- One look, light or dark: the colour themes are gone
+- Zenith Plus: $4 a month, $8 for 3 months, or $10 for good
+Already set up? Zenith asks once before anything moves.
+```
+
 ## Graphics
 
 | Asset | File | Requirement |
@@ -139,6 +159,10 @@ Make every part of it yours.
 | Phone screenshots | `play/screenshots/*.png` | 1080×2160 (Play rejects anything longer than 2:1), at least 2, up to 8 |
 
 Screenshots included (8, in upload order): home screen, wallpaper gallery, setup — pick a colour, setup — the finished page, app drawer, settings, settings — Look, Zenith Plus.
+
+These are from before the new home screen and still show the colour themes (setup's "pick a
+colour" step is now "Light or dark?", and Plus has three plans). Take new ones before the update
+with the new home screen goes out.
 
 ## In-app products
 
@@ -155,7 +179,7 @@ price anywhere, which Play rejects anyway.
 | Product ID | `zenith_plus` (cannot be changed once created) |
 | Type | One-time product, non-consumable, "multi-quantity" off |
 | Name | Zenith Plus — Lifetime |
-| Description | Theme maker, hidden apps, and backup & restore. Paid once, yours for good. |
+| Description | Hidden apps, backup & restore, the island and more. Paid once, yours for good. |
 | Price | $10.00 (Play converts for other countries) |
 
 **Subscription** — Monetisation → Subscriptions. One subscription with two base plans. A purchase of
@@ -238,7 +262,7 @@ about it, and a backup sent to the account leaves the purchase and the trial out
 
 Note for the reviewer, if asked: the launcher reads the list of installed applications through
 `LauncherApps` in order to display them, and — only with the user's consent — today's calendar
-entries for the bedside clock. The calendar entries are never transmitted, logged or stored
+entries for the Calendar widget and the bedside clock. The calendar entries are never transmitted, logged or stored
 off-device. Nor is the list of installed applications as a whole; a backup the user chooses to send
 to their account names the apps on their home screen and the ones they hid, which is what "Installed
 apps" above declares.
@@ -255,10 +279,10 @@ is needed. Backing up to the account needs Zenith Plus, which the seven free day
 | --- | --- |
 | `SET_WALLPAPER` | Zenith sets the wallpapers it paints, and a photo you pick in it |
 | `VIBRATE` | A short tick when you pick up an icon or resize a widget |
-| `READ_CALENDAR` | Optional. Requested at runtime the first time you ask the bedside clock to show today's events; the launcher works fully without it |
+| `READ_CALENDAR` | Optional. Requested at runtime the first time you tap "Show your events" on the Calendar widget or ask the bedside clock to show today's events; the launcher works fully without it |
 | `com.android.vending.BILLING` | Selling Zenith Plus through Google Play |
-| `INTERNET`, `ACCESS_NETWORK_STATE` | `INTERNET` is the app's own since 2026-10-04: it reaches Zenith's server once somebody makes or signs in to an account, and never before. Both are also merged in by the Play Billing library so it can reach Google Play |
+| `INTERNET`, `ACCESS_NETWORK_STATE` | `INTERNET` is the app's own since 2026-10-04: it reaches Zenith's server once somebody makes or signs in to an account, and never before, and Open-Meteo once a place is chosen for the Weather widget. Both are also merged in by the Play Billing library so it can reach Google Play |
 
-`READ_CALENDAR` is in the "personal and sensitive" family, so the listing must explain it: the bedside clock shows today's events on a dimmed screen, the data is read on the device and never leaves it, and every other feature works if you decline.
+`READ_CALENDAR` is in the "personal and sensitive" family, so the listing must explain it: the Calendar widget lists today's events and the bedside clock shows them on a dimmed screen, the data is read on the device and never leaves it, and every other feature works if you decline.
 
 No `QUERY_ALL_PACKAGES`: app discovery uses `LauncherApps` plus a `<queries>` element, so no sensitive-permission declaration form is required.

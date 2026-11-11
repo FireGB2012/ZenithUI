@@ -82,6 +82,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.PointerInputScope
+import kotlinx.coroutines.withTimeoutOrNull
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
@@ -152,6 +154,66 @@ import kotlin.math.sin
 private class HoldRun {
     var at = Offset.Zero
     var carrying = false
+}
+
+/** How far a finger moves on something that is being edited before it is picked up. */
+private val EDIT_SLOP = 6.dp
+
+/**
+ * A touch on something while the home screen is edited. Moved, the thing is picked up at once, with
+ * no hold to wait for ([onPickUp], with where the finger is inside it). Held still for [holdMs], its
+ * menu comes as it always does ([onHold]). Either way every move after that is reported ([onMove]:
+ * where the finger is inside the thing, and how far it has just come) and taken, so that the page
+ * does not turn under it, and the lift is [onEnd]. A touch that lifts before either is a tap, and is
+ * left for whoever takes taps.
+ */
+private suspend fun PointerInputScope.dragAtOnce(
+    holdMs: Long,
+    slop: Float,
+    onPickUp: (Offset) -> Unit,
+    onHold: (Offset) -> Unit,
+    onMove: (Offset, Offset) -> Unit,
+    onEnd: () -> Unit,
+    onCancel: () -> Unit,
+) {
+    awaitEachGesture {
+        val down = awaitFirstDown(requireUnconsumed = false)
+        var at = down.position
+        var lifted = false
+        var movedOff = false
+        withTimeoutOrNull(holdMs) {
+            while (true) {
+                val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id }
+                if (change == null || !change.pressed) {
+                    lifted = true
+                    break
+                }
+                at = change.position
+                if ((at - down.position).getDistance() > slop) {
+                    movedOff = true
+                    change.consume()
+                    break
+                }
+            }
+        }
+        if (lifted) return@awaitEachGesture
+        if (movedOff) onPickUp(at) else onHold(at)
+        while (true) {
+            val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id }
+            if (change == null) {
+                onCancel()
+                return@awaitEachGesture
+            }
+            if (!change.pressed) {
+                change.consume()
+                onEnd()
+                return@awaitEachGesture
+            }
+            val came = change.positionChange()
+            change.consume()
+            onMove(change.position, came)
+        }
+    }
 }
 
 /** The room a name takes under its icon or widget, which a held thing's menu stands clear of. */
@@ -393,6 +455,10 @@ fun HomePage(
     heldId: String? = null,
     /** How the pour squashes the held thing as the drop lets go of it; read while drawing. */
     heldSquash: () -> Offset = { Offset(1f, 1f) },
+    /** The home screen is being edited: everything wiggles and wears a minus, and a tap opens nothing but a folder. */
+    editing: Boolean = false,
+    /** The minus on something was tapped. */
+    onBead: (HomeItem) -> Unit = {},
     onSearch: () -> Unit,
     onNoteChange: (String) -> Unit,
     onAmbient: () -> Unit,
@@ -630,7 +696,7 @@ fun HomePage(
             // of step with its neighbours and at its own pace. A wide widget rocks less: the same
             // angle would swing its corners much further than an icon's.
             val jigglePhase = remember(item.id) { (item.id.hashCode() and 0xFF) / 255f }
-            val jiggleAngle = if (item.spanX > 1 || item.spanY > ROW_UNITS) 0.45f else 1.2f
+            val jiggleAngle = if (item.spanX > 1 || item.spanY > ROW_UNITS) WIGGLE_WIDE else WIGGLE_ICON
             val carried = item.id == dragged?.id
             val gatheredHere = drag.gathered.any { it.first.id == item.id }
             val gatheredAlpha by animateFloatAsState(if (gatheredHere) 0.3f else 1f, Motion.smooth(), label = "gathered")
@@ -729,8 +795,13 @@ fun HomePage(
                         translationY += float.y
                         val shake = jiggleStrength()
                         if (shake > 0f && !carried) {
+                            // About four swings a second, each thing a little off the pace of the
+                            // ones beside it, with a hair of a bob on another beat.
+                            val clock = jiggleClock()
                             rotationZ = jiggleAngle * shake *
-                                sin((jiggleClock() * (2f + 0.7f * jigglePhase) + jigglePhase) * TWO_PI)
+                                sin((clock * (WIGGLE_HZ + WIGGLE_HZ_SPREAD * jigglePhase) + jigglePhase) * TWO_PI)
+                            translationY += WIGGLE_BOB.toPx() * shake *
+                                sin((clock * (BOB_HZ + WIGGLE_HZ_SPREAD * jigglePhase) + 2f * jigglePhase) * TWO_PI)
                         }
                     }
                     .drawBehind {
@@ -785,7 +856,7 @@ fun HomePage(
                             contentAt[0] = it
                         }
                         .then(if (opens != null) Modifier.launchOrigin(opens) else Modifier)
-                        .pointerInput(item.id, cellWidthPx, cellHeightPx, settings.columns, resizing, settings.lockLayout) {
+                        .pointerInput(item.id, cellWidthPx, cellHeightPx, settings.columns, resizing, settings.lockLayout, editing) {
                             // While its size is being pulled, the item stays put: a finger resting
                             // on the pointer must never turn into a long press that carries it off.
                             if (resizing) return@pointerInput
@@ -845,6 +916,27 @@ fun HomePage(
                                 holdToCarry(onStart = began, onDrag = moved, onEnd = { ended() }, onCancel = cancelled)
                                 return@pointerInput
                             }
+                            // Edited, it is picked up the moment the finger moves on it: there is
+                            // no hold to wait for, and the page does not turn under it instead.
+                            if (editing) {
+                                dragAtOnce(
+                                    holdMs = viewConfiguration.longPressTimeoutMillis,
+                                    slop = EDIT_SLOP.toPx(),
+                                    onPickUp = { local ->
+                                        longPressHandled = true
+                                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        holdRun.at = onScreen(local)
+                                        holdRun.carrying = true
+                                        drag.begin(liveItem, holdRun.at, cellRoot)
+                                        drag.hoverCandidateId = hoverTarget(drag, liveItems, liveItem)
+                                    },
+                                    onHold = began,
+                                    onMove = { local, _ -> moved(local) },
+                                    onEnd = ended,
+                                    onCancel = cancelled,
+                                )
+                                return@pointerInput
+                            }
                             detectDragGesturesAfterLongPress(
                                 onDragStart = began,
                                 onDrag = { change, _ ->
@@ -855,7 +947,7 @@ fun HomePage(
                                 onDragCancel = cancelled,
                             )
                         }
-                        .pointerInput(item.id, resizing) {
+                        .pointerInput(item.id, resizing, editing) {
                             // Its taps are its own: the widget inside answers them.
                             if (liveItem.hasOwnTouches) return@pointerInput
                             detectTapGestures(
@@ -875,6 +967,8 @@ fun HomePage(
                                     }
                                     when {
                                         resizing -> onResizeDone()
+                                        // Being edited, nothing opens but a folder, to arrange what is in it.
+                                        editing && item !is FolderCell -> Unit
                                         opens != null -> onOpenApp(opens)
                                         item is FolderCell -> {
                                             val icon = geometry.iconFrame
@@ -905,6 +999,25 @@ fun HomePage(
                         onNoteChange = onNoteChange,
                         onAmbient = onAmbient,
                         onRestoreWidget = onRestoreWidget,
+                    )
+                }
+
+                // The minus on its corner while the home screen is edited. A folder has none: it is
+                // emptied, or removed from its menu. On top of the item, so a tap on it is its own.
+                if (item !is FolderCell) {
+                    val reach = with(density) { (BEAD_TOUCH / 2).toPx() }
+                    MinusBead(
+                        shown = editing && !carried && !resizing,
+                        name = when (item) {
+                            is AppCell -> appsByKey[item.key]?.label ?: "app"
+                            is ShortcutCell -> item.label
+                            is WidgetCell -> Widgets.shortName(item.type)
+                            else -> "widget"
+                        },
+                        onClick = { onBead(liveItem) },
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .offset { IntOffset((ringFrame.left - reach).roundToInt(), (ringFrame.top - reach).roundToInt()) },
                     )
                 }
 
@@ -2122,6 +2235,11 @@ fun DockBar(
     heldKey: String? = null,
     /** How the pour squashes the held app as the drop lets go of it; read while drawing. */
     heldSquash: () -> Offset = { Offset(1f, 1f) },
+    /** The home screen is being edited: the apps in the dock wiggle and wear a minus too, and a tap opens nothing. */
+    editing: Boolean = false,
+    onBead: (String) -> Unit = {},
+    jiggleClock: () -> Float = { 0f },
+    jiggleStrength: () -> Float = { 0f },
     modifier: Modifier = Modifier,
     /**
      * Reads whatever moves the dock with a layer, such as its arrival, so the wallpaper in its glass
@@ -2171,6 +2289,7 @@ fun DockBar(
     val currentOnReorder by rememberUpdatedState(onReorder)
     val currentOnDragOut by rememberUpdatedState(onDragOut)
     val currentHold by rememberUpdatedState(hold)
+    val currentEditing by rememberUpdatedState(editing)
     // Each app's icon as it is laid out inside its own layer, for where a touch on it is on screen.
     val iconAt = remember { HashMap<String, androidx.compose.ui.layout.LayoutCoordinates>() }
     // One hold on one app: where the finger is, and whether the app has been picked up yet.
@@ -2378,6 +2497,13 @@ fun DockBar(
                                     scaleX *= squash.x
                                     scaleY *= squash.y
                                 }
+                                // Edited, it wiggles as the icons on the page do.
+                                val shake = jiggleStrength()
+                                if (shake > 0f && !isCarried) {
+                                    val phase = (key.hashCode() and 0xFF) / 255f
+                                    rotationZ = WIGGLE_ICON * shake *
+                                        sin((jiggleClock() * (WIGGLE_HZ + WIGGLE_HZ_SPREAD * phase) + phase) * TWO_PI)
+                                }
                                 if (left != null) {
                                     val seen = seenAt.getOrPut(key) { FloatArray(3) }
                                     seen[0] = left + x
@@ -2391,50 +2517,51 @@ fun DockBar(
                             .pointerInput(key) {
                                 detectTapGestures(
                                     onPress = { suppressTap = false },
-                                    onTap = { if (!suppressTap) onOpen(key) },
+                                    onTap = { if (!suppressTap && !currentEditing) onOpen(key) },
                                 )
                             }
-                            .pointerInput(key, index, settings.lockLayout) {
-                                detectDragGesturesAfterLongPress(
-                                    onDragStart = { local ->
-                                        suppressTap = true
-                                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                                        val slot = slotOf(index)
-                                        grabRoot = (slot?.topLeft ?: Offset.Zero) + local
-                                        dragOffset = Offset.Zero
-                                        // The menu first, over the dock; the app is only picked up
-                                        // if the finger then wanders off with it.
-                                        holdRun.at = iconAt[key]?.takeIf { it.isAttached }?.localToRoot(local) ?: grabRoot
-                                        holdRun.carrying = false
-                                        val side = currentIconPx.toFloat()
-                                        val at = slot ?: Rect(grabRoot.x - side / 2f, grabRoot.y - side / 2f, grabRoot.x + side / 2f, grabRoot.y + side / 2f)
-                                        currentHold.start(
-                                            HoldTarget.Dock(key),
-                                            at,
-                                            at,
-                                            HoldTuning.LIFT_ICON,
-                                            side * 0.28f,
-                                            grabRoot,
-                                        )
-                                    },
-                                    onDrag = { change, amount ->
-                                        change.consume()
-                                        holdRun.at = iconAt[key]?.takeIf { it.isAttached }?.localToRoot(change.position) ?: (holdRun.at + amount)
-                                        if (holdRun.carrying) {
-                                            dragOffset += amount
-                                        } else if (currentHold.move(holdRun.at)) {
-                                            // Picked up: it comes to the finger from where it stood.
-                                            holdRun.carrying = true
-                                            dragOffset = holdRun.at - grabRoot
-                                            draggingIndex = index
-                                        }
-                                    },
-                                    onDragEnd = {
-                                        if (!holdRun.carrying) currentHold.release()
+                            .pointerInput(key, index, settings.lockLayout, editing) {
+                                val onScreen: (Offset) -> Offset? = { local ->
+                                    iconAt[key]?.takeIf { it.isAttached }?.localToRoot(local)
+                                }
+                                val grab: (Offset) -> Unit = { local ->
+                                    suppressTap = true
+                                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    grabRoot = (slotOf(index)?.topLeft ?: Offset.Zero) + local
+                                    dragOffset = Offset.Zero
+                                    holdRun.at = onScreen(local) ?: grabRoot
+                                    holdRun.carrying = false
+                                }
+                                // A hold: the menu first, over the dock; the app is only picked up
+                                // if the finger then wanders off with it.
+                                val began: (Offset) -> Unit = { local ->
+                                    grab(local)
+                                    val side = currentIconPx.toFloat()
+                                    val at = slotOf(index)
+                                        ?: Rect(grabRoot.x - side / 2f, grabRoot.y - side / 2f, grabRoot.x + side / 2f, grabRoot.y + side / 2f)
+                                    currentHold.start(HoldTarget.Dock(key), at, at, HoldTuning.LIFT_ICON, side * 0.28f, grabRoot)
+                                }
+                                // The icon follows the finger on a layer of its own, so how far
+                                // the finger came is asked of each move, not worked out from where
+                                // it is inside an icon that has moved with it.
+                                val moved: (Offset, Offset) -> Unit = { local, came ->
+                                    holdRun.at = onScreen(local) ?: (holdRun.at + came)
+                                    if (holdRun.carrying) {
+                                        dragOffset += came
+                                    } else if (currentHold.move(holdRun.at)) {
+                                        // Picked up: it comes to the finger from where it stood.
+                                        holdRun.carrying = true
+                                        dragOffset = holdRun.at - grabRoot
+                                        draggingIndex = index
+                                    }
+                                }
+                                val ended: () -> Unit = {
+                                    if (!holdRun.carrying) {
+                                        currentHold.release()
+                                    } else {
                                         val start = draggingIndex
                                         val end = targetNow()
                                         when {
-                                            !holdRun.carrying -> Unit
                                             liftedNow() -> currentOnDragOut(key, (slotOf(index)?.center ?: grabRoot) + dragOffset)
                                             start != null && end != null && end != start -> currentOnReorder(start, end)
                                         }
@@ -2445,17 +2572,44 @@ fun DockBar(
                                         // let go, is what it would then be seen to start from.
                                         drops[key] = (drops[key] ?: 0) + 1
                                         draggingIndex = null
-                                    },
-                                    onDragCancel = {
-                                        if (!holdRun.carrying) currentHold.release()
+                                    }
+                                }
+                                val cancelled: () -> Unit = {
+                                    if (!holdRun.carrying) {
+                                        currentHold.release()
+                                    } else if (draggingIndex == index) {
                                         // Also what a gesture hears as its icon is taken out from
                                         // under it, long after it was put down: that is not a drop.
-                                        if (draggingIndex == index) {
-                                            drops[key] = (drops[key] ?: 0) + 1
-                                            draggingIndex = null
-                                        }
-                                    },
-                                )
+                                        drops[key] = (drops[key] ?: 0) + 1
+                                        draggingIndex = null
+                                    }
+                                }
+                                if (editing) {
+                                    // Edited, it is picked up the moment the finger moves on it.
+                                    dragAtOnce(
+                                        holdMs = viewConfiguration.longPressTimeoutMillis,
+                                        slop = EDIT_SLOP.toPx(),
+                                        onPickUp = { local ->
+                                            grab(local)
+                                            holdRun.carrying = true
+                                            draggingIndex = index
+                                        },
+                                        onHold = began,
+                                        onMove = moved,
+                                        onEnd = ended,
+                                        onCancel = cancelled,
+                                    )
+                                } else {
+                                    detectDragGesturesAfterLongPress(
+                                        onDragStart = began,
+                                        onDrag = { change, came ->
+                                            change.consume()
+                                            moved(change.position, came)
+                                        },
+                                        onDragEnd = ended,
+                                        onDragCancel = cancelled,
+                                    )
+                                }
                             },
                         contentAlignment = Alignment.Center,
                     ) {
@@ -2478,6 +2632,12 @@ fun DockBar(
                                     scaleY = landing
                                     alpha = (if (isCarried && lifted) 0.75f else 1f) * AppLanding.alphaFor(key)
                                 },
+                        )
+                        MinusBead(
+                            shown = editing && !isCarried,
+                            name = appsByKey[key]?.label ?: "app",
+                            onClick = { onBead(key) },
+                            modifier = Modifier.align(Alignment.TopStart).offset(x = -BEAD_TOUCH / 2, y = -BEAD_TOUCH / 2),
                         )
                     }
                     }

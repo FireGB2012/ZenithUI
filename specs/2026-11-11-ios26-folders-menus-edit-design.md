@@ -80,14 +80,28 @@ glass row, the stack rows and the shortcuts keep their place. "Customise home sc
 "Edit Home Screen". The dock no longer opens the drawer's sheet; the drawer keeps it until step 3.
 
 Until part 2 is built, "Edit Home Screen" opens what stands nearest to it: today's resize and move
-mode for a widget, and Customise for anything else. The bin still comes down while something is
-carried, and holding an empty spot still opens Customise.
+mode for a widget, and Customise for anything else. (Part 2 has since replaced that: see below.)
 
 The lead's calls in part 1: the hold is 450 ms, the mockup's time (it was 320 ms); an app's
 "Uninstall" cannot be reached with the layout locked (unlock first); a finger that never trembles
 ends its hold "cancelled" in Compose, and that counts as a plain lift, so the menu stays.
 
 ## Part 2: edit mode
+
+Built so far: holding an empty spot, "Edit Home Screen" in a menu, or picking something up starts edit
+mode. Everything wiggles (2 degrees for an icon, 0.7 for anything bigger, about four swings a second
+with a hair of a bob) and wears a minus on its corner, the dock's apps too and a folder not; the
+minus asks before it removes. The Search pill stretches into the bar ("+" opens the widget picker,
+the brush Customise, the dots the pages, Done ends it) and draws back into the page dots while
+something is carried. Edited, a thing is picked up the moment the finger moves on it, with no hold,
+on the page and in the dock; held still, its menu still comes. A tap opens nothing but a folder. Done,
+a tap on the wallpaper, Back and the home button end it. With the layout locked, a hold on the
+wallpaper says "The layout is locked" in a capsule of glass with "Unlock". The bin is gone. Undo
+stands just above the bar. Still to come in this part: the Customise card, the corner to pull, the
+wave, the glass beads and their pop, and Undo for every change.
+
+The plan for the whole part:
+
 
 Hold an empty spot, or choose "Edit Home Screen", or pick something up: every icon and widget
 wiggles and wears a bead of glass with a minus on its corner (twist 6: the beads well up, magnify

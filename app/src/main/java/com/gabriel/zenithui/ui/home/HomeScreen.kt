@@ -432,6 +432,16 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
     // kept by package, so a second hold on an app shows them with the menu and not after it.
     var holdShortcuts by remember { mutableStateOf(emptyList<AppShortcut>()) }
     val shortcutsKnown = remember { HashMap<String, List<AppShortcut>>() }
+    // Edit mode: everything on the home screen wiggles, wears a minus and can be moved. And a few
+    // words said over the home screen for a moment, in glass.
+    var editing by remember { mutableStateOf(false) }
+    var toast by remember { mutableStateOf<HomeToast?>(null) }
+    LaunchedEffect(toast) {
+        if (toast != null) {
+            kotlinx.coroutines.delay(2800)
+            toast = null
+        }
+    }
     var ambient by remember { mutableStateOf(false) }
     // Every page small on a tray, to go to, move, add or take away.
     var overview by remember { mutableStateOf(false) }
@@ -502,6 +512,25 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         folderJob[0] = scope.launch {
             if (motion.reduced) folderProgress.animateTo(1f, tween(Motion.REDUCED_MS)) else folderProgress.animateTo(1f, Motion.open())
         }
+    }
+
+    /**
+     * Into edit mode, from a hold on the wallpaper, "Edit Home Screen" in a menu, or something being
+     * picked up. With the layout locked it says so instead, and offers to unlock.
+     */
+    fun startEdit() {
+        if (settings.lockLayout) {
+            toast = HomeToast("The layout is locked", "Unlock") { viewModel.updateSettings { it.copy(lockLayout = false) } }
+            return
+        }
+        holdMenu.close()
+        resizingId = null
+        editing = true
+    }
+
+    fun endEdit() {
+        editing = false
+        resizingId = null
     }
 
     /** Back into its icon; only then is it gone, so the home screen is never left dimmed behind nothing. */
@@ -624,7 +653,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
     val lookDue by viewModel.lookDue.collectAsState()
     val idle = !dragging && drag.item == null && !sheetVisible && !settingsOpen && !widgetsOpen &&
         drawerProgress < 0.002f && folderUp == null && card == null && resizingId == null && !ambient && !overview &&
-        !askingNewLook && !searchShown && holdMenu.open == null && alert == null
+        !askingNewLook && !searchShown && holdMenu.open == null && alert == null && !editing
     LaunchedEffect(lookDue, idle) {
         if (lookDue != null && idle) {
             delay(LOOK_DUE_WAIT_MS)
@@ -1184,7 +1213,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
 
     // Everything else on the page rocks while something is carried. One clock for all of it, and
     // it runs only from the moment something is picked up until the rocking has died away.
-    val jiggleStrength = animateFloatAsState(if (drag.isDragging && !motion.reduced) 1f else 0f, tween(200), label = "jiggle")
+    val jiggleStrength = animateFloatAsState(if ((drag.isDragging || editing) && !motion.reduced) 1f else 0f, tween(200), label = "jiggle")
     val jiggleClock = remember { mutableFloatStateOf(0f) }
     val jiggling by remember { derivedStateOf { jiggleStrength.value > 0.001f } }
     LaunchedEffect(jiggling) {
@@ -1461,13 +1490,14 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             seenAgain[0] = viewModel.homeAgain.value
             val busy = (card != null && cardOpening) || sheetVisible || settingsOpen || widgetsOpen ||
                 folderUp != null || drawer.value > 0.02f || resizingId != null || ambient || askingNewLook || searchOpen ||
-                holdMenu.open != null || alert != null
+                holdMenu.open != null || alert != null || editing
             val action = Gestures.actionFor(Gestures.HOME, viewModel.settings.value.gestures)
             // Home while an app is still opening sends it straight back into its icon.
             if (card != null && cardOpening) closeCard()
             hideSheet()
             holdMenu.close()
             alert = null
+            endEdit()
             settingsOpen = false
             widgetsOpen = false
             closeFolder()
@@ -1481,7 +1511,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         }
     }
 
-    BackHandler(enabled = overview || (card != null && cardOpening) || drawerProgress > 0.002f || sheetVisible || resizingId != null || ambient || folderUp != null || holdMenu.open != null) {
+    BackHandler(enabled = overview || (card != null && cardOpening) || drawerProgress > 0.002f || sheetVisible || resizingId != null || ambient || folderUp != null || holdMenu.open != null || editing) {
         // A held thing's menu is the topmost of these: from its colours back to its rows, then away.
         if (holdMenu.open != null) {
             if (holdMenu.colours) holdMenu.colours = false else holdMenu.close()
@@ -1497,6 +1527,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             sheetVisible -> hideSheet()
             folderUp != null -> closeFolder()
             resizingId != null -> resizingId = null
+            editing -> endEdit()
             else -> closeDrawer()
         }
     }
@@ -1696,9 +1727,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 holdMenu.close()
                 when (row.what) {
                     HoldDo.SHORTCUT -> holdShortcuts.getOrNull(row.index)?.let { launchApp(it.key) }
-                    // Until edit mode is built this opens what stands nearest to it today: the
-                    // resize and move mode for a widget, Customise for anything else.
-                    HoldDo.EDIT_HOME -> if (item != null && item.isWidgetLike) resizingId = item.id else showSheet(HomeSheet.Customize)
+                    HoldDo.EDIT_HOME -> startEdit()
                     HoldDo.EDIT_NAME -> appKey?.let { showSheet(HomeSheet.EditApp(it)) }
                     HoldDo.RESIZE -> resizingId = id
                     HoldDo.ADD_TO_HOME -> appKey?.let { key ->
@@ -1796,7 +1825,11 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 holdMenu.hover = null
                 val by = pointer - open.start
                 val pickedUp = HoldGesture.picksUp(by.x, by.y, pickUpSlop, holdMenu.above, holdMenu.onMenu, settings.lockLayout)
-                if (pickedUp) holdMenu.close(pickedUp = true)
+                if (pickedUp) {
+                    // Picked up, the home screen is being edited, and stays so when the thing is put down.
+                    holdMenu.close(pickedUp = true)
+                    editing = true
+                }
                 pickedUp
             }
         }
@@ -1858,7 +1891,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                         // would go to them first.
                         val idle = !fired && !drag.isDragging && !settingsOpen && !widgetsOpen &&
                             !sheetVisible && folderUp == null && card == null && !dragging && drawer.value < 0.02f &&
-                            !askingNewLook && !searchOpen && holdMenu.open == null && alert == null
+                            !askingNewLook && !searchOpen && holdMenu.open == null && alert == null && !editing
                         if (!idle) continue
                         val travel = centre - startCentre
                         val gesture = when {
@@ -1986,20 +2019,29 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                                 )
                                 // A double tap waits for the second tap before a single one counts, so it
                                 // is only listened for when it has been given something to do.
-                                .pointerInput(resizingId, doubleTap != GestureActions.NONE) {
+                                .pointerInput(resizingId, doubleTap != GestureActions.NONE, editing, settings.lockLayout) {
                                     detectTapGestures(
                                         // Only a tap on the wallpaper itself comes here: the icons and
                                         // widgets on the page take their own, and Search and the dock
                                         // are not on the page. It sends a ring of light out, or, while
                                         // something is being resized, puts that down instead.
-                                        onTap = { at -> if (resizingId != null) resizingId = null else ringAt(pageOrigin + at) },
+                                        onTap = { at ->
+                                            when {
+                                                resizingId != null -> resizingId = null
+                                                // A tap on the wallpaper is one of the ways out of edit mode.
+                                                editing -> endEdit()
+                                                else -> ringAt(pageOrigin + at)
+                                            }
+                                        },
                                         onDoubleTap = if (doubleTap == GestureActions.NONE) null else { at ->
-                                            if (resizingId == null) {
+                                            if (resizingId == null && !editing) {
                                                 ringAt(pageOrigin + at)
                                                 runGesture(doubleTapNow)
                                             }
                                         },
-                                        onLongPress = { if (resizingId == null) showSheet(HomeSheet.Customize) },
+                                        // Holding an empty spot starts edit mode, as on a phone;
+                                        // Customise is the brush in its bar.
+                                        onLongPress = { if (resizingId == null && !editing) startEdit() },
                                     )
                                 },
                         ) {
@@ -2051,6 +2093,8 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                                     hold = holdCalls,
                                     heldId = (holdMenu.open?.target as? HoldTarget.Item)?.id,
                                     heldSquash = { holdMenu.squash() },
+                                    editing = editing,
+                                    onBead = { askRemove(HoldTarget.Item(it.id)) },
                                     onSearch = { openDrawer(search = true) },
                                     onNoteChange = { viewModel.setNote(it) },
                                     onAmbient = { ambient = true },
@@ -2114,15 +2158,19 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                         1 -> "${removedName(removed.first(), appsByKey)} removed"
                         else -> "${removed.size} things removed"
                     }
+                    // Edited, the pill stretches into the bar of controls; while something is
+                    // carried the bar draws back into the pill, which shows the pages, so the
+                    // dock is free to be dropped on.
+                    val barShown = editing && !drag.isDragging
                     Box(band.zIndex(1f), contentAlignment = Alignment.Center) {
                         AnimatedVisibility(
-                            visible = removedWhat == null,
+                            visible = !barShown && (removedWhat == null || editing),
                             enter = bandSwapIn(motion.reduced),
                             exit = bandSwapOut(motion.reduced),
                         ) {
                             SearchPill(
                                 onOpen = { openSearch() },
-                                dots = { pillDotsShown.value },
+                                dots = { if (editing) 1f else pillDotsShown.value },
                                 pageCount = pageCount,
                                 position = { pagerState.currentPage + pagerState.currentPageOffsetFraction },
                                 // It arrives as the search bar did, moved on a layer, so its glass reads
@@ -2142,7 +2190,17 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                             key = removed.firstOrNull()?.id,
                             millis = com.gabriel.zenithui.data.UNDO_MS,
                             onUndo = { viewModel.undoRemove().firstOrNull()?.let { back -> revealPage(back.page) } },
-                            modifier = Modifier.padding(horizontal = 16.dp),
+                            // Edited, Undo stands just above the bar rather than in its place.
+                            modifier = Modifier.padding(horizontal = 16.dp).offset(y = if (editing) (-56).dp else 0.dp),
+                        )
+                        EditBar(
+                            visible = barShown,
+                            pageCount = pageCount,
+                            position = { pagerState.currentPage + pagerState.currentPageOffsetFraction },
+                            onAdd = { widgetsOpen = true },
+                            onCustomise = { showSheet(HomeSheet.Customize) },
+                            onPages = { overview = true },
+                            onDone = { endEdit() },
                         )
                     }
                 },
@@ -2161,6 +2219,10 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                             hold = holdCalls,
                             heldKey = heldDockKey,
                             heldSquash = { holdMenu.squash() },
+                            editing = editing,
+                            onBead = { askRemove(HoldTarget.Dock(it)) },
+                            jiggleClock = { jiggleClock.floatValue },
+                            jiggleStrength = { jiggleStrength.value },
                             onReorder = { from, to -> viewModel.moveInDock(from, to) },
                             onDragOut = { key, iconCentre ->
                                 if (drag.cellWidth > 0f && drag.cellHeight > 0f) {
@@ -2387,44 +2449,9 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 }
             }
 
-            // Hold on the bin for a moment before it will actually take anything.
-            LaunchedEffect(overRemove) {
-                drag.removeArmed = false
-                if (overRemove) {
-                    kotlinx.coroutines.delay(450)
-                    drag.removeArmed = true
-                    haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
-                }
-            }
         }
-        // The bin comes down from the top edge when something is picked up, and goes back up when
-        // it is put down: still red on its way, if what was put down went into it.
-        val binTook = remember { booleanArrayOf(false) }
-        if (drag.isDragging) binTook[0] = drag.removeArmed
-        AnimatedVisibility(
-            visible = drag.isDragging,
-            enter = edgeIn(motion.reduced),
-            exit = edgeOut(motion.reduced),
-            modifier = Modifier.align(Alignment.TopCenter),
-        ) {
-            RemoveTarget(
-                armed = if (drag.isDragging) drag.removeArmed else binTook[0],
-                hovering = overRemove,
-                modifier = Modifier
-                    .statusBarsPadding()
-                    .padding(start = BAR_ROOM, top = 12.dp, end = BAR_ROOM, bottom = BAR_ROOM)
-                    .onGloballyPositioned { coords ->
-                        val topLeft = coords.positionInRoot()
-                        drag.removeZone = androidx.compose.ui.geometry.Rect(
-                            offset = topLeft,
-                            size = androidx.compose.ui.geometry.Size(
-                                coords.size.width.toFloat(),
-                                coords.size.height.toFloat(),
-                            ),
-                        )
-                    },
-            )
-        }
+        // There is no bin any more: something is taken off the home screen by the minus on its
+        // corner while the screen is edited, or by the red row in its menu, and asked about first.
         if (drag.isDragging) DragGhost(drag = drag, settings = settings, appsByKey = appsByKey)
         // What was let go into the bin, the dock or a folder is seen going there.
         drag.sent?.let { sent ->
@@ -2476,6 +2503,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     onDismiss = { holdMenu.close() },
                 )
                 GlassAlert(alert = alert, onDismiss = { alert = null })
+                GlassToast(toast = toast, onDone = { toast = null })
             }
         }
 

@@ -2460,7 +2460,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     },
                     onSubscribe = {
                         val activity = context as? android.app.Activity
-                        val started = activity != null && viewModel.subscribe(activity)
+                        val started = activity != null && viewModel.subscribe(activity, it)
                         if (!started) {
                             Toast.makeText(context, "Play could not open the subscription just now", Toast.LENGTH_SHORT).show()
                         }

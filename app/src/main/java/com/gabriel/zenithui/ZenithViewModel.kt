@@ -35,6 +35,8 @@ import com.gabriel.zenithui.data.PageGrid
 import com.gabriel.zenithui.data.occupyItem
 import com.gabriel.zenithui.data.Plus
 import com.gabriel.zenithui.data.PlusStatus
+import com.gabriel.zenithui.data.PriceAmounts
+import com.gabriel.zenithui.data.SubscriptionPlan
 import com.gabriel.zenithui.data.ROW_UNITS
 import com.gabriel.zenithui.data.Reshape
 import com.gabriel.zenithui.data.SettingsStore
@@ -128,6 +130,10 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
         billing.trialOffer,
         billing.monthlyPrice,
         billing.lifetimePrice,
+        billing.quarterlyPrice,
+        billing.monthlyOffered,
+        billing.quarterlyOffered,
+        billing.amounts,
     ) { values ->
         val settings = values[0] as ZenithSettings
         val purchased = values[1] as Boolean
@@ -136,6 +142,10 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
         val trialOffer = values[4] as Boolean
         val monthly = values[5] as String
         val lifetimeCost = values[6] as String
+        val quarterly = values[7] as String
+        val monthlyOffered = values[8] as Boolean
+        val quarterlyOffered = values[9] as Boolean
+        val amounts = values[10] as PriceAmounts
         PlusStatus(
             purchased = purchased || settings.plusPurchased,
             lifetime = settings.plusPurchased,
@@ -143,7 +153,11 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
             trialDaysLeft = trialDaysLeft(settings.plusTrialStart),
             trialAvailable = settings.plusTrialStart == 0L,
             monthlyPrice = monthly,
+            quarterlyPrice = quarterly,
             lifetimePrice = lifetimeCost,
+            monthlyOffered = monthlyOffered,
+            quarterlyOffered = quarterlyOffered,
+            amounts = amounts,
             purchasable = available,
             playTrialOffer = trialOffer,
         )
@@ -364,14 +378,14 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
     /** The pass: one payment, kept for ever. */
     fun buyLifetime(activity: android.app.Activity): Boolean = billing.buyLifetime(activity)
 
-    /** The monthly subscription. */
-    fun subscribe(activity: android.app.Activity): Boolean = billing.subscribe(activity)
+    /** The subscription, on either of its plans: a month at a time, or three months at a time. */
+    fun subscribe(activity: android.app.Activity, plan: SubscriptionPlan): Boolean = billing.subscribe(activity, plan)
 
     /**
      * Begins the trial the best way this phone can. When Play has the free-trial subscription it
-     * shows its own sheet - the "7 days free, then five pounds" one - and the week is Google's to
-     * count. Until that product exists, the week is counted here instead, which is what happens
-     * today. Returns true if Play took over.
+     * shows its own sheet - the "7 days free, then the monthly price" one - and the week is
+     * Google's to count. Until that product exists, the week is counted here instead, which is
+     * what happens today. Returns true if Play took over.
      */
     fun startTrialViaPlayOrLocally(activity: android.app.Activity?): Boolean {
         if (activity != null && billing.startPlayTrial(activity)) return true

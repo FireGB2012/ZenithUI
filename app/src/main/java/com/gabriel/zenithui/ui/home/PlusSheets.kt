@@ -66,6 +66,7 @@ import androidx.compose.ui.unit.sp
 import com.gabriel.zenithui.data.AppInfo
 import com.gabriel.zenithui.data.Plus
 import com.gabriel.zenithui.data.PlusStatus
+import com.gabriel.zenithui.data.SubscriptionPlan
 import com.gabriel.zenithui.data.ZenithSettings
 import com.gabriel.zenithui.ui.common.GlassButton
 import com.gabriel.zenithui.ui.common.SectionLabel
@@ -97,7 +98,7 @@ fun PlusSheet(
     status: PlusStatus,
     onStartTrial: () -> Unit,
     onBuyLifetime: () -> Unit,
-    onSubscribe: () -> Unit,
+    onSubscribe: (SubscriptionPlan) -> Unit,
     onRestore: () -> Unit,
     onRedeem: (String) -> Boolean,
     onDismiss: () -> Unit,
@@ -149,30 +150,44 @@ fun PlusSheet(
                     )
                 }
 
-                // Both plans side by side, the pass marked. Until Play has the products they are
-                // shown but greyed, with the reason underneath, rather than a dead button.
-                Row(Modifier.fillMaxWidth().arrive(3), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                // The plans one above the other, shortest first and the pass marked: three side by
+                // side would leave no room for a price in a longer currency. Until Play has the
+                // products they are shown but greyed, with the reason underneath, rather than a
+                // dead button; a plan Play's subscription does not carry is not shown at all.
+                Column(Modifier.fillMaxWidth().arrive(3), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    // Both plans are the one subscription, so a subscriber is offered neither again.
                     if (!status.subscribed) {
-                        PlanCard(
-                            title = "Monthly",
-                            price = status.monthlyPrice,
-                            per = "a month, cancel anytime",
-                            badge = null,
-                            featured = false,
-                            enabled = status.purchasable,
-                            onClick = onSubscribe,
-                            modifier = Modifier.weight(1f),
-                        )
+                        if (status.monthlyOffered) {
+                            PlanCard(
+                                title = "1 month",
+                                price = status.monthlyPrice,
+                                per = "every month, cancel any time",
+                                badge = null,
+                                featured = false,
+                                enabled = status.purchasable,
+                                onClick = { onSubscribe(SubscriptionPlan.MONTHLY) },
+                            )
+                        }
+                        if (status.quarterlyOffered) {
+                            PlanCard(
+                                title = "3 months",
+                                price = status.quarterlyPrice,
+                                per = "every 3 months, cancel any time",
+                                badge = null,
+                                featured = false,
+                                enabled = status.purchasable,
+                                onClick = { onSubscribe(SubscriptionPlan.QUARTERLY) },
+                            )
+                        }
                     }
                     PlanCard(
-                        title = "Lifetime",
+                        title = "Forever",
                         price = status.lifetimePrice,
                         per = "once, yours for good",
                         badge = "Best value",
                         featured = true,
                         enabled = status.purchasable,
                         onClick = onBuyLifetime,
-                        modifier = Modifier.weight(1f),
                     )
                 }
 
@@ -180,7 +195,11 @@ fun PlusSheet(
                     text = when {
                         !status.purchasable -> "Buying opens once Zenith is on Google Play. The free trial works right now."
                         status.subscribed -> "Buying the pass does not cancel the subscription — do that in Play, and you keep Plus either way."
-                        else -> "Lifetime costs about ${Plus.LIFETIME_EQUIVALENT_MONTHS} months of the monthly. No ads, ever."
+                        // The pass is set against the monthly plan only while there is one to compare.
+                        else -> listOfNotNull(
+                            Plus.payOnce(status.amounts)?.takeIf { status.monthlyOffered },
+                            "No ads, ever.",
+                        ).joinToString(" ")
                     },
                     color = palette.onGlassMuted,
                     fontSize = 11.sp,
@@ -251,6 +270,32 @@ internal val FEATURE_ICONS: List<ImageVector> = listOf(
     Icons.Rounded.Save,
 )
 
+/**
+ * The free week's terms in one line, from the prices as they stand: what follows it, and every
+ * plan on offer. Play's own sheet says this once the trial subscription exists; until then the
+ * week is counted here, and the wording has to be true in both cases. Setup quotes the same line,
+ * so the two can never disagree about a price.
+ */
+internal fun trialTerms(status: PlusStatus): String {
+    val days = Plus.TRIAL_DAYS
+    val others = listOfNotNull(
+        "${status.quarterlyPrice} every 3 months".takeIf { status.quarterlyOffered },
+        "${status.lifetimePrice} once",
+    )
+    return if (status.playTrialOffer) {
+        // Play's trial is the monthly plan's, so it is the monthly price that follows it.
+        "Free for $days days through Google Play, then ${status.monthlyPrice} a month. " +
+            "Cancel any time in Play. Or pay ${choices(others)}."
+    } else {
+        val all = listOfNotNull("${status.monthlyPrice} a month".takeIf { status.monthlyOffered }) + others
+        "Free for $days days, no card needed. After that it's ${choices(all)}."
+    }
+}
+
+/** The plans as anyone would say them: "a, b, or c", the last after an "or". */
+private fun choices(plans: List<String>): String =
+    if (plans.size < 2) plans.joinToString() else plans.dropLast(1).joinToString(", ") + ", or " + plans.last()
+
 /** The header: what Plus is, and where you stand with it. */
 @Composable
 private fun PlusHero(status: PlusStatus, modifier: Modifier = Modifier) {
@@ -258,8 +303,9 @@ private fun PlusHero(status: PlusStatus, modifier: Modifier = Modifier) {
     val reduced = LocalMotionLevel.current.reduced
     val statusLine = when {
         status.lifetime -> "Unlocked for good. Thank you — it follows you to every phone you sign in to."
-        status.subscribed -> "Subscribed at ${status.monthlyPrice} a month."
-        status.trialAvailable -> "${Plus.TRIAL_DAYS} free days first. Nothing is charged until they are up."
+        // Play does not tell the app which of the two plans it is, so no price is quoted here.
+        status.subscribed -> "Subscribed through Google Play. Everything is on."
+        status.trialAvailable -> trialTerms(status)
         status.trialDaysLeft > 1 -> "${status.trialDaysLeft} days left of your free trial. Everything is on."
         status.trialDaysLeft == 1 -> "Last day of your free trial. Everything is on."
         else -> "Your free week is over. Pick whichever suits you."
@@ -366,7 +412,11 @@ private fun FeatureRow(icon: ImageVector, title: String, detail: String, unlocke
     }
 }
 
-/** One of the two ways to pay. The featured one carries a badge and an accent rim. */
+/**
+ * One of the ways to pay, a row across the sheet: what it is on the left, and the price on the
+ * right, where a price in any currency has the room it needs. The featured one carries a badge
+ * beside its name and an accent rim.
+ */
 @Composable
 private fun PlanCard(
     title: String,
@@ -379,48 +429,54 @@ private fun PlanCard(
     modifier: Modifier = Modifier,
 ) {
     val palette = LocalPalette.current
-    Box(modifier) {
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .pressBounce(0.97f, enabled = enabled)
-                .alpha(if (enabled) 1f else 0.55f)
-                .clip(ZenithShapes.card)
-                .background(
-                    if (featured) palette.accent.copy(alpha = 0.16f) else palette.onGlass.copy(alpha = 0.06f)
-                )
-                .border(
-                    width = if (featured) 1.5.dp else 1.dp,
-                    color = if (featured) palette.accent.copy(alpha = 0.8f) else palette.onGlass.copy(alpha = 0.10f),
-                    shape = ZenithShapes.card,
-                )
-                .clickable(enabled = enabled) { onClick() }
-                .padding(horizontal = 14.dp, vertical = 16.dp),
-        ) {
-            Text(title, color = palette.onGlassMuted, fontSize = 13.sp, fontWeight = FontWeight.Medium)
-            Spacer(Modifier.height(6.dp))
-            Text(
-                text = price,
-                color = palette.onGlass,
-                fontSize = 24.sp,
-                fontWeight = FontWeight.Bold,
+    Row(
+        modifier
+            .fillMaxWidth()
+            .pressBounce(0.97f, enabled = enabled)
+            .alpha(if (enabled) 1f else 0.55f)
+            .clip(ZenithShapes.card)
+            .background(
+                if (featured) palette.accent.copy(alpha = 0.16f) else palette.onGlass.copy(alpha = 0.06f)
             )
-            Text(per, color = palette.onGlassMuted, fontSize = 11.sp, maxLines = 1)
-        }
-        if (badge != null) {
-            Text(
-                text = badge,
-                color = inkOnTint(palette.accent),
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(8.dp)
-                    .clip(ZenithShapes.pill)
-                    .background(palette.accent)
-                    .padding(horizontal = 8.dp, vertical = 3.dp),
+            .border(
+                width = if (featured) 1.5.dp else 1.dp,
+                color = if (featured) palette.accent.copy(alpha = 0.8f) else palette.onGlass.copy(alpha = 0.10f),
+                shape = ZenithShapes.card,
             )
+            .clickable(enabled = enabled) { onClick() }
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(title, color = palette.onGlass, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                if (badge != null) {
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = badge,
+                        color = inkOnTint(palette.accent),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        modifier = Modifier
+                            .clip(ZenithShapes.pill)
+                            .background(palette.accent)
+                            .padding(horizontal = 8.dp, vertical = 3.dp),
+                    )
+                }
+            }
+            Spacer(Modifier.height(2.dp))
+            Text(per, color = palette.onGlassMuted, fontSize = 12.sp, lineHeight = 16.sp)
         }
+        Spacer(Modifier.width(12.dp))
+        Text(
+            text = price,
+            color = palette.onGlass,
+            fontSize = 22.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            softWrap = false,
+        )
     }
 }
 

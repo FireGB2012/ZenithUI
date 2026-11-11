@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.sp
 import com.gabriel.zenithui.data.Plus
 import com.gabriel.zenithui.data.PlusStatus
 import com.gabriel.zenithui.ui.home.FEATURE_ICONS
+import com.gabriel.zenithui.ui.home.trialTerms
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.ZenithShapes
 import com.gabriel.zenithui.ui.theme.glass
@@ -130,15 +131,8 @@ fun PlusSheet(status: PlusStatus, onTry: () -> Unit, onNotNow: () -> Unit, modif
 
         Spacer(Modifier.height(16.dp))
         Text(
-            // Play's own sheet says this once the trial subscription exists; until then the week is
-            // counted here, and the wording has to be true in both cases.
-            text = if (status.playTrialOffer) {
-                "Free for ${Plus.TRIAL_DAYS} days through Google Play, then ${status.monthlyPrice} a month. " +
-                    "Cancel any time in Play. Or pay ${status.lifetimePrice} once."
-            } else {
-                "Free for ${Plus.TRIAL_DAYS} days, no card needed. After that it is " +
-                    "${status.monthlyPrice} a month, or ${status.lifetimePrice} once."
-            },
+            // The Plus sheet's own line, so that setup quotes the same plans at the same prices.
+            text = trialTerms(status),
             color = palette.onGlassMuted,
             fontSize = 12.sp,
             lineHeight = 17.sp,

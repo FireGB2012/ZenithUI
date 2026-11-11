@@ -71,13 +71,16 @@ Verify a build before uploading:
 - [ ] Target audience: 13+ or Everyone; no ads declaration.
 - [ ] App access: tick "All functionality is available without special access". An account is
       optional and anyone can make one in the app; see `play/listing.md`.
-- [ ] Monetisation → In-app products: create `zenith_plus` (the $14.99 lifetime pass) exactly as
-      specified in `play/listing.md` and **activate** it.
-- [ ] Monetisation → Subscriptions: create `zenith_plus_monthly` at $1.99/month with a 7 day free
-      trial offer, and **activate** it. Do both before the first release reaches testers, or the
-      app will correctly report that the purchase is unavailable.
+- [ ] Monetisation → In-app products: create `zenith_plus` (the lifetime pass, "Forever" in the
+      app) at $10 exactly as specified in `play/listing.md` and **activate** it. If it already
+      exists at the old $14.99, change its price to $10.
+- [ ] Monetisation → Subscriptions: `zenith_plus_monthly` carries two auto-renewing base plans, and
+      **both** must be **active**: the monthly one at $4 a month, keeping its 7 day free trial
+      offer, and a new base plan `three-months`, billed every 3 months, at $8. The steps are in
+      `play/listing.md`. Do all of it before the first release reaches testers, or the app will
+      correctly report that the purchase is unavailable.
 - [ ] Setup → License testing: add your own Gmail address so you can test the buy flow for free.
-- [ ] Note: the moment `zenith_plus_monthly` has its free-trial offer, Play runs the seven days
+- [ ] Note: the moment the monthly base plan has its free-trial offer, Play runs the seven days
       instead of the app. No new build needed — see `play/listing.md`.
 - [ ] Declare in-app purchases on the store listing (the Ads answer stays "No").
 - [ ] App content → **Accessibility API**: since the lock helper (`data/LockService.kt`), Play asks

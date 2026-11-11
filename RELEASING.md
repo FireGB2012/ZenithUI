@@ -77,8 +77,13 @@ Verify a build before uploading:
 - [ ] Monetisation → Subscriptions: `zenith_plus_monthly` carries two auto-renewing base plans, and
       **both** must be **active**: the monthly one at $4 a month, keeping its 7 day free trial
       offer, and a new base plan `three-months`, billed every 3 months, at $8. The steps are in
-      `play/listing.md`. Do all of it before the first release reaches testers, or the app will
-      correctly report that the purchase is unavailable.
+      `play/listing.md`. On a new Play account, make the products before the first release reaches
+      testers, or the app will correctly report that the purchase is unavailable.
+- [ ] Timing, for products that already exist: change the prices and add `three-months` only once
+      the first build with three plans is on the track testers install from. An older build sells
+      whichever plan Play lists first as its Monthly, which could be the 3 months one at "$8.00 a
+      month", and says the pass costs about eight months of the monthly. The new build shows what
+      Play has, so it is right before the change and after it.
 - [ ] Setup → License testing: add your own Gmail address so you can test the buy flow for free.
 - [ ] Note: the moment the monthly base plan has its free-trial offer, Play runs the seven days
       instead of the app. No new build needed — see `play/listing.md`.

@@ -178,6 +178,9 @@ and Forever, and the 3 months card appears by itself once it is, with no new bui
 To add the 3 month plan: open `zenith_plus_monthly`, **Add base plan**, base plan ID
 `three-months`, type Auto-renewing, billing period Every 3 months. Under prices, set $8.00 for the
 United States and let Play convert it for the other countries, then **Save** and **Activate**.
+Do this, and the new prices, only once the first build with three plans is on the track testers
+install from: an older build sells whichever plan Play lists first as its Monthly, which could be
+this one, and says the pass costs about eight months of the monthly.
 
 To move the monthly plan to $4: open its base plan, edit its prices to $4.00, converted for the
 other countries the same way, and **Save**. If Play asks what to do for people already subscribed,

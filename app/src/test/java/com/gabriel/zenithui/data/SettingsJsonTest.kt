@@ -90,6 +90,7 @@ class SettingsJsonTest {
         folderStyle = "cover",
         widgetLook = "colour",
         lockLayout = true,
+        dimWallpaper = true,
         hideStatusBar = true,
         island = IslandSettings(on = true, live = false, always = true, hideSideways = false),
         homePrompts = 2,

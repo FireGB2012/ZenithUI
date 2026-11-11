@@ -459,6 +459,8 @@ fun HomePage(
     editing: Boolean = false,
     /** The minus on something was tapped. */
     onBead: (HomeItem) -> Unit = {},
+    /** The minuses show. Not while Customise is up: the home screen is being looked at, not arranged. */
+    beads: Boolean = true,
     onSearch: () -> Unit,
     onNoteChange: (String) -> Unit,
     onAmbient: () -> Unit,
@@ -1007,7 +1009,7 @@ fun HomePage(
                 if (item !is FolderCell) {
                     val reach = with(density) { (BEAD_TOUCH / 2).toPx() }
                     MinusBead(
-                        shown = editing && !carried && !resizing,
+                        shown = editing && beads && !carried && !resizing,
                         name = when (item) {
                             is AppCell -> appsByKey[item.key]?.label ?: "app"
                             is ShortcutCell -> item.label
@@ -2238,6 +2240,7 @@ fun DockBar(
     /** The home screen is being edited: the apps in the dock wiggle and wear a minus too, and a tap opens nothing. */
     editing: Boolean = false,
     onBead: (String) -> Unit = {},
+    beads: Boolean = true,
     jiggleClock: () -> Float = { 0f },
     jiggleStrength: () -> Float = { 0f },
     modifier: Modifier = Modifier,
@@ -2634,7 +2637,7 @@ fun DockBar(
                                 },
                         )
                         MinusBead(
-                            shown = editing && !isCarried,
+                            shown = editing && beads && !isCarried,
                             name = appsByKey[key]?.label ?: "app",
                             onClick = { onBead(key) },
                             modifier = Modifier.align(Alignment.TopStart).offset(x = -BEAD_TOUCH / 2, y = -BEAD_TOUCH / 2),

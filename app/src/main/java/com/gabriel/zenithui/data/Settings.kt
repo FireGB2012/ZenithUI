@@ -102,6 +102,8 @@ data class ZenithSettings(
     val widgetLook: String = WidgetLooks.GLASS,
     /** Nothing on the home screen can be moved, removed or resized while this is on. */
     val lockLayout: Boolean = false,
+    /** The wallpaper is drawn a little darker on the home screen, so what stands on it reads more easily. */
+    val dimWallpaper: Boolean = false,
     /** The status bar stays away on the home screen until swiped in from the top. */
     val hideStatusBar: Boolean = false,
     /** The island round the camera, over every app (Plus): see [IslandSettings]. */
@@ -277,6 +279,7 @@ data class ZenithSettings(
         put("folderStyle", folderStyle)
         put("widgetLook", widgetLook)
         put("lockLayout", lockLayout)
+        put("dimWallpaper", dimWallpaper)
         put("hideStatusBar", hideStatusBar)
         put("island", island.toJson())
         put("wallpaperStyle", wallpaperStyle)
@@ -387,6 +390,7 @@ data class ZenithSettings(
                 folderStyle = o.optString("folderStyle", d.folderStyle),
                 widgetLook = o.optString("widgetLook", d.widgetLook),
                 lockLayout = o.optBoolean("lockLayout", d.lockLayout),
+                dimWallpaper = o.optBoolean("dimWallpaper", d.dimWallpaper),
                 hideStatusBar = o.optBoolean("hideStatusBar", d.hideStatusBar),
                 island = IslandSettings.fromJson(o.optJSONObject("island")),
                 wallpaperStyle = o.optString("wallpaperStyle", d.wallpaperStyle),

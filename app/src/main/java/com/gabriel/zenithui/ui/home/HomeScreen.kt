@@ -252,7 +252,6 @@ private sealed interface HomeSheet {
     data class WidgetColour(val id: String) : HomeSheet
     /** The fonts Zenith carries, and their licence. */
     data object FontLicences : HomeSheet
-    data object Customize : HomeSheet
     data object Help : HomeSheet
     data object Plus : HomeSheet
     data object HiddenApps : HomeSheet
@@ -435,6 +434,8 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
     // Edit mode: everything on the home screen wiggles, wears a minus and can be moved. And a few
     // words said over the home screen for a moment, in glass.
     var editing by remember { mutableStateOf(false) }
+    // Customise: a card of glass at the foot of the home screen, which changes above it as you choose.
+    var customising by remember { mutableStateOf(false) }
     var toast by remember { mutableStateOf<HomeToast?>(null) }
     LaunchedEffect(toast) {
         if (toast != null) {
@@ -530,6 +531,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
 
     fun endEdit() {
         editing = false
+        customising = false
         resizingId = null
     }
 
@@ -653,7 +655,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
     val lookDue by viewModel.lookDue.collectAsState()
     val idle = !dragging && drag.item == null && !sheetVisible && !settingsOpen && !widgetsOpen &&
         drawerProgress < 0.002f && folderUp == null && card == null && resizingId == null && !ambient && !overview &&
-        !askingNewLook && !searchShown && holdMenu.open == null && alert == null && !editing
+        !askingNewLook && !searchShown && holdMenu.open == null && alert == null && !editing && !customising
     LaunchedEffect(lookDue, idle) {
         if (lookDue != null && idle) {
             delay(LOOK_DUE_WAIT_MS)
@@ -1035,7 +1037,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 Toast.makeText(context, "There is no torch Zenith can use on this phone", Toast.LENGTH_SHORT).show()
             }
             GestureActions.AMBIENT -> ambient = true
-            GestureActions.CUSTOMISE -> showSheet(HomeSheet.Customize)
+            GestureActions.CUSTOMISE -> customising = true
             GestureActions.SETTINGS -> settingsOpen = true
             GestureActions.WIDGETS -> widgetsOpen = true
             GestureActions.FIRST_PAGE -> scope.launch { if (pagerState.currentPage != 0) pagerState.animateScrollToPage(0) }
@@ -1213,7 +1215,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
 
     // Everything else on the page rocks while something is carried. One clock for all of it, and
     // it runs only from the moment something is picked up until the rocking has died away.
-    val jiggleStrength = animateFloatAsState(if ((drag.isDragging || editing) && !motion.reduced) 1f else 0f, tween(200), label = "jiggle")
+    val jiggleStrength = animateFloatAsState(if ((drag.isDragging || (editing && !customising)) && !motion.reduced) 1f else 0f, tween(200), label = "jiggle")
     val jiggleClock = remember { mutableFloatStateOf(0f) }
     val jiggling by remember { derivedStateOf { jiggleStrength.value > 0.001f } }
     LaunchedEffect(jiggling) {
@@ -1490,7 +1492,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             seenAgain[0] = viewModel.homeAgain.value
             val busy = (card != null && cardOpening) || sheetVisible || settingsOpen || widgetsOpen ||
                 folderUp != null || drawer.value > 0.02f || resizingId != null || ambient || askingNewLook || searchOpen ||
-                holdMenu.open != null || alert != null || editing
+                holdMenu.open != null || alert != null || editing || customising
             val action = Gestures.actionFor(Gestures.HOME, viewModel.settings.value.gestures)
             // Home while an app is still opening sends it straight back into its icon.
             if (card != null && cardOpening) closeCard()
@@ -1891,7 +1893,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                         // would go to them first.
                         val idle = !fired && !drag.isDragging && !settingsOpen && !widgetsOpen &&
                             !sheetVisible && folderUp == null && card == null && !dragging && drawer.value < 0.02f &&
-                            !askingNewLook && !searchOpen && holdMenu.open == null && alert == null && !editing
+                            !askingNewLook && !searchOpen && holdMenu.open == null && alert == null && !editing && !customising
                         if (!idle) continue
                         val travel = centre - startCentre
                         val gesture = when {
@@ -1927,6 +1929,15 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
 
         // A wallpaper changing with the theme fades in here, behind everything.
         WallpaperFade(wallpaperIncoming, wallpaperOffset)
+
+        // The wallpaper a little darker, when Customise has been asked for that: a veil over it and
+        // under everything that stands on it.
+        val dimmed by animateFloatAsState(if (settings.dimWallpaper) 0.3f else 0f, tween(300), label = "dimWallpaper")
+        if (dimmed > 0.001f) {
+            androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+                drawRect(androidx.compose.ui.graphics.Color.Black.copy(alpha = dimmed))
+            }
+        }
 
         // ------------------------------------------------------------ home
         Box(
@@ -2095,6 +2106,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                                     heldSquash = { holdMenu.squash() },
                                     editing = editing,
                                     onBead = { askRemove(HoldTarget.Item(it.id)) },
+                                    beads = !customising,
                                     onSearch = { openDrawer(search = true) },
                                     onNoteChange = { viewModel.setNote(it) },
                                     onAmbient = { ambient = true },
@@ -2161,7 +2173,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     // Edited, the pill stretches into the bar of controls; while something is
                     // carried the bar draws back into the pill, which shows the pages, so the
                     // dock is free to be dropped on.
-                    val barShown = editing && !drag.isDragging
+                    val barShown = editing && !drag.isDragging && !customising
                     Box(band.zIndex(1f), contentAlignment = Alignment.Center) {
                         AnimatedVisibility(
                             visible = !barShown && (removedWhat == null || editing),
@@ -2198,7 +2210,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                             pageCount = pageCount,
                             position = { pagerState.currentPage + pagerState.currentPageOffsetFraction },
                             onAdd = { widgetsOpen = true },
-                            onCustomise = { showSheet(HomeSheet.Customize) },
+                            onCustomise = { customising = true },
                             onPages = { overview = true },
                             onDone = { endEdit() },
                         )
@@ -2221,6 +2233,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                             heldSquash = { holdMenu.squash() },
                             editing = editing,
                             onBead = { askRemove(HoldTarget.Dock(it)) },
+                            beads = !customising,
                             jiggleClock = { jiggleClock.floatValue },
                             jiggleStrength = { jiggleStrength.value },
                             onReorder = { from, to -> viewModel.moveInDock(from, to) },
@@ -2502,6 +2515,49 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     onHit = { holdHit(it) },
                     onDismiss = { holdMenu.close() },
                 )
+                CustomiseCard(
+                    visible = customising,
+                    iconStyle = settings.iconStyle,
+                    widgetLook = settings.widgetLook,
+                    large = !settings.showLabels,
+                    dim = settings.dimWallpaper,
+                    sampleKey = (layout.firstOrNull { it is AppCell } as? AppCell)?.key ?: settings.dock.firstOrNull(),
+                    iconShape = ZenithShapes.forIconShape(settings.iconShape),
+                    showNewLook = !NewLook.isOn(settings),
+                    showMakeHome = !isDefaultLauncher,
+                    onIconStyle = { style -> viewModel.updateSettings { it.copy(iconStyle = style) } },
+                    onWidgetLook = { look -> viewModel.updateSettings { it.copy(widgetLook = look) } },
+                    // Larger icons are icons with no names under them: they take the room the names had.
+                    onLarge = { large -> viewModel.updateSettings { it.copy(showLabels = !large) } },
+                    onDim = { dim -> viewModel.updateSettings { it.copy(dimWallpaper = dim) } },
+                    onWallpaper = {
+                        customising = false
+                        showSheet(HomeSheet.Wallpapers)
+                    },
+                    onClock = {
+                        endEdit()
+                        ambient = true
+                    },
+                    onHelp = {
+                        customising = false
+                        showSheet(HomeSheet.Help)
+                    },
+                    onSettings = {
+                        endEdit()
+                        settingsOpen = true
+                    },
+                    // The grid it sets is worked out for this screen and the home screen settled
+                    // into it, as for any grid: nothing is lost, though some may move to another page.
+                    onNewLook = { viewModel.updateSettings { NewLook.apply(it) } },
+                    onMakeHome = {
+                        runCatching {
+                            context.startActivity(
+                                Intent(Settings.ACTION_HOME_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            )
+                        }
+                    },
+                    onDismiss = { customising = false },
+                )
                 GlassAlert(alert = alert, onDismiss = { alert = null })
                 GlassToast(toast = toast, onDone = { toast = null })
             }
@@ -2741,40 +2797,6 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                         photoFor[0] = current.key
                         pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
                         showSheet(HomeSheet.EditApp(current.key))
-                    },
-                    onDismiss = { hideSheet() },
-                )
-
-                HomeSheet.Customize -> CustomizeSheet(
-                    visible = up,
-                    wallpaper = glassLevels?.sharp,
-                    wallpaperName = WallStyle.byName(settings.wallpaperStyle)?.label,
-                    widgetLook = settings.widgetLook,
-                    onWidgetLook = { look -> viewModel.updateSettings { it.copy(widgetLook = look) } },
-                    newLookOn = NewLook.isOn(settings),
-                    // The grid it sets is worked out for this screen and the home screen settled
-                    // into it, as for any grid: nothing is lost, though some may move to another page.
-                    onNewLook = { viewModel.updateSettings { NewLook.apply(it) } },
-                    onWallpaper = { showSheet(HomeSheet.Wallpapers) },
-                    onHelp = { showSheet(HomeSheet.Help) },
-                    onAmbient = {
-                        hideSheet()
-                        ambient = true
-                    },
-                    onWidgets = {
-                        hideSheet()
-                        widgetsOpen = true
-                    },
-                    onSettings = {
-                        hideSheet()
-                        settingsOpen = true
-                    },
-                    onDefaultLauncher = {
-                        runCatching {
-                            context.startActivity(
-                                Intent(Settings.ACTION_HOME_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                            )
-                        }
                     },
                     onDismiss = { hideSheet() },
                 )

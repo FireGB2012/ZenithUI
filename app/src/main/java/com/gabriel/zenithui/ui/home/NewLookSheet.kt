@@ -1,11 +1,14 @@
 package com.gabriel.zenithui.ui.home
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -72,40 +75,48 @@ fun NewLookSheet(
             answered = true
             choice()
         }
-        if (home != null) {
-            NewLookPicture(
-                settings = settings,
-                home = home,
-                free = free,
-                // Whatever room the words and the two answers leave, up to the height of a phone
-                // that is easily read.
-                modifier = Modifier
-                    .weight(1f, fill = false)
-                    .fillMaxWidth()
-                    .heightIn(max = 280.dp)
-                    .appearIn(delayMillis = staggerDelay(0), riseFrom = 18f),
-            )
-            Spacer(Modifier.height(16.dp))
+        // The picture and the words have the room the two answers leave them, so the answers are
+        // always there to be pressed: nothing else puts the question away. The picture takes what
+        // the words leave; where even the words have too little, as with the largest text on a
+        // small phone, they scroll rather than push the answers off the foot of the sheet.
+        Column(Modifier.weight(1f, fill = false)) {
+            if (home != null) {
+                NewLookPicture(
+                    settings = settings,
+                    home = home,
+                    free = free,
+                    // Whatever room the words and the two answers leave, up to the height of a phone
+                    // that is easily read.
+                    modifier = Modifier
+                        .weight(1f, fill = false)
+                        .fillMaxWidth()
+                        .heightIn(max = 280.dp)
+                        .appearIn(delayMillis = staggerDelay(0), riseFrom = 18f),
+                )
+                Spacer(Modifier.height(16.dp))
+            }
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                Text(
+                    "The iPhone's grid and icons, widgets in colour and a dock of glass.",
+                    color = palette.onGlass,
+                    fontSize = 15.sp,
+                    lineHeight = 21.sp,
+                    modifier = Modifier
+                        .padding(horizontal = 4.dp)
+                        .appearIn(delayMillis = staggerDelay(1), riseFrom = 18f),
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "Your apps and widgets keep their order. Some may move to another page. Either way, each of these can be changed later in Settings.",
+                    color = palette.onGlassMuted,
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp,
+                    modifier = Modifier
+                        .padding(horizontal = 4.dp)
+                        .appearIn(delayMillis = staggerDelay(2), riseFrom = 18f),
+                )
+            }
         }
-        Text(
-            "The iPhone's grid and icons, widgets in colour and a dock of glass.",
-            color = palette.onGlass,
-            fontSize = 15.sp,
-            lineHeight = 21.sp,
-            modifier = Modifier
-                .padding(horizontal = 4.dp)
-                .appearIn(delayMillis = staggerDelay(1), riseFrom = 18f),
-        )
-        Spacer(Modifier.height(8.dp))
-        Text(
-            "Your apps and widgets keep their order. Some may move to another page. Either way, each of these can be changed later in Settings.",
-            color = palette.onGlassMuted,
-            fontSize = 13.sp,
-            lineHeight = 18.sp,
-            modifier = Modifier
-                .padding(horizontal = 4.dp)
-                .appearIn(delayMillis = staggerDelay(2), riseFrom = 18f),
-        )
         Spacer(Modifier.height(18.dp))
         // The answers come up with the sheet itself: a pane of glass moved by a layer of its own
         // would show the wallpaper out of line while it rose.

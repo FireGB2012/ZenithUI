@@ -1101,7 +1101,9 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
     val ringDensity = LocalDensity.current.density
     /** A ring from [at], on the screen in pixels. */
     fun ringAt(at: Offset) {
-        if (motion.reduced) return
+        // Asked as the tap comes, not when the page's tap listener was set up, which outlives a
+        // change to Motion: that listener holds on to this function as it was then.
+        if (liveMotion.reduced) return
         // The screen as the home screen is measured now, which is the whole window.
         glassRing.screen = androidx.compose.ui.geometry.Size(drawerWidthPx, drawerHeightPx)
         glassRing.density = ringDensity

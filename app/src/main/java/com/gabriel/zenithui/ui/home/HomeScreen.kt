@@ -84,6 +84,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.geometry.Offset
@@ -118,6 +119,7 @@ import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.foundation.layout.offset
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.IntOffset
 import com.gabriel.zenithui.data.GestureActions
@@ -130,6 +132,7 @@ import com.gabriel.zenithui.data.Torch
 import com.gabriel.zenithui.ui.common.GlassButton
 import com.gabriel.zenithui.ui.common.staggerDelay
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.collectLatest
 import com.gabriel.zenithui.data.DropPlanner
 import com.gabriel.zenithui.data.FolderCell
 import com.gabriel.zenithui.data.HomeItem
@@ -382,6 +385,37 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
     var dragging by remember { mutableStateOf(false) }
     var drawerEverOpened by remember { mutableStateOf(false) }
     var focusSearch by remember { mutableStateOf(false) }
+    // Search out of the pill: whether it is open, and whether its glass is out of the pill at all
+    // (opening, open, or shrinking back into it), for which time the pill itself is not drawn, the
+    // field's glass standing in its place.
+    var searchOpen by remember { mutableStateOf(false) }
+    var searchShown by remember { mutableStateOf(false) }
+    // The pill as it is laid out, and where on screen it was as the field last set off from it or
+    // turned back towards it: what the field's glass stretches out of and shrinks back into. Taken
+    // as it goes each way, not kept up as the pill moves, so the pill arriving or the page springing
+    // back from a pull composes nothing.
+    val pillPlaced = remember { arrayOfNulls<androidx.compose.ui.layout.LayoutCoordinates>(1) }
+    var searchFrom by remember { mutableStateOf(androidx.compose.ui.geometry.Rect.Zero) }
+
+    /** Where the Search pill is on screen now, or null while it is not there, as while Undo has its place. */
+    fun pillNow(): androidx.compose.ui.geometry.Rect? = pillPlaced[0]?.takeIf { it.isAttached }?.boundsInWindow()
+
+    /**
+     * Stretches the pill into the search field, with the keyboard up. With no pill on the screen to
+     * come out of, the field fades in where it sits.
+     */
+    fun openSearch() {
+        searchFrom = pillNow() ?: androidx.compose.ui.geometry.Rect.Zero
+        searchShown = true
+        searchOpen = true
+    }
+
+    /** Shrinks the field back into the pill, wherever the pill is by now. */
+    fun closeSearch() {
+        if (!searchOpen) return
+        pillNow()?.let { searchFrom = it }
+        searchOpen = false
+    }
     val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
     val motion = LocalMotionLevel.current
     var resizingId by remember { mutableStateOf<String?>(null) }
@@ -577,7 +611,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
     val lookDue by viewModel.lookDue.collectAsState()
     val idle = !dragging && drag.item == null && !sheetVisible && !settingsOpen && !widgetsOpen &&
         drawerProgress < 0.002f && folderUp == null && card == null && resizingId == null && !ambient && !overview &&
-        !askingNewLook
+        !askingNewLook && !searchShown
     LaunchedEffect(lookDue, idle) {
         if (lookDue != null && idle) {
             delay(LOOK_DUE_WAIT_MS)
@@ -776,6 +810,9 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
             when (event) {
                 androidx.lifecycle.Lifecycle.Event.ON_STOP -> {
+                    // Search folds back into its pill while nobody can see it, so coming home finds
+                    // the home screen and not a field without its keyboard.
+                    closeSearch()
                     // Wind the arrival back now, unseen. Stopped with the screen off, the next
                     // thing seen is an unlock: the full fly-in. Stopped behind an app: a settle.
                     if (!liveMotion.reduced) {
@@ -873,6 +910,29 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         }
     }
 
+    // While the pages turn, and for a second after they come to rest, the Search pill's words give
+    // way to the page dots (pillDots). Moved on here and read by the pill only while it draws, so
+    // paging composes nothing for it.
+    val pillDotsShown = remember { Animatable(0f) }
+    LaunchedEffect(pagerState) {
+        // Until the pages have moved there is no rest to count the second from.
+        var moved = false
+        snapshotFlow { pagerState.isScrollInProgress }.collectLatest { moving ->
+            if (moving) moved = true
+            val restedAt = android.os.SystemClock.uptimeMillis()
+            fun sinceRest() = if (moving || !moved) -1L else android.os.SystemClock.uptimeMillis() - restedAt
+            val spec: androidx.compose.animation.core.AnimationSpec<Float> =
+                if (liveMotion.reduced) tween(Motion.REDUCED_MS) else Motion.page()
+            while (pillDots(moving, sinceRest())) {
+                pillDotsShown.animateTo(1f, spec)
+                // While they move the dots stay; the next change of mind starts this again.
+                if (moving) return@collectLatest
+                delay((PILL_DOTS_LINGER_MS - sinceRest()).coerceAtLeast(1L))
+            }
+            pillDotsShown.animateTo(0f, spec)
+        }
+    }
+
     fun openDrawer(search: Boolean = false) {
         focusSearch = search
         drawerEverOpened = true
@@ -892,6 +952,26 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         }
     }
 
+    /** One of Android's settings that a search found by its name, or Zenith's own Settings. */
+    fun openSetting(link: com.gabriel.zenithui.data.SettingsLinks.Link) {
+        if (link.action == com.gabriel.zenithui.data.SettingsLinks.ZENITH) {
+            settingsOpen = true
+        } else {
+            val opened = runCatching {
+                context.startActivity(Intent(link.action).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            }.isSuccess
+            if (!opened) runCatching { context.startActivity(Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+        }
+    }
+
+    /** A sum's answer or a conversion that a search found, onto the clipboard. */
+    fun copyAnswer(text: String) {
+        val clipboard = context.getSystemService(android.content.ClipboardManager::class.java)
+        clipboard?.setPrimaryClip(android.content.ClipData.newPlainText("Zenith", text))
+        // Android 13 and later say so themselves.
+        if (android.os.Build.VERSION.SDK_INT < 33) Toast.makeText(context, "Copied $text", Toast.LENGTH_SHORT).show()
+    }
+
     /**
      * Does what a gesture was set to do. Anything that needs something Zenith does not have yet —
      * the lock helper, a torch — says so rather than doing nothing.
@@ -907,7 +987,8 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             }
             GestureActions.LOCK -> if (!LockService.lock()) showSheet(HomeSheet.LockHelper)
             GestureActions.DRAWER -> openDrawer()
-            GestureActions.SEARCH -> openDrawer(search = true)
+            // The Search pill's search, its glass stretching out of the pill, with the keyboard up.
+            GestureActions.SEARCH -> openSearch()
             GestureActions.TORCH -> if (!Torch.toggle(context)) {
                 Toast.makeText(context, "There is no torch Zenith can use on this phone", Toast.LENGTH_SHORT).show()
             }
@@ -1333,6 +1414,9 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             drawerProgress > 0.55f -> 20.dp
             // An open folder has the home screen out of focus behind it.
             folderUp != null -> 14.dp
+            // So has Search, open out of its pill; below Android 12 the blur does nothing, and the
+            // field's dim alone is behind it.
+            searchOpen -> 16.dp
             // The liquid glass opening wants more of it than the card does.
             card != null && !closingCard && settings.openAnimation == "glass" -> (tuning[Tune.HomeBlur] + 12f).dp
             // One UI softens the home screen behind an opening app; a lighter frost for the card.
@@ -1361,7 +1445,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             val again = viewModel.homeAgain.value != seenAgain[0]
             seenAgain[0] = viewModel.homeAgain.value
             val busy = (card != null && cardOpening) || sheetVisible || settingsOpen || widgetsOpen ||
-                folderUp != null || drawer.value > 0.02f || resizingId != null || ambient || askingNewLook
+                folderUp != null || drawer.value > 0.02f || resizingId != null || ambient || askingNewLook || searchOpen
             val action = Gestures.actionFor(Gestures.HOME, viewModel.settings.value.gestures)
             // Home while an app is still opening sends it straight back into its icon.
             if (card != null && cardOpening) closeCard()
@@ -1370,6 +1454,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             widgetsOpen = false
             closeFolder()
             closeDrawer()
+            closeSearch()
             if (again && !busy && action != GestureActions.FIRST_PAGE) {
                 runGesture(action)
             } else if (pagerState.currentPage != 0) {
@@ -1500,7 +1585,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                         // would go to them first.
                         val idle = !fired && !drag.isDragging && !settingsOpen && !widgetsOpen &&
                             !sheetVisible && folderUp == null && card == null && !dragging && drawer.value < 0.02f &&
-                            !askingNewLook
+                            !askingNewLook && !searchOpen
                         if (!idle) continue
                         val travel = centre - startCentre
                         val gesture = when {
@@ -1735,9 +1820,10 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                         }
                     }
                 },
-                // Search, a pill in the middle of the band between the page and the dock. There are
-                // no page dots and no full-width bar any more. Until the pill opens a search of its
-                // own it opens the drawer's, with the keyboard up, as the bar did.
+                // Search, a pill in the middle of the band between the page and the dock. There is no
+                // full-width bar any more, and no row of page dots: while the pages turn, and for a
+                // second after, the pill's words give way to the dots. Tapped, its glass stretches
+                // into the search field, which stands in its place until it has shrunk back into it.
                 //
                 // For the five seconds something taken off the home screen can still be put back,
                 // Undo stands in the band in Search's place, and Search comes back when it goes. Over
@@ -1760,15 +1846,20 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                             exit = bandSwapOut(motion.reduced),
                         ) {
                             SearchPill(
-                                onOpen = { openDrawer(search = true) },
-                                // Always the words for now: nothing turns them into the dots yet.
-                                dots = { 0f },
+                                onOpen = { openSearch() },
+                                dots = { pillDotsShown.value },
                                 pageCount = pageCount,
                                 position = { pagerState.currentPage + pagerState.currentPageOffsetFraction },
                                 // It arrives as the search bar did, moved on a layer, so its glass reads
                                 // the clock that moves it and keeps the wallpaper in place behind it.
                                 tracking = { arrivalClock.value },
-                                modifier = Modifier.arriving({ arrivalClock.value }, { arrivalDepth.floatValue }, distance = 0.85f, from = 40.dp, style = settings.arrival),
+                                modifier = Modifier
+                                    .arriving({ arrivalClock.value }, { arrivalDepth.floatValue }, distance = 0.85f, from = 40.dp, style = settings.arrival)
+                                    // Where it is, for the field to stretch out of and shrink back into.
+                                    .onGloballyPositioned { pillPlaced[0] = it }
+                                    // Not drawn while the field's glass is out of it, standing in its
+                                    // place; with movement reduced the field fades in over it instead.
+                                    .drawWithContent { if (!searchShown || motion.reduced) drawContent() },
                             )
                         }
                         UndoPill(
@@ -1914,21 +2005,41 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 },
                 onSetting = { link ->
                     closeDrawer()
-                    if (link.action == com.gabriel.zenithui.data.SettingsLinks.ZENITH) {
-                        settingsOpen = true
-                    } else {
-                        val opened = runCatching {
-                            context.startActivity(Intent(link.action).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                        }.isSuccess
-                        if (!opened) runCatching { context.startActivity(Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
-                    }
+                    openSetting(link)
                 },
-                onCopy = { text ->
-                    val clipboard = context.getSystemService(android.content.ClipboardManager::class.java)
-                    clipboard?.setPrimaryClip(android.content.ClipData.newPlainText("Zenith", text))
-                    // Android 13 and later say so themselves.
-                    if (android.os.Build.VERSION.SDK_INT < 33) Toast.makeText(context, "Copied $text", Toast.LENGTH_SHORT).show()
+                onCopy = { text -> copyAnswer(text) },
+            )
+        }
+
+        // ------------------------------------------------------------ search
+        // The pill stretched into a search field on the keyboard, over the home screen dimmed and
+        // softened behind it, until it has shrunk back into the pill. It finds what the drawer's
+        // search does, among the same apps: the hidden ones stay hidden, and work apps are found.
+        if (searchShown) {
+            val workApps by viewModel.workApps.collectAsState()
+            val searchApps = remember(drawerApps, workApps) { drawerApps + workApps }
+            // Every app's shortcuts, asked for once each time it opens, for its answers.
+            val searchShortcuts by produceState(emptyList<AppShortcut>(), searchOpen) {
+                if (searchOpen) value = viewModel.allShortcuts()
+            }
+            SearchField(
+                open = searchOpen,
+                from = searchFrom,
+                apps = searchApps,
+                shortcuts = searchShortcuts,
+                // Out of the icon it found, as from the drawer, while the field goes back into the pill.
+                onOpenApp = { key ->
+                    launchApp(key)
+                    closeSearch()
                 },
+                onClose = { closeSearch() },
+                onSetting = { link ->
+                    closeSearch()
+                    openSetting(link)
+                },
+                onCopy = { text -> copyAnswer(text) },
+                onShrunk = { searchShown = false },
+                iconShape = ZenithShapes.forIconShape(settings.iconShape),
             )
         }
 

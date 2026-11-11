@@ -100,7 +100,7 @@ object GestureActions {
         NOTIFICATIONS -> "Pulls down the notification shade"
         QUICK_SETTINGS -> "Pulls the quick settings all the way down"
         LOCK -> "Turns the screen off and locks, as the side button does. Needs Zenith's lock helper"
-        SEARCH -> "All apps, with the keyboard up"
+        SEARCH -> "Search, with the keyboard up"
         TORCH -> "Turns the flashlight on or off"
         AMBIENT -> "A dim clock for the night"
         FIRST_PAGE -> "Back to the first page, and everything closed"

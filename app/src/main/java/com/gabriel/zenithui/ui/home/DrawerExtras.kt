@@ -281,6 +281,10 @@ fun indexLetter(label: String): Char = label.trim().firstOrNull()?.uppercaseChar
  * What a search finds besides apps, at the top of the results: the answer to a sum, a conversion,
  * Android's settings by name, and apps' shortcuts. Each is a section of its own, rising in as it
  * appears; a sum's answer and a conversion turn over as the typing changes them.
+ *
+ * In the drawer the apps it finds follow, under a heading of their own when anything else was
+ * found; where they come first instead, as in the Search pill's search, [appsBelow] is false and
+ * there is no heading to end on.
  */
 @Composable
 fun SearchAnswers(
@@ -289,6 +293,7 @@ fun SearchAnswers(
     onCopy: (String) -> Unit,
     onSetting: (SettingsLinks.Link) -> Unit,
     onShortcut: (AppShortcut) -> Unit,
+    appsBelow: Boolean = true,
 ) {
     val palette = LocalPalette.current
     val reduced = LocalMotionLevel.current.reduced
@@ -363,7 +368,7 @@ fun SearchAnswers(
                 }
             }
         }
-        if (answer != null || settingsFound.isNotEmpty() || shortcutsFound.isNotEmpty()) {
+        if (appsBelow && (answer != null || settingsFound.isNotEmpty() || shortcutsFound.isNotEmpty())) {
             SectionLabel("Apps", Modifier.padding(start = 10.dp, top = 4.dp))
         }
     }

@@ -306,6 +306,7 @@ fun WidgetStack(
  */
 internal suspend fun PointerInputScope.holdToCarry(
     onStart: (Offset) -> Unit,
+    /** The finger has moved: where it is now, inside this thing. */
     onDrag: (Offset) -> Unit,
     /** Let go, with how far it was carried in all. */
     onEnd: (Float) -> Unit,
@@ -339,9 +340,8 @@ internal suspend fun PointerInputScope.holdToCarry(
                 onEnd(travelled)
                 return@awaitEachGesture
             }
-            val delta = change.position - change.previousPosition
-            travelled += delta.getDistance()
-            onDrag(delta)
+            travelled += (change.position - change.previousPosition).getDistance()
+            onDrag(change.position)
         }
     }
 }

@@ -251,7 +251,7 @@ private fun Swatch(label: String, colours: List<Color>?, selected: Boolean, onCl
 }
 
 /** The colours a widget can have of its own: bright enough to glow on glass, light or dark. */
-private val WIDGET_COLOURS = listOf(
+internal val WIDGET_COLOURS = listOf(
     0xFFFF6B8BL to "Rose", 0xFFFF8A5BL to "Coral", 0xFFFFC14DL to "Amber", 0xFFB8E05AL to "Lime",
     0xFF4FE0A8L to "Mint", 0xFF3FD0D6L to "Teal", 0xFF4FB4FFL to "Sky", 0xFF5B7CFFL to "Blue",
     0xFF8B6CFFL to "Violet", 0xFFD66CFFL to "Orchid", 0xFFFF5FD2L to "Magenta", 0xFFE8EDF5L to "Frost",

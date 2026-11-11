@@ -135,7 +135,14 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.collectLatest
 import com.gabriel.zenithui.data.DropPlanner
 import com.gabriel.zenithui.data.FolderCell
+import com.gabriel.zenithui.data.HoldDo
+import com.gabriel.zenithui.data.HoldEntry
+import com.gabriel.zenithui.data.HoldGesture
+import com.gabriel.zenithui.data.HoldMenuRules
+import com.gabriel.zenithui.data.HoldSubject
+import com.gabriel.zenithui.data.HoldTuning
 import com.gabriel.zenithui.data.HomeItem
+import com.gabriel.zenithui.data.SizeChoice
 import com.gabriel.zenithui.data.LaunchMotion
 import com.gabriel.zenithui.data.LayoutBuilder
 import com.gabriel.zenithui.data.NewLook
@@ -214,7 +221,6 @@ private const val LOOK_DUE_WAIT_MS = 1500L
 private const val NEW_LOOK_WAIT_MS = 1200L
 
 private sealed interface HomeSheet {
-    data class Item(val id: String) : HomeSheet
     data class DrawerApp(val key: String) : HomeSheet
     /** One app's name, icon and whether its name shows. */
     data class EditApp(val key: String) : HomeSheet
@@ -419,6 +425,13 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
     val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
     val motion = LocalMotionLevel.current
     var resizingId by remember { mutableStateOf<String?>(null) }
+    // The menu beside something held, and a question asked in a card of glass over the home screen.
+    val holdMenu = remember { HoldMenuState() }
+    var alert by remember { mutableStateOf<HomeAlert?>(null) }
+    // The held app's own shortcuts, once Android has said what they are. What was last heard is
+    // kept by package, so a second hold on an app shows them with the menu and not after it.
+    var holdShortcuts by remember { mutableStateOf(emptyList<AppShortcut>()) }
+    val shortcutsKnown = remember { HashMap<String, List<AppShortcut>>() }
     var ambient by remember { mutableStateOf(false) }
     // Every page small on a tray, to go to, move, add or take away.
     var overview by remember { mutableStateOf(false) }
@@ -611,7 +624,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
     val lookDue by viewModel.lookDue.collectAsState()
     val idle = !dragging && drag.item == null && !sheetVisible && !settingsOpen && !widgetsOpen &&
         drawerProgress < 0.002f && folderUp == null && card == null && resizingId == null && !ambient && !overview &&
-        !askingNewLook && !searchShown
+        !askingNewLook && !searchShown && holdMenu.open == null && alert == null
     LaunchedEffect(lookDue, idle) {
         if (lookDue != null && idle) {
             delay(LOOK_DUE_WAIT_MS)
@@ -1447,11 +1460,14 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             val again = viewModel.homeAgain.value != seenAgain[0]
             seenAgain[0] = viewModel.homeAgain.value
             val busy = (card != null && cardOpening) || sheetVisible || settingsOpen || widgetsOpen ||
-                folderUp != null || drawer.value > 0.02f || resizingId != null || ambient || askingNewLook || searchOpen
+                folderUp != null || drawer.value > 0.02f || resizingId != null || ambient || askingNewLook || searchOpen ||
+                holdMenu.open != null || alert != null
             val action = Gestures.actionFor(Gestures.HOME, viewModel.settings.value.gestures)
             // Home while an app is still opening sends it straight back into its icon.
             if (card != null && cardOpening) closeCard()
             hideSheet()
+            holdMenu.close()
+            alert = null
             settingsOpen = false
             widgetsOpen = false
             closeFolder()
@@ -1465,7 +1481,12 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         }
     }
 
-    BackHandler(enabled = overview || (card != null && cardOpening) || drawerProgress > 0.002f || sheetVisible || resizingId != null || ambient || folderUp != null) {
+    BackHandler(enabled = overview || (card != null && cardOpening) || drawerProgress > 0.002f || sheetVisible || resizingId != null || ambient || folderUp != null || holdMenu.open != null) {
+        // A held thing's menu is the topmost of these: from its colours back to its rows, then away.
+        if (holdMenu.open != null) {
+            if (holdMenu.colours) holdMenu.colours = false else holdMenu.close()
+            return@BackHandler
+        }
         if (overview) {
             overview = false
             return@BackHandler
@@ -1543,6 +1564,256 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         )
     }
 
+    // ------------------------------------------------------------ the hold menu
+    // Holding something brings its menu up beside it while the finger is still down. What the menu
+    // says is a rule (HoldMenuRules); what each row does is here.
+    val pickUpSlop = with(LocalDensity.current) { HoldTuning.PICK_UP_DP.dp.toPx() }
+    val holdOpen = holdMenu.open
+    val heldItem = (holdOpen?.target as? HoldTarget.Item)?.let { held -> layout.firstOrNull { it.id == held.id } }
+    val heldDockKey = (holdOpen?.target as? HoldTarget.Dock)?.key
+    // What is held has gone from under its menu, taken off by one of its own rows or by anything
+    // else: the menu goes with it.
+    val heldGone = holdOpen != null && heldItem == null && (heldDockKey == null || heldDockKey !in settings.dock)
+    LaunchedEffect(heldGone) { if (heldGone) holdMenu.close() }
+    val heldSizes = remember(heldItem, layout, settings.columns, settings.rows) {
+        val widget = heldItem as? WidgetCell
+        val spec = widget?.let { com.gabriel.zenithui.data.Widgets.byType(it.type) }
+        if (widget == null || spec == null) {
+            emptyList()
+        } else {
+            com.gabriel.zenithui.data.WidgetSizes.options(spec, settings.columns, settings.rows).map { size ->
+                val current = size.spanX == widget.spanX && size.spanY == widget.spanY
+                SizeChoice(
+                    name = size.name, spanX = size.spanX, spanY = size.spanY, current = current,
+                    // Asked without changing anything: the same rule the size is then given by.
+                    fits = current || com.gabriel.zenithui.data.Reshape.resized(
+                        layout, widget.id, size.spanX, size.spanY, settings.columns, settings.rows,
+                    ) != null,
+                )
+            }
+        }
+    }
+    val holdSubject: HoldSubject? = when {
+        heldItem is AppCell -> HoldSubject.App(holdShortcuts.map { it.label })
+        heldItem is com.gabriel.zenithui.data.ShortcutCell -> HoldSubject.Pinned
+        heldItem is FolderCell -> HoldSubject.Folder
+        heldItem is WidgetCell -> HoldSubject.ZenithWidget(
+            kind = com.gabriel.zenithui.data.Widgets.baseType(heldItem.type),
+            sizes = heldSizes,
+            mediaAllowed = NotificationDots.allowed(context),
+        )
+        heldItem is HostedWidgetCell -> HoldSubject.HostedWidget(heldItem.glass)
+        heldItem is StackCell -> HoldSubject.Stack(
+            members = heldItem.members.map { memberName(context, it) },
+            full = heldItem.members.size >= com.gabriel.zenithui.data.StackRules.MOST,
+        )
+        heldDockKey != null -> HoldSubject.App(holdShortcuts.map { it.label }, inDock = true)
+        else -> null
+    }
+    val holdEntries = remember(holdSubject, settings.lockLayout) {
+        holdSubject?.let { HoldMenuRules.rows(it, settings.lockLayout) } ?: emptyList()
+    }
+    val heldColour = when (heldItem) {
+        is FolderCell -> heldItem.colour
+        is WidgetCell -> heldItem.accent
+        else -> 0L
+    }
+
+    /** Asks before something is taken off the home screen, the way a phone does. Undo still follows. */
+    fun askRemove(target: HoldTarget) {
+        val apps = if (libraryMode) "App Library" else "app drawer"
+        when (target) {
+            is HoldTarget.Dock -> {
+                val name = appsByKey[target.key]?.label ?: "this app"
+                alert = HomeAlert(
+                    title = "Remove “$name”?",
+                    message = "Removing from the Dock will keep the app in your $apps.",
+                    buttons = listOf(
+                        AlertButton("Remove from Dock") { viewModel.toggleDock(target.key) },
+                        AlertButton("Uninstall App", danger = true) { viewModel.uninstall(target.key) },
+                        AlertButton("Cancel") {},
+                    ),
+                )
+            }
+
+            is HoldTarget.Item -> when (val item = layout.firstOrNull { it.id == target.id }) {
+                is AppCell -> alert = HomeAlert(
+                    title = "Remove “${appsByKey[item.key]?.label ?: "this app"}”?",
+                    message = "Removing from Home Screen will keep the app in your $apps.",
+                    buttons = listOf(
+                        AlertButton("Remove from Home Screen") { viewModel.removeItem(item.id) },
+                        AlertButton("Uninstall App", danger = true) { viewModel.uninstall(item.key) },
+                        AlertButton("Cancel") {},
+                    ),
+                )
+
+                is com.gabriel.zenithui.data.ShortcutCell -> alert = HomeAlert(
+                    title = "Remove “${item.label}”?",
+                    message = "Its app keeps the shortcut.",
+                    buttons = listOf(AlertButton("Remove", danger = true) { viewModel.removeItem(item.id) }, AlertButton("Cancel") {}),
+                )
+
+                is FolderCell -> alert = HomeAlert(
+                    title = "Remove “${item.title}”?",
+                    message = "Removing from Home Screen will keep all its apps in your $apps.",
+                    buttons = listOf(
+                        AlertButton("Remove from Home Screen", danger = true) { viewModel.removeItem(item.id) },
+                        AlertButton("Cancel") {},
+                    ),
+                )
+
+                is WidgetCell, is HostedWidgetCell -> {
+                    val name = if (item is WidgetCell) com.gabriel.zenithui.data.Widgets.shortName(item.type)
+                    else hostedName(context, (item as HostedWidgetCell).appWidgetId)
+                    alert = HomeAlert(
+                        title = "Remove “$name”?",
+                        message = "You can add it again from Add Widget.",
+                        buttons = listOf(AlertButton("Remove", danger = true) { viewModel.removeItem(item.id) }, AlertButton("Cancel") {}),
+                    )
+                }
+
+                is StackCell -> alert = HomeAlert(
+                    title = "Remove this stack?",
+                    message = "All ${item.members.size} widgets in it go. You can add them again from Add Widget.",
+                    buttons = listOf(AlertButton("Remove", danger = true) { viewModel.removeItem(item.id) }, AlertButton("Cancel") {}),
+                )
+
+                null -> Unit
+            }
+        }
+    }
+
+    /** What a row of the menu does. Most put the menu away first; unlocking and the colours keep it. */
+    fun holdDo(row: HoldEntry.Row, open: HoldOpen) {
+        val target = open.target
+        val id = (target as? HoldTarget.Item)?.id
+        val item = id?.let { held -> layout.firstOrNull { it.id == held } }
+        val appKey = (item as? AppCell)?.key ?: (target as? HoldTarget.Dock)?.key
+        when (row.what) {
+            HoldDo.UNLOCK -> viewModel.updateSettings { it.copy(lockLayout = false) }
+            HoldDo.COLOUR -> holdMenu.colours = true
+            else -> {
+                holdMenu.close()
+                when (row.what) {
+                    HoldDo.SHORTCUT -> holdShortcuts.getOrNull(row.index)?.let { launchApp(it.key) }
+                    // Until edit mode is built this opens what stands nearest to it today: the
+                    // resize and move mode for a widget, Customise for anything else.
+                    HoldDo.EDIT_HOME -> if (item != null && item.isWidgetLike) resizingId = item.id else showSheet(HomeSheet.Customize)
+                    HoldDo.EDIT_NAME -> appKey?.let { showSheet(HomeSheet.EditApp(it)) }
+                    HoldDo.RESIZE -> resizingId = id
+                    HoldDo.ADD_TO_HOME -> appKey?.let { key ->
+                        val page = viewModel.addAppToFirstFreeSlot(key)
+                        if (page == null) Toast.makeText(context, "Every page is full", Toast.LENGTH_SHORT).show() else revealPage(page)
+                    }
+                    HoldDo.APP_INFO -> appKey?.let { viewModel.openAppInfo(it) }
+                    HoldDo.REMOVE -> askRemove(target)
+                    // It opens out of its own icon, as it does from a tap.
+                    HoldDo.RENAME -> id?.let { openFolder(it, open.frame) }
+                    HoldDo.SET_UP -> (item as? WidgetCell)?.let { widget ->
+                        val kind = com.gabriel.zenithui.data.Widgets.baseType(widget.type)
+                        if (kind == "toggles") showSheet(HomeSheet.Toggles) else setUpWidget(kind)
+                    }
+                    HoldDo.STACK -> id?.let {
+                        stackOnto = it
+                        widgetsOpen = true
+                    }
+                    HoldDo.GLASS -> (item as? HostedWidgetCell)?.let { viewModel.setHostedGlass(it.id, !it.glass) }
+                    HoldDo.UNSTACK -> id?.let {
+                        if (!viewModel.unstack(it, row.index)) {
+                            Toast.makeText(context, "No room for it on this page", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                    else -> Unit
+                }
+            }
+        }
+    }
+
+    /** A row, a size, a colour or a shortcut's "+" was chosen: by a tap, or by the held finger lifting on it. */
+    fun holdHit(hit: HoldHit) {
+        val open = holdMenu.open ?: return
+        val id = (open.target as? HoldTarget.Item)?.id
+        when (hit) {
+            is HoldHit.Row -> (holdEntries.getOrNull(hit.index) as? HoldEntry.Row)?.let { holdDo(it, open) }
+            is HoldHit.Plus -> {
+                val shortcut = holdShortcuts.getOrNull((holdEntries.getOrNull(hit.index) as? HoldEntry.Row)?.index ?: -1) ?: return
+                holdMenu.close()
+                val page = viewModel.addShortcut(shortcut)
+                if (page == null) Toast.makeText(context, "Every page is full", Toast.LENGTH_SHORT).show() else revealPage(page)
+            }
+            is HoldHit.Size -> {
+                val choice = holdEntries.filterIsInstance<HoldEntry.Sizes>().firstOrNull()?.choices?.getOrNull(hit.index) ?: return
+                if (id == null || choice.current || !choice.fits) return
+                // The widget changes shape under its menu, which would then stand in the wrong place.
+                holdMenu.close()
+                haptic.tick()
+                viewModel.resizeWidgetTo(id, choice.spanX, choice.spanY)
+            }
+            // Each colour takes at once, and the menu stays for another.
+            is HoldHit.Swatch -> HOLD_COLOURS.getOrNull(hit.index)?.let { (colour, _) ->
+                if (id != null) {
+                    haptic.tick()
+                    viewModel.setItemColour(id, colour)
+                }
+            }
+        }
+    }
+
+    // The gestures that report a hold are set up once and outlive recompositions, so what they call
+    // is read afresh each time, never captured.
+    val onHoldStart by androidx.compose.runtime.rememberUpdatedState<(HoldTarget, androidx.compose.ui.geometry.Rect, androidx.compose.ui.geometry.Rect, Float, Float, Offset) -> Unit> { target, frame, clear, lift, corner, pointer ->
+        val key = when (target) {
+            is HoldTarget.Item -> (layout.firstOrNull { it.id == target.id } as? AppCell)?.key
+            is HoldTarget.Dock -> target.key
+        }
+        // A work app's shortcuts are not Zenith's to list.
+        val packageName = key?.takeUnless { com.gabriel.zenithui.data.WorkKeys.isWork(it) }?.substringBefore('/')
+        holdShortcuts = packageName?.let { shortcutsKnown[it] } ?: emptyList()
+        holdMenu.begin(HoldOpen(target, frame, clear, lift, corner, pointer))
+        if (packageName != null) {
+            scope.launch {
+                val found = viewModel.shortcuts(packageName)
+                shortcutsKnown[packageName] = found
+                if (holdMenu.open?.target == target) holdShortcuts = found
+            }
+        }
+    }
+    val onHoldMove by androidx.compose.runtime.rememberUpdatedState<(Offset) -> Boolean> { pointer ->
+        val open = holdMenu.open
+        val hit = if (open == null) null else holdMenu.hitAt(pointer)
+        when {
+            open == null -> false
+            hit != null -> {
+                // On the menu: from here the finger chooses, and letting go on a row takes it.
+                holdMenu.onMenu = true
+                if (holdMenu.hover != hit) {
+                    holdMenu.hover = hit
+                    haptic.tick()
+                }
+                false
+            }
+            else -> {
+                holdMenu.hover = null
+                val by = pointer - open.start
+                val pickedUp = HoldGesture.picksUp(by.x, by.y, pickUpSlop, holdMenu.above, holdMenu.onMenu, settings.lockLayout)
+                if (pickedUp) holdMenu.close(pickedUp = true)
+                pickedUp
+            }
+        }
+    }
+    val onHoldRelease by androidx.compose.runtime.rememberUpdatedState {
+        val hit = holdMenu.hover
+        holdMenu.hover = null
+        if (hit != null) holdHit(hit)
+    }
+    val holdCalls = remember {
+        HoldCalls(
+            start = { target, frame, clear, lift, corner, pointer -> onHoldStart(target, frame, clear, lift, corner, pointer) },
+            move = { onHoldMove(it) },
+            release = { onHoldRelease() },
+        )
+    }
+
     CompositionLocalProvider(LocalWidgetWorld provides widgetWorld) {
     Box(
         Modifier
@@ -1587,7 +1858,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                         // would go to them first.
                         val idle = !fired && !drag.isDragging && !settingsOpen && !widgetsOpen &&
                             !sheetVisible && folderUp == null && card == null && !dragging && drawer.value < 0.02f &&
-                            !askingNewLook && !searchOpen
+                            !askingNewLook && !searchOpen && holdMenu.open == null && alert == null
                         if (!idle) continue
                         val travel = centre - startCentre
                         val gesture = when {
@@ -1777,7 +2048,9 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                                     onGathered = { haptic.tick() },
                                     onOpenApp = { launchApp(it) },
                                     onOpenFolder = { folder, icon -> openFolder(folder.id, icon) },
-                                    onItemMenu = { showSheet(HomeSheet.Item(it.id)) },
+                                    hold = holdCalls,
+                                    heldId = (holdMenu.open?.target as? HoldTarget.Item)?.id,
+                                    heldSquash = { holdMenu.squash() },
                                     onSearch = { openDrawer(search = true) },
                                     onNoteChange = { viewModel.setNote(it) },
                                     onAmbient = { ambient = true },
@@ -1885,7 +2158,9 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                             animateEntrance = entrance,
                             geometry = drag.geometry,
                             onOpen = { launchApp(it) },
-                            onLongPress = { showSheet(HomeSheet.DrawerApp(it)) },
+                            hold = holdCalls,
+                            heldKey = heldDockKey,
+                            heldSquash = { holdMenu.squash() },
                             onReorder = { from, to -> viewModel.moveInDock(from, to) },
                             onDragOut = { key, iconCentre ->
                                 if (drag.cellWidth > 0f && drag.cellHeight > 0f) {
@@ -2184,6 +2459,26 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             )
         }
 
+        // ------------------------------------------------------------ the hold menu
+        // Over the page, the dock and an open folder; under the sheets its rows lead to. Its glass
+        // stands on the wallpaper, as the page's does: the same in Light and in Dark, and lit by the
+        // same ring of light.
+        OnWallpaper {
+            androidx.compose.runtime.CompositionLocalProvider(LocalGlassRing provides glassRing) {
+                HoldMenuLayer(
+                    state = holdMenu,
+                    entries = holdEntries,
+                    shortcutKeys = holdShortcuts.map { it.key },
+                    colour = heldColour,
+                    columns = settings.columns,
+                    rows = settings.rows,
+                    onHit = { holdHit(it) },
+                    onDismiss = { holdMenu.close() },
+                )
+                GlassAlert(alert = alert, onDismiss = { alert = null })
+            }
+        }
+
         StreakStrip(
             state = checkIn,
             onShown = { viewModel.clearCheckIn() },
@@ -2335,59 +2630,6 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             // The sheet that is being left is closed, whatever the one taking its place is.
             val up = sheetVisible && transition.targetState != EnterExitState.PostExit
             when (current) {
-                is HomeSheet.Item -> {
-                    // Taking the item off the page is one of the things its own menu does. The
-                    // menu keeps what it last showed, so it is seen to close and not simply gone.
-                    val found = layout.firstOrNull { it.id == current.id }
-                    val last = remember { arrayOfNulls<HomeItem>(1) }
-                    if (found != null) last[0] = found
-                    val item = found ?: last[0]
-                    if (found == null) hideSheet()
-                    val shortcuts by produceState(emptyList<AppShortcut>(), current.id) {
-                        val app = item as? AppCell ?: return@produceState
-                        value = viewModel.shortcuts(app.packageName)
-                    }
-                    if (item != null) ItemMenuSheet(
-                        visible = up,
-                        item = item,
-                        appsByKey = appsByKey,
-                        shortcuts = shortcuts,
-                        onShortcut = { launchApp(it.key) },
-                        onAddShortcut = { shortcut ->
-                            val page = viewModel.addShortcut(shortcut)
-                            if (page == null) Toast.makeText(context, "Every page is full", Toast.LENGTH_SHORT).show() else revealPage(page)
-                        },
-                        onEdit = { showSheet(HomeSheet.EditApp(it)) },
-                        onStack = {
-                            stackOnto = item.id
-                            hideSheet()
-                            widgetsOpen = true
-                        },
-                        onGlassBehind = { viewModel.setHostedGlass(item.id, it) },
-                        onSetUp = { kind -> setUpWidget(kind) },
-                        onColour = { showSheet(HomeSheet.WidgetColour(item.id)) },
-                        locked = settings.lockLayout,
-                        onUnlock = { viewModel.updateSettings { it.copy(lockLayout = false) } },
-                        onUnstack = { index ->
-                            if (!viewModel.unstack(item.id, index)) {
-                                Toast.makeText(context, "No room for it on this page", Toast.LENGTH_SHORT).show()
-                            }
-                        },
-                        onCustomize = { showSheet(HomeSheet.Customize) },
-                        onOpen = { launchApp(it) },
-                        onAppInfo = { viewModel.openAppInfo(it) },
-                        onChooseToggles = { showSheet(HomeSheet.Toggles) },
-                        onRename = { openFolder(it, null) },
-                        onResize = {
-                            resizingId = item.id
-                            hideSheet()
-                        },
-                        onRemove = { viewModel.removeItem(item.id) },
-                        onUninstall = { viewModel.uninstall(it) },
-                        onDismiss = { hideSheet() },
-                    )
-                }
-
                 is HomeSheet.DrawerApp -> {
                     val work = com.gabriel.zenithui.data.WorkKeys.isWork(current.key)
                     val workList by viewModel.workApps.collectAsState()
@@ -3028,5 +3270,5 @@ private val TWO_FINGER_SWIPE = 70.dp
 /** Android's view configuration with a shorter long press, for picking things up on the home screen. */
 private class QuickHold(base: androidx.compose.ui.platform.ViewConfiguration) :
     androidx.compose.ui.platform.ViewConfiguration by base {
-    override val longPressTimeoutMillis: Long get() = 320L
+    override val longPressTimeoutMillis: Long get() = HoldTuning.HOLD_MS
 }

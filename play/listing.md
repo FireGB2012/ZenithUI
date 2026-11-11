@@ -19,7 +19,7 @@ Paste these into Play Console → Grow → Store presence → Main store listing
 | Website | *(optional)* |
 | Privacy policy URL | `https://firegb2012.github.io/zenith-privacy/` (served from `docs/index.html` via GitHub Pages) |
 | Ads | No |
-| In-app purchases | Yes — a $1.99/month subscription and a $14.99 lifetime pass |
+| In-app purchases | Yes — a subscription at $4 a month or $8 every 3 months, and a $10 lifetime pass |
 | Content rating | Everyone (questionnaire: no user-generated content, no data sharing) |
 
 ## Short description (80 characters max)
@@ -55,7 +55,7 @@ SETTINGS YOU CAN READ
 One page with a search box: type "dark" or "vibrate" and it takes you to the switch. Nine groups say how they are set before you open them, and a small live copy of your home screen shows each change as you make it. To get there, pinch the home screen or hold your name.
 
 ZENITH PLUS
-Try the extras free for a week: seven more wallpapers, a theme maker that builds a palette from any three colours you like, hidden apps that stay out of the drawer behind a PIN, and a backup, in a file or in your Zenith account, to restore on any phone. After that it is $1.99 a month, or $14.99 once for the lifetime pass. No ads either way, and nothing that was free before is ever taken away.
+Try the extras free for a week: seven more wallpapers, a theme maker that builds a palette from any three colours you like, hidden apps that stay out of the drawer behind a PIN, and a backup, in a file or in your Zenith account, to restore on any phone. After that it is $4 a month, $8 every 3 months, or a $10 lifetime pass. No ads either way, and nothing that was free before is ever taken away.
 
 AS MANY PAGES AS YOU LIKE
 Tap the + beside the page dots for another page, or hold an icon against the side of the screen to carry it across.
@@ -142,11 +142,13 @@ Screenshots included (8, in upload order): home screen, wallpaper gallery, setup
 
 ## In-app products
 
-Two ways in, both real, both shown side by side. The pass is the one the app argues for, on the
-honest ground that it costs about eight months of the subscription — there is no invented "was"
+Three plans, all real, shown one above the other: 1 month, 3 months, and Forever, which is the
+lifetime pass. The pass is the one the app argues for, on the honest ground that it costs less than
+three months of the monthly plan. The app works that out from the prices Play actually charges, so
+it stays true in every country whatever Play's conversion comes to, and there is no invented "was"
 price anywhere, which Play rejects anyway.
 
-**Lifetime pass** — Monetisation → In-app products:
+**Lifetime pass ("Forever" in the app)** — Monetisation → In-app products:
 
 | Field | Value |
 | --- | --- |
@@ -154,19 +156,35 @@ price anywhere, which Play rejects anyway.
 | Type | One-time product, non-consumable, "multi-quantity" off |
 | Name | Zenith Plus — Lifetime |
 | Description | Theme maker, hidden apps, and backup & restore. Paid once, yours for good. |
-| Price | $14.99 (Play converts for other countries) |
+| Price | $10.00 (Play converts for other countries) |
 
-**Monthly** — Monetisation → Subscriptions:
+**Subscription** — Monetisation → Subscriptions. One subscription with two base plans. A purchase of
+either is the same product, so either one counts as subscribed. The app finds each plan by how often
+it bills, every month or every 3 months, so the base plans' IDs and their order make no difference
+to it.
 
 | Field | Value |
 | --- | --- |
-| Subscription ID | `zenith_plus_monthly` |
-| Base plan | Monthly, auto-renewing, $1.99 |
-| Offer | Free trial, 7 days, new subscribers |
-| Name | Zenith Plus — Monthly |
+| Subscription ID | `zenith_plus_monthly` (named before it had a second plan; an ID cannot be changed) |
+| Name | Zenith Plus (Play's purchase sheet shows it, so no longer "Monthly") |
+| Base plan: monthly | Auto-renewing, billed every month, $4.00. It keeps whatever ID it already has |
+| Offer on the monthly plan | Free trial, 7 days, new subscribers |
+| Base plan: `three-months` | Auto-renewing, billed every 3 months, $8.00, no offer |
 
-Create both and **activate** them. If only one exists the app shows only that one; if neither
-does, the sheet says the Play Store is unavailable rather than pretending to sell anything.
+Create all of it and **activate** the pass and both base plans. Once Play has the subscription, the
+app shows only the base plans it carries: until `three-months` is active the sheet offers 1 month
+and Forever, and the 3 months card appears by itself once it is, with no new build.
+
+To add the 3 month plan: open `zenith_plus_monthly`, **Add base plan**, base plan ID
+`three-months`, type Auto-renewing, billing period Every 3 months. Under prices, set $8.00 for the
+United States and let Play convert it for the other countries, then **Save** and **Activate**.
+Do this, and the new prices, only once the first build with three plans is on the track testers
+install from: an older build sells whichever plan Play lists first as its Monthly, which could be
+this one, and says the pass costs about eight months of the monthly.
+
+To move the monthly plan to $4: open its base plan, edit its prices to $4.00, converted for the
+other countries the same way, and **Save**. If Play asks what to do for people already subscribed,
+leaving them on the price they signed up at is fine. Its 7 day free trial offer stays as it is.
 
 The seven day trial is offered on the last screen of setup and counted by the app itself, from the
 moment it is accepted. It needs nothing configured in Play. Create the one-time product and activate
@@ -175,10 +193,12 @@ unavailable.
 
 ### Who counts the free week
 
-Once `zenith_plus_monthly` carries its 7 day offer, "Start my free days" hands over to Play's own
-sheet — the familiar "7 days free, then $1.99" one — and Google counts the week and takes over
-billing at the end. Until that subscription exists, the app counts the seven days itself and asks
-for nothing, which is what happens today. Same button either way; no new build needed to switch.
+Once the monthly base plan of `zenith_plus_monthly` carries its 7 day offer, "Start my free days"
+hands over to Play's own sheet — the familiar "7 days free, then $4.00 a month" one — and Google
+counts the week and takes over billing at the end. Only an offer on the monthly plan counts, since
+the app says the monthly price follows the trial. Until that offer exists, the app counts the seven
+days itself and asks for nothing, which is what happens today. Same button either way; no new build
+needed to switch.
 
 To test the purchase without paying: Play Console → Setup → License testing, add the tester's Gmail
 address, then buy from a build signed with the upload key and installed from a Play track.

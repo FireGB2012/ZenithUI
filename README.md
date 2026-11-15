@@ -106,16 +106,15 @@ stretching, and a press is a small one with no wobble.
 - **Folders** — drop one app onto another to create a folder; drop onto a folder to add to it.
   Tap a folder for a bottom sheet with an editable name; long-press an app inside to take it out.
 - **Remove** — drag to the "Remove" target at the top.
-- **Resize and move** — long-press any app or widget → **Resize and move**, then pull the pointer
-  on its bottom-right corner. The outline follows your finger and the item snaps to whole cells and whole rows as you
-  pass them, with a size badge; it can be any size up to the whole page (a widget stops at the
-  smallest its design allows). An app bigger than 1×1 becomes a super icon, its icon stretched to fill the space. A
-  size with no room turns the outline red. Tap anywhere to finish.
-  While it is up, a bar at the foot of the screen does the same in taps (`ui/home/ResizeBar.kt`):
-  a widget's named sizes — Small, Medium, Wide, Tall, Large — one tap each, and four arrows that
-  move the item a cell at a time. A named size is taken where the widget stands, or at the closest
-  opening on its page when there is no room there; an arrow never pushes anything aside, and a tap
-  with no room shakes the bar instead. The rules are `Reshape.resized` and `Reshape.nudged`.
+- **Resize** — in edit mode every widget has a corner to pull: a short arc of white round its
+  bottom-right corner. Pull it and it follows your finger, while the widget snaps to whole cells
+  and rows as you pass them, a thin outline shows the size asked for and a capsule of glass says it
+  ("4 × 2"); it can be any size up to the whole page (a widget stops at the smallest its design
+  allows). A size with no room turns the outline red rather than pushing anything aside. A whole
+  pull is one change for Undo. An app gets the same corner from **Resize** in its menu, which starts
+  edit mode; bigger than 1×1 it becomes a super icon, its icon stretched to fill the space. One of
+  Zenith's widgets also has its named sizes in its menu (Small, Medium, Wide, Tall, Large), each
+  taken where it stands or at the closest opening on its page (`Reshape.resized`).
 - **App drawer** — a sheet that tracks your finger: drag up anywhere on the page and it follows,
   release and a fling (or the halfway point) decides whether it opens or falls back. Close it by
   dragging down anywhere — the handle, the header, the search row, or the app grid once it is
@@ -247,8 +246,8 @@ grid as wide as your page, its cells filled in (`SizeShape`), so Wide is plainly
 page and Tall a row more. A tap on a name brings that size to the middle, and under it a line says
 what that size shows ("Hours over minutes, like a Lock Screen"). The lines come from
 `WidgetLayouts`, which reads the same rules the widgets lay themselves out by (`WidgetForm`, and
-`ToggleGrid` for the toggles), so they cannot say a size shows what it does not. The bar that
-comes up for **Resize and move** shows the same little grid on each of its sizes.
+`ToggleGrid` for the toggles), so they cannot say a size shows what it does not. The row of sizes
+in a widget's menu shows the same little grid on each of them.
 
 The switch between Glass and No glass carries a symbol on each side, a pane and a pane struck
 through, and what the side chosen means is said right under it. It is about the No glass versions

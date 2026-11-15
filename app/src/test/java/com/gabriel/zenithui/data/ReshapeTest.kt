@@ -1,8 +1,10 @@
 package com.gabriel.zenithui.data
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ReshapeTest {
@@ -67,35 +69,8 @@ class ReshapeTest {
     }
 
     @Test
-    fun `a nudge moves one cell, and stops at the edge of the page`() {
-        val items = listOf(widget("w", 1, 1))
-        assertEquals(Triple(2, 1, 2 to 2), Reshape.nudged(items, "w", 1, 0, columns, rows)!!.at("w"))
-        assertEquals(Triple(0, 1, 2 to 2), Reshape.nudged(items, "w", -1, 0, columns, rows)!!.at("w"))
-        assertEquals(Triple(1, 0, 2 to 2), Reshape.nudged(items, "w", 0, -ROW_UNITS, columns, rows)!!.at("w"))
-        assertEquals(Triple(1, 2, 2 to 2), Reshape.nudged(items, "w", 0, ROW_UNITS, columns, rows)!!.at("w"))
-        // Two columns wide in the last two columns: no further right.
-        assertNull(Reshape.nudged(listOf(widget("w", 2, 0)), "w", 1, 0, columns, rows))
-        assertNull(Reshape.nudged(listOf(widget("w", 0, 0)), "w", -1, 0, columns, rows))
-        assertNull(Reshape.nudged(listOf(widget("w", 0, 0)), "w", 0, -ROW_UNITS, columns, rows))
-        assertNull(Reshape.nudged(listOf(widget("w", 0, 3)), "w", 0, ROW_UNITS, columns, rows))
-    }
-
-    @Test
-    fun `a nudge never pushes anything aside`() {
-        val items = listOf(widget("w", 0, 0), app("a", 2, 1))
-        assertNull(Reshape.nudged(items, "w", 1, 0, columns, rows))
-        // Down is clear.
-        assertEquals(Triple(0, 1, 2 to 2), Reshape.nudged(items, "w", 0, ROW_UNITS, columns, rows)!!.at("w"))
-        assertSame(items, Reshape.nudged(items, "w", 0, 0, columns, rows))
-        assertNull(Reshape.nudged(items, "gone", 1, 0, columns, rows))
-    }
-
-    @Test
-    fun `moving or resizing drops a free-placement offset, as dragging does`() {
+    fun `resizing drops a free-placement offset, as dragging does`() {
         val items = listOf(widget("w", 1, 1).nudged(0.3f, -0.2f))
-        val moved = Reshape.nudged(items, "w", 1, 0, columns, rows)!!.first()
-        assertEquals(0f, moved.dx, 0f)
-        assertEquals(0f, moved.dy, 0f)
         val resized = Reshape.resized(items, "w", 3, 2 * ROW_UNITS, columns, rows)!!.first()
         assertEquals(0f, resized.dx, 0f)
         assertEquals(3, resized.spanX)
@@ -107,5 +82,34 @@ class ReshapeTest {
         assertEquals(Triple(2, 0, 2 to 2), Reshape.resized(apps, "a", 2, 2 * ROW_UNITS, columns, rows)!!.at("a"))
         val folder = listOf(FolderCell("f", 0, 0, 0, "Folder", listOf("x/y")))
         assertSame(folder, Reshape.resized(folder, "f", 1, ROW_UNITS, columns, rows))
+    }
+
+    @Test
+    fun `in edit mode every widget has a corner to pull, and an app only once it is chosen to be resized`() {
+        assertTrue(Reshape.hasCorner(widget("w", 0, 0), chosen = false))
+        assertTrue(Reshape.hasCorner(HostedWidgetCell("h", 0, 0, 0, 4, 2 * ROW_UNITS, appWidgetId = 17, provider = "com.weather/.Widget"), chosen = false))
+        assertTrue(Reshape.hasCorner(StackCell("st", 0, 0, 0, 2, 2 * ROW_UNITS, listOf(StackMember("m1", type = "clock"))), chosen = false))
+        assertFalse(Reshape.hasCorner(app("a", 0, 0), chosen = false))
+        assertTrue(Reshape.hasCorner(app("a", 0, 0), chosen = true))
+        // A folder and a shortcut are always one cell: there is nothing to pull.
+        assertFalse(Reshape.hasCorner(FolderCell("f", 0, 0, 0, "Folder", listOf("x/y")), chosen = true))
+        assertFalse(Reshape.hasCorner(ShortcutCell("s", 0, 0, 0, "com.maps", "home", "Home"), chosen = true))
+    }
+
+    @Test
+    fun `without pulling, it grows or shrinks a column or a row at a time, as far as the page goes`() {
+        fun steps(item: HomeItem) = Reshape.steps(item, columns, rows).map { it.name to (it.spanX to it.spanY / ROW_UNITS) }
+        // In the middle of the page it can go every way.
+        assertEquals(
+            listOf("Wider" to (3 to 2), "Narrower" to (1 to 2), "Taller" to (2 to 3), "Shorter" to (2 to 1)),
+            steps(widget("w", 1, 1)),
+        )
+        // Against the page's right edge it grows no wider, and at its foot no taller.
+        assertEquals(listOf("Narrower", "Taller", "Shorter"), steps(widget("w", 2, 1)).map { it.first })
+        assertEquals(listOf("Wider", "Narrower", "Shorter"), steps(widget("w", 1, 3)).map { it.first })
+        // An icon in the last cell of the page has nowhere to go, and a folder never has.
+        assertEquals(emptyList<String>(), steps(app("a", 3, 4)).map { it.first })
+        assertEquals(listOf("Wider", "Taller"), steps(app("a", 0, 0)).map { it.first })
+        assertEquals(emptyList<String>(), steps(FolderCell("f", 0, 0, 0, "Folder", listOf("x/y"))).map { it.first })
     }
 }

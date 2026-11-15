@@ -52,6 +52,7 @@ import com.gabriel.zenithui.ui.theme.LocalGlassStrength
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.LocalScreenSize
 import com.gabriel.zenithui.ui.theme.LocalTilt
+import com.gabriel.zenithui.ui.theme.LocalWallpaperDim
 import com.gabriel.zenithui.ui.theme.LocalWallpaperOffset
 import com.gabriel.zenithui.ui.theme.WALLPAPER_VEIL
 import com.gabriel.zenithui.ui.theme.tuned
@@ -132,6 +133,7 @@ fun AppLaunchCard(
     val levels = LocalGlassLevels.current
     val screen = LocalScreenSize.current
     val wallpaperOffset = LocalWallpaperOffset.current
+    val wallpaperDim = LocalWallpaperDim.current
     val glassStrength = LocalGlassStrength.current.coerceIn(0f, 1.4f)
     val tilt = LocalTilt.current
     val tuning = LocalGlassTuning.current
@@ -228,6 +230,7 @@ fun AppLaunchCard(
                         lean = tilt.value,
                         dark = true,
                         tuning = tuning,
+                        dim = wallpaperDim.value,
                     )
                 }
             }

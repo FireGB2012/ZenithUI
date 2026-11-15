@@ -54,6 +54,26 @@ class BeadMotionTest {
     }
 
     @Test
+    fun `woken by the wave, a thing gives a little jolt, wide then tall, and comes to rest`() {
+        assertEquals(1f, BeadMotion.joltX(0f, widget = false), eps)
+        assertEquals(1f, BeadMotion.joltY(0f, widget = false), eps)
+        assertEquals(1f, BeadMotion.joltX(1f, widget = false), eps)
+        assertEquals(1f, BeadMotion.joltY(1f, widget = false), eps)
+        val steps = (0..100).map { it / 100f }
+        val wide = steps.indexOfFirst { BeadMotion.joltX(it, false) > 1.05f && BeadMotion.joltY(it, false) < 0.97f }
+        val tall = steps.indexOfFirst { BeadMotion.joltY(it, false) > 1.02f && BeadMotion.joltX(it, false) < 1f }
+        assertTrue(wide >= 0 && tall > wide)
+    }
+
+    @Test
+    fun `a widget's jolt is gentler than an icon's`() {
+        val steps = (0..100).map { it / 100f }
+        val icon = steps.maxOf { kotlin.math.abs(BeadMotion.joltX(it, widget = false) - 1f) }
+        val widget = steps.maxOf { kotlin.math.abs(BeadMotion.joltX(it, widget = true) - 1f) }
+        assertTrue(widget < icon * 0.5f)
+    }
+
+    @Test
     fun `several pops in a row throw fewer droplets each`() {
         assertEquals(6, BeadMotion.droplets(msSinceLastPop = 5_000))
         assertEquals(3, BeadMotion.droplets(msSinceLastPop = 300))

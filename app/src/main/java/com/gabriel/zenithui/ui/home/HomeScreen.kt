@@ -428,6 +428,8 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
     }
     val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
     val motion = LocalMotionLevel.current
+    // Asked as something happens, by listeners that outlive a change to Motion.
+    val liveMotion by androidx.compose.runtime.rememberUpdatedState(motion)
     var resizingId by remember { mutableStateOf<String?>(null) }
     // The menu beside something held, and a question asked in a card of glass over the home screen.
     val holdMenu = remember { HoldMenuState() }
@@ -520,22 +522,65 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         }
     }
 
+    // The one ring of light on the home screen, for every pane of glass and every icon to read while
+    // drawing: a tap on the wallpaper sends it out, and so do edit mode's waves.
+    val glassRing = remember { GlassRing() }
+    LaunchedEffect(glassRing) { glassRing.play() }
+    val ringDensity = LocalDensity.current.density
+
+    // Edit mode starts and ends with a wave of light: a quick one from where it was started wakes
+    // everything as it reaches it, and a calmer one from where it was ended settles it all again.
+    // While the calm one crosses the screen, what it has not reached yet still wiggles.
+    var calming by remember { mutableStateOf(false) }
+    val calmJob = remember { arrayOfNulls<kotlinx.coroutines.Job>(1) }
+    /** A wave of [style] from [at] on the screen, or from the middle of it; none with movement reduced. */
+    fun sendWave(at: Offset?, style: com.gabriel.zenithui.ui.theme.RingStyle) {
+        if (liveMotion.reduced) return
+        glassRing.screen = androidx.compose.ui.geometry.Size(drawerWidthPx, drawerHeightPx)
+        glassRing.density = ringDensity
+        glassRing.startOnNextFrame(at ?: Offset(drawerWidthPx / 2f, drawerHeightPx / 2f), style)
+    }
+
+    /** Edit mode, begun: the wave that wakes everything runs out from [at]. */
+    fun beginEditing(at: Offset?) {
+        calmJob[0]?.cancel()
+        calming = false
+        sendWave(at, com.gabriel.zenithui.ui.theme.RingStyle.WAKE)
+        editing = true
+        viewModel.setEditing(true)
+    }
+
     /**
      * Into edit mode, from a hold on the wallpaper, "Edit Home Screen" in a menu, or something being
-     * picked up. With the layout locked it says so instead, and offers to unlock.
+     * picked up, at [at] on the screen. With the layout locked it says so instead, and offers to unlock.
      */
-    fun startEdit() {
+    fun startEdit(at: Offset? = null) {
         if (settings.lockLayout) {
             toast = HomeToast("The layout is locked", "Unlock") { viewModel.updateSettings { it.copy(lockLayout = false) } }
             return
         }
         holdMenu.close()
         resizingId = null
-        editing = true
-        viewModel.setEditing(true)
+        beginEditing(at)
     }
 
-    fun endEdit() {
+    /**
+     * Out of edit mode, from Done, a tap on the wallpaper, Back or Home: the calm wave runs out from
+     * [at], or the middle of the screen. [quietly] settles everything at once, for leaving the home
+     * screen for something that covers it.
+     */
+    fun endEdit(at: Offset? = null, quietly: Boolean = false) {
+        if (editing) {
+            if (!quietly) sendWave(at, com.gabriel.zenithui.ui.theme.RingStyle.CALM)
+            if (!quietly && !liveMotion.reduced) {
+                calming = true
+                calmJob[0]?.cancel()
+                calmJob[0] = scope.launch {
+                    delay(com.gabriel.zenithui.ui.theme.RingStyle.CALM.durationMs.toLong() + BeadMotion.CALM_MS)
+                    calming = false
+                }
+            }
+        }
         editing = false
         customising = false
         resizingId = null
@@ -613,7 +658,6 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
     // Arriving. One clock for the whole home screen: at 0 everything is out from the middle, at
     // FlyIn.TOTAL_MS it is all in its place. It is wound back while nobody can see — at a cold
     // start, or when Zenith is stopped — and let run once the home screen is on show again.
-    val liveMotion by androidx.compose.runtime.rememberUpdatedState(motion)
     val flyOnStart = remember { !entrance && !motion.reduced }
     val arrivalClock = remember { Animatable(if (flyOnStart) 0f else FlyIn.TOTAL_MS.toFloat()) }
     val arrivalDepth = remember { mutableFloatStateOf(FlyIn.FULL) }
@@ -1147,10 +1191,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
     // A tap on the wallpaper sends a ring of light out from under the finger, across the whole
     // screen: every pane of glass lights up as it passes, and the icons catch a gleam. It takes the
     // place of the small ring a double tap used to send, and a double tap sends it too. None with
-    // movement reduced.
-    val glassRing = remember { GlassRing() }
-    LaunchedEffect(glassRing) { glassRing.play() }
-    val ringDensity = LocalDensity.current.density
+    // movement reduced. (The ring itself, which edit mode's waves are too, is made further up.)
     /** A ring from [at], on the screen in pixels. */
     fun ringAt(at: Offset) {
         // Asked as the tap comes, not when the page's tap listener was set up, which outlives a
@@ -1223,7 +1264,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
 
     // Everything else on the page rocks while something is carried. One clock for all of it, and
     // it runs only from the moment something is picked up until the rocking has died away.
-    val jiggleStrength = animateFloatAsState(if ((drag.isDragging || (editing && !customising)) && !motion.reduced) 1f else 0f, tween(200), label = "jiggle")
+    val jiggleStrength = animateFloatAsState(if ((drag.isDragging || ((editing || calming) && !customising)) && !motion.reduced) 1f else 0f, tween(200), label = "jiggle")
     val jiggleClock = remember { mutableFloatStateOf(0f) }
     val jiggling by remember { derivedStateOf { jiggleStrength.value > 0.001f } }
     LaunchedEffect(jiggling) {
@@ -1746,7 +1787,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 holdMenu.close()
                 when (row.what) {
                     HoldDo.SHORTCUT -> holdShortcuts.getOrNull(row.index)?.let { launchApp(it.key) }
-                    HoldDo.EDIT_HOME -> startEdit()
+                    HoldDo.EDIT_HOME -> startEdit(open.frame.center)
                     HoldDo.EDIT_NAME -> appKey?.let { showSheet(HomeSheet.EditApp(it)) }
                     HoldDo.RESIZE -> resizingId = id
                     HoldDo.ADD_TO_HOME -> appKey?.let { key ->
@@ -1845,10 +1886,10 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 val by = pointer - open.start
                 val pickedUp = HoldGesture.picksUp(by.x, by.y, pickUpSlop, holdMenu.above, holdMenu.onMenu, settings.lockLayout)
                 if (pickedUp) {
-                    // Picked up, the home screen is being edited, and stays so when the thing is put down.
+                    // Picked up, the home screen is being edited, and stays so when the thing is put
+                    // down. The wave wakes everything from what was picked up.
                     holdMenu.close(pickedUp = true)
-                    editing = true
-                    viewModel.setEditing(true)
+                    if (!editing) beginEditing(open.frame.center)
                 }
                 pickedUp
             }
@@ -2059,7 +2100,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                                             when {
                                                 resizingId != null -> resizingId = null
                                                 // A tap on the wallpaper is one of the ways out of edit mode.
-                                                editing -> endEdit()
+                                                editing -> endEdit(pageOrigin + at)
                                                 else -> ringAt(pageOrigin + at)
                                             }
                                         },
@@ -2071,7 +2112,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                                         },
                                         // Holding an empty spot starts edit mode, as on a phone;
                                         // Customise is the brush in its bar.
-                                        onLongPress = { if (resizingId == null && !editing) startEdit() },
+                                        onLongPress = { at -> if (resizingId == null && !editing) startEdit(pageOrigin + at) },
                                     )
                                 },
                         ) {
@@ -2244,7 +2285,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                             onAdd = { widgetsOpen = true },
                             onCustomise = { customising = true },
                             onPages = { overview = true },
-                            onDone = { endEdit() },
+                            onDone = { at -> endEdit(at) },
                         )
                     }
                 },
@@ -2568,7 +2609,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                         showSheet(HomeSheet.Wallpapers)
                     },
                     onClock = {
-                        endEdit()
+                        endEdit(quietly = true)
                         ambient = true
                     },
                     onHelp = {
@@ -2576,7 +2617,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                         showSheet(HomeSheet.Help)
                     },
                     onSettings = {
-                        endEdit()
+                        endEdit(quietly = true)
                         settingsOpen = true
                     },
                     // The grid it sets is worked out for this screen and the home screen settled

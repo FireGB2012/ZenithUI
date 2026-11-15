@@ -76,6 +76,30 @@ internal object BeadMotion {
 
     private val BACK_TIMES = floatArrayOf(0f, 0.42f, 0.7f, 0.86f, 1f)
 
+    /**
+     * How long something takes to come up to its full wiggle as the wave of light reaches it, the
+     * jolt it gives as it does, and how long its wiggle takes to die away as the calmer wave passes.
+     */
+    const val WAKE_MS = 200
+    const val JOLT_MS = 380
+    const val CALM_MS = 520
+
+    /** Waking, it gives a small rock with a soft squash: a little wide, then a little tall, then still. */
+    fun joltX(t: Float, widget: Boolean): Float {
+        val k = if (widget) WIDGET_JOLT else 1f
+        return keyframes(t.coerceIn(0f, 1f), JOLT_TIMES, floatArrayOf(1f, 1f + 0.07f * k, 1f - 0.025f * k, 1f))
+    }
+
+    fun joltY(t: Float, widget: Boolean): Float {
+        val k = if (widget) WIDGET_JOLT else 1f
+        return keyframes(t.coerceIn(0f, 1f), JOLT_TIMES, floatArrayOf(1f, 1f - 0.06f * k, 1f + 0.03f * k, 1f))
+    }
+
+    private val JOLT_TIMES = floatArrayOf(0f, 1f / 3f, 2f / 3f, 1f)
+
+    /** A widget jolts this much as hard as an icon: it is big, and the same squash would look like a wobble. */
+    private const val WIDGET_JOLT = 0.3f
+
     /** A smaller spray when several pop in a row, so a run of removals does not turn to confetti. */
     fun droplets(msSinceLastPop: Long): Int = if (msSinceLastPop < 1000) 3 else 6
 

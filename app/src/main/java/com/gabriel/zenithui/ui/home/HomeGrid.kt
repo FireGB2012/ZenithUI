@@ -800,6 +800,10 @@ fun HomePage(
                 LaunchedEffect(Unit) { back.animateTo(1f, tween(BeadMotion.BACK_MS, easing = LinearEasing)) }
             }
             val formed by remember { derivedStateOf { back.value >= BACK_FORMED } }
+            // Woken by the wave of light as it reaches it, and settled by the calm one.
+            val wake = rememberEditWake(editing) {
+                Offset(cellRoot.x + (ringFrame.left + ringFrame.right) / 2f, cellRoot.y + (ringFrame.top + ringFrame.bottom) / 2f)
+            }
             // The gestures below outlive recompositions: they ask for the frame as it is now.
             val liveFrame by rememberUpdatedState(ringFrame)
             val opens = item.launchKey
@@ -808,7 +812,7 @@ fun HomePage(
             // While its bead is out, what the item draws is kept in a layer too, for the bead to show
             // its corner magnified.
             val lens = rememberGraphicsLayer()
-            val lensing = editing && beads && item !is FolderCell
+            val lensing = (editing || wake.awake) && beads && item !is FolderCell
 
             Box(
                 Modifier
@@ -887,7 +891,7 @@ fun HomePage(
                         val float = TiltRest.parallaxShift(parallax.value, ITEM_FLOAT_DP, density.density)
                         translationX += float.x
                         translationY += float.y
-                        val shake = jiggleStrength()
+                        val shake = jiggleStrength() * wake.level.value
                         if (shake > 0f && !carried) {
                             // About four swings a second, each thing a little off the pace of the
                             // ones beside it, with a hair of a bob on another beat.
@@ -896,6 +900,13 @@ fun HomePage(
                                 sin((clock * (WIGGLE_HZ + WIGGLE_HZ_SPREAD * jigglePhase) + jigglePhase) * TWO_PI)
                             translationY += WIGGLE_BOB.toPx() * shake *
                                 sin((clock * (BOB_HZ + WIGGLE_HZ_SPREAD * jigglePhase) + 2f * jigglePhase) * TWO_PI)
+                        }
+                        // Waking, a small rock with a soft squash; gentler for anything bigger than an icon.
+                        val jolt = wake.jolt.value
+                        if (jolt < 1f) {
+                            val big = jiggleAngle == WIGGLE_WIDE
+                            scaleX *= BeadMotion.joltX(jolt, big)
+                            scaleY *= BeadMotion.joltY(jolt, big)
                         }
                         // Forming again, round the middle of what it shows rather than of its cell.
                         val forming = back.value
@@ -1120,7 +1131,7 @@ fun HomePage(
                 if (item !is FolderCell) {
                     val reach = with(density) { (BEAD_TOUCH / 2).toPx() }
                     MinusBead(
-                        shown = editing && beads && !carried && !resizing && formed,
+                        shown = wake.awake && beads && !carried && !resizing && formed,
                         name = when (item) {
                             is AppCell -> appsByKey[item.key]?.label ?: "app"
                             is ShortcutCell -> item.label
@@ -2634,6 +2645,8 @@ fun DockBar(
                         LaunchedEffect(Unit) { reform.animateTo(1f, tween(BeadMotion.BACK_MS, easing = LinearEasing)) }
                     }
                     val formed by remember { derivedStateOf { reform.value >= BACK_FORMED } }
+                    // Woken by the wave of light as it reaches it, and settled by the calm one.
+                    val wake = rememberEditWake(editing) { slotOf(index)?.center }
                     // What the icon draws, for its bead to show its corner magnified.
                     val lens = rememberGraphicsLayer()
                     val left = lefts?.getOrNull(index)
@@ -2690,12 +2703,17 @@ fun DockBar(
                                     scaleX *= squash.x
                                     scaleY *= squash.y
                                 }
-                                // Edited, it wiggles as the icons on the page do.
-                                val shake = jiggleStrength()
+                                // Edited, it wiggles as the icons on the page do, and jolts as it wakes.
+                                val shake = jiggleStrength() * wake.level.value
                                 if (shake > 0f && !isCarried) {
                                     val phase = (key.hashCode() and 0xFF) / 255f
                                     rotationZ = WIGGLE_ICON * shake *
                                         sin((jiggleClock() * (WIGGLE_HZ + WIGGLE_HZ_SPREAD * phase) + phase) * TWO_PI)
+                                }
+                                val jolt = wake.jolt.value
+                                if (jolt < 1f) {
+                                    scaleX *= BeadMotion.joltX(jolt, widget = false)
+                                    scaleY *= BeadMotion.joltY(jolt, widget = false)
                                 }
                                 val forming = reform.value
                                 if (forming < 1f) {
@@ -2822,7 +2840,7 @@ fun DockBar(
                             badge = true,
                             modifier = Modifier
                                 .then(
-                                    if (editing && beads) {
+                                    if ((editing || wake.awake) && beads) {
                                         Modifier.drawWithContent {
                                             lens.record { this@drawWithContent.drawContent() }
                                             drawLayer(lens)
@@ -2844,7 +2862,7 @@ fun DockBar(
                                 },
                         )
                         MinusBead(
-                            shown = editing && beads && !isCarried && formed,
+                            shown = wake.awake && beads && !isCarried && formed,
                             name = appsByKey[key]?.label ?: "app",
                             onClick = { onBead(key) },
                             lens = lens,

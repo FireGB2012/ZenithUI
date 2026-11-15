@@ -117,7 +117,17 @@ in and it forms again with a wobble, and its bead wells up once it has. Anything
 page another way (into the dock, a folder or another page) still shrinks away. With movement
 reduced it fades.
 
-Still to come in this part: the corner to pull and the wave.
+Edit mode starts with a wave of light: the ring a tap on the wallpaper sends, quicker (640 ms, fast
+off the finger and slowing as it spreads), from wherever it was started (the finger on the
+wallpaper, the thing held or picked up). Each thing on the home screen wakes as the ring reaches it:
+it starts to wiggle with a small jolt, a little wide then a little tall (a third as much for a
+widget), and its bead wells up; the glass lights up as the ring passes, as it does for a tap. Done,
+a tap on the wallpaper, Back or Home send a slower, fainter wave (950 ms) from where they were, and
+each thing settles as it reaches it, its wiggle dying away like water going still and its bead
+sinking. Anything off the screen wakes or settles at once, as everything does with movement reduced,
+and leaving for the bedside clock or Settings from Customise settles it all at once.
+
+Still to come in this part: the corner to pull.
 
 The plan for the whole part:
 

@@ -40,10 +40,20 @@ import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Brush
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
+import com.gabriel.zenithui.ui.theme.LocalGlassRing
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -101,7 +111,8 @@ internal fun EditBar(
     onAdd: () -> Unit,
     onCustomise: () -> Unit,
     onPages: () -> Unit,
-    onDone: () -> Unit,
+    /** Done was tapped, its middle here on the screen. */
+    onDone: (Offset) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val reduced = LocalMotionLevel.current.reduced
@@ -212,16 +223,19 @@ private fun BarDots(pageCount: Int, position: () -> Float, onClick: () -> Unit) 
     )
 }
 
+/** Done, which says where its middle is on the screen as it is tapped: the calm wave starts there. */
 @Composable
-private fun DoneButton(onClick: () -> Unit) {
+private fun DoneButton(onClick: (Offset) -> Unit) {
     val tick = rememberTick()
     val source = remember { MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
     val press by animateFloatAsState(if (pressed) 0.94f else 1f, spring(dampingRatio = 0.6f, stiffness = 600f), label = "donePress")
+    val middle = remember { arrayOf(Offset.Zero) }
     Box(
         Modifier
             .height(BAR_BUTTON)
             .widthIn(min = 72.dp)
+            .onGloballyPositioned { middle[0] = it.positionInRoot() + Offset(it.size.width / 2f, it.size.height / 2f) }
             .graphicsLayer {
                 scaleX = press
                 scaleY = press
@@ -230,7 +244,7 @@ private fun DoneButton(onClick: () -> Unit) {
             .background(ACTION_BLUE)
             .clickable(interactionSource = source, indication = null, role = Role.Button) {
                 tick()
-                onClick()
+                onClick(middle[0])
             }
             .padding(horizontal = 16.dp),
         contentAlignment = Alignment.Center,
@@ -242,6 +256,49 @@ private fun DoneButton(onClick: () -> Unit) {
 /** How big the bead is, and the room round it that still counts as touching it. */
 internal val BEAD = 25.dp
 internal val BEAD_TOUCH = 41.dp
+
+/**
+ * How awake one thing on the home screen is to its being edited: whether it wears its bead
+ * ([awake]), how much of its wiggle it has ([level], 0 to 1), and how far through the jolt it gave on
+ * waking it is ([jolt], 1 at rest). The last two are read while drawing.
+ */
+@Stable
+internal class EditWake(awake: Boolean) {
+    var awake by mutableStateOf(awake)
+    val level = Animatable(if (awake) 1f else 0f)
+    val jolt = Animatable(1f)
+}
+
+/**
+ * Wakes this thing as editing starts, and settles it as editing ends, when the wave of light
+ * ([LocalGlassRing]) reaches its [middle] on the screen: it starts to wiggle with a small jolt and its
+ * bead wells up, or its wiggle dies away like water going still and its bead sinks. At once with no
+ * wave, with movement reduced, or off the screen. One first seen while editing is simply awake.
+ */
+@Composable
+internal fun rememberEditWake(editing: Boolean, middle: () -> Offset?): EditWake {
+    val ring = LocalGlassRing.current
+    val reduced = LocalMotionLevel.current.reduced
+    val wake = remember { EditWake(editing) }
+    LaunchedEffect(editing) {
+        if (editing == wake.awake) return@LaunchedEffect
+        val at = middle()
+        val wait = if (reduced || ring == null || at == null) 0f else ring.reachesIn(at, withFrameNanos { it })
+        if (wait >= 1f) delay(wait.toLong())
+        wake.awake = editing
+        if (editing) {
+            launch { wake.level.animateTo(1f, tween(if (reduced) 0 else BeadMotion.WAKE_MS)) }
+            if (!reduced) {
+                wake.jolt.snapTo(0f)
+                wake.jolt.animateTo(1f, tween(BeadMotion.JOLT_MS, easing = LinearEasing))
+            }
+        } else {
+            wake.jolt.snapTo(1f)
+            wake.level.animateTo(0f, tween(if (reduced) 0 else BeadMotion.CALM_MS, easing = LinearOutSlowInEasing))
+        }
+    }
+    return wake
+}
 
 /**
  * The minus on the corner of everything that can be taken off the home screen, while it is being

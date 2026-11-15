@@ -3,6 +3,7 @@ package com.gabriel.zenithui.ui.theme
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class GlassPressTest {
@@ -47,13 +48,40 @@ class GlassPressTest {
 
     @Test
     fun `each motion springs as designed`() {
-        assertEquals(SpringParams(0.41f, 420f), pressSpring(GlassMotion.Flex, reduced = false))
-        assertEquals(SpringParams(0.24f, 520f), pressSpring(GlassMotion.Jelly, reduced = false))
-        assertEquals(SpringParams(0.56f, 380f), pressSpring(GlassMotion.Lean, reduced = false))
-        assertEquals(SpringParams(0.41f, 420f), pressSpring(GlassMotion.Drag, reduced = false))
-        assertEquals(SpringParams(0.18f, 640f), squashSpring(reduced = false))
+        assertEquals(SpringParams(0.7f, 420f), pressSpring(GlassMotion.Flex, reduced = false))
+        assertEquals(SpringParams(0.6f, 520f), pressSpring(GlassMotion.Jelly, reduced = false))
+        assertEquals(SpringParams(0.7f, 380f), pressSpring(GlassMotion.Lean, reduced = false))
+        assertEquals(SpringParams(0.7f, 420f), pressSpring(GlassMotion.Drag, reduced = false))
+        assertEquals(SpringParams(0.45f, 640f), squashSpring(reduced = false))
         assertEquals(SpringParams(0.74f, 260f), leanSpring(reduced = false))
-        assertEquals(SpringParams(0.57f, 700f), snapSpring(reduced = false))
+        assertEquals(SpringParams(0.7f, 700f), snapSpring(reduced = false))
+    }
+
+    /** How far past its target a spring goes on its first swing, as a share of the way it came. */
+    private fun overshoot(spring: SpringParams): Double {
+        val z = spring.dampingRatio.toDouble()
+        return if (z >= 1.0) 0.0 else kotlin.math.exp(-Math.PI * z / kotlin.math.sqrt(1.0 - z * z))
+    }
+
+    @Test
+    fun `glass springs back as Apple's does, with one small bounce and no wobble`() {
+        val springs = GlassMotion.entries.map { pressSpring(it, reduced = false) } +
+            listOf(squashSpring(reduced = false), leanSpring(reduced = false), snapSpring(reduced = false))
+        for (spring in springs) {
+            // Past its rest by a fifth at most, and the swing back after that too small to see:
+            // a jelly that wobbles on and on reads as goo, not glass.
+            assertTrue("$spring overshoots by ${overshoot(spring)}", overshoot(spring) <= 0.21)
+            assertTrue("$spring swings back by ${overshoot(spring) * overshoot(spring)}", overshoot(spring) * overshoot(spring) <= 0.05)
+            // Quick enough to answer a finger and not so quick that it twitches: a response
+            // between a fifth and half a second, as Apple's springs keep to.
+            val response = 2 * Math.PI / kotlin.math.sqrt(spring.stiffness.toDouble())
+            assertTrue("$spring takes ${response}s", response in 0.2..0.5)
+        }
+        // Everything that is not the home screen's jelly is at least as calm as Apple's bounciest.
+        for (motion in listOf(GlassMotion.Flex, GlassMotion.Lean, GlassMotion.Drag)) {
+            assertTrue(pressSpring(motion, reduced = false).dampingRatio >= 0.7f)
+        }
+        assertTrue(snapSpring(reduced = false).dampingRatio >= 0.7f)
     }
 
     @Test

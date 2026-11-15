@@ -372,16 +372,14 @@ internal fun MinusBead(
     )
 }
 
-/** A drop of glass with a minus in it: see [MinusBead]. */
+/** A bead of glass with a minus in it: see [MinusBead]. */
 private fun DrawScope.drawBead(lens: GraphicsLayer?, corner: Offset, shade: android.graphics.Paint) {
     val r = BEAD.toPx() / 2f
     val c = Offset(size.width / 2f, size.height / 2f)
-    // It floats a little off what it sits on: a soft shadow under it, and a tight one at its foot.
+    // It floats a little off what it sits on, as Apple's glass does: one soft shadow, straight down.
     drawIntoCanvas {
         shade.color = android.graphics.Color.TRANSPARENT
-        shade.setShadowLayer(3.dp.toPx(), 0f, 2.dp.toPx(), android.graphics.Color.argb(87, 0, 0, 0))
-        it.nativeCanvas.drawCircle(c.x, c.y, r - 0.5f, shade)
-        shade.setShadowLayer(0.5.dp.toPx(), 0f, 0.5.dp.toPx(), android.graphics.Color.argb(51, 0, 0, 0))
+        shade.setShadowLayer(3.dp.toPx(), 0f, 1.dp.toPx(), android.graphics.Color.argb(46, 0, 0, 0))
         it.nativeCanvas.drawCircle(c.x, c.y, r - 0.5f, shade)
     }
     val round = Path().apply { addOval(Rect(c, r)) }
@@ -396,39 +394,38 @@ private fun DrawScope.drawBead(lens: GraphicsLayer?, corner: Offset, shade: andr
             }) {
                 drawLayer(lens)
             }
-            // The glass keeps a little of its paleness over what it shows, so the minus reads on
-            // a dark corner as on a light one.
-            drawRect(Color.White.copy(alpha = 0.16f))
+            // The glass keeps its paleness over what it shows, so it is the same grey bead over
+            // any corner and the minus reads on a dark one as on a light one.
+            drawRect(BEAD_GLASS.copy(alpha = BEAD_OVER_LENS))
         }
-        // Brighter towards its edge, where the glass curves away, than in its middle.
+        // Where the glass turns away at its edge it bends the light: a narrow band there, a touch
+        // brighter than its flat face. No shading, no highlight on the face: it is a sheet.
         drawCircle(
             Brush.radialGradient(
-                0f to Color.White.copy(alpha = 0.26f),
-                0.56f to Color.White.copy(alpha = 0.14f),
-                1f to Color.White.copy(alpha = 0.6f),
-                center = c + Offset(0f, r * 0.16f),
-                radius = r * 1.08f,
+                0.7f to Color.White.copy(alpha = 0f),
+                1f to Color.White.copy(alpha = 0.22f),
+                center = c,
+                radius = r,
             ),
             radius = r,
             center = c,
         )
-        // A little shade inside its foot, and the light caught near its top.
-        drawRect(
-            Brush.verticalGradient(0.6f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.14f), startY = c.y - r, endY = c.y + r),
-        )
-        drawOval(
-            Brush.radialGradient(
-                0f to Color.White,
-                0.75f to Color.White.copy(alpha = 0f),
-                center = Offset(c.x - r * 0.36f, c.y - r * 0.48f),
-                radius = r * 0.62f,
-            ),
-            topLeft = Offset(c.x - r * 0.98f, c.y - r * 0.96f),
-            size = Size(r * 1.24f, r * 0.96f),
-        )
     }
-    // Its rim, crisp and white all the way round.
-    drawCircle(Color.White, radius = r - 0.5.dp.toPx(), center = c, style = Stroke(1.dp.toPx()), alpha = 0.9f)
+    // Its rim: a hairline of light, brightest on the edge facing the light (up and to the left) and
+    // again on the edge opposite, and faint between, as on all of Zenith's glass.
+    drawCircle(
+        Brush.linearGradient(
+            0f to Color.White.copy(alpha = 0.95f),
+            0.35f to Color.White.copy(alpha = 0.28f),
+            0.65f to Color.White.copy(alpha = 0.28f),
+            1f to Color.White.copy(alpha = 0.7f),
+            start = c - Offset(r, r) * 0.71f,
+            end = c + Offset(r, r) * 0.71f,
+        ),
+        radius = r - 0.5.dp.toPx(),
+        center = c,
+        style = Stroke(1.dp.toPx()),
+    )
     val half = 5.5.dp.toPx()
     val thick = 2.5.dp.toPx()
     drawRoundRect(
@@ -442,6 +439,9 @@ private fun DrawScope.drawBead(lens: GraphicsLayer?, corner: Offset, shade: andr
 /** The bead's own glass, pale and a little see-through, as iOS's minus is. */
 private val BEAD_GLASS = Color(0x9EEEF0F6)
 private val MINUS_INK = Color(0xFF1C1C1E)
+
+/** How much of the bead's paleness lies over the corner it magnifies. */
+private const val BEAD_OVER_LENS = 0.45f
 
 /** How much bigger a bead shows the corner under it. */
 private const val LENS_POWER = 1.25f

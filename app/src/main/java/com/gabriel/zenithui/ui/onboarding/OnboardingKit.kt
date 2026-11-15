@@ -134,8 +134,8 @@ fun Lede(text: String, modifier: Modifier = Modifier) {
 
 /**
  * The one button that moves you on: a pill of the accent's tinted glass, bending the wallpaper at
- * its rim, that squishes under a finger and wobbles back, its label swapping in place when what it
- * will do changes. The glass draws its own rim and sheen.
+ * its rim, that swells and lights up under a finger and springs back, as iOS's tinted glass buttons
+ * do, its label swapping in place when what it will do changes. The glass draws its own rim.
  */
 @Composable
 fun PrimaryButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
@@ -153,7 +153,7 @@ fun PrimaryButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifi
                 material = GlassMaterial.Clear,
                 interactive = true,
                 tinted = true,
-                motion = GlassMotion.Jelly,
+                motion = GlassMotion.Flex,
             )
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,

@@ -380,7 +380,7 @@ fun GlassButton(
     filled: Boolean = false,
     leading: (@Composable () -> Unit)? = null,
     style: GlassButtonStyle = if (filled) GlassButtonStyle.Tinted else GlassButtonStyle.Regular,
-    motion: GlassMotion = if (style == GlassButtonStyle.Tinted) GlassMotion.Jelly else GlassMotion.Flex,
+    motion: GlassMotion = GlassMotion.Flex,
 ) {
     val palette = LocalPalette.current
     val contentAlpha = if (enabled) 1f else 0.4f

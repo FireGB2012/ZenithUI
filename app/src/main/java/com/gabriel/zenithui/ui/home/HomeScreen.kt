@@ -530,12 +530,15 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         holdMenu.close()
         resizingId = null
         editing = true
+        viewModel.setEditing(true)
     }
 
     fun endEdit() {
         editing = false
         customising = false
         resizingId = null
+        // Undo keeps the last change made, for the usual few seconds, and lets go of the rest.
+        viewModel.setEditing(false)
     }
 
     /** Back into its icon; only then is it gone, so the home screen is never left dimmed behind nothing. */
@@ -1834,6 +1837,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     // Picked up, the home screen is being edited, and stays so when the thing is put down.
                     holdMenu.close(pickedUp = true)
                     editing = true
+                    viewModel.setEditing(true)
                 }
                 pickedUp
             }
@@ -2168,19 +2172,17 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 // Part of the home screen, it sinks, fades and softens with it as the drawer, a
                 // folder, an app or Settings comes over it.
                 searchBand = { band ->
-                    val removed by viewModel.removed.collectAsState()
-                    val removedWhat = when (removed.size) {
-                        0 -> null
-                        1 -> "${removedName(removed.first(), appsByKey)} removed"
-                        else -> "${removed.size} things removed"
-                    }
+                    // What Undo would take back: outside edit mode the one change left over, for a
+                    // few seconds; edited, every change made, newest first, for as long as it lasts.
+                    val undo by viewModel.undoable.collectAsState()
+                    val undoShown = undo?.takeIf { editing != it.timed && !customising }
                     // Edited, the pill stretches into the bar of controls; while something is
                     // carried the bar draws back into the pill, which shows the pages, so the
                     // dock is free to be dropped on.
                     val barShown = editing && !drag.isDragging && !customising
                     Box(band.zIndex(1f), contentAlignment = Alignment.Center) {
                         AnimatedVisibility(
-                            visible = !barShown && (removedWhat == null || editing),
+                            visible = !barShown && (undoShown == null || editing),
                             enter = bandSwapIn(motion.reduced),
                             exit = bandSwapOut(motion.reduced),
                         ) {
@@ -2202,10 +2204,13 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                             )
                         }
                         UndoPill(
-                            what = removedWhat,
-                            key = removed.firstOrNull()?.id,
+                            what = undoShown?.label,
+                            key = undoShown?.key,
                             millis = com.gabriel.zenithui.data.UNDO_MS,
-                            onUndo = { viewModel.undoRemove().firstOrNull()?.let { back -> revealPage(back.page) } },
+                            more = undoShown?.more ?: 0,
+                            timed = undoShown?.timed ?: true,
+                            // It happened on another page: the screen turns there to show it undone.
+                            onUndo = { viewModel.undo().firstOrNull()?.let { back -> revealPage(back.page) } },
                             // Edited, Undo stands just above the bar rather than in its place.
                             modifier = Modifier.padding(horizontal = 16.dp).offset(y = if (editing) (-56).dp else 0.dp),
                         )

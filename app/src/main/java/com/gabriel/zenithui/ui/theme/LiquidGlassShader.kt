@@ -85,6 +85,8 @@ internal class LiquidGlassShader(val levels: GlassLevels) {
         squircleN: Float = SQUIRCLE_EXPONENT,
         /** A ring of light from a tap on the wallpaper, its centre in pane pixels, or null for none. */
         ring: RingNow? = null,
+        /** How much darker the wallpaper is drawn under the home screen ([LocalWallpaperDim]): 0 for not at all. */
+        dim: Float = 0f,
     ) {
         if (size.width <= 0f || size.height <= 0f || screen.width <= 0 || screen.height <= 0) return
         // The wallpaper as Android shows it: centre-cropped to fill the screen, zoomed a little
@@ -130,6 +132,8 @@ internal class LiquidGlassShader(val levels: GlassLevels) {
         shader.setFloatUniform("ringRadius", ring?.radius ?: 0f)
         shader.setFloatUniform("ringWidth", ring?.width ?: 1f)
         shader.setFloatUniform("ringStrength", (ring?.strength ?: 0f).coerceIn(0f, 1f))
+        // Set on every draw, so glass off the home screen never keeps the home screen's dimming.
+        shader.setFloatUniform("dim", dim.coerceIn(0f, 1f))
         when (outline) {
             is Outline.Rounded -> {
                 val r = outline.roundRect
@@ -202,6 +206,7 @@ internal class LiquidGlassShader(val levels: GlassLevels) {
             uniform float ringRadius;
             uniform float ringWidth;
             uniform float ringStrength;
+            uniform float dim;
 
             // Signed distance to the outline: negative inside, in pixels.
             float edgeDistance(float2 point) {
@@ -223,7 +228,7 @@ internal class LiquidGlassShader(val levels: GlassLevels) {
             // What is behind a point, as soft as asked: 0 is the picture as it is, 3 little but
             // its colours. The pictures either side of that softness are blended, which is a true
             // blur of any strength for the price of two lookups.
-            float3 behind(float2 point, float soft) {
+            float3 picture(float2 point, float soft) {
                 float2 uv = (point + origin) * imageScale;
                 if (soft < 1.0) {
                     return mix(wallpaper.eval(uv).rgb, misted.eval(uv * mistRatio).rgb, max(soft, 0.0));
@@ -232,6 +237,11 @@ internal class LiquidGlassShader(val levels: GlassLevels) {
                     return mix(misted.eval(uv * mistRatio).rgb, frosted.eval(uv * frostRatio).rgb, soft - 1.0);
                 }
                 return mix(frosted.eval(uv * frostRatio).rgb, hazed.eval(uv * hazeRatio).rgb, min(soft - 2.0, 1.0));
+            }
+
+            // The wallpaper as the screen shows it: under a dimming veil, when one is asked for.
+            float3 behind(float2 point, float soft) {
+                return picture(point, soft) * (1.0 - dim);
             }
 
             half4 main(float2 point) {
@@ -279,7 +289,7 @@ internal class LiquidGlassShader(val levels: GlassLevels) {
 
                 // What is round this point, with only its colours left: in the face what is behind
                 // it and about it, towards the rim what lies beyond the edge on that side.
-                float3 air = hazed.eval((point + normal * bevel * t + origin) * imageScale * hazeRatio).rgb;
+                float3 air = hazed.eval((point + normal * bevel * t + origin) * imageScale * hazeRatio).rgb * (1.0 - dim);
 
                 // Glass gathers light. What is dark behind it comes through a little brighter,
                 // keeping its colour, and whatever round it is brighter still spills a little of
@@ -312,7 +322,7 @@ internal class LiquidGlassShader(val levels: GlassLevels) {
                 // out. Softened and a touch richer, as a reflection in the edge of a tumbler is.
                 if (t > 0.0 && mirror > 0.0) {
                     float2 beside = point + normal * (inside * 2.6 + 3.0 * density) + lean * 14.0 * density;
-                    float3 thrown = frosted.eval((beside + origin) * imageScale * frostRatio).rgb;
+                    float3 thrown = frosted.eval((beside + origin) * imageScale * frostRatio).rgb * (1.0 - dim);
                     float bright = dot(thrown, float3(0.2126, 0.7152, 0.0722));
                     thrown = mix(float3(bright), thrown, 1.3);
                     color = mix(color, clamp(thrown, 0.0, 1.0), mirror * presence * t * t * t);

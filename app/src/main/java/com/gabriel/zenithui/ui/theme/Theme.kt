@@ -56,6 +56,13 @@ internal val LocalLens = staticCompositionLocalOf<LiquidGlassShader?> { null }
 /** Android's current wallpaper scroll, read during drawing so paging only invalidates the material. */
 val LocalWallpaperOffset = staticCompositionLocalOf<State<Offset>> { mutableStateOf(Offset(0.5f, 0.5f)) }
 
+/**
+ * How much darker the home screen draws the wallpaper (Customise's "Dim the wallpaper"): 0 for not
+ * at all. Glass shows its own copy of the wallpaper, not the veil laid over it, so it darkens that
+ * copy by as much. Read while drawing, so the veil fading in redraws only the glass.
+ */
+val LocalWallpaperDim = staticCompositionLocalOf<State<Float>> { mutableStateOf(0f) }
+
 /** Size of the window in pixels, so glass panels can align the backdrop to the screen. */
 val LocalScreenSize = staticCompositionLocalOf { IntSize.Zero }
 

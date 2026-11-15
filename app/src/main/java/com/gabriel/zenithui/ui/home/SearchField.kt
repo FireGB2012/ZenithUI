@@ -131,6 +131,7 @@ import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.LocalScreenSize
 import com.gabriel.zenithui.ui.theme.LocalTilt
 import com.gabriel.zenithui.ui.theme.LocalWallColour
+import com.gabriel.zenithui.ui.theme.LocalWallpaperDim
 import com.gabriel.zenithui.ui.theme.LocalWallpaperOffset
 import com.gabriel.zenithui.ui.theme.LocalZenithFont
 import com.gabriel.zenithui.ui.theme.WALLPAPER_VEIL
@@ -247,6 +248,7 @@ fun SearchField(
     val backdrop = LocalBackdrop.current
     val screen = LocalScreenSize.current
     val wallpaperOffset = LocalWallpaperOffset.current
+    val wallpaperDim = LocalWallpaperDim.current
     val tilt = LocalTilt.current
     val tuning = LocalGlassTuning.current
     val savedWall = LocalWallColour.current
@@ -312,6 +314,7 @@ fun SearchField(
                         savedWall = savedWall,
                         lean = tilt.value,
                         tuning = tuning,
+                        dim = wallpaperDim.value,
                     )
                     if (stretch) {
                         val words = (1f - p / PILL_WORDS_GONE).coerceIn(0f, 1f)
@@ -629,6 +632,7 @@ private fun DrawScope.drawFieldGlass(
     savedWall: Color,
     lean: Offset,
     tuning: GlassTuning,
+    dim: Float,
 ) {
     val pane = at.size
     if (pane.width < 1f || pane.height < 1f || look.opacity <= 0f) return
@@ -670,6 +674,7 @@ private fun DrawScope.drawFieldGlass(
                 dark = true,
                 tuning = tuning,
                 wall = wall,
+                dim = dim,
             )
         }
     }

@@ -165,6 +165,7 @@ import com.gabriel.zenithui.ui.settings.LookActions
 import com.gabriel.zenithui.ui.settings.SettingsActions
 import com.gabriel.zenithui.ui.settings.SettingsPreview
 import com.gabriel.zenithui.ui.settings.SettingsScreen
+import com.gabriel.zenithui.ui.theme.LocalWallpaperDim
 import com.gabriel.zenithui.ui.theme.LocalWallpaperOffset
 import com.gabriel.zenithui.ui.theme.ZenithShapes
 import com.gabriel.zenithui.ui.theme.glass
@@ -188,7 +189,6 @@ import com.gabriel.zenithui.ui.settings.AccountActions
  */
 private val PAGE_FLIP_EDGE = 16.dp
 
-/** How far the home screen sinks back while an app opens out of it. */
 /** Coming home longer than this after opening an app does not shrink it back into its icon. */
 private const val CLOSE_WINDOW_MS = 30 * 60 * 1000L
 
@@ -210,6 +210,9 @@ private val PAGE_MARGIN = 12.dp
  * casts, and the bin itself when it swells.
  */
 private val BAR_ROOM = 28.dp
+
+/** How dark the veil over the wallpaper is when Customise's "Dim the wallpaper" is on. */
+private const val WALLPAPER_DIM = 0.3f
 
 /** How long the home screen must be left alone before a scheduled Look goes on. */
 private const val LOOK_DUE_WAIT_MS = 1500L
@@ -1849,7 +1852,10 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         )
     }
 
-    CompositionLocalProvider(LocalWidgetWorld provides widgetWorld) {
+    // The wallpaper a little darker, when Customise has been asked for that: a veil over it, under
+    // everything that stands on it, and the same darkening on the copy of it the glass shows.
+    val dimmed = animateFloatAsState(if (settings.dimWallpaper) WALLPAPER_DIM else 0f, tween(300), label = "dimWallpaper")
+    CompositionLocalProvider(LocalWidgetWorld provides widgetWorld, LocalWallpaperDim provides dimmed) {
     Box(
         Modifier
             .fillMaxSize()
@@ -1930,12 +1936,10 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         // A wallpaper changing with the theme fades in here, behind everything.
         WallpaperFade(wallpaperIncoming, wallpaperOffset)
 
-        // The wallpaper a little darker, when Customise has been asked for that: a veil over it and
-        // under everything that stands on it.
-        val dimmed by animateFloatAsState(if (settings.dimWallpaper) 0.3f else 0f, tween(300), label = "dimWallpaper")
-        if (dimmed > 0.001f) {
+        // The veil that dims the wallpaper; the glass darkens its own copy by as much.
+        if (dimmed.value > 0.001f) {
             androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
-                drawRect(androidx.compose.ui.graphics.Color.Black.copy(alpha = dimmed))
+                drawRect(androidx.compose.ui.graphics.Color.Black.copy(alpha = dimmed.value))
             }
         }
 

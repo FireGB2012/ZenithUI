@@ -154,8 +154,6 @@ import com.gabriel.zenithui.data.findActivity
 import com.gabriel.zenithui.ui.common.LaunchOrigin
 import com.gabriel.zenithui.ui.common.Motion
 import com.gabriel.zenithui.ui.common.appearIn
-import com.gabriel.zenithui.ui.common.edgeIn
-import com.gabriel.zenithui.ui.common.edgeOut
 import com.gabriel.zenithui.ui.common.pressBounce
 import com.gabriel.zenithui.ui.common.wordsChange
 import com.gabriel.zenithui.ui.theme.LocalPalette
@@ -203,13 +201,6 @@ private const val REORDER_DELAY = 280L
 
 /** The space between the edge of the screen and the page, the dock and everything else on it. */
 private val PAGE_MARGIN = 12.dp
-
-/**
- * The room left round a bar of glass that fades as it comes and goes. While it fades it is drawn
- * through a layer of its own, which cuts off whatever reaches past its edges: the shadow the glass
- * casts, and the bin itself when it swells.
- */
-private val BAR_ROOM = 28.dp
 
 /** How dark the veil over the wallpaper is when Customise's "Dim the wallpaper" is on. */
 private const val WALLPAPER_DIM = 0.3f
@@ -561,7 +552,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         }
         holdMenu.close()
         resizingId = null
-        beginEditing(at)
+        if (!editing) beginEditing(at)
     }
 
     /**
@@ -1789,7 +1780,11 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     HoldDo.SHORTCUT -> holdShortcuts.getOrNull(row.index)?.let { launchApp(it.key) }
                     HoldDo.EDIT_HOME -> startEdit(open.frame.center)
                     HoldDo.EDIT_NAME -> appKey?.let { showSheet(HomeSheet.EditApp(it)) }
-                    HoldDo.RESIZE -> resizingId = id
+                    // Into edit mode, with this app's corner out as well as the widgets'.
+                    HoldDo.RESIZE -> {
+                        startEdit(open.frame.center)
+                        if (editing) resizingId = id
+                    }
                     HoldDo.ADD_TO_HOME -> appKey?.let { key ->
                         val page = viewModel.addAppToFirstFreeSlot(key)
                         if (page == null) Toast.makeText(context, "Every page is full", Toast.LENGTH_SHORT).show() else revealPage(page)
@@ -2158,6 +2153,13 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                                     },
                                     onRestoreWidget = { item, info -> viewModel.addHostedWidget(info, replacing = item.id) },
                                     onResizeDone = { resizingId = null },
+                                    onResizePull = { item, starting ->
+                                        if (starting) {
+                                            viewModel.beginChange()
+                                        } else {
+                                            viewModel.endChange({ "${viewModel.nameOf(item.id)} resized" })
+                                        }
+                                    },
                                     onGathered = { haptic.tick() },
                                     onOpenApp = { launchApp(it) },
                                     onOpenFolder = { folder, icon -> openFolder(folder.id, icon) },
@@ -2466,58 +2468,6 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 onCopy = { text -> copyAnswer(text) },
                 onShrunk = { searchShown = false },
                 iconShape = ZenithShapes.forIconShape(settings.iconShape),
-            )
-        }
-
-        // Down from the top edge while something is being resized, and back up when it is done.
-        AnimatedVisibility(
-            visible = resizingId != null,
-            enter = edgeIn(motion.reduced),
-            exit = edgeOut(motion.reduced),
-            modifier = Modifier.align(Alignment.TopCenter),
-        ) {
-            Row(
-                Modifier
-                    .statusBarsPadding()
-                    .padding(start = BAR_ROOM, top = 12.dp, end = BAR_ROOM, bottom = BAR_ROOM)
-                    .pressBounce(0.96f)
-                    .glass(ZenithShapes.pill, strength = 1.2f, solid = 0.4f)
-                    .clickable { resizingId = null }
-                    .padding(horizontal = 20.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = "Pull the pointer to resize · tap to finish",
-                    color = palette.onGlass,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium,
-                )
-            }
-        }
-
-        // The same thing in taps: a widget's named sizes, and arrows that move it a cell at a time.
-        // It comes up from the foot of the screen, and on its way back down it is still the bar
-        // for whatever was last being resized.
-        val reshaping = resizingId?.let { id -> layout.firstOrNull { it.id == id } }
-        val reshaped = remember { arrayOfNulls<HomeItem>(1) }
-        if (reshaping != null) reshaped[0] = reshaping
-        AnimatedVisibility(
-            visible = reshaping != null,
-            enter = edgeIn(motion.reduced, fromFoot = true),
-            exit = edgeOut(motion.reduced, toFoot = true),
-            modifier = Modifier.align(Alignment.BottomCenter),
-        ) {
-            val item = reshaped[0]
-            if (item != null) ResizeBar(
-                item = item,
-                columns = settings.columns,
-                rows = settings.rows,
-                onSize = { size -> viewModel.resizeWidgetTo(item.id, size.spanX, size.spanY) },
-                onNudge = { dCol, dRows -> viewModel.nudgeItem(item.id, dCol, dRows) },
-                onDone = { resizingId = null },
-                modifier = Modifier
-                    .navigationBarsPadding()
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
             )
         }
 

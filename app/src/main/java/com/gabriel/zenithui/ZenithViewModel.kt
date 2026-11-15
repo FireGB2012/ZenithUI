@@ -1778,19 +1778,7 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     /**
-     * Moves an item one cell across or one row up or down from the resize bar. A row is a whole
-     * row, or a quarter of one with free placement on. False when the page ends there or
-     * something is in the way.
-     */
-    fun nudgeItem(id: String, dCol: Int, dRows: Int): Boolean {
-        val s = settings.value
-        val next = Reshape.nudged(layout.value, id, dCol, dRows * rowStep(), s.columns, s.rows) ?: return false
-        if (next != layout.value) store.setLayout(next)
-        return true
-    }
-
-    /**
-     * Resizes an app icon where it stands, for the resize pointer: [spanX] columns wide and [rows]
+     * Resizes an app icon where it stands, for its corner: [spanX] columns wide and [rows]
      * whole rows tall, anything up to the whole page. 1 by 1 is an ordinary icon; anything bigger is
      * a super icon, stretched to fill it. It never moves the icon — it is under your finger — so a
      * size with no room is refused, and false comes back.

@@ -127,7 +127,20 @@ each thing settles as it reaches it, its wiggle dying away like water going stil
 sinking. Anything off the screen wakes or settles at once, as everything does with movement reduced,
 and leaving for the bedside clock or Settings from Customise settles it all at once.
 
-Still to come in this part: the corner to pull.
+Widgets show a corner to pull, the arc of white the mockup has hugging each one's bottom right
+corner, coming with the bead as the wave wakes it and drawing back into the corner as edit mode
+ends. Pulled, it follows the finger and the widget snaps to whole cells and rows as it passes them
+(any number of quarter rows with free placement), with a light tick; while it is pulled the widget
+stops wiggling and stands over its neighbours, a thin outline shows the size asked for, red where
+there is no room rather than pushing anything aside, and a capsule of glass above the finger says
+the size (“2 × 3”). Let go, the corner grows back where the finger left it and glides onto the
+widget's. A whole pull is one change for Undo (“Battery resized”). “Resize” in an app's menu starts
+edit mode with that app's corner out instead of its bead; a tap on it, or on the wallpaper, puts the
+corner away and edit mode carries on. To a screen reader the corner is “Resize Battery” with its
+size, and offers Wider, Narrower, Taller and Shorter, as far as the page goes (`Reshape.steps`). The
+resize bar, its arrows and the old pointer are gone; a widget's named sizes are still in its menu.
+
+Part 2 is built.
 
 The plan for the whole part:
 

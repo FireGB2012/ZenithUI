@@ -1972,11 +1972,18 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
 
     private fun dockLimit(): Int = LayoutBuilder.dockLimit(settings.value.columns)
 
-    /** Adds [key] to the dock or takes it off. False when it was to be added and the dock is full. */
+    /**
+     * Adds [key] to the dock or takes it off. False when it was to be added and the dock is full.
+     * Taken off, it is a removal Undo can take back, as one taken off a page is.
+     */
     fun toggleDock(key: String): Boolean {
         val dock = settings.value.dock
         if (key !in dock && dock.size >= dockLimit()) return false
-        store.update { it.copy(dock = if (key in it.dock) it.dock - key else it.dock + key) }
+        val leaving = key in dock
+        val name = { appsByKey()[key]?.label ?: "App" }
+        change({ if (leaving) "${name()} removed" else "${name()} added" }, removal = leaving) {
+            store.update { it.copy(dock = if (key in it.dock) it.dock - key else it.dock + key) }
+        }
         return true
     }
 

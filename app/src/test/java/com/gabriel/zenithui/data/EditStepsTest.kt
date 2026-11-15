@@ -96,6 +96,14 @@ class EditStepsTest {
     }
 
     @Test
+    fun `an app taken off the dock comes back to its place in it`() {
+        val before = at(mail, dock = listOf("com.phone/.Main", "com.mail/.Main", "com.web/.Main"))
+        val after = at(mail, dock = listOf("com.phone/.Main", "com.web/.Main"))
+        val step = EditSteps.of("Mail removed", before, after)!!
+        assertEquals(before, undo(step, after))
+    }
+
+    @Test
     fun `a dock the step left alone keeps what happened to it since`() {
         val before = at(mail, maps, dock = listOf("com.phone/.Main"))
         val after = at(mail.moved(0, 2, 0), maps, dock = listOf("com.phone/.Main"))

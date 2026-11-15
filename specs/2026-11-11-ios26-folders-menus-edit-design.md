@@ -96,9 +96,28 @@ the brush Customise, the dots the pages, Done ends it) and draws back into the p
 something is carried. Edited, a thing is picked up the moment the finger moves on it, with no hold,
 on the page and in the dock; held still, its menu still comes. A tap opens nothing but a folder. Done,
 a tap on the wallpaper, Back and the home button end it. With the layout locked, a hold on the
-wallpaper says "The layout is locked" in a capsule of glass with "Unlock". The bin is gone. Undo
-stands just above the bar. Still to come in this part: the Customise card, the corner to pull, the
-wave, the glass beads and their pop, and Undo for every change.
+wallpaper says "The layout is locked" in a capsule of glass with "Unlock". The bin is gone.
+
+Customise is a card at the foot of the screen; the glass on the home screen sees the wallpaper as
+dimmed as it is, so with "Dim the wallpaper" on the panes darken with it, and the ways on wrap onto
+a second line when they do not fit on one. Undo, while editing, takes back every change in turn
+(something moved, dropped, made into a folder, taken out of one, resized, added or taken off, a page
+moved or taken away, the dock) and says how many there are behind it ("Mail moved +2"); it stands
+just above the bar. Taking a change back puts back only what it touched, so anything that has
+changed since without it stays as it is. Outside edit mode only a removal is offered, for five
+seconds, as before, and leaving edit mode leaves the last change on offer the same way. Taking an
+app off the dock is a removal like any other, so Undo puts it back too.
+
+The minuses are beads of glass. Each wells up out of its corner like a drop (tiny and tucked in,
+then out, wide, tall and still) and sinks back as edit mode ends, and shows the corner under it a
+quarter bigger, on the page and in the dock. What a minus takes off pops like a soap bubble where
+it stood: a quick swell as it brightens, then a ring that spreads and fades, with a few droplets,
+and fewer when several go within a second. Undo blows it back together: the ring and droplets close
+in and it forms again with a wobble, and its bead wells up once it has. Anything that leaves the
+page another way (into the dock, a folder or another page) still shrinks away. With movement
+reduced it fades.
+
+Still to come in this part: the corner to pull and the wave.
 
 The plan for the whole part:
 

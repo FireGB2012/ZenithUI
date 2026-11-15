@@ -1,6 +1,18 @@
 package com.gabriel.zenithui.ui.home
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.graphics.layer.GraphicsLayer
+import androidx.compose.ui.graphics.layer.drawLayer
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -233,20 +245,42 @@ internal val BEAD_TOUCH = 41.dp
 
 /**
  * The minus on the corner of everything that can be taken off the home screen, while it is being
- * edited: a small bead that wells up on its corner, and asks before it removes anything. It is
- * given a box [BEAD_TOUCH] across, centred on the corner, so it is easy to hit; the bead is drawn in
- * the middle of that.
+ * edited: a bead of glass that wells up out of the corner like a drop, magnifying the corner under
+ * it, and asks before it removes anything. It is given a box [BEAD_TOUCH] across, centred on the
+ * corner, so it is easy to hit; the bead is drawn in the middle of that.
+ *
+ * [lens] is what the bead sits on, drawn into a layer, and [corner] where in that layer the bead's
+ * middle is: the bead shows that corner a quarter bigger, as a drop of glass would. Without one the
+ * bead is clear glass over the wallpaper.
  */
 @Composable
-internal fun MinusBead(shown: Boolean, name: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+internal fun MinusBead(
+    shown: Boolean,
+    name: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    lens: GraphicsLayer? = null,
+    corner: Offset = Offset.Zero,
+) {
     val reduced = LocalMotionLevel.current.reduced
-    val up by animateFloatAsState(
-        targetValue = if (shown) 1f else 0f,
-        animationSpec = if (reduced) tween(Motion.REDUCED_MS) else spring(dampingRatio = if (shown) 0.55f else 1f, stiffness = 420f),
-        label = "bead",
-    )
-    if (!shown && up <= 0.01f) return
+    // Welling up, 0 to 1, and sinking back, 0 to 1; one already up when it is first seen, on a page
+    // turned to in edit mode, is simply there.
+    val up = remember { Animatable(if (shown) 1f else 0f) }
+    val down = remember { Animatable(0f) }
+    LaunchedEffect(shown) {
+        if (shown) {
+            if (down.value > 0f) up.snapTo(0f)
+            down.snapTo(0f)
+            up.animateTo(1f, tween(if (reduced) Motion.REDUCED_MS else BeadMotion.WELL_UP_MS, easing = LinearEasing))
+        } else if (up.value > 0f) {
+            down.animateTo(1f, tween(if (reduced) Motion.REDUCED_MS else BeadMotion.SINK_MS, easing = LinearEasing))
+            up.snapTo(0f)
+            down.snapTo(0f)
+        }
+    }
+    if (!shown && up.value <= 0f) return
     val tick = rememberTick()
+    val shade = remember { android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG) }
     Box(
         modifier
             .size(BEAD_TOUCH)
@@ -266,29 +300,94 @@ internal fun MinusBead(shown: Boolean, name: String, onClick: () -> Unit, modifi
             )
             .semantics { contentDescription = "Remove $name" }
             .graphicsLayer {
-                alpha = up.coerceIn(0f, 1f)
-                val s = if (reduced) 1f else 0.2f + 0.8f * up
-                scaleX = s
-                scaleY = s
+                val pose = when {
+                    reduced -> BeadMotion.Pose(up.value * (1f - down.value), 0f, 0f, 1f, 1f)
+                    down.value > 0f -> BeadMotion.sink(down.value)
+                    else -> BeadMotion.wellUp(up.value)
+                }
+                alpha = pose.alpha
+                translationX = pose.dx.dp.toPx()
+                translationY = pose.dy.dp.toPx()
+                scaleX = pose.scaleX
+                scaleY = pose.scaleY
             }
-            .drawBehind {
-                val r = BEAD.toPx() / 2f
-                val c = Offset(size.width / 2f, size.height / 2f)
-                // A soft shadow, the pale bead, a bright rim on its upper edge, and the minus.
-                drawCircle(Color.Black.copy(alpha = 0.22f), radius = r + 1.dp.toPx(), center = c + Offset(0f, 1.5.dp.toPx()))
-                drawCircle(Color(0xFFEEF0F6), radius = r, center = c)
-                drawCircle(Color.White, radius = r - 0.5.dp.toPx(), center = c, style = androidx.compose.ui.graphics.drawscope.Stroke(1.dp.toPx()), alpha = 0.9f)
-                val half = 5.5.dp.toPx()
-                val thick = 2.5.dp.toPx()
-                drawRoundRect(
-                    Color(0xFF1C1C1E),
-                    topLeft = Offset(c.x - half, c.y - thick / 2f),
-                    size = Size(half * 2f, thick),
-                    cornerRadius = CornerRadius(thick / 2f),
-                )
-            },
+            .drawBehind { drawBead(lens, corner, shade) },
     )
 }
+
+/** A drop of glass with a minus in it: see [MinusBead]. */
+private fun DrawScope.drawBead(lens: GraphicsLayer?, corner: Offset, shade: android.graphics.Paint) {
+    val r = BEAD.toPx() / 2f
+    val c = Offset(size.width / 2f, size.height / 2f)
+    // It floats a little off what it sits on: a soft shadow under it, and a tight one at its foot.
+    drawIntoCanvas {
+        shade.color = android.graphics.Color.TRANSPARENT
+        shade.setShadowLayer(3.dp.toPx(), 0f, 2.dp.toPx(), android.graphics.Color.argb(87, 0, 0, 0))
+        it.nativeCanvas.drawCircle(c.x, c.y, r - 0.5f, shade)
+        shade.setShadowLayer(0.5.dp.toPx(), 0f, 0.5.dp.toPx(), android.graphics.Color.argb(51, 0, 0, 0))
+        it.nativeCanvas.drawCircle(c.x, c.y, r - 0.5f, shade)
+    }
+    val round = Path().apply { addOval(Rect(c, r)) }
+    clipPath(round) {
+        // Pale glass, and through it the corner it sits on, a quarter bigger.
+        drawRect(BEAD_GLASS)
+        if (lens != null) {
+            withTransform({
+                translate(c.x, c.y)
+                scale(LENS_POWER, LENS_POWER, pivot = Offset.Zero)
+                translate(-corner.x, -corner.y)
+            }) {
+                drawLayer(lens)
+            }
+            // The glass keeps a little of its paleness over what it shows, so the minus reads on
+            // a dark corner as on a light one.
+            drawRect(Color.White.copy(alpha = 0.16f))
+        }
+        // Brighter towards its edge, where the glass curves away, than in its middle.
+        drawCircle(
+            Brush.radialGradient(
+                0f to Color.White.copy(alpha = 0.26f),
+                0.56f to Color.White.copy(alpha = 0.14f),
+                1f to Color.White.copy(alpha = 0.6f),
+                center = c + Offset(0f, r * 0.16f),
+                radius = r * 1.08f,
+            ),
+            radius = r,
+            center = c,
+        )
+        // A little shade inside its foot, and the light caught near its top.
+        drawRect(
+            Brush.verticalGradient(0.6f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.14f), startY = c.y - r, endY = c.y + r),
+        )
+        drawOval(
+            Brush.radialGradient(
+                0f to Color.White,
+                0.75f to Color.White.copy(alpha = 0f),
+                center = Offset(c.x - r * 0.36f, c.y - r * 0.48f),
+                radius = r * 0.62f,
+            ),
+            topLeft = Offset(c.x - r * 0.98f, c.y - r * 0.96f),
+            size = Size(r * 1.24f, r * 0.96f),
+        )
+    }
+    // Its rim, crisp and white all the way round.
+    drawCircle(Color.White, radius = r - 0.5.dp.toPx(), center = c, style = Stroke(1.dp.toPx()), alpha = 0.9f)
+    val half = 5.5.dp.toPx()
+    val thick = 2.5.dp.toPx()
+    drawRoundRect(
+        MINUS_INK,
+        topLeft = Offset(c.x - half, c.y - thick / 2f),
+        size = Size(half * 2f, thick),
+        cornerRadius = CornerRadius(thick / 2f),
+    )
+}
+
+/** The bead's own glass, pale and a little see-through, as iOS's minus is. */
+private val BEAD_GLASS = Color(0x9EEEF0F6)
+private val MINUS_INK = Color(0xFF1C1C1E)
+
+/** How much bigger a bead shows the corner under it. */
+private const val LENS_POWER = 1.25f
 
 /** A few words said over the home screen for a moment, with one thing to do about them, or none. */
 data class HomeToast(val words: String, val action: String? = null, val onAction: () -> Unit = {})

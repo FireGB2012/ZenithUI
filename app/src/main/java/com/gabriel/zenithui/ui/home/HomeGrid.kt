@@ -5,6 +5,7 @@ import com.gabriel.zenithui.ui.common.WideAppIcon
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutLinearInEasing
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.VectorConverter
 import androidx.compose.animation.core.animateFloatAsState
@@ -45,6 +46,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.key
 import androidx.compose.runtime.getValue
@@ -80,6 +82,8 @@ import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.layer.drawLayer
+import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.PointerInputScope
@@ -90,6 +94,7 @@ import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
@@ -400,6 +405,27 @@ private const val COPY_ALPHA_OVER_BIN = 0.32f
 private fun carriedScale(item: HomeItem): Float =
     if (item.isWidgetLike || (item is AppCell && !item.isPlainIcon)) 1.02f else 1.14f
 
+/** How far inside an item's corner its bead's lens looks. */
+private val LENS_BIAS = 3.dp
+
+/** How far into blowing back together something is formed, and its bead can well up. */
+private const val BACK_FORMED = 0.7f
+
+/** The middle of [frame], for a layer [size] big to grow and turn round. */
+private fun originOf(frame: PxRect, size: Size): TransformOrigin =
+    if (size.width <= 0f || size.height <= 0f) {
+        TransformOrigin.Center
+    } else {
+        TransformOrigin((frame.left + frame.right) / 2f / size.width, (frame.top + frame.bottom) / 2f / size.height)
+    }
+
+/** Where what [item] shows stands in its cell: its icon, its super icon or its widget's pane. */
+private fun frameOf(item: HomeItem, geometry: HomeGeometry): PxRect = when {
+    item.isWidgetLike -> geometry.widgetFrame(item.spanX, item.spanY)
+    item is AppCell && !item.isPlainIcon -> geometry.superIconFrame(item.spanX, (item.spanY / ROW_UNITS).coerceAtLeast(1))
+    else -> geometry.iconFrame
+}
+
 /**
  * What has just left a page: thrown away, put in the dock, made into a folder, taken off from its
  * own menu. Each is kept just long enough to be seen going, where it stood. Without this an item
@@ -428,6 +454,44 @@ private class Departures(first: List<HomeItem>) {
 
     fun gone(item: HomeItem) {
         if (going.remove(item)) finished++
+    }
+}
+
+/**
+ * Apps just taken off the dock by their minus, each popping where it was last seen while the others
+ * close up. Only one whose pop was asked for ([Bubbles]) and that was seen in its place pops; any
+ * other app that leaves the dock simply goes, as it always has.
+ */
+@Stable
+private class DockPops(first: List<String>) {
+    /** An app popping: its key, where it was across the dock and how far off its line, and its spray. */
+    class Pop(val key: String, val left: Float, val down: Float, val droplets: Int)
+
+    private var before = first
+    private val going = ArrayList<Pop>()
+
+    /** Goes up when one has finished popping, so the dock is composed again without it. */
+    private var finished by mutableIntStateOf(0)
+
+    /** Told the dock's apps [now], and where each was last [seenAt], says which are popping. */
+    fun after(now: List<String>, seenAt: Map<String, FloatArray>, bubbles: Bubbles?): List<Pop> {
+        finished
+        if (now != before) {
+            for (key in before) {
+                if (key in now || going.any { it.key == key }) continue
+                val seen = seenAt[key] ?: continue
+                val pop = bubbles?.takePop(dockBubble(key)) ?: continue
+                going += Pop(key, seen[0], seen[1], pop.droplets)
+            }
+            // Put back before it had finished popping: it is simply there again.
+            going.removeAll { it.key in now }
+            before = now
+        }
+        return if (going.isEmpty()) emptyList() else going.toList()
+    }
+
+    fun gone(pop: Pop) {
+        if (going.remove(pop)) finished++
     }
 }
 
@@ -461,6 +525,8 @@ fun HomePage(
     onBead: (HomeItem) -> Unit = {},
     /** The minuses show. Not while Customise is up: the home screen is being looked at, not arranged. */
     beads: Boolean = true,
+    /** What has just been taken off pops like a bubble, and what Undo has just put back blows back together. */
+    bubbles: Bubbles? = null,
     onSearch: () -> Unit,
     onNoteChange: (String) -> Unit,
     onAmbient: () -> Unit,
@@ -724,17 +790,25 @@ fun HomePage(
                     ring.snapTo(1f)
                 }
             }
-            val ringFrame = when {
-                item.isWidgetLike -> geometry.widgetFrame(item.spanX, item.spanY)
-                item is AppCell && !item.isPlainIcon -> geometry.superIconFrame(item.spanX, (item.spanY / ROW_UNITS).coerceAtLeast(1))
-                else -> geometry.iconFrame
-            }
+            val ringFrame = frameOf(item, geometry)
             val ringRound = item is FolderCell || item is ShortcutCell || (item is AppCell && item.isPlainIcon)
+            // Brought back by Undo, it blows back together where it stood: its droplets fly in, and
+            // it forms again with a wobble. Its bead wells up once it has.
+            val returning = remember { !reduced && bubbles?.takeReturn(item.id) == true }
+            val back = remember { Animatable(if (returning) 0f else 1f) }
+            if (returning) {
+                LaunchedEffect(Unit) { back.animateTo(1f, tween(BeadMotion.BACK_MS, easing = LinearEasing)) }
+            }
+            val formed by remember { derivedStateOf { back.value >= BACK_FORMED } }
             // The gestures below outlive recompositions: they ask for the frame as it is now.
             val liveFrame by rememberUpdatedState(ringFrame)
             val opens = item.launchKey
             val makingWay = carriedCovered && item.id == dragged?.id
             val wayAlpha by animateFloatAsState(if (makingWay) 0f else 1f, tween(140), label = "makingWay")
+            // While its bead is out, what the item draws is kept in a layer too, for the bead to show
+            // its corner magnified.
+            val lens = rememberGraphicsLayer()
+            val lensing = editing && beads && item !is FolderCell
 
             Box(
                 Modifier
@@ -745,8 +819,26 @@ fun HomePage(
                     .requiredSize(cellWidthDp * item.spanX, cellHeightDp * item.spanY)
                     .onGloballyPositioned { cellRoot = it.positionInRoot() }
                     .then(
-                        // One that arrives by being let go here already has its landing.
-                        if ((animateEntrance || item.id !in firstIds) && !arrivedByDrop) {
+                        // Over what is forming, and not grown or shrunk with it.
+                        if (returning) {
+                            Modifier.drawWithContent {
+                                drawContent()
+                                val float = TiltRest.parallaxShift(parallax.value, ITEM_FLOAT_DP, density.density)
+                                translate(float.x, float.y) {
+                                    drawBurst(
+                                        burstCentre(ringFrame), burstSpan(ringFrame), back.value * BeadMotion.BACK_MS,
+                                        BeadMotion.BACK_DROPLETS, inward = true,
+                                    )
+                                }
+                            }
+                        } else {
+                            Modifier
+                        }
+                    )
+                    .then(
+                        // One that arrives by being let go here already has its landing, and one
+                        // Undo brings back its bubble.
+                        if ((animateEntrance || item.id !in firstIds) && !arrivedByDrop && !returning) {
                             Modifier.appearIn(delayMillis = staggerDelay(index))
                         } else {
                             Modifier
@@ -805,6 +897,15 @@ fun HomePage(
                             translationY += WIGGLE_BOB.toPx() * shake *
                                 sin((clock * (BOB_HZ + WIGGLE_HZ_SPREAD * jigglePhase) + 2f * jigglePhase) * TWO_PI)
                         }
+                        // Forming again, round the middle of what it shows rather than of its cell.
+                        val forming = back.value
+                        if (forming < 1f) {
+                            val grown = BeadMotion.backScale(forming)
+                            scaleX *= grown
+                            scaleY *= grown
+                            alpha *= BeadMotion.backAlpha(forming)
+                            transformOrigin = originOf(ringFrame, size)
+                        }
                     }
                     .drawBehind {
                         // Held over, a plate spreads out from under it: let go there, and that
@@ -853,6 +954,16 @@ fun HomePage(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
+                        .then(
+                            if (lensing) {
+                                Modifier.drawWithContent {
+                                    lens.record { this@drawWithContent.drawContent() }
+                                    drawLayer(lens)
+                                }
+                            } else {
+                                Modifier
+                            }
+                        )
                         .onGloballyPositioned {
                             contentRoot = it.positionInRoot()
                             contentAt[0] = it
@@ -1009,7 +1120,7 @@ fun HomePage(
                 if (item !is FolderCell) {
                     val reach = with(density) { (BEAD_TOUCH / 2).toPx() }
                     MinusBead(
-                        shown = editing && beads && !carried && !resizing,
+                        shown = editing && beads && !carried && !resizing && formed,
                         name = when (item) {
                             is AppCell -> appsByKey[item.key]?.label ?: "app"
                             is ShortcutCell -> item.label
@@ -1017,6 +1128,10 @@ fun HomePage(
                             else -> "widget"
                         },
                         onClick = { onBead(liveItem) },
+                        lens = lens,
+                        // A hair inside the very corner, which is rounded away to nothing: the bead
+                        // shows the item's edge curving through it, a quarter bigger.
+                        corner = Offset(ringFrame.left.toFloat(), ringFrame.top.toFloat()) + with(density) { Offset(LENS_BIAS.toPx(), LENS_BIAS.toPx()) },
                         modifier = Modifier
                             .align(Alignment.TopStart)
                             .offset { IntOffset((ringFrame.left - reach).roundToInt(), (ringFrame.top - reach).roundToInt()) },
@@ -1047,14 +1162,25 @@ fun HomePage(
             }
         }
 
-        // What has just been taken off the page shrinks away where it stood.
+        // What has just been taken off the page is seen to go where it stood: taken off by its minus
+        // or its menu, it pops like a soap bubble; gone into the dock, a folder or another page, it
+        // shrinks away.
         departures.after(items).forEach { item ->
             key("gone", item.id) {
+                val pop = remember { if (reduced) null else bubbles?.takePop(item.id) }
                 val out = remember { Animatable(0f) }
                 LaunchedEffect(Unit) {
-                    out.animateTo(1f, if (reduced) tween(Motion.REDUCED_MS) else tween(220, easing = FastOutLinearInEasing))
+                    out.animateTo(
+                        1f,
+                        when {
+                            reduced -> tween(Motion.REDUCED_MS)
+                            pop != null -> tween(BURST_MS, easing = LinearEasing)
+                            else -> tween(220, easing = FastOutLinearInEasing)
+                        },
+                    )
                     departures.gone(item)
                 }
+                val frame = frameOf(item, geometry)
                 Box(
                     Modifier
                         .offset {
@@ -1064,19 +1190,54 @@ fun HomePage(
                             )
                         }
                         .requiredSize(cellWidthDp * item.spanX, cellHeightDp * item.spanY)
+                        .then(
+                            // The bubble's ring and droplets, over where it stood and not shrunk with it.
+                            if (pop != null) {
+                                Modifier.drawWithContent {
+                                    drawContent()
+                                    val float = TiltRest.parallaxShift(parallax.value, ITEM_FLOAT_DP, density.density)
+                                    translate(float.x, float.y) {
+                                        drawBurst(
+                                            burstCentre(frame), burstSpan(frame), out.value * BURST_MS - BeadMotion.RING_DELAY_MS,
+                                            pop.droplets, inward = false,
+                                        )
+                                    }
+                                }
+                            } else {
+                                Modifier
+                            }
+                        )
                         .graphicsLayer {
                             val gone = out.value
-                            alpha = 1f - gone
-                            if (!reduced) {
-                                val shrunk = 1f - 0.35f * gone
-                                scaleX = shrunk
-                                scaleY = shrunk
+                            if (pop != null) {
+                                // A quick swell round the middle of what it shows, and gone.
+                                val t = gone * BURST_MS / BeadMotion.POP_MS
+                                val swell = BeadMotion.popScale(t)
+                                scaleX = swell
+                                scaleY = swell
+                                alpha = BeadMotion.popAlpha(t)
+                                transformOrigin = originOf(frame, size)
+                            } else {
+                                alpha = 1f - gone
+                                if (!reduced) {
+                                    val shrunk = 1f - 0.35f * gone
+                                    scaleX = shrunk
+                                    scaleY = shrunk
+                                }
                             }
                             // Floating still, as it was while it stood here.
                             val float = TiltRest.parallaxShift(parallax.value, ITEM_FLOAT_DP, density.density)
                             translationX = float.x
                             translationY = float.y
-                        },
+                        }
+                        .then(
+                            // Brighter as it swells, as a bubble catches the light just as it bursts.
+                            if (pop != null) {
+                                Modifier.brightened { BeadMotion.popGlow(out.value * BURST_MS / BeadMotion.POP_MS) }
+                            } else {
+                                Modifier
+                            }
+                        ),
                     contentAlignment = Alignment.Center,
                 ) {
                     HomeItemContent(
@@ -2241,6 +2402,8 @@ fun DockBar(
     editing: Boolean = false,
     onBead: (String) -> Unit = {},
     beads: Boolean = true,
+    /** An app taken off the dock pops like a bubble, and one Undo puts back blows back together. */
+    bubbles: Bubbles? = null,
     jiggleClock: () -> Float = { 0f },
     jiggleStrength: () -> Float = { 0f },
     modifier: Modifier = Modifier,
@@ -2261,6 +2424,10 @@ fun DockBar(
     // in your hand let go — starts from here and settles to where it now belongs, so nothing in
     // the dock is ever in one place and then in another.
     val seenAt = remember { HashMap<String, FloatArray>() }
+    // An app taken off the dock by its minus pops like a bubble where it was last seen, while the
+    // others close up round the gap; so where it was is asked before it is forgotten.
+    val pops = remember { DockPops(keys) }
+    val popping = pops.after(keys, seenAt, if (reduced) null else bubbles)
     seenAt.keys.retainAll(keys.toSet())
     /** How many times each app has been let go, so that being put down is always a fresh start. */
     val drops = remember { HashMap<String, Int>() }
@@ -2460,6 +2627,15 @@ fun DockBar(
                         label = "dockLift",
                     )
                     val fresh = remember { known.add(key) }
+                    // Brought back by Undo, it blows back together in its place rather than rising in.
+                    val returning = remember { !reduced && bubbles?.takeReturn(dockBubble(key)) == true }
+                    val reform = remember { Animatable(if (returning) 0f else 1f) }
+                    if (returning) {
+                        LaunchedEffect(Unit) { reform.animateTo(1f, tween(BeadMotion.BACK_MS, easing = LinearEasing)) }
+                    }
+                    val formed by remember { derivedStateOf { reform.value >= BACK_FORMED } }
+                    // What the icon draws, for its bead to show its corner magnified.
+                    val lens = rememberGraphicsLayer()
                     val left = lefts?.getOrNull(index)
                     // Out of its place by this much as it starts, and bigger by this much.
                     val astray = remember {
@@ -2475,8 +2651,22 @@ fun DockBar(
                     Box(
                         Modifier
                             .then(
-                                if (fresh) {
+                                if (fresh && !returning) {
                                     Modifier.appearIn(delayMillis = 90 + staggerDelay(index), riseFrom = 26f)
+                                } else {
+                                    Modifier
+                                }
+                            )
+                            .then(
+                                // Its droplets and ring, closing in on where it forms.
+                                if (returning) {
+                                    Modifier.drawWithContent {
+                                        drawContent()
+                                        drawBurst(
+                                            Offset(size.width / 2f, size.height / 2f), size.width, reform.value * BeadMotion.BACK_MS,
+                                            BeadMotion.BACK_DROPLETS, inward = true,
+                                        )
+                                    }
                                 } else {
                                     Modifier
                                 }
@@ -2506,6 +2696,13 @@ fun DockBar(
                                     val phase = (key.hashCode() and 0xFF) / 255f
                                     rotationZ = WIGGLE_ICON * shake *
                                         sin((jiggleClock() * (WIGGLE_HZ + WIGGLE_HZ_SPREAD * phase) + phase) * TWO_PI)
+                                }
+                                val forming = reform.value
+                                if (forming < 1f) {
+                                    val again = BeadMotion.backScale(forming)
+                                    scaleX *= again
+                                    scaleY *= again
+                                    alpha = BeadMotion.backAlpha(forming)
                                 }
                                 if (left != null) {
                                     val seen = seenAt.getOrPut(key) { FloatArray(3) }
@@ -2624,6 +2821,16 @@ fun DockBar(
                             shape = iconShape,
                             badge = true,
                             modifier = Modifier
+                                .then(
+                                    if (editing && beads) {
+                                        Modifier.drawWithContent {
+                                            lens.record { this@drawWithContent.drawContent() }
+                                            drawLayer(lens)
+                                        }
+                                    } else {
+                                        Modifier
+                                    }
+                                )
                                 .launchOrigin(key)
                                 // Jelly, as the icons on the page are, whatever Pressing says.
                                 .jellyIcon(iconShape)
@@ -2637,12 +2844,54 @@ fun DockBar(
                                 },
                         )
                         MinusBead(
-                            shown = editing && beads && !isCarried,
+                            shown = editing && beads && !isCarried && formed,
                             name = appsByKey[key]?.label ?: "app",
                             onClick = { onBead(key) },
+                            lens = lens,
+                            corner = with(density) { Offset(LENS_BIAS.toPx(), LENS_BIAS.toPx()) },
                             modifier = Modifier.align(Alignment.TopStart).offset(x = -BEAD_TOUCH / 2, y = -BEAD_TOUCH / 2),
                         )
                     }
+                    }
+                }
+            }
+            // Over the dock, where each popping app was last seen: a quick swell, and its bubble bursts.
+            popping.forEach { pop ->
+                androidx.compose.runtime.key("popping", pop.key) {
+                    val out = remember { Animatable(0f) }
+                    LaunchedEffect(Unit) {
+                        out.animateTo(1f, tween(BURST_MS, easing = LinearEasing))
+                        pops.gone(pop)
+                    }
+                    val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+                    Box(
+                        Modifier
+                            .align(Alignment.CenterStart)
+                            .offset { IntOffset((if (rtl) wide - iconPx - pop.left else pop.left).roundToInt(), pop.down.roundToInt()) }
+                            .size(iconSize)
+                            .drawWithContent {
+                                drawContent()
+                                drawBurst(
+                                    Offset(size.width / 2f, size.height / 2f), size.width, out.value * BURST_MS - BeadMotion.RING_DELAY_MS,
+                                    pop.droplets, inward = false,
+                                )
+                            }
+                            .graphicsLayer {
+                                val t = out.value * BURST_MS / BeadMotion.POP_MS
+                                val swell = BeadMotion.popScale(t)
+                                scaleX = swell
+                                scaleY = swell
+                                alpha = BeadMotion.popAlpha(t)
+                            }
+                            .brightened { BeadMotion.popGlow(out.value * BURST_MS / BeadMotion.POP_MS) },
+                    ) {
+                        AppIcon(
+                            key = pop.key,
+                            label = appsByKey[pop.key]?.label ?: "",
+                            size = iconSize,
+                            shape = ZenithShapes.forIconShape(settings.iconShape),
+                            badge = false,
+                        )
                     }
                 }
             }

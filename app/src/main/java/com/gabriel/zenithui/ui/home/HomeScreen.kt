@@ -286,6 +286,8 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
 
     val settings by viewModel.settings.collectAsState()
     val layout by viewModel.layout.collectAsState()
+    // What is popping off the home screen and what Undo is blowing back onto it.
+    val bubbles = remember { Bubbles() }
     val looks by viewModel.looks.collectAsState()
     val apps by viewModel.apps.collectAsState()
     val appsByKey = remember(apps) { apps.associateBy { it.key } }
@@ -1658,6 +1660,12 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         else -> 0L
     }
 
+    /** Takes [id] off the home screen, popping like a soap bubble where it stood. */
+    fun popOff(id: String) {
+        bubbles.pop(listOf(id))
+        viewModel.removeItem(id)
+    }
+
     /** Asks before something is taken off the home screen, the way a phone does. Undo still follows. */
     fun askRemove(target: HoldTarget) {
         val apps = if (libraryMode) "App Library" else "app drawer"
@@ -1668,7 +1676,10 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     title = "Remove “$name”?",
                     message = "Removing from the Dock will keep the app in your $apps.",
                     buttons = listOf(
-                        AlertButton("Remove from Dock") { viewModel.toggleDock(target.key) },
+                        AlertButton("Remove from Dock") {
+                            bubbles.pop(listOf(dockBubble(target.key)))
+                            viewModel.toggleDock(target.key)
+                        },
                         AlertButton("Uninstall App", danger = true) { viewModel.uninstall(target.key) },
                         AlertButton("Cancel") {},
                     ),
@@ -1680,7 +1691,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     title = "Remove “${appsByKey[item.key]?.label ?: "this app"}”?",
                     message = "Removing from Home Screen will keep the app in your $apps.",
                     buttons = listOf(
-                        AlertButton("Remove from Home Screen") { viewModel.removeItem(item.id) },
+                        AlertButton("Remove from Home Screen") { popOff(item.id) },
                         AlertButton("Uninstall App", danger = true) { viewModel.uninstall(item.key) },
                         AlertButton("Cancel") {},
                     ),
@@ -1689,14 +1700,14 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 is com.gabriel.zenithui.data.ShortcutCell -> alert = HomeAlert(
                     title = "Remove “${item.label}”?",
                     message = "Its app keeps the shortcut.",
-                    buttons = listOf(AlertButton("Remove", danger = true) { viewModel.removeItem(item.id) }, AlertButton("Cancel") {}),
+                    buttons = listOf(AlertButton("Remove", danger = true) { popOff(item.id) }, AlertButton("Cancel") {}),
                 )
 
                 is FolderCell -> alert = HomeAlert(
                     title = "Remove “${item.title}”?",
                     message = "Removing from Home Screen will keep all its apps in your $apps.",
                     buttons = listOf(
-                        AlertButton("Remove from Home Screen", danger = true) { viewModel.removeItem(item.id) },
+                        AlertButton("Remove from Home Screen", danger = true) { popOff(item.id) },
                         AlertButton("Cancel") {},
                     ),
                 )
@@ -1707,14 +1718,14 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     alert = HomeAlert(
                         title = "Remove “$name”?",
                         message = "You can add it again from Add Widget.",
-                        buttons = listOf(AlertButton("Remove", danger = true) { viewModel.removeItem(item.id) }, AlertButton("Cancel") {}),
+                        buttons = listOf(AlertButton("Remove", danger = true) { popOff(item.id) }, AlertButton("Cancel") {}),
                     )
                 }
 
                 is StackCell -> alert = HomeAlert(
                     title = "Remove this stack?",
                     message = "All ${item.members.size} widgets in it go. You can add them again from Add Widget.",
-                    buttons = listOf(AlertButton("Remove", danger = true) { viewModel.removeItem(item.id) }, AlertButton("Cancel") {}),
+                    buttons = listOf(AlertButton("Remove", danger = true) { popOff(item.id) }, AlertButton("Cancel") {}),
                 )
 
                 null -> Unit
@@ -2115,6 +2126,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                                     editing = editing,
                                     onBead = { askRemove(HoldTarget.Item(it.id)) },
                                     beads = !customising,
+                                    bubbles = bubbles,
                                     onSearch = { openDrawer(search = true) },
                                     onNoteChange = { viewModel.setNote(it) },
                                     onAmbient = { ambient = true },
@@ -2210,7 +2222,18 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                             more = undoShown?.more ?: 0,
                             timed = undoShown?.timed ?: true,
                             // It happened on another page: the screen turns there to show it undone.
-                            onUndo = { viewModel.undo().firstOrNull()?.let { back -> revealPage(back.page) } },
+                            // What comes back to the page, rather than moving back on it, blows
+                            // back together.
+                            onUndo = {
+                                val had = layout.mapTo(HashSet()) { it.id }
+                                val docked = settings.dock.toHashSet()
+                                val back = viewModel.undo()
+                                bubbles.back(
+                                    back.filter { it.id !in had }.map { it.id } +
+                                        viewModel.settings.value.dock.filter { it !in docked }.map(::dockBubble)
+                                )
+                                back.firstOrNull()?.let { revealPage(it.page) }
+                            },
                             // Edited, Undo stands just above the bar rather than in its place.
                             modifier = Modifier.padding(horizontal = 16.dp).offset(y = if (editing) (-56).dp else 0.dp),
                         )
@@ -2243,6 +2266,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                             editing = editing,
                             onBead = { askRemove(HoldTarget.Dock(it)) },
                             beads = !customising,
+                            bubbles = bubbles,
                             jiggleClock = { jiggleClock.floatValue },
                             jiggleStrength = { jiggleStrength.value },
                             onReorder = { from, to -> viewModel.moveInDock(from, to) },

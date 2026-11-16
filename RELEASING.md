@@ -93,6 +93,14 @@ Verify a build before uploading:
   gesture the user chose". The in-app disclosure is the "Lock with a gesture" sheet, shown before
   Android's page opens. Play also wants a short video of that flow: set Double tap to Lock the
   phone, double tap, read the sheet, turn the helper on, double tap again.
+  The app picture helper (`data/PictureService.kt`) is a second use on the same declaration:
+  "pictures of the app on screen, taken so it can be seen going back into its icon when closed and
+  out of it when opened; kept in memory for at most five minutes, never saved or sent; it cannot
+  read the screen". Its disclosure is the "App pictures" sheet (Settings → Motion & feel → App
+  pictures); the video shows that row, the sheet, the helper turned on, then an app closed into its
+  icon. Installed from outside Play (an APK from a browser or file manager), Android greys the
+  switch out until *Allow restricted settings* is chosen from the menu in Zenith's App info; the
+  sheet says so.
 - [ ] Permissions note for the reviewer: notification access (`NotificationDots`) only counts
   what each app has showing, for dots; nothing in a notification is read, kept or sent.
 - [ ] Keep Play App Signing enabled (default) so Google holds the release key.

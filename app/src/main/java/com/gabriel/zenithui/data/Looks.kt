@@ -84,7 +84,7 @@ object Looks {
         "layoutVersion",
         "iconShape", "iconPack", "iconStyle", "iconSize", "appEdits", "badges", "labelSize", "labelShadow", "showLabels",
         "dock", "showDock", "searchBar", "header", "dockStyle", "indicator", "folderStyle", "widgetLook", "hideStatusBar", "island",
-        "openAnimation", "motion", "animation", "pageEffect", "arrival", "drawerArrival", "press", "haptics", "gestures",
+        "openAnimation", "closeAnimation", "motion", "animation", "pageEffect", "arrival", "drawerArrival", "press", "haptics", "gestures",
         "appsView", "drawerSort", "drawerColumns", "toggles",
     )
 

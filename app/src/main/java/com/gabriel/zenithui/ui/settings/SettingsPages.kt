@@ -34,6 +34,7 @@ import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -45,6 +46,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.gabriel.zenithui.data.AnimationPreset
+import com.gabriel.zenithui.data.CloseRules
+import com.gabriel.zenithui.data.PictureService
 import com.gabriel.zenithui.data.Badges
 import com.gabriel.zenithui.data.DrawerSort
 import com.gabriel.zenithui.data.GlassBody
@@ -617,6 +620,43 @@ internal fun MotionOptions(settings: ZenithSettings, actions: SettingsActions, o
                     } else {
                         "The icon grows into a card in its own colour."
                     }
+                )
+            }
+        }
+        GroupDivider(inset = 16.dp)
+        Spot("closeAnimation") {
+            Column(Modifier.padding(14.dp)) {
+                Caption("Closing apps")
+                Spacer(Modifier.height(10.dp))
+                Segmented(
+                    options = listOf(CloseRules.INTO_ICON to "Into its icon", CloseRules.PLAIN to "Plain"),
+                    selected = if (settings.closeAnimation == CloseRules.PLAIN) CloseRules.PLAIN else CloseRules.INTO_ICON,
+                    onSelect = { value -> change { it.copy(closeAnimation = value) } },
+                )
+                Spacer(Modifier.height(8.dp))
+                Note(
+                    if (settings.closeAnimation == CloseRules.PLAIN) {
+                        "Android closes the app its own way, then its icon lands back in its place."
+                    } else {
+                        "Where Android allows it, the app itself shrinks back into its icon. Elsewhere a picture of it does, with App pictures on."
+                    }
+                )
+            }
+        }
+        if (PictureService.supported) {
+            GroupDivider(inset = 16.dp)
+            Spot("appPictures") {
+                val picturesOn by PictureService.on.collectAsState()
+                ActionRow(
+                    icon = Icons.Rounded.Image,
+                    title = "App pictures",
+                    subtitle = if (picturesOn) {
+                        "On. Apps are seen going back into their icons, and coming out of them"
+                    } else {
+                        "Off. Lets apps be seen going back into their icons on any phone"
+                    },
+                    status = if (picturesOn) "On" else null,
+                    onClick = actions.appPictures,
                 )
             }
         }

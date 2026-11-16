@@ -133,12 +133,15 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         viewModel.homeShowing(true)
+        // No picture of another app is taken while the home screen is on show (see PictureService).
+        com.gabriel.zenithui.data.AppPictures.homeShown(true)
         // Other apps' widgets are kept up to date while the home screen is on show.
         runCatching { viewModel.widgetHost.startListening() }
     }
 
     override fun onStop() {
         viewModel.homeShowing(false)
+        com.gabriel.zenithui.data.AppPictures.homeShown(false)
         runCatching { viewModel.widgetHost.stopListening() }
         super.onStop()
     }
@@ -168,6 +171,11 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        // Going home from an app with gestures, Android may ask where its icon is, so it can spring
+        // the app's window into it. It is answered first, while the window is still on its way.
+        com.gabriel.zenithui.data.GestureHandshake.from(intent)?.let { ask ->
+            com.gabriel.zenithui.data.GestureHandshake.answerer?.invoke(ask)
+        }
         // Home pressed: everything folds back. Pressed while Zenith was already in front, rather
         // than on the way back from an app, it is also the gesture of that name. Android's own
         // launcher tells the two apart the same way.

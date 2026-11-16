@@ -136,6 +136,8 @@ import com.gabriel.zenithui.ui.common.LocalLabelStyle
 import com.gabriel.zenithui.ui.common.LocalMotionLevel
 import com.gabriel.zenithui.ui.common.Motion
 import com.gabriel.zenithui.ui.common.appearIn
+import com.gabriel.zenithui.ui.common.LocalHomePlaces
+import com.gabriel.zenithui.ui.common.homePlace
 import com.gabriel.zenithui.ui.common.launchOrigin
 import com.gabriel.zenithui.ui.common.labelShadow
 import com.gabriel.zenithui.ui.common.pressBounce
@@ -1132,16 +1134,19 @@ fun HomePage(
                         },
                     contentAlignment = Alignment.Center,
                 ) {
-                    HomeItemContent(
-                        item = item,
-                        settings = settings,
-                        appsByKey = appsByKey,
-                        geometry = geometry,
-                        onSearch = onSearch,
-                        onNoteChange = onNoteChange,
-                        onAmbient = onAmbient,
-                        onRestoreWidget = onRestoreWidget,
-                    )
+                    // The page's own icons, where a closing app can go back to (see IconPlaces).
+                    CompositionLocalProvider(LocalHomePlaces provides true) {
+                        HomeItemContent(
+                            item = item,
+                            settings = settings,
+                            appsByKey = appsByKey,
+                            geometry = geometry,
+                            onSearch = onSearch,
+                            onNoteChange = onNoteChange,
+                            onAmbient = onAmbient,
+                            onRestoreWidget = onRestoreWidget,
+                        )
+                    }
                 }
 
                 // The minus on its corner while the home screen is edited. A folder has none: it is
@@ -1646,6 +1651,7 @@ private fun SuperAppTile(key: String, label: String, frame: PxRect, showLabel: B
                 .padding(start = with(density) { frame.left.toDp() })
                 .size(with(density) { frame.width.toDp() }, with(density) { frame.height.toDp() })
                 .launchOrigin(key)
+                .homePlace(key)
                 // Jelly, as every icon on a page is, whatever Pressing says. Its picture is never
                 // glass, so a ring of light from the wallpaper puts a gleam on it as it passes.
                 .jellyIcon(SuperIconShape)
@@ -1725,6 +1731,7 @@ fun AppTile(
             modifier = Modifier
                 .then(if (frame != null) Modifier.padding(start = with(density) { frame.left.toDp() }) else Modifier)
                 .launchOrigin(key)
+                .then(if (frame != null) Modifier.homePlace(key) else Modifier)
                 // On a home page an icon is jelly, whatever Pressing says, and gleams as a ring of light
                 // from the wallpaper passes; in the drawer and a folder's panel it keeps Pressing.
                 .then(if (frame != null) Modifier.jellyIcon(shape).iconGleam(shape) else Modifier.pressBounce()),
@@ -1769,6 +1776,7 @@ fun ShortcutTile(
                 .then(if (frame != null) Modifier.padding(start = with(density) { frame.left.toDp() }) else Modifier)
                 .size(iconSize)
                 .launchOrigin(item.key)
+                .then(if (frame != null) Modifier.homePlace(item.key) else Modifier)
                 // Jelly on a home page, as an app's icon is.
                 .then(if (frame != null) Modifier.jellyIcon(shape).iconGleam(shape) else Modifier.pressBounce()),
         ) {
@@ -1823,6 +1831,8 @@ fun FolderTile(
             Modifier
                 .then(if (frame != null) Modifier.padding(start = with(density) { frame.left.toDp() }) else Modifier)
                 .size(iconSize)
+                // An app opened from inside it goes back into it, if it has no icon of its own on show.
+                .then(if (frame != null) Modifier.homePlace(folder.keys, folder = true) else Modifier)
                 // Jelly on a home page, as an app's icon is. A folder is glass, which lights up of
                 // itself as a ring of light from the wallpaper passes, so it takes no gleam.
                 .then(if (frame != null) Modifier.jellyIcon(shape) else Modifier.pressBounce()),
@@ -2900,6 +2910,7 @@ fun DockBar(
                                     }
                                 )
                                 .launchOrigin(key)
+                                .homePlace(key, dock = true)
                                 // Jelly, as the icons on the page are, whatever Pressing says.
                                 .jellyIcon(iconShape)
                                 .iconGleam(iconShape)

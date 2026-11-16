@@ -172,5 +172,15 @@ class AnimationTuningTest {
         assertEquals("1.22×", Tune.LandScale.show(1.22f))
         assertEquals("Off", Tune.CloseCard.show(0f))
         assertEquals("60%", Tune.CloseCard.show(0.6f))
+        assertEquals("92%", Tune.ClosePicture.show(0.92f))
+    }
+
+    @Test
+    fun `a picture of the app starts back into its icon a little smaller than the screen, whatever the style`() {
+        AnimationPreset.entries.forEach { assertEquals(it.id, 0.92f, AnimationTuning.of(it)[Tune.ClosePicture], 0f) }
+        assertEquals(TuneGroup.Close, Tune.ClosePicture.group)
+        // Never so small that it is only an icon again, and never bigger than the screen.
+        assertEquals(0.3f, AnimationTuning().with(Tune.ClosePicture, 0.1f)[Tune.ClosePicture], 0f)
+        assertEquals(1f, AnimationTuning().with(Tune.ClosePicture, 1.4f)[Tune.ClosePicture], 0f)
     }
 }

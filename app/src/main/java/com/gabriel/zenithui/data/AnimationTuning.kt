@@ -56,6 +56,7 @@ enum class Tune(
     ReturnStiffness("returnStiffness", TuneGroup.Close, "Return stiffness", 40f, 1200f, 5f, TuneUnit.Plain, 300f, "How fast the home screen comes forward again."),
     ReturnDamping("returnDamping", TuneGroup.Close, "Return damping", 0.3f, 1.2f, 0.01f, TuneUnit.Ratio, 0.7f, "Under 1.00 it comes a little too far forward and settles."),
     CloseCard("closeCard", TuneGroup.Close, "Closing card", 0f, 1f, 0.01f, TuneUnit.Percent, 0f, "A card that shrinks back into the icon. Its size to start from; 0% is no card."),
+    ClosePicture("closePicture", TuneGroup.Close, "Picture starts at", 0.3f, 1f, 0.01f, TuneUnit.Percent, 0.92f, "With the app picture helper on, how big the picture of the app is as it starts back into its icon."),
     LandScale("landScale", TuneGroup.Close, "Icon lands from", 1f, 2f, 0.01f, TuneUnit.Times, 1.22f, "How large the app's icon is as it arrives back in its place."),
     LandStiffness("landStiffness", TuneGroup.Close, "Landing stiffness", 40f, 1200f, 5f, TuneUnit.Plain, 380f, "How fast the icon comes down to size."),
     LandDamping("landDamping", TuneGroup.Close, "Landing damping", 0.2f, 1.2f, 0.01f, TuneUnit.Ratio, 0.5f, "Under 1.00 the icon bounces as it lands."),

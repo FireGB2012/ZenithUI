@@ -63,6 +63,11 @@ data class ZenithSettings(
     val paletteOccasion: String = "",
     /** How an app grows out of its icon: colour (a card in the icon's colour) | glass (grey liquid glass). */
     val openAnimation: String = "colour",
+    /**
+     * How a closed app goes back: icon (into its icon, every way the phone allows: Android's
+     * gesture handshake, or a picture of the app) | plain (only its icon landing). See [CloseRules].
+     */
+    val closeAnimation: String = CloseRules.INTO_ICON,
     /** What swiping up shows: drawer (every app, A to Z) | library (apps grouped by kind). */
     val appsView: String = "drawer",
     /** Apps you opened from Zenith, most recent first. Feeds Suggestions; never leaves the phone. */
@@ -262,6 +267,7 @@ data class ZenithSettings(
         put("dayPalettes", DayParts.toJson(dayPalettes))
         put("paletteOccasion", paletteOccasion)
         put("openAnimation", openAnimation)
+        put("closeAnimation", closeAnimation)
         put("appsView", appsView)
         put("recentLaunches", JSONArray(recentLaunches))
         put("launchCounts", JSONObject().apply { launchCounts.forEach { (key, count) -> put(key, count) } })
@@ -369,6 +375,7 @@ data class ZenithSettings(
                 dayPalettes = DayParts.fromJson(o.optJSONObject("dayPalettes")),
                 paletteOccasion = o.optString("paletteOccasion", d.paletteOccasion),
                 openAnimation = o.optString("openAnimation", d.openAnimation),
+                closeAnimation = o.optString("closeAnimation", d.closeAnimation),
                 appsView = o.optString("appsView", d.appsView),
                 recentLaunches = o.optJSONArray("recentLaunches").toStringList(),
                 launchCounts = o.optJSONObject("launchCounts")?.let { counts ->

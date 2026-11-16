@@ -50,8 +50,9 @@ Toggles and Search, which are untouched.
   flame are drawn paths with one soft shadow straight down (`Glyphs.kt`). The clock is a real dial
   (`Dial.kt`): a paper face by day and a dark one by night (six to six), a clear one on cards and in
   "No glass", the hours written round it on the Square, and an orange second hand.
-- **Glass, Apple's way.** Buttons on glass are glass (`Modifier.glass`), presses spring back with
-  one small bounce, shadows fall straight down and are soft. Nothing glows.
+- **Glass, Apple's way.** A button on a widget's glass is glass lying in it
+  (`Modifier.glassOnGlass`), not a pane of its own, which would show the wallpaper through a hole.
+  Presses spring back with one small bounce, shadows fall straight down and are soft. Nothing glows.
 - **"No glass".** The same layouts, drawn in glass ink. A filled disc would swallow its symbol in
   glass ink, so the play button there is a ring.
 
@@ -70,7 +71,8 @@ Toggles and Search, which are untouched.
   to come as cards with a bar in their calendar's colour, red while one is under way. Wide adds the
   week, Tall and Big the month.
 - **Music.** The album's picture with a soft shadow in its own colour, the song, three moving bars
-  while it plays, how far in and how long is left, and back, play and next. Play is glass.
+  while it plays, how far in and how long is left, and back, play and next. Play is glass lying in
+  the widget's.
 - **Battery.** The charge as a ring, green, yellow in battery saver and red when low, a light running
   round it while it charges; the bigger ones add where the power comes from, the temperature, the
   health and the voltage.

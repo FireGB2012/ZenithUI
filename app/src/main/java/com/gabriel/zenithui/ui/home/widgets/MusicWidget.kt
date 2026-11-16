@@ -77,8 +77,8 @@ import com.gabriel.zenithui.ui.home.LocalWidgetFill
 import com.gabriel.zenithui.ui.home.LocalWidgetWorld
 import com.gabriel.zenithui.ui.theme.LocalOnWallpaper
 import com.gabriel.zenithui.ui.theme.LocalPalette
-import com.gabriel.zenithui.ui.theme.glass
 import com.gabriel.zenithui.ui.theme.glassInk
+import com.gabriel.zenithui.ui.theme.glassOnGlass
 import com.gabriel.zenithui.ui.theme.inkOnTint
 import kotlinx.coroutines.delay
 
@@ -258,9 +258,9 @@ private fun Art(now: Playing, glow: Color?, modifier: Modifier, corner: Dp, shad
 }
 
 /**
- * Play or pause, the one turning into the other. On the wallpaper's glass it is a lens of glass on
- * the pane; on a card, a disc of the card's ink; in a "No glass" widget, glass. Over the picture it is
- * a dark disc, which reads on any picture.
+ * Play or pause, the one turning into the other. On the wallpaper's glass it is glass lying in the
+ * pane; on a card, a disc of the card's ink; in a "No glass" widget, a ring of glass round the
+ * symbol. Over the picture it is a dark disc, which reads on any picture.
  */
 @Composable
 private fun PlayButton(now: Playing, size: Dp, onArt: Boolean = false) {
@@ -287,7 +287,10 @@ private fun PlayButton(now: Playing, size: Dp, onArt: Boolean = false) {
             glyph = inkOnTint(palette.onGlass)
         }
         onGlass -> {
-            disc = Modifier.glass(CircleShape, shadow = false, interactive = true)
+            // Glass lying in the widget's glass: a pane of its own would show the wallpaper through
+            // a hole in it. On the wallpaper the glass is the same in Light and Dark, so it lies in
+            // dark glass in both.
+            disc = Modifier.glassOnGlass(CircleShape, dark = true, interactive = true)
             glyph = palette.onGlass
         }
         else -> {

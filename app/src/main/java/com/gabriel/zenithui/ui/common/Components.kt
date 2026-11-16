@@ -64,6 +64,7 @@ import com.gabriel.zenithui.ui.theme.ZenithShapes
 import com.gabriel.zenithui.ui.theme.GlassMaterial
 import com.gabriel.zenithui.ui.theme.GlassMotion
 import com.gabriel.zenithui.ui.theme.glass
+import com.gabriel.zenithui.ui.theme.glassOnGlass
 import com.gabriel.zenithui.ui.theme.inkOnTint
 
 val LocalIconLoader = staticCompositionLocalOf<IconLoader> { error("IconLoader not provided") }
@@ -189,7 +190,7 @@ fun AppIcon(
     shape: Shape = ZenithShapes.icon,
     /** Shows the app's notification dot, where dots are on. */
     badge: Boolean = false,
-    /** Already over glass or the drawer, as in a folder: a glass icon gets a pale plate, not a pane of its own. */
+    /** Already over glass or the drawer, as in a folder: a glass icon is glass lying in glass, not a pane of its own. */
     onGlass: Boolean = false,
 ) {
     val loader = LocalIconLoader.current
@@ -232,8 +233,10 @@ private fun StyledIcon(key: String, label: String, px: Int, shape: Shape, style:
     val glassTileInk = if (onWallpaper) Color.White else palette.onGlass
     val ink = if (glass) glassTileInk else palette.onGlass
     val tile = when {
-        // Glass inside glass would show the wallpaper through a hole in it: a pale plate instead.
-        glass && onGlass -> Modifier.clip(shape).background(glassTileInk.copy(alpha = 0.12f))
+        // Glass inside glass, or in the drawer, would show the wallpaper through a hole in it: it
+        // is glass lying in glass instead, frosted a little, with the same light on its edge.
+        // A folder's tiny tiles are lit by the folder's own glass, not each under the finger.
+        glass && onGlass -> Modifier.glassOnGlass(shape, dark = onWallpaper || palette.dark, interactive = px >= LIT_TILE_PX)
         glass -> Modifier.glass(shape, strength = 1.2f, material = GlassMaterial.Clear, interactive = true)
         palette.dark -> Modifier.clip(shape).background(Color(0xFF1C1C1E))
         else -> Modifier.clip(shape).background(Color.White)
@@ -257,6 +260,9 @@ private fun StyledIcon(key: String, label: String, px: Int, shape: Shape, style:
         }
     }
 }
+
+/** How big, in pixels, an icon's glass tile lying in glass has to be to light up under a finger. */
+private const val LIT_TILE_PX = 96
 
 /**
  * A notification dot: a small bead of glass in iOS's red at the icon's top corner, with the count
@@ -380,7 +386,7 @@ fun GlassButton(
     filled: Boolean = false,
     leading: (@Composable () -> Unit)? = null,
     style: GlassButtonStyle = if (filled) GlassButtonStyle.Tinted else GlassButtonStyle.Regular,
-    motion: GlassMotion = if (style == GlassButtonStyle.Tinted) GlassMotion.Jelly else GlassMotion.Flex,
+    motion: GlassMotion = GlassMotion.Flex,
 ) {
     val palette = LocalPalette.current
     val contentAlpha = if (enabled) 1f else 0.4f

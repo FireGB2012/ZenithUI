@@ -4,20 +4,23 @@
 - Branch: `liquid-glass-buttons`
 - Status: built from the handoff "Liquid Glass buttons for Zenith UI" (the four buttons of the
   Liquid Glass Button design, each put where it fits). Gabriel asked for "the 4 different ones in the
-  places they fit perfectly". The motion numbers are the handoff's and are final; the decisions
-  below were made while building, and any of them can be changed.
+  places they fit perfectly". The motion numbers were the handoff's; on 2026-11-15 Gabriel asked for
+  the glass to be 1:1 with Apple's, and the springs and the tinted button's press changed to Apple's
+  (see `2026-11-15-apple-liquid-glass-design.md`). The decisions below were made while building,
+  and any of them can be changed.
 
 ## The four, and where they went
 
 | | Glass | Under a finger | Where |
 |---|---|---|---|
 | 1a | Regular | Flex: swells to 1.075 and lights up from the fingertip | `GlassButton`, its default: every sheet's buttons |
-| 1b | Tinted (accent) | Jelly: 0.95 and squashed 5%, wobbling back | `PrimaryButton` (setup, Plus, wallpaper, gallery, Aura, account) and `GlassButton(filled = true)` |
+| 1b | Tinted (accent) | Flex, as iOS's tinted glass buttons do (it was Jelly: 0.95 and squashed 5%, wobbling back) | `PrimaryButton` (setup, Plus, wallpaper, gallery, Aura, account) and `GlassButton(filled = true)` |
 | 1c | Clear | Lean: swells to 1.05 and leans up to 12 dp across, 9 down, towards the finger | the bedside clock's button, the round search button, the Quick Toggles |
 | 1d | Clear lens | Drag: swells to 1.09, follows the finger, stretches with speed, snaps | the pill of `Segmented`, everywhere it is used |
 
-Springs: Flex and Drag 0.41 / 420, Jelly 0.24 / 520 with its squash 0.18 / 640, Lean 0.56 / 380
-with the lean 0.74 / 260, a lens let go 0.57 / 700. With movement reduced every change of size is
+Springs: Flex and Drag 0.7 / 420, Jelly (now the home screen's icons) 0.6 / 520 with its squash
+0.45 / 640, Lean 0.7 / 380 with the lean 0.74 / 260, a lens let go 0.7 / 700. They were 0.41, 0.24,
+0.18, 0.56 and 0.57, which wobbled on and on. With movement reduced every change of size is
 two fifths of what it was, nothing squashes, leans or stretches, and every spring is 1.0 / 320 (the
 lens settles at 1.0 / 700). All of it, and where a lean goes, is `GlassPress.kt`, with
 `GlassPressTest`; which option a lens is nearest is `nearestSegment`, with `SegmentedTest`.

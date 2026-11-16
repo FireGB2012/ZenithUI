@@ -86,7 +86,7 @@ Zenith's own, on top of the iPhone's layout:
    from the finger across the screen: every pane of glass lights up, rim and face, as the ring passes
    over it, and the icons and colour widgets catch a faint gleam (`GlassRing`).
 5. **Jelly icons.** Press an app, a folder or a dock icon and it squishes and lights up from under the
-   finger, then springs back with a wobble (`JellyIcon`). On the home screen icons always do this;
+   finger, then springs back with one small bounce (`JellyIcon`). On the home screen icons always do this;
    the Pressing setting applies everywhere else.
 
 With movement reduced nothing floats, there is no ring, the search field fades in rather than
@@ -162,9 +162,13 @@ stretching, and a press is a small one with no wobble.
   first notification and shrinks away with the last.
 - **Icon style** — **Original**, **Tinted** (each app's one-colour symbol in the words' colour on a
   plain dark or white tile, as Android 13 does) or **Glass** (the symbol on a tile of clear glass, the
-  way iOS draws clear icons). The symbol is the adaptive icon's monochrome layer where the app has
-  one, its foreground where that is a logo on its own, and otherwise what stands out of the icon
-  from its own tile (`IconLoader.loadGlyph`). An icon you chose yourself stays as you chose it.
+  way iOS draws clear icons). In the drawer, an open folder and a folder's tiny icons, where it
+  already lies in glass, a Glass tile is glass lying in glass (`glassOnGlass`): a light frost, the
+  same hairline of light on its edge as every pane, moving with the tilt, a soft shadow straight
+  down, and in Light a soft grey band round its rim. The symbol is the adaptive icon's monochrome
+  layer where the app has one, its foreground where that is a logo on its own, and otherwise what
+  stands out of the icon from its own tile (`IconLoader.loadGlyph`). An icon you chose yourself
+  stays as you chose it.
 - **Shapes and names** — nine icon shapes (iPhone, Squircle, Circle, Rounded, Square, Pebble,
   Teardrop, Hexagon, Clover), one path each in `IconShapes` for the pictures and the tiles alike;
   names in three sizes inside the same strip, so nothing on the page moves, and **Name shadow**, a
@@ -503,10 +507,11 @@ the switch is off.
   finger that falls only on what was pressed; on the home screen icons are jelly whatever it is set
   to. All of it gives way to plain fades with movement reduced.
 - **Glass under a finger** (`GlassPress`). Glass buttons move like glass, each its own way, and
-  not by the Pressing setting: the plain ones in sheets swell and light up from the fingertip
-  (Flex); the one button that moves you on, in the accent's tinted glass, squishes and wobbles
-  back (Jelly); clear glass over the wallpaper or the dark (the round search button, the bedside
-  clock's button) and the Quick Toggles swell and lean towards the finger (Lean). The pill of a
+  not by the Pressing setting: glass buttons, plain and in the accent's tinted glass, swell and
+  light up from the fingertip, as iOS's do (Flex); clear glass over the wallpaper or the dark (the
+  round search button, the bedside clock's button) and the Quick Toggles swell and lean towards the
+  finger (Lean). Every press springs back as Apple's glass does, one small bounce past its rest and
+  still, never a wobble. The pill of a
   row of options can be picked up: it turns into a lens of clear glass that swells, follows the
   finger along the row, stretching the faster it goes, ticks as each option comes under it, and
   settles on the nearest, which is then the one picked. Only how they are drawn changes, and the
@@ -587,24 +592,23 @@ white one. A pressed pane bends the light a little more as the finger's light co
 13+ an AGSL shader (`LiquidGlassShader`), one lens shared by every pane over the same copy of the
 wallpaper, draws each pane, and does these things to the wallpaper round it:
 
-- **It bends it.** The flat middle shows the wallpaper exactly where it is; the rounded rim bends
-  and magnifies it inward like the edge of a thick lens, with a faint colour split on clear glass.
-  A bigger pane is a thicker slab and bends more.
+- **It bends it.** The flat middle shows the wallpaper exactly where it is; a band round the rim
+  bends and magnifies it inward like the edge of a thick convex lens, gently where the band starts
+  and hardest at the outline, where it turns over, with a faint colour split on clear glass. A
+  bigger pane is thicker glass, with a wider band, and bends more.
 - **It softens it**, with a true blur. `GlassLevels` keeps the wallpaper four times over — as it
   is, misted, frosted, and with little left but its colours, each made from the one before at half
   its size when the wallpaper changes — and a pane shows a blend of the two either side of how soft
   it is (`GlassLook.frost`), so any softness costs two lookups and nothing is blurred while
   drawing. What is dark behind the glass comes through a little brighter, in its own colour.
-- **It reflects it.** The steep outer part of the rim is a mirror as much as a window and holds the
-  wallpaper just outside the pane, turned over at the edge (`GlassLook.mirror`). The light the
-  glass catches is the colour of the wallpaper round it (`GlassLook.glow`): a crisp line all the
-  way round the rim, brightest where it faces the light and bright again opposite, with a soft glow
-  just inside it. Light, bend and reflection all move as the phone tilts.
-- **It is a thing, not a picture of one** (`GlassLook.relief`). A pane is a slab with a rounded
-  shoulder and a polished edge, and the same light shows its shape: the shoulder turned to the lamp
-  is lit and the one turned from it is in the slab's own shade, light falls away gently across the
-  face, and where the polished edge mirrors the lamp there is a glint, with a fainter one opposite.
-  A bigger pane is a thicker slab. Turning **Glass** down in Settings flattens it.
+- **It catches the light on its edge, and nowhere else.** A hairline of light hugs the outline,
+  brightest on the corner facing the light (up and to the left, as on iOS) and again on the corner
+  opposite, faint between, with a little sheen just inside it; the bent band is a touch brighter
+  than the face, as glass seen edge-on is. The face itself is flat: no shading, no glints, no glow
+  round the edge. The light is a little of the wallpaper's colour round the pane
+  (`GlassLook.glow`), and it moves as the phone tilts.
+- **It makes colour richer, not greyer** (`GlassLook.vibrance`): what is seen through the glass is a
+  little more saturated, as Apple's vibrancy makes it.
 - **It takes the wallpaper's colour.** On the home screen each pane's veil is tinted with the
   wallpaper's own colour where the pane sits, read from the copy the lens already samples, with a
   soft glow of that colour just outside it (`GlassTint`, the second twist). The fallbacks take one
@@ -624,9 +628,9 @@ A readable veil thickens only over parts of the wallpaper that would fight the t
 everybody has unless they ask for more. **Frosted** is for a wallpaper as dark as the pane itself,
 or in the light as pale, where clear glass is mostly its rim: a little frost lifts the pane a step
 away, there and nowhere else (`glassLift`). **Solid** adds a fuller veil on
-top of that (`GlassBody`). Every pane casts a shadow in two parts, away from the light: a wide
-faint one that says how far off the wallpaper it floats and a close dark one under its edge that
-says it is solid, both deeper for a thicker slab (`shadowPaints`). Panes you press
+top of that (`GlassBody`). Every pane casts a soft shadow straight down, as Apple's glass does: a
+wide faint one that says how far off the wallpaper it floats and a hairline one under its edge,
+deeper for thicker glass (`shadowPaints`). Panes you press
 (`interactive = true`: the dock, folders, widgets, search) light up from within, the glow starting
 under your finger.
 
@@ -637,7 +641,8 @@ app's external cache (`glass-*.png`), for Clear, Frosted and Solid and for both 
 `Modifier.glassInk()` makes whatever a composable draws out of glass, for the "No glass" widgets:
 its own outline becomes the rim, so the wallpaper bends at the edges of each numeral and icon,
 which throw back what is beside them, and the highlight runs along them in the wallpaper's colour.
-Each stroke is a rounded bar of glass, shaded and glinting by the same light as the panes.
+Each stroke is a flat bar of glass with a hairline of light on its edge, lit by the same light as
+the panes.
 What is drawn white is clear glass; a colour becomes tinted glass.
 With Glass panels on Frosted or Solid the glass also gathers more light over a dark wallpaper, so
 a glass clock stands out from it.
@@ -649,8 +654,7 @@ noted when the copy is made; see `WallpaperTrust`). The wallpaper's colours are 
 Samsung phones never announce them to the app that set the wallpaper. Android 14+ shows a
 still wallpaper zoomed by a tenth to leave room for parallax, and the shader matches that. With no
 usable copy (a live wallpaper, or one set in another app) panes fall back to frosted glass with a
-rim of the same kind and the slab's form drawn in plain shading, rather than showing a picture that
-is not really behind them. Android 12
+rim of the same kind, rather than showing a picture that is not really behind them. Android 12
 uses the frosted copy, and "No glass" widgets draw their numbers and icons plain white below
 Android 13. Nothing is captured or blurred per frame.
 

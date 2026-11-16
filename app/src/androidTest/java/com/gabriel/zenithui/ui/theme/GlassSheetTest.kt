@@ -27,6 +27,7 @@ import androidx.test.filters.SdkSuppress
 import androidx.test.platform.app.InstrumentationRegistry
 import com.gabriel.zenithui.data.GlassBody
 import com.gabriel.zenithui.data.GlassLevels
+import com.gabriel.zenithui.data.GlassTuning
 import com.gabriel.zenithui.data.WallStyle
 import com.gabriel.zenithui.data.WallpaperArt
 import com.gabriel.zenithui.data.WallpaperSource
@@ -201,11 +202,10 @@ class GlassSheetTest {
             screen = screen,
             wallpaperOffset = systemWallpaperOffset(Offset(0.5f, 0.5f)),
             bevel = numeral * 0.075f,
-            light = Offset(-0.45f - 1.6f * lean.x, -1f - 1.2f * lean.y),
+            light = lightFrom(lean, GlassTuning()),
             strength = 0.8f,
             halo = true,
             lift = body.lift,
-            lean = lean,
         )!!
         program.setInputShader("content", BitmapShader(shape, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP))
         canvas.save()

@@ -141,8 +141,8 @@ fun WallpaperSheet(
     ) {
         Palettes.setById(settings.wallpaperPalette.ifEmpty { settings.paletteId }, settings)
     }
-    // The wallpaper's colours first, then every other set a design can be painted in: the six, the
-    // Aura sets you bought, your own if you made one, and the one taken from your wallpaper.
+    // The wallpaper's colours first, then every other set a design can be painted in: the free ones,
+    // the Aura sets you bought, your own if you made one, and the one taken from your wallpaper.
     val palettes = remember(
         current, settings.unlockedThemes, settings.paletteId,
         settings.customAccent, settings.customAccentAlt, settings.customBackdrop, settings.customDark,
@@ -615,7 +615,7 @@ private fun WallpaperImage(style: WallStyle, palette: ZenithPalette, widthPx: In
 
 /**
  * Painted thumbnails, kept by how much memory they take and not by how many there are:
- * thirty-three designs in every colour set, light and dark, would otherwise be a great many pictures.
+ * forty-one designs in every colour set, light and dark, would otherwise be a great many pictures.
  */
 private val thumbCache = object : LruCache<String, ImageBitmap>(24 * 1024 * 1024) {
     override fun sizeOf(key: String, value: ImageBitmap): Int = value.width * value.height * 4

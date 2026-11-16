@@ -121,6 +121,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.IntOffset
 import com.gabriel.zenithui.data.GestureActions
@@ -198,6 +199,9 @@ import com.gabriel.zenithui.ui.settings.AccountActions
  * the grid, which is easy to do with a thumb that cannot see past what it is holding.
  */
 private val PAGE_FLIP_EDGE = 16.dp
+
+/** How out of focus the home screen is behind the open drawer. */
+private val DRAWER_FROST = 20.dp
 
 /** Coming home longer than this after opening an app does not shrink it back into its icon. */
 private const val CLOSE_WINDOW_MS = 30 * 60 * 1000L
@@ -521,8 +525,33 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
     }
     val overRemove by remember { derivedStateOf { drag.overRemove } }
     val edgeFlipPx = with(LocalDensity.current) { PAGE_FLIP_EDGE.toPx() }
-    val drawerProgress = if (dragging) dragProgress else drawer.value
-    val drawerOpen = drawerProgress > 0.5f
+    // How far open the drawer is: read only where it is placed or drawn, never while the home
+    // screen is composed, so a frame of the swipe composes nothing. The lines it crosses are
+    // derived, so only crossing one of them composes anything.
+    val drawerNow: () -> Float = remember { { if (dragging) dragProgress else drawer.value } }
+    val drawerShown by remember { derivedStateOf { drawerNow() > 0.002f } }
+    // Moving under a finger or on its spring: the light on its glass, and on the home screen's
+    // behind it, stays where it was until it is still (see HeldTilt).
+    val drawerMoving = remember { derivedStateOf { dragging || drawer.isRunning } }
+    val drawerCovers = remember { derivedStateOf { drawerNow() > 0.002f } }
+    // Open and still: what the drawer asks for only once it is there, so asking costs the swipe nothing.
+    val drawerSettled by remember { derivedStateOf { !dragging && !drawer.isRunning && drawer.value > 0.999f } }
+    // The home screen's blur behind the drawer: a copy of it blurred once and faded in over it, not a
+    // blur grown frame by frame (see DrawerFrost). Android 12 and later; before that nothing blurs,
+    // and the home screen only dims behind the drawer, as it always did there.
+    val canFrost = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S
+    val homeLayer = androidx.compose.ui.graphics.rememberGraphicsLayer()
+    val frost = remember { derivedStateOf { DrawerFrost.amount(drawerNow()) } }
+    val frosting by remember { derivedStateOf { frost.value > 0f } }
+    val frostPx = with(LocalDensity.current) { DRAWER_FROST.toPx() }
+    val frostEffect = remember(frostPx) {
+        androidx.compose.ui.graphics.BlurEffect(frostPx, frostPx, androidx.compose.ui.graphics.TileMode.Clamp)
+    }
+    val liveTilt = com.gabriel.zenithui.ui.theme.LocalTilt.current
+    val liveParallax = com.gabriel.zenithui.ui.theme.LocalParallax.current
+    val homeTilt = remember(liveTilt) { com.gabriel.zenithui.ui.theme.HeldTilt(liveTilt, drawerCovers) }
+    val homeParallax = remember(liveParallax) { com.gabriel.zenithui.ui.theme.HeldTilt(liveParallax, drawerCovers) }
+    val drawerTilt = remember(liveTilt) { com.gabriel.zenithui.ui.theme.HeldTilt(liveTilt, drawerMoving) }
 
     fun showSheet(next: HomeSheet) {
         sheet = next
@@ -759,7 +788,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
     // open over the home screen, and then goes on as one put on by hand does.
     val lookDue by viewModel.lookDue.collectAsState()
     val idle = !dragging && drag.item == null && !sheetVisible && !settingsOpen && !widgetsOpen &&
-        drawerProgress < 0.002f && folderUp == null && card == null && resizingId == null && !ambient && !overview &&
+        !drawerShown && folderUp == null && card == null && resizingId == null && !ambient && !overview &&
         !askingNewLook && !searchShown && holdMenu.open == null && alert == null && !editing && !customising
     LaunchedEffect(lookDue, idle) {
         if (lookDue != null && idle) {
@@ -1822,7 +1851,8 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
     val homeBlur by animateDpAsState(
         // The liquid glass opening frosts the home screen behind the growing glass.
         targetValue = when {
-            drawerProgress > 0.55f -> 20.dp
+            // (Behind the drawer the home screen frosts over by a blurred copy fading in instead:
+            // see DrawerFrost.)
             // An open folder has the home screen out of focus behind it.
             folderUp != null -> 14.dp
             // So has Search, open out of its pill; below Android 12 the blur does nothing, and the
@@ -1881,7 +1911,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         }
     }
 
-    BackHandler(enabled = overview || (card != null && cardOpening) || drawerProgress > 0.002f || sheetVisible || resizingId != null || ambient || folderUp != null || holdMenu.open != null || editing) {
+    BackHandler(enabled = overview || (card != null && cardOpening) || drawerShown || sheetVisible || resizingId != null || ambient || folderUp != null || holdMenu.open != null || editing) {
         // A held thing's menu is the topmost of these: from its colours back to its rows, then away.
         if (holdMenu.open != null) {
             if (holdMenu.colours) holdMenu.colours = false else holdMenu.close()
@@ -2338,7 +2368,8 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     // the drawer, and comes forward again as the page is pulled away.
                     val covered = homeCover.amount()
                     val sink = if (motion.reduced) 1f else homeScaleUnderPage(covered)
-                    val scale = (1f - 0.06f * drawerProgress) * zoom * sink
+                    val drawerOpenBy = drawerNow()
+                    val scale = (1f - 0.06f * drawerOpenBy) * zoom * sink
                     scaleX = scale
                     scaleY = scale
                     // It zooms about the icon the app came from, as far as asked, so the eye is
@@ -2351,7 +2382,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     )
                     val sunk = depth.coerceIn(0f, 1f)
                     // Settings is glass over the wallpaper; the home screen is not seen through it.
-                    alpha = (1f - 0.55f * drawerProgress) * (1f - t[Tune.HomeDim] * sunk) * (1f - covered)
+                    alpha = (1f - 0.55f * drawerOpenBy) * (1f - t[Tune.HomeDim] * sunk) * (1f - covered)
                     // Pulled down for the swipe-down gesture: after the finger, but less and less.
                     if (!motion.reduced) translationY = band(pulled(), PULL_REACH.toPx())
                 }
@@ -2362,12 +2393,37 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 // The ring of light from a tap, on the wallpaper under everything on the home screen.
                 .ringOfLight(glassRing)
         ) {
+            // The home screen as it is, kept as a layer of its own: behind the drawer a blurred copy of
+            // it fades in over it (see DrawerFrost), and that copy is drawn from this same layer.
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .then(
+                        if (!canFrost) {
+                            Modifier
+                        } else {
+                            Modifier
+                                .graphicsLayer { alpha = DrawerFrost.sharpAlpha(frost.value) }
+                                .drawWithContent {
+                                    homeLayer.record { this@drawWithContent.drawContent() }
+                                    drawLayer(homeLayer)
+                                }
+                        }
+                    )
+            ) {
             // Picking something up on the home screen answers a beat sooner than Android's usual
             // long press, so moving things feels immediate rather than like waiting for permission.
             val baseConfiguration = androidx.compose.ui.platform.LocalViewConfiguration.current
             val quickHold = remember(baseConfiguration) { QuickHold(baseConfiguration) }
             // Every pane of glass on the home screen, and every icon, reads the ring while drawing.
-            androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalViewConfiguration provides quickHold, LocalGlassRing provides glassRing) {
+            // Behind the drawer the light on them stays where it was, so the blurred copy of the home
+            // screen is worked out once, not again for every frame the phone moves in the hand.
+            androidx.compose.runtime.CompositionLocalProvider(
+                androidx.compose.ui.platform.LocalViewConfiguration provides quickHold,
+                LocalGlassRing provides glassRing,
+                com.gabriel.zenithui.ui.theme.LocalTilt provides homeTilt,
+                com.gabriel.zenithui.ui.theme.LocalParallax provides homeParallax,
+            ) {
             HomeLayout(
                 // The page and the gestures made on it. Nothing is written above it any more; while
                 // Zenith is not the home app the hint to make it so stands there instead, above the
@@ -2692,6 +2748,22 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 overlays = {},
             )
             }
+            }
+            // The blurred copy: worked out once as it starts to come in, then only faded, which costs
+            // the swipe nothing. Once the drawer is open it is the home screen's blur, and follows it.
+            if (canFrost && frosting) {
+                Box(
+                    Modifier
+                        .matchParentSize()
+                        .graphicsLayer {
+                            renderEffect = frostEffect
+                            alpha = frost.value
+                            // As Modifier.blur does: the blur kept inside the screen's edges.
+                            clip = true
+                        }
+                        .drawBehind { drawLayer(homeLayer) }
+                )
+            }
         }
 
         // ------------------------------------------------------------ drawer
@@ -2726,7 +2798,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
 
         // Undo is part of the home screen now, in Search's place in the band: see HomeLayout's searchBand.
 
-        if (drawerProgress > 0.002f || drawerEverOpened) {
+        if (drawerShown || drawerEverOpened) {
             // In the order chosen in Settings. By colour needs every icon's colour, worked out once.
             val colours by produceState(emptyMap<String, com.gabriel.zenithui.data.IconColour>(), drawerApps, settings.drawerSort) {
                 if (settings.drawerSort == com.gabriel.zenithui.data.DrawerSort.COLOUR) value = viewModel.icons.colours(drawerApps.map { it.key })
@@ -2735,18 +2807,20 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 com.gabriel.zenithui.data.DrawerSort.sort(drawerApps, settings.drawerSort, settings.launchCounts, viewModel.repository::installedAt, colours)
             }
             val workApps by viewModel.workApps.collectAsState()
-            // Every app's shortcuts, asked for once each time the drawer opens, for its search.
-            val opened = drawerProgress > 0.5f
-            val allShortcuts by produceState(emptyList<AppShortcut>(), opened) {
-                if (opened) value = viewModel.allShortcuts()
+            // Every app's shortcuts, asked for once each time the drawer is open, for its search: once
+            // it has come to rest, so the answer never arrives in the middle of the swipe.
+            val allShortcuts by produceState(emptyList<AppShortcut>(), drawerSettled) {
+                if (drawerSettled) value = viewModel.allShortcuts()
             }
+            // While it moves, the light on its glass and icons stays where it was.
+            androidx.compose.runtime.CompositionLocalProvider(com.gabriel.zenithui.ui.theme.LocalTilt provides drawerTilt) {
             AppDrawer(
                 apps = sortedApps,
                 groups = libraryGroups,
                 horizontal = libraryMode,
                 settings = settings,
                 focusSearch = focusSearch,
-                progress = drawerProgress,
+                progress = drawerNow,
                 onDrag = { delta -> dragDrawer(delta) },
                 onDragStopped = { velocity -> settleDrawer(velocity) },
                 onOpen = {
@@ -2771,7 +2845,9 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     openSetting(link)
                 },
                 onCopy = { text -> copyAnswer(text) },
+                onIconSize = { px -> viewModel.drawerIconsAre(px) },
             )
+            }
         }
 
         // ------------------------------------------------------------ search

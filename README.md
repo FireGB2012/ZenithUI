@@ -516,9 +516,14 @@ far out of an opening folder each app is) and `AnimationTuning` (the numbers it 
   glints while charging, every other gauge filling the same way as it appears, today's dot drawing
   itself in, toggles that fill with their own colour from the middle as they come on.
 - **The drawer and sheets.** The drawer is put together just after the home screen arrives, out of
-  sight, so the first swipe up is as smooth as the tenth. Rows rise in each time it opens, its
-  title and count turn over as you search, and a wallpaper's preview grows out of the thumbnail
-  that was tapped. A sheet comes up from the edge on a spring and follows a finger: down as far as
+  sight, so the first swipe up is as smooth as the tenth. Every app's icon is drawn at the drawer's
+  size once, on a background thread, as soon as the app list is known, and kept in memory
+  (`IconLoader.warm`); only an app installed, updated or removed is drawn again, when Android says
+  so. A frame of the swipe composes nothing: the drawer's progress is read only where it is placed
+  and drawn, the rows rise in each time it opens on one clock (`DrawerRise`), and behind it the home
+  screen frosts over by a copy of it blurred once and faded in (`DrawerFrost`), its light held still
+  while the drawer moves. Its title and count turn over as you search, and a wallpaper's preview
+  grows out of the thumbnail that was tapped. A sheet comes up from the edge on a spring and follows a finger: down as far as
   it is pulled, up only a little. Let go and it settles, or, past a third of its height or with a
   flick, goes. One sheet opened from another is seen going down as the new one comes up.
 - **Settings and the gallery.** Settings arrives in order — its title, the search box, then each

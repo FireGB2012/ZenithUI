@@ -308,6 +308,28 @@ class HomeGeometry(
          */
         fun drawerIconDp(cellWidthDp: Float): Float = (cellWidthDp * DRAWER_ICON_SHARE).coerceIn(60f, 68f)
 
+        /**
+         * How big an icon in the drawer is in [widthDp] of drawer with [columns] across: the dp
+         * [drawerIconDp] gives a column, less the grid's margin of [DRAWER_MARGIN_DP] each side.
+         */
+        fun drawerIconDpIn(widthDp: Float, columns: Int): Float =
+            drawerIconDp((widthDp - 2f * DRAWER_MARGIN_DP) / columns.coerceAtLeast(1))
+
+        /**
+         * The same in pixels, exactly as an icon of that many dp is drawn on a screen of [density]
+         * (rounded as Compose rounds a dp to pixels, and kept between the sizes an icon is ever
+         * drawn at). The drawer's icons are drawn ahead of time at this size, so it must be the one
+         * the drawer asks for: both work it out here.
+         */
+        fun drawerIconPx(widthDp: Float, columns: Int, density: Float): Int =
+            iconPx(drawerIconDpIn(widthDp, columns), density)
+
+        /** An icon [dp] across in pixels on a screen of [density], as `AppIcon` asks for it. */
+        fun iconPx(dp: Float, density: Float): Int = (dp * density).roundToInt().coerceIn(48, 288)
+
+        /** The drawer's grid stands this far in from each side. */
+        const val DRAWER_MARGIN_DP = 16f
+
         private const val DRAWER_ICON_SHARE = 0.68f
     }
 }

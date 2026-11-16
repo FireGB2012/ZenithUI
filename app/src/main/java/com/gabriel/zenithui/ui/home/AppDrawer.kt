@@ -54,6 +54,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.withFrameMillis
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -91,6 +93,7 @@ import com.gabriel.zenithui.data.HomeGeometry
 import com.gabriel.zenithui.data.AppSearch
 import com.gabriel.zenithui.data.ZenithSettings
 import com.gabriel.zenithui.ui.common.AppIcon
+import com.gabriel.zenithui.ui.common.LocalIconFromMemory
 import com.gabriel.zenithui.ui.common.LocalMotionLevel
 import com.gabriel.zenithui.ui.common.appearIn
 import com.gabriel.zenithui.ui.common.launchOrigin
@@ -126,8 +129,11 @@ fun AppDrawer(
     horizontal: Boolean = false,
     settings: ZenithSettings,
     focusSearch: Boolean,
-    /** 0 = fully closed, 1 = fully open. The drawer follows this while you drag. */
-    progress: Float,
+    /**
+     * 0 = fully closed, 1 = fully open. The drawer follows this while you drag. Read only where it
+     * is placed and drawn, never while it is composed, so a frame of the swipe composes nothing.
+     */
+    progress: () -> Float,
     onDrag: (Float) -> Unit,
     onDragStopped: (Float) -> Unit,
     onOpen: (String) -> Unit,
@@ -146,6 +152,8 @@ fun AppDrawer(
     onShortcut: (AppShortcut) -> Unit = {},
     onSetting: (SettingsLinks.Link) -> Unit = {},
     onCopy: (String) -> Unit = {},
+    /** How big, in pixels, the drawer draws its apps' icons, so they can be drawn ahead at that size. */
+    onIconSize: (Int) -> Unit = {},
 ) {
     val palette = LocalPalette.current
     val context = LocalContext.current
@@ -198,22 +206,41 @@ fun AppDrawer(
         if (focusSearch) runCatching { focusRequester.requestFocus() }
     }
 
-    // The drawer stays composed between openings, so tidy it up once it is fully closed.
-    val closed = progress < 0.01f
+    // The drawer stays composed between openings, so tidy it up once it is fully closed. Derived,
+    // so only crossing the line composes anything, not every frame of the swipe.
+    val currentProgress by androidx.compose.runtime.rememberUpdatedState(progress)
+    val closed by remember { derivedStateOf { currentProgress() < 0.01f } }
     // Rise slides it up from the foot; Grow and Glass bring it in where it is, as it opens.
     val inPlace = !horizontal && settings.drawerArrival != "rise" && !LocalMotionLevel.current.reduced
-    // Counts the openings, so the first screenful rises in each time and not only the first.
-    var opening by remember { androidx.compose.runtime.mutableIntStateOf(0) }
+    // One clock for every app rising into its place, from the moment the drawer begins to open:
+    // see DrawerRise. Each app reads it while it is drawn, so the whole first screenful rises in
+    // each time it opens, and nothing is composed for it.
+    val riseClock = remember { mutableFloatStateOf(0f) }
+    val screenRows = (androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp / DRAWER_ROW.value).toInt() + 2
+    val riseTotal = maxOf(DrawerRise.totalMs(columns * screenRows, columns), staggerDelay(Int.MAX_VALUE) + DrawerRise.SETTLE_MS)
+    var everOpen by remember { mutableStateOf(false) }
     LaunchedEffect(closed) {
-        if (!closed) opening++
-        // Not before it has ever been open: it is put together ahead of the first swipe, and
-        // has nothing to tidy then, nor any business taking the keyboard from a note being typed.
-        if (closed && opening > 0) {
-            query = ""
-            openGroup = null
-            runCatching { focusManager.clearFocus(force = true) }
-            gridState.scrollToItem(0)
+        if (closed) {
+            // Back at the start, ready for the next opening, while nobody can see it.
+            riseClock.floatValue = 0f
+            // Not before it has ever been open: it is put together ahead of the first swipe, and
+            // has nothing to tidy then, nor any business taking the keyboard from a note being typed.
+            if (everOpen) {
+                query = ""
+                openGroup = null
+                runCatching { focusManager.clearFocus(force = true) }
+                gridState.scrollToItem(0)
+            }
+            return@LaunchedEffect
         }
+        everOpen = true
+        val start = withFrameMillis { it }
+        while (true) {
+            val elapsed = (withFrameMillis { it } - start).toFloat()
+            riseClock.floatValue = elapsed
+            if (elapsed >= riseTotal) break
+        }
+        riseClock.floatValue = RISEN
     }
     LaunchedEffect(query) { if (query.isNotEmpty()) gridState.scrollToItem(0) }
     // Scrolling the results means you are looking, not typing: give the screen back.
@@ -221,11 +248,11 @@ fun AppDrawer(
         if (gridState.isScrollInProgress) runCatching { focusManager.clearFocus() }
     }
 
-    val nestedScroll = remember(progress) {
+    val nestedScroll = remember {
         object : NestedScrollConnection {
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
                 // Already part way closed: keep following the finger rather than scrolling.
-                if (available.y > 0f && progress < 1f) {
+                if (available.y > 0f && currentProgress() < 1f) {
                     onDrag(available.y)
                     return Offset(0f, available.y)
                 }
@@ -242,7 +269,7 @@ fun AppDrawer(
             }
 
             override suspend fun onPreFling(available: Velocity): Velocity {
-                if (progress < 1f) {
+                if (currentProgress() < 1f) {
                     onDragStopped(-available.y)
                     return available
                 }
@@ -259,7 +286,7 @@ fun AppDrawer(
             .layout { measurable, constraints ->
                 val placeable = measurable.measure(constraints)
                 layout(placeable.width, placeable.height) {
-                    val hidden = 1f - progress.coerceIn(0f, 1f)
+                    val hidden = 1f - progress().coerceIn(0f, 1f)
                     when {
                         horizontal -> placeable.place((hidden * placeable.width).roundToInt(), 0)
                         // Growing or clearing where it is; once shut it goes out of the way of fingers.
@@ -273,7 +300,7 @@ fun AppDrawer(
                     Modifier
                 } else {
                     Modifier.graphicsLayer {
-                        val shown = progress.coerceIn(0f, 1f)
+                        val shown = progress().coerceIn(0f, 1f)
                         alpha = shown
                         if (settings.drawerArrival == "grow") {
                             // Up out of the foot of the screen, where the swipe begins.
@@ -415,8 +442,11 @@ fun AppDrawer(
                 // How many rows of apps the drawer shows at once, and one over: every one of them
                 // rises in as it opens, not only the top few.
                 val rowsOnShow = (maxHeight / DRAWER_ROW).toInt() + 2
-                // As big as its columns have room for, less the grid's margins each side.
-                val iconSize = HomeGeometry.drawerIconDp(((maxWidth - 32.dp) / columns.coerceAtLeast(1)).value).dp
+                // As big as its columns have room for, less the grid's margins each side: the size
+                // every app's icon is drawn at ahead of time, so it is told where that is decided.
+                val iconSize = HomeGeometry.drawerIconDpIn(maxWidth.value, columns).dp
+                val iconPx = HomeGeometry.iconPx(iconSize.value, androidx.compose.ui.platform.LocalDensity.current.density)
+                LaunchedEffect(iconPx) { onIconSize(iconPx) }
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(if (shelves) 2 else columns),
                     state = gridState,
@@ -443,8 +473,8 @@ fun AppDrawer(
                                 modifier = Modifier
                                     .animateItem()
                                     .then(
-                                        if (index < rowsOnShow * 2 && gridState.firstVisibleItemIndex == 0) {
-                                            Modifier.appearIn(delayMillis = staggerDelay(index), riseFrom = 26f, replay = opening)
+                                        if (index < rowsOnShow * 2) {
+                                            Modifier.riseIn(riseClock, staggerDelay(index), reduced)
                                         } else {
                                             Modifier
                                         }
@@ -454,16 +484,15 @@ fun AppDrawer(
                     } else {
                     // What a search finds that is not an app, above the apps it finds.
                     if (query.isNotBlank()) {
-                        item(key = "answers", span = { GridItemSpan(maxLineSpan) }) {
+                        item(key = "answers", span = { GridItemSpan(maxLineSpan) }, contentType = "answers") {
                             SearchAnswers(query = query, shortcuts = shortcuts, onCopy = onCopy, onSetting = onSetting, onShortcut = onShortcut)
                         }
                     }
-                    itemsIndexed(filtered, key = { _, app -> app.key }) { index, app ->
+                    itemsIndexed(filtered, key = { _, app -> app.key }, contentType = { _, _ -> "app" }) { index, app ->
                         // The whole first screenful is staggered in, a row at a time from the top
-                        // and from left to right along each. Anything composed while you are
-                        // scrolling must land at once, or the list appears to lag behind.
-                        val stagger = index < columns * rowsOnShow && gridState.firstVisibleItemIndex == 0
-                        val turn = (index / columns) * ROW_TURN_MS + (index % columns) * ICON_TURN_MS
+                        // and from left to right along each. Anything further down is composed only
+                        // as you scroll to it, by when the clock has run out: it lands at once.
+                        val stagger = index < columns * rowsOnShow
                         // Scroll-linked motion: an icon dissolves and shrinks as it slides past
                         // the top or bottom edge, and is left alone once it is fully in view.
                         var itemTop by remember { mutableFloatStateOf(0f) }
@@ -471,13 +500,7 @@ fun AppDrawer(
                         Box(
                             Modifier
                                 .animateItem()
-                                .then(
-                                    if (stagger) {
-                                        Modifier.appearIn(delayMillis = turn, riseFrom = 26f, replay = opening)
-                                    } else {
-                                        Modifier
-                                    }
-                                )
+                                .then(if (stagger) Modifier.riseIn(riseClock, DrawerRise.turn(index, columns), reduced) else Modifier)
                                 .onPlaced { coords ->
                                     itemTop = coords.positionInParent().y
                                     itemHeight = coords.size.height.toFloat().coerceAtLeast(1f)
@@ -507,15 +530,19 @@ fun AppDrawer(
                                 },
                             contentAlignment = Alignment.Center,
                         ) {
-                            AppTile(
-                                key = app.key,
-                                label = app.label,
-                                iconSize = iconSize,
-                                showLabel = true,
-                                shape = ZenithShapes.forIconShape(settings.iconShape),
-                                badge = true,
-                                onGlass = true,
-                            )
+                            // Every one is in memory already (see IconLoader.warm): none is read from
+                            // a file while the list moves.
+                            androidx.compose.runtime.CompositionLocalProvider(LocalIconFromMemory provides true) {
+                                AppTile(
+                                    key = app.key,
+                                    label = app.label,
+                                    iconSize = iconSize,
+                                    showLabel = true,
+                                    shape = ZenithShapes.forIconShape(settings.iconShape),
+                                    badge = true,
+                                    onGlass = true,
+                                )
+                            }
                         }
                     }
                     }
@@ -670,9 +697,32 @@ fun AppDrawer(
 /** The least room a row of apps takes in the drawer: an icon, its name and the gap under it. */
 private val DRAWER_ROW = 96.dp
 
-/** How long after the row above a row of apps sets off as the drawer opens, and each icon after the one beside it. */
-private const val ROW_TURN_MS = 46
-private const val ICON_TURN_MS = 14
+/** The rise clock once every app has risen: past any app's turn, so each is drawn in its place. */
+private const val RISEN = Float.MAX_VALUE
+
+/**
+ * Rises into its place on the drawer's one [clock] (see [DrawerRise]), its turn coming [turnMs]
+ * after the drawer began to open: from a little smaller and lower, fading in. With movement
+ * reduced, everything only fades in, together. Read while drawing, so the rise composes nothing.
+ */
+private fun Modifier.riseIn(clock: androidx.compose.runtime.FloatState, turnMs: Int, reduced: Boolean): Modifier =
+    graphicsLayer {
+        val elapsed = clock.floatValue
+        if (reduced) {
+            alpha = (elapsed / com.gabriel.zenithui.ui.common.Motion.REDUCED_MS).coerceIn(0f, 1f)
+        } else {
+            val risen = DrawerRise.progress(elapsed, turnMs)
+            alpha = risen.coerceIn(0f, 1f)
+            val scale = RISE_FROM_SCALE + (1f - RISE_FROM_SCALE) * risen
+            scaleX = scale
+            scaleY = scale
+            translationY = (1f - risen) * RISE_FROM_PX
+        }
+    }
+
+/** How much smaller, and how many pixels lower, an app starts its rise: as appearIn's were. */
+private const val RISE_FROM_SCALE = 0.84f
+private const val RISE_FROM_PX = 26f
 
 /** One folder in the App Library: a kind of app, and every app of that kind. */
 @Immutable

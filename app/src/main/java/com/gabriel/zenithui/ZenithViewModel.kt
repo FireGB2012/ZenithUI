@@ -66,6 +66,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
@@ -215,6 +216,52 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
 
     fun noteHomePrompt() = store.update { it.copy(homePrompts = it.homePrompts + 1) }
 
+    // ---------------------------------------------------------------- drawer icons
+
+    /**
+     * How big, in pixels, the drawer draws its icons: worked out from the screen until the drawer
+     * has been laid out once, and from then on as the drawer itself says ([drawerIconsAre]).
+     */
+    private val drawerIconPx = MutableStateFlow(guessDrawerIconPx())
+
+    private fun guessDrawerIconPx(): Int {
+        val metrics = getApplication<Application>().resources.displayMetrics
+        val current = settings.value
+        val columns = current.drawerColumns.takeIf { it > 0 } ?: current.columns
+        return com.gabriel.zenithui.data.HomeGeometry.drawerIconPx(metrics.widthPixels / metrics.density, columns, metrics.density)
+    }
+
+    /** The drawer, as it is laid out, says how big it draws its icons: they are drawn ahead at that size. */
+    fun drawerIconsAre(px: Int) {
+        if (px > 0) drawerIconPx.value = px
+    }
+
+    /**
+     * Every app the drawer can show, drawn once at the drawer's size off the main thread as soon as
+     * the app list is known, and kept in memory: the drawer never draws or reads an icon while it
+     * moves. Asked again whenever an app is installed, updated or removed, or the icons change look,
+     * which draws only what is new; what was kept for apps that have gone is let go.
+     */
+    private fun keepDrawerIconsReady() {
+        viewModelScope.launch {
+            combine(
+                apps,
+                repository.workApps,
+                drawerIconPx,
+                settings.map { it.iconStyle }.distinctUntilChanged(),
+                icons.version,
+            ) { list, work, px, style, _ -> Triple(list + work, px, style) }
+                .collectLatest { (list, px, style) ->
+                    icons.warm(
+                        purpose = "drawer",
+                        keys = list.map { it.key },
+                        sizePx = px,
+                        glyphs = com.gabriel.zenithui.data.IconStyles.of(style) != com.gabriel.zenithui.data.IconStyles.ORIGINAL,
+                    )
+                }
+        }
+    }
+
     init {
         upgradeLayout()
         icons.prime(settings.value.iconPack, settings.value.iconShape)
@@ -245,10 +292,13 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             repository.apps.collect { icons.invalidate() }
         }
-        repository.observePackages {
+        repository.observePackages { changed ->
+            // An app updated may have a new icon: it is drawn again, not shown from before.
+            icons.forget(changed)
             viewModelScope.launch { repository.refresh() }
             viewModelScope.launch { repository.refreshWork() }
         }
+        keepDrawerIconsReady()
         tidyWidgetIds()
         // Photos left over from a home screen another Look was put on over, kept by nothing now.
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) { icons.tidyPhotos(photosInUse()) }

@@ -2403,20 +2403,22 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 .ringOfLight(glassRing)
         ) {
             // The home screen as it is, kept as a layer of its own: behind the drawer a blurred copy of
-            // it fades in over it (see DrawerFrost), and that copy is drawn from this same layer.
+            // it fades in over it (see DrawerFrost), and that copy is drawn from this same layer. In a
+            // theme that blurs nothing it goes out as its veil comes in, so the drawer stands over the
+            // wallpaper rather than over the icons it has just covered.
             Box(
                 Modifier
                     .fillMaxSize()
                     .then(
-                        if (!canFrost) {
-                            Modifier
-                        } else {
-                            Modifier
+                        when {
+                            canFrost -> Modifier
                                 .graphicsLayer { alpha = DrawerFrost.sharpAlpha(frost.value) }
                                 .drawWithContent {
                                     homeLayer.record { this@drawWithContent.drawContent() }
                                     drawLayer(homeLayer)
                                 }
+                            blurBehind <= 0.dp -> Modifier.graphicsLayer { alpha = DrawerFrost.sharpAlpha(frost.value) }
+                            else -> Modifier
                         }
                     )
             ) {
@@ -2758,8 +2760,8 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             )
             }
             }
-            // A theme with no blur: a veil of its page, faded in as the copy would be, so what is
-            // behind the drawer is covered over, not bare.
+            // A theme with no blur: a veil of its page over the wallpaper, faded in as the copy would
+            // be while the home screen goes out, so what is behind the drawer is quiet, not bare.
             if (blurBehind <= 0.dp && frosting) {
                 val veil = palette.backdrop.first()
                 Box(Modifier.matchParentSize().drawBehind { drawRect(veil, alpha = DRAWER_VEIL * frost.value) })

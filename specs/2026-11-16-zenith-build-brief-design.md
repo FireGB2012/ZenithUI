@@ -183,7 +183,10 @@ Retro. A font chosen by name wins in every theme.
 *(My call)* **Only a theme cross-fades.** Light and Dark change at once, as before.
 
 *(My call)* Clean and Retro are flat, so nothing is blurred behind their sheets and drawer: a veil of
-the page's colour comes in instead. Neon blurs a little less than glass (14 dp).
+the page's colour comes in instead. Behind the drawer the home screen goes out as that veil comes in
+(on the same curve the blurred copy uses), so the drawer stands over the wallpaper and not over the
+icons it covers: seen in the screenshot rig, a sharp home screen under a thin veil read as clutter.
+Neon blurs a little less than glass (14 dp).
 
 *(My call)* The glass settings (Glass panels, Tilt shine) show only with Liquid Glass, the only theme
 made of glass; what they are set to is kept. In the other three nothing follows the phone's tilt, the

@@ -16,6 +16,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -27,6 +28,8 @@ import com.gabriel.zenithui.data.GlassLevels
 import com.gabriel.zenithui.data.GlassTuning
 import com.gabriel.zenithui.data.IconStyles
 import com.gabriel.zenithui.data.LabelSizes
+import com.gabriel.zenithui.data.Performance
+import com.gabriel.zenithui.data.PhonePerformance
 import com.gabriel.zenithui.data.Theme
 import com.gabriel.zenithui.data.Themes
 import com.gabriel.zenithui.data.WidgetLooks
@@ -75,6 +78,13 @@ val LocalGlassStrength = staticCompositionLocalOf { 0.8f }
 
 /** How much body every pane has: whether it is lifted off a wallpaper of its own tone. */
 val LocalGlassBody = staticCompositionLocalOf { GlassBody.Clear }
+
+/**
+ * Whether Zenith draws Lite ([Performance]): as chosen in Motion & feel, or with Auto, as this phone
+ * was found to be. Read by what Lite draws more simply: the light on the icons, the home screen's
+ * blur, and the widgets that move by themselves.
+ */
+val LocalLite = staticCompositionLocalOf { false }
 
 /**
  * How Zenith's own widgets are drawn, colour or glass ([WidgetLooks]): one switch for every one of
@@ -187,9 +197,17 @@ private fun Themed(
     val typography = remember(font) { typographyIn(font.family) }
     val numbers = remember(font, settings.numberFont) { ZenithFonts.numbers(settings.numberFont, font) }
 
+    // Full or Lite (see Performance): as chosen, or with Auto, as this phone was found to be. Lite
+    // keeps the glass and lets go of what is drawn again on every frame something moves.
+    val context = LocalContext.current
+    val verdict by remember(context) { PhonePerformance.start(context); PhonePerformance.verdict }.collectAsState()
+    val lite = Performance.isLite(settings.performance, verdict)
+
     // One sensor for the whole launcher: the light every glass surface reads, and how far the tilt
-    // floats the home screen, which it does not with movement reduced. Only glass catches the light.
-    val tilt = rememberTilt(settings.glassShine && theme.isGlass, floats = !MotionLevel.of(settings.motion, rememberAnimationsEnabled()).reduced)
+    // floats the home screen, which it does not with movement reduced. Only glass catches the light,
+    // and in Lite the light stays where it sits and nothing floats, so there is no sensor at all.
+    val reduced = MotionLevel.of(settings.motion, rememberAnimationsEnabled()).reduced
+    val tilt = rememberTilt(Performance.lightTilts(settings.glassShine, theme.isGlass, lite), floats = Performance.floats(reduced, lite))
 
     // One lens for the wallpaper, shared by every pane of glass, made again only when the wallpaper
     // changes: a page of panes coming into view no longer compiles the shader once for each.
@@ -213,7 +231,8 @@ private fun Themed(
         LocalLabelStyle provides LabelStyle(LabelSizes.sp(settings.labelSize).sp, settings.labelShadow),
         LocalZenithFont provides font.family,
         LocalNumberFont provides numbers,
-        LocalGlassTuning provides glassTuning,
+        LocalGlassTuning provides Performance.tuning(glassTuning, lite),
+        LocalLite provides lite,
         LocalPressStyle provides settings.press,
     ) {
         MaterialTheme(

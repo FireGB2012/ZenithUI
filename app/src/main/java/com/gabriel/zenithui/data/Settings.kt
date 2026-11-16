@@ -185,6 +185,11 @@ data class ZenithSettings(
     val newLookAsked: Boolean = false,
     /** 0 = rows only, 1 = rows divided into units, 2 = everything on whole rows. */
     val layoutVersion: Int = 0,
+    /**
+     * How much drawing is asked of the phone: auto | full | lite (see [Performance]). Not kept in a
+     * Look: it is about this phone, not about how the home screen looks.
+     */
+    val performance: String = Performance.AUTO,
 
     // ------------------------------------------------------------------ Zenith Plus
     /** When the free trial began, in epoch millis. 0 means it has not started yet. */
@@ -344,6 +349,7 @@ data class ZenithSettings(
         put("calendarDeclined", calendarDeclined)
         put("newLookAsked", newLookAsked)
         put("layoutVersion", layoutVersion)
+        put("performance", performance)
     }
 
     companion object {
@@ -472,6 +478,7 @@ data class ZenithSettings(
                 calendarDeclined = o.optBoolean("calendarDeclined", d.calendarDeclined),
                 newLookAsked = o.optBoolean("newLookAsked", d.newLookAsked),
                 layoutVersion = o.optInt("layoutVersion", d.layoutVersion),
+                performance = Performance.of(o.optString("performance", d.performance)),
             )
         }
     }

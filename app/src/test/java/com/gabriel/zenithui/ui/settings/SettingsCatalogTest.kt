@@ -56,6 +56,9 @@ class SettingsCatalogTest {
         assertEquals("appearance", found("night").first())
         assertEquals("haptics", found("vibrate").first())
         assertEquals("keepLoaded", found("battery").first())
+        assertEquals("performance", found("lag").first())
+        assertEquals("performance", found("fps").first())
+        assertEquals("performance", found("smooth").first())
         assertEquals("reset", found("start over").first())
     }
 

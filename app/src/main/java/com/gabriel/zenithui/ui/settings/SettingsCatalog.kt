@@ -72,6 +72,7 @@ object SettingsCatalog {
         SettingsEntry("tidy", SettingsPage.Home, "Tidy up", "arrange sort clean align fix gaps"),
 
         SettingsEntry("animations", SettingsPage.Motion, "Animations", "reduce reduced full movement"),
+        SettingsEntry("performance", SettingsPage.Motion, "Performance", "lag laggy slow smooth smoothness fps frames frame rate stutter jank speed fast lite auto"),
         SettingsEntry("openAnimation", SettingsPage.Motion, "Opening apps", "launch colour color glass card"),
         SettingsEntry("closeAnimation", SettingsPage.Motion, "Closing apps", "close shrink into icon plain window"),
         SettingsEntry("appPictures", SettingsPage.Motion, "App pictures", "screenshot accessibility helper picture real open close"),

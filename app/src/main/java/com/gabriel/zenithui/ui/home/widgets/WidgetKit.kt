@@ -83,6 +83,7 @@ import com.gabriel.zenithui.ui.home.contrast
 import com.gabriel.zenithui.ui.home.quiet
 import com.gabriel.zenithui.ui.home.rememberFilled
 import com.gabriel.zenithui.ui.home.tight
+import com.gabriel.zenithui.ui.theme.LocalLite
 import com.gabriel.zenithui.ui.theme.LocalOnWallpaper
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.glassInk
@@ -410,7 +411,8 @@ internal fun Gauge(
     val reduced = LocalMotionLevel.current.reduced
     val filled = rememberFilled(fraction.coerceIn(0f, 1f))
     val track = faint()
-    val running = if (glint && !reduced) {
+    // Lite draws nothing that moves by itself, so the ring charges without its glint.
+    val running = if (glint && !reduced && !LocalLite.current) {
         rememberInfiniteTransition(label = "gaugeGlint").animateFloat(
             initialValue = 0f,
             targetValue = 1f,

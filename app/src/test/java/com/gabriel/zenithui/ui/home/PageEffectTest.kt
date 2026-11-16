@@ -186,4 +186,21 @@ class PageEffectTest {
     fun `a page far off is drawn as if just gone, whatever the style`() {
         for (style in PageEffects.styles) assertEquals(style, at(style, 1f), at(style, 3f))
     }
+
+    @Test
+    fun `whether the icons drift apart is the style's alone, at every point of a swipe`() {
+        // The page is composed with it once and drawn with the rest as it moves, so it must not
+        // change part way through a swipe.
+        for (style in PageEffects.styles + "something unknown") {
+            for (offset in listOf(-3f, -1f, -0.5f, -0.01f, 0f, 0.01f, 0.5f, 1f, 3f)) {
+                for (leaving in listOf(true, false)) {
+                    assertEquals("$style at $offset", PageEffects.parallax(style), PageEffects.transform(style, offset, leaving).parallax)
+                }
+            }
+        }
+        assertTrue(PageEffects.parallax("depth"))
+        assertTrue(PageEffects.parallax("something unknown"))
+        assertFalse(PageEffects.parallax("slide"))
+        assertFalse(PageEffects.parallax("cube"))
+    }
 }

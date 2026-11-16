@@ -20,8 +20,12 @@ import androidx.compose.ui.graphics.addOutline
 import androidx.compose.ui.graphics.asAndroidPath
 import androidx.compose.ui.graphics.asComposePath
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import kotlin.math.abs
 import kotlin.math.ceil
@@ -185,6 +189,9 @@ fun Modifier.iconDepth(shape: Shape, side: Dp, shadow: Boolean = true): Modifier
     val look = remember(side, onWallpaper, dark, shadow) { IconDepth.look(side.value, onWallpaper, dark, shadow) } ?: return this
     val tilt = LocalTilt.current
     val tuning = LocalGlassTuning.current
+    // In Lite the light stays where it sits, so it is drawn once for every icon of one outline and
+    // size, and only laid over each, rather than traced round each icon on every frame it moves.
+    val lite = LocalLite.current
     return drawWithCache {
         val outline = shape.createOutline(size, layoutDirection, this)
         val face = Path().apply { addOutline(outline) }
@@ -201,17 +208,59 @@ fun Modifier.iconDepth(shape: Shape, side: Dp, shadow: Boolean = true): Modifier
             1f to Color.Black.copy(alpha = look.footShade),
         )
         val cast = if (look.shadows.isEmpty()) null else CastShadows.of(shape, face, size, density, look.shadows)
-        onDrawWithContent {
-            if (cast != null) drawImage(cast.image, topLeft = Offset(-cast.margin, -cast.margin))
-            drawContent()
+        // The light and shade on the face and the light round its rim, for light falling from [light].
+        fun DrawScope.lightUp(light: Offset) {
             drawPath(face, faceLight)
-            // Where the light is, read here so it moves with the phone and composes nothing.
-            val (lamp, far) = IconDepth.rimEnds(lightFrom(tilt.value, tuning), size)
+            val (lamp, far) = IconDepth.rimEnds(light, size)
             val sheen = IconDepth.rimBrush(look.sheen / sheens.size, lamp, far)
             for ((path, width) in sheens) drawPath(path, sheen, style = Stroke(width))
             drawPath(rim, IconDepth.rimBrush(look.rim, lamp, far), style = Stroke(rimWidth))
         }
+        val lit = if (lite) LitFaces.of(shape, size, this, layoutDirection, look, lightFrom(tilt.value, tuning)) { lightUp(it) } else null
+        onDrawWithContent {
+            if (cast != null) drawImage(cast.image, topLeft = Offset(-cast.margin, -cast.margin))
+            drawContent()
+            if (lit != null) {
+                drawImage(lit)
+            } else {
+                // Where the light is, read here so it moves with the phone and composes nothing.
+                lightUp(lightFrom(tilt.value, tuning))
+            }
+        }
     }
+}
+
+/**
+ * The light on icons whose light stays where it sits, as it does in Lite: drawn once for each
+ * outline, size and light, which is a handful, and shared by every icon drawn with it.
+ */
+private object LitFaces {
+    private data class Kind(val shape: Shape, val width: Int, val height: Int, val density: Float, val look: IconDepthLook, val light: Offset)
+
+    private val made = object : LinkedHashMap<Kind, ImageBitmap>(8, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Kind, ImageBitmap>?): Boolean = size > KEPT
+    }
+
+    fun of(
+        shape: Shape,
+        size: Size,
+        density: Density,
+        layoutDirection: LayoutDirection,
+        look: IconDepthLook,
+        light: Offset,
+        draw: DrawScope.(Offset) -> Unit,
+    ): ImageBitmap {
+        val kind = Kind(shape, ceil(size.width).toInt().coerceAtLeast(1), ceil(size.height).toInt().coerceAtLeast(1), density.density, look, light)
+        synchronized(made) { made[kind]?.let { return it } }
+        val image = ImageBitmap(kind.width, kind.height)
+        CanvasDrawScope().draw(density, layoutDirection, androidx.compose.ui.graphics.Canvas(image), size) { draw(light) }
+        image.prepareToDraw()
+        synchronized(made) { made[kind] = image }
+        return image
+    }
+
+    /** As many as there could be outlines and sizes on screen at once, and a few over. */
+    private const val KEPT = 12
 }
 
 /** This outline drawn [by] pixels further in all round, in an icon of [size]. */

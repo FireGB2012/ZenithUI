@@ -541,9 +541,11 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
     // The home screen's blur behind the drawer: a copy of it blurred once and faded in over it, not a
     // blur grown frame by frame (see DrawerFrost), as far as the theme blurs what is behind. Android 12
     // and later; before that the home screen only dims behind the drawer, as it always did there. A
-    // theme that blurs nothing (Clean, Retro) lays a veil of its page over it instead, on any phone.
+    // theme that blurs nothing (Clean, Retro) lays a veil of its page over it instead, on any phone,
+    // and so does Lite, in any theme.
     val theme = com.gabriel.zenithui.ui.theme.LocalTheme.current
-    val blurBehind = theme.blurBehind.dp
+    val lite = com.gabriel.zenithui.ui.theme.LocalLite.current
+    val blurBehind = com.gabriel.zenithui.data.Performance.blurBehind(theme.blurBehind, lite).dp
     val canFrost = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S && blurBehind > 0.dp
     val homeLayer = androidx.compose.ui.graphics.rememberGraphicsLayer()
     val frost = remember { derivedStateOf { DrawerFrost.amount(drawerNow()) } }
@@ -1662,7 +1664,10 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
     // Rest over a spot for a moment and whatever is there steps aside, the way it does on a phone;
     // keep moving and nothing shuffles. Resting on an icon's middle is for making a folder, and
     // resting on the bin for throwing away, so nothing steps aside then.
-    LaunchedEffect(dropPlan?.target, drag.hoverCandidateId, overRemove, pagerState.currentPage) {
+    // The page in view, as far as carrying something cares: only while something is carried, so a
+    // swipe on its own does not compose the whole home screen again half way through.
+    val carriedPage by remember { derivedStateOf { if (drag.isDragging) pagerState.currentPage else -1 } }
+    LaunchedEffect(dropPlan?.target, drag.hoverCandidateId, overRemove, carriedPage) {
         drag.preview = null
         val plan = dropPlan ?: return@LaunchedEffect
         if (plan.moves.isEmpty() || drag.hoverCandidateId != null || overRemove) return@LaunchedEffect
@@ -1876,9 +1881,12 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         }
     }
 
-    // A page you added but left empty is forgotten once you swipe away from it.
-    LaunchedEffect(pagerState.settledPage, drag.isDragging) {
-        if (!drag.isDragging) viewModel.trimPages(pagerState.settledPage)
+    // A page you added but left empty is forgotten once you swipe away from it. Watched rather than
+    // read while composing, so a page coming to rest composes nothing here.
+    LaunchedEffect(pagerState) {
+        snapshotFlow { pagerState.settledPage to drag.isDragging }.collect { (settled, dragging) ->
+            if (!dragging) viewModel.trimPages(settled)
+        }
     }
 
     var hintDismissed by rememberSaveable { mutableStateOf(false) }
@@ -1911,8 +1919,8 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         label = "homeBlur",
     )
     // As far as the theme blurs what is behind: Liquid Glass's is the blur as it is drawn, and Clean
-    // and Retro have none, only the dim.
-    val blurShare = theme.blurBehind / com.gabriel.zenithui.data.Themes.LiquidGlass.blurBehind
+    // and Retro have none, only the dim. Nor has Lite.
+    val blurShare = blurBehind.value / com.gabriel.zenithui.data.Themes.LiquidGlass.blurBehind
     val homeBlur = designedBlur.value * blurShare
     val homePressed by viewModel.homePressed.collectAsState()
     val environmentTick by viewModel.environmentTick.collectAsState()
@@ -2565,15 +2573,28 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                                 // carrying it survives being scrolled off screen.
                                 beyondViewportPageCount = if (drag.isDragging) LayoutBuilder.MAX_PAGES else 1,
                             ) { page ->
-                                val offset = (pagerState.currentPage - page) + pagerState.currentPageOffsetFraction
+                                // How far the page is through a swipe is read only while it is drawn,
+                                // in its layer below and the layers of what is on it: a swipe composes
+                                // nothing, every page is drawn again as it moves rather than built
+                                // again on every frame of it. What the page is composed with changes
+                                // once a swipe, as it comes to rest.
+                                val offsetNow = remember(pagerState, page) {
+                                    { (pagerState.currentPage - page) + pagerState.currentPageOffsetFraction }
+                                }
                                 // The page the swipe started on, whichever way it goes: the one Stack sinks.
                                 val leaving = page == pagerState.settledPage
                                 // With movement reduced a page simply slides.
-                                val turn = PageEffects.transform(if (motion.reduced) "slide" else settings.pageEffect, offset, leaving)
+                                val effect = if (motion.reduced) "slide" else settings.pageEffect
+                                val pageItems = remember(layout, page) { layout.filter { it.page == page } }
+                                // The page coming in is drawn over the one being left, going back as
+                                // well as going on: the pager alone draws them left to right. Set out
+                                // here, so the page itself is not composed again as the swipe ends.
+                                Box(Modifier.fillMaxSize().zIndex(PageEffects.over(leaving))) {
                                 HomePage(
                                     page = page,
-                                    active = page == pagerState.currentPage,
-                                    items = layout.filter { it.page == page },
+                                    // The page that is in view at rest: the one things are dropped on.
+                                    active = page == pagerState.settledPage,
+                                    items = pageItems,
                                     settings = settings,
                                     appsByKey = appsByKey,
                                     drag = drag,
@@ -2612,7 +2633,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                                     dropPlan = dropPlan,
                                     freePlacement = settings.freeform && plus.active,
                                     animateEntrance = entrance,
-                                    pageOffset = if (turn.parallax) offset else 0f,
+                                    pageOffset = if (PageEffects.parallax(effect)) offsetNow else NO_PAGE_OFFSET,
                                     arrivalClock = { arrivalClock.value },
                                     arrivalDepth = { arrivalDepth.floatValue },
                                     arrivalWave = { arrivalWave.value },
@@ -2620,10 +2641,10 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                                     jiggleStrength = { jiggleStrength.value },
                                     modifier = Modifier
                                         .fillMaxSize()
-                                        // The page coming in is drawn over the one being left, going back
-                                        // as well as going on: the pager alone draws them left to right.
-                                        .zIndex(PageEffects.over(leaving))
                                         .graphicsLayer {
+                                            // Which page the swipe started on is read here too, so
+                                            // the layer changes with it and the page is not composed.
+                                            val turn = PageEffects.transform(effect, offsetNow(), page == pagerState.settledPage)
                                             alpha = turn.alpha
                                             scaleX = turn.scale * turn.squash
                                             scaleY = turn.scale
@@ -2637,6 +2658,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                                         }
                                         .padding(horizontal = PAGE_MARGIN, vertical = 4.dp),
                                 )
+                                }
                             }
 
                             if (layout.isEmpty()) {
@@ -2828,10 +2850,13 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
 
         // ------------------------------------------------------------ drawer
         // ------------------------------------------------------------ page overview
+        // The page in view is read inside, so a swipe composes the overview's corner of the home
+        // screen and not all of it.
+        CurrentPage(pagerState) { currentPage ->
         PageOverview(
             visible = overview,
             pageCount = pageCount,
-            current = pagerState.currentPage,
+            current = currentPage,
             layout = layout,
             appsByKey = appsByKey,
             settings = settings,
@@ -2855,6 +2880,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             onAdd = { viewModel.addPage() },
             onDismiss = { overview = false },
         )
+        }
 
         // Undo is part of the home screen now, in Search's place in the band: see HomeLayout's searchBand.
 
@@ -3903,4 +3929,14 @@ private val TWO_FINGER_SWIPE = 70.dp
 private class QuickHold(base: androidx.compose.ui.platform.ViewConfiguration) :
     androidx.compose.ui.platform.ViewConfiguration by base {
     override val longPressTimeoutMillis: Long get() = HoldTuning.HOLD_MS
+}
+
+/**
+ * The page in view, read here rather than by the home screen itself: the home screen is a great
+ * deal to compose, and reading the page where it is composed would compose all of it again half
+ * way through every swipe, just for the one thing that wants to know.
+ */
+@Composable
+private fun CurrentPage(pagerState: androidx.compose.foundation.pager.PagerState, content: @Composable (Int) -> Unit) {
+    content(pagerState.currentPage)
 }

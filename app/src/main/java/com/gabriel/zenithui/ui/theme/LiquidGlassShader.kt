@@ -204,6 +204,8 @@ internal class LiquidGlassShader(val levels: GlassLevels) {
             uniform float dim;
 
             const float3 LUMA = float3(0.2126, 0.7152, 0.0722);
+            // How far in from the outline, in dp, the light on the edge reaches before it is gone.
+            const float RIM_REACH = 24.0;
 
             // Signed distance to the outline, negative inside, in pixels. Its corners are rounded out
             // to at least [round], which is how the direction the rim faces is found: from a
@@ -222,6 +224,30 @@ internal class LiquidGlassShader(val levels: GlassLevels) {
                 radius = min(max(radius, round), min(halfSize.x, halfSize.y));
                 float2 q = abs(p) - halfSize + radius;
                 return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - radius;
+            }
+
+            // Which way the outline faces near [point], outwards: the way [edgeDistance] grows, worked
+            // out exactly rather than measured either side of the point. Its corners are rounded out
+            // to at least [round], so that it turns smoothly round a corner instead of snapping at it.
+            float2 rimNormal(float2 point, float round) {
+                float2 halfSize = size * 0.5;
+                float2 p = point - halfSize;
+                float2 side = float2(p.x < 0.0 ? -1.0 : 1.0, p.y < 0.0 ? -1.0 : 1.0);
+                if (squircle > 0.5) {
+                    float2 scale = max(halfSize, float2(1.0));
+                    float2 v = abs(p) / scale;
+                    float2 g = side * pow(v, float2(squircleN - 1.0)) / scale;
+                    return g / max(length(g), 0.0001);
+                }
+                float radius = p.y < 0.0
+                    ? (p.x < 0.0 ? corners.x : corners.y)
+                    : (p.x < 0.0 ? corners.w : corners.z);
+                radius = min(max(radius, round), min(halfSize.x, halfSize.y));
+                float2 q = abs(p) - halfSize + radius;
+                if (q.x > 0.0 && q.y > 0.0) {
+                    return side * normalize(q);
+                }
+                return q.x > q.y ? float2(side.x, 0.0) : float2(0.0, side.y);
             }
 
             // What is behind a point, as soft as asked: 0 is the picture as it is, 3 little but
@@ -248,13 +274,18 @@ internal class LiquidGlassShader(val levels: GlassLevels) {
                 float inside = max(-d, 0.0);
                 float px = density;
 
-                // Which way the rim faces here, outwards.
-                float round = band * 1.5;
-                float2 gradient = float2(
-                    edgeDistance(point + float2(1.0, 0.0), round) - edgeDistance(point - float2(1.0, 0.0), round),
-                    edgeDistance(point + float2(0.0, 1.0), round) - edgeDistance(point - float2(0.0, 1.0), round)
-                );
-                float2 normal = gradient / max(length(gradient), 0.0001);
+                // Which way the rim faces here, outwards, and the light on the edge: a hairline hugging
+                // the outline and a softer glow just inside it. Only the rim has them. Past the band
+                // and the glow, which has faded to nothing [RIM_REACH] in, nothing on the pane needs
+                // them, so most of a big pane is spared working them out.
+                float2 normal = float2(0.0);
+                float hairline = 0.0;
+                float sheen = 0.0;
+                if (rimmed > 0.5 && inside < max(band, RIM_REACH * px)) {
+                    normal = rimNormal(point, band * 1.5);
+                    hairline = exp(-inside / (0.8 * px));
+                    sheen = exp(-inside / (3.5 * px));
+                }
 
                 // The lens. 0 where the band starts, 1 at the very edge. A pane that runs off the
                 // screen has no rim: it is all flat middle.
@@ -316,9 +347,9 @@ internal class LiquidGlassShader(val levels: GlassLevels) {
                 // inside it, at their brightest on the corner that faces the lamp and on the corner
                 // opposite, and faint all the way round between.
                 float facing = dot(normal, light);
-                float spec = pow(max(facing, 0.0), 3.0) + 0.65 * pow(max(-facing, 0.0), 3.0);
-                float hairline = exp(-inside / (0.8 * px)) * rimmed;
-                float sheen = exp(-inside / (3.5 * px)) * rimmed;
+                float toward = max(facing, 0.0);
+                float away = max(-facing, 0.0);
+                float spec = toward * toward * toward + 0.65 * away * away * away;
                 // Glass reflects more the more it is seen edge-on: the bent band is a touch brighter
                 // than the face, and more on the lit side.
                 float fresnel = x * x * (0.035 + 0.05 * spec);

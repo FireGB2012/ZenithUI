@@ -44,6 +44,9 @@ object RefreshRate {
         display.supportedModes.maxOfOrNull { it.refreshRate } ?: display.refreshRate
     }.getOrDefault(FLOOR_HZ).coerceAtLeast(FLOOR_HZ)
 
+    /** How fast the screen runs now, or [FLOOR_HZ] when it cannot be read. */
+    fun currentHz(activity: Activity): Float = runCatching { activity.screen?.refreshRate ?: FLOOR_HZ }.getOrDefault(FLOOR_HZ)
+
     /** Asks for the fastest mode the screen has. */
     fun applyFullSpeed(activity: Activity) {
         runCatching {

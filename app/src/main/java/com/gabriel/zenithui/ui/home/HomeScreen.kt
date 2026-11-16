@@ -154,8 +154,6 @@ import com.gabriel.zenithui.data.findActivity
 import com.gabriel.zenithui.ui.common.LaunchOrigin
 import com.gabriel.zenithui.ui.common.Motion
 import com.gabriel.zenithui.ui.common.appearIn
-import com.gabriel.zenithui.ui.common.edgeIn
-import com.gabriel.zenithui.ui.common.edgeOut
 import com.gabriel.zenithui.ui.common.pressBounce
 import com.gabriel.zenithui.ui.common.wordsChange
 import com.gabriel.zenithui.ui.theme.LocalPalette
@@ -165,6 +163,7 @@ import com.gabriel.zenithui.ui.settings.LookActions
 import com.gabriel.zenithui.ui.settings.SettingsActions
 import com.gabriel.zenithui.ui.settings.SettingsPreview
 import com.gabriel.zenithui.ui.settings.SettingsScreen
+import com.gabriel.zenithui.ui.theme.LocalWallpaperDim
 import com.gabriel.zenithui.ui.theme.LocalWallpaperOffset
 import com.gabriel.zenithui.ui.theme.ZenithShapes
 import com.gabriel.zenithui.ui.theme.glass
@@ -188,7 +187,6 @@ import com.gabriel.zenithui.ui.settings.AccountActions
  */
 private val PAGE_FLIP_EDGE = 16.dp
 
-/** How far the home screen sinks back while an app opens out of it. */
 /** Coming home longer than this after opening an app does not shrink it back into its icon. */
 private const val CLOSE_WINDOW_MS = 30 * 60 * 1000L
 
@@ -204,12 +202,8 @@ private const val REORDER_DELAY = 280L
 /** The space between the edge of the screen and the page, the dock and everything else on it. */
 private val PAGE_MARGIN = 12.dp
 
-/**
- * The room left round a bar of glass that fades as it comes and goes. While it fades it is drawn
- * through a layer of its own, which cuts off whatever reaches past its edges: the shadow the glass
- * casts, and the bin itself when it swells.
- */
-private val BAR_ROOM = 28.dp
+/** How dark the veil over the wallpaper is when Customise's "Dim the wallpaper" is on. */
+private const val WALLPAPER_DIM = 0.3f
 
 /** How long the home screen must be left alone before a scheduled Look goes on. */
 private const val LOOK_DUE_WAIT_MS = 1500L
@@ -283,6 +277,8 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
 
     val settings by viewModel.settings.collectAsState()
     val layout by viewModel.layout.collectAsState()
+    // What is popping off the home screen and what Undo is blowing back onto it.
+    val bubbles = remember { Bubbles() }
     val looks by viewModel.looks.collectAsState()
     val apps by viewModel.apps.collectAsState()
     val appsByKey = remember(apps) { apps.associateBy { it.key } }
@@ -423,6 +419,8 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
     }
     val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
     val motion = LocalMotionLevel.current
+    // Asked as something happens, by listeners that outlive a change to Motion.
+    val liveMotion by androidx.compose.runtime.rememberUpdatedState(motion)
     var resizingId by remember { mutableStateOf<String?>(null) }
     // The menu beside something held, and a question asked in a card of glass over the home screen.
     val holdMenu = remember { HoldMenuState() }
@@ -515,24 +513,70 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         }
     }
 
+    // The one ring of light on the home screen, for every pane of glass and every icon to read while
+    // drawing: a tap on the wallpaper sends it out, and so do edit mode's waves.
+    val glassRing = remember { GlassRing() }
+    LaunchedEffect(glassRing) { glassRing.play() }
+    val ringDensity = LocalDensity.current.density
+
+    // Edit mode starts and ends with a wave of light: a quick one from where it was started wakes
+    // everything as it reaches it, and a calmer one from where it was ended settles it all again.
+    // While the calm one crosses the screen, what it has not reached yet still wiggles.
+    var calming by remember { mutableStateOf(false) }
+    val calmJob = remember { arrayOfNulls<kotlinx.coroutines.Job>(1) }
+    /** A wave of [style] from [at] on the screen, or from the middle of it; none with movement reduced. */
+    fun sendWave(at: Offset?, style: com.gabriel.zenithui.ui.theme.RingStyle) {
+        if (liveMotion.reduced) return
+        glassRing.screen = androidx.compose.ui.geometry.Size(drawerWidthPx, drawerHeightPx)
+        glassRing.density = ringDensity
+        glassRing.startOnNextFrame(at ?: Offset(drawerWidthPx / 2f, drawerHeightPx / 2f), style)
+    }
+
+    /** Edit mode, begun: the wave that wakes everything runs out from [at]. */
+    fun beginEditing(at: Offset?) {
+        calmJob[0]?.cancel()
+        calming = false
+        sendWave(at, com.gabriel.zenithui.ui.theme.RingStyle.WAKE)
+        editing = true
+        viewModel.setEditing(true)
+    }
+
     /**
      * Into edit mode, from a hold on the wallpaper, "Edit Home Screen" in a menu, or something being
-     * picked up. With the layout locked it says so instead, and offers to unlock.
+     * picked up, at [at] on the screen. With the layout locked it says so instead, and offers to unlock.
      */
-    fun startEdit() {
+    fun startEdit(at: Offset? = null) {
         if (settings.lockLayout) {
             toast = HomeToast("The layout is locked", "Unlock") { viewModel.updateSettings { it.copy(lockLayout = false) } }
             return
         }
         holdMenu.close()
         resizingId = null
-        editing = true
+        if (!editing) beginEditing(at)
     }
 
-    fun endEdit() {
+    /**
+     * Out of edit mode, from Done, a tap on the wallpaper, Back or Home: the calm wave runs out from
+     * [at], or the middle of the screen. [quietly] settles everything at once, for leaving the home
+     * screen for something that covers it.
+     */
+    fun endEdit(at: Offset? = null, quietly: Boolean = false) {
+        if (editing) {
+            if (!quietly) sendWave(at, com.gabriel.zenithui.ui.theme.RingStyle.CALM)
+            if (!quietly && !liveMotion.reduced) {
+                calming = true
+                calmJob[0]?.cancel()
+                calmJob[0] = scope.launch {
+                    delay(com.gabriel.zenithui.ui.theme.RingStyle.CALM.durationMs.toLong() + BeadMotion.CALM_MS)
+                    calming = false
+                }
+            }
+        }
         editing = false
         customising = false
         resizingId = null
+        // Undo keeps the last change made, for the usual few seconds, and lets go of the rest.
+        viewModel.setEditing(false)
     }
 
     /** Back into its icon; only then is it gone, so the home screen is never left dimmed behind nothing. */
@@ -605,7 +649,6 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
     // Arriving. One clock for the whole home screen: at 0 everything is out from the middle, at
     // FlyIn.TOTAL_MS it is all in its place. It is wound back while nobody can see — at a cold
     // start, or when Zenith is stopped — and let run once the home screen is on show again.
-    val liveMotion by androidx.compose.runtime.rememberUpdatedState(motion)
     val flyOnStart = remember { !entrance && !motion.reduced }
     val arrivalClock = remember { Animatable(if (flyOnStart) 0f else FlyIn.TOTAL_MS.toFloat()) }
     val arrivalDepth = remember { mutableFloatStateOf(FlyIn.FULL) }
@@ -1139,10 +1182,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
     // A tap on the wallpaper sends a ring of light out from under the finger, across the whole
     // screen: every pane of glass lights up as it passes, and the icons catch a gleam. It takes the
     // place of the small ring a double tap used to send, and a double tap sends it too. None with
-    // movement reduced.
-    val glassRing = remember { GlassRing() }
-    LaunchedEffect(glassRing) { glassRing.play() }
-    val ringDensity = LocalDensity.current.density
+    // movement reduced. (The ring itself, which edit mode's waves are too, is made further up.)
     /** A ring from [at], on the screen in pixels. */
     fun ringAt(at: Offset) {
         // Asked as the tap comes, not when the page's tap listener was set up, which outlives a
@@ -1215,7 +1255,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
 
     // Everything else on the page rocks while something is carried. One clock for all of it, and
     // it runs only from the moment something is picked up until the rocking has died away.
-    val jiggleStrength = animateFloatAsState(if ((drag.isDragging || (editing && !customising)) && !motion.reduced) 1f else 0f, tween(200), label = "jiggle")
+    val jiggleStrength = animateFloatAsState(if ((drag.isDragging || ((editing || calming) && !customising)) && !motion.reduced) 1f else 0f, tween(200), label = "jiggle")
     val jiggleClock = remember { mutableFloatStateOf(0f) }
     val jiggling by remember { derivedStateOf { jiggleStrength.value > 0.001f } }
     LaunchedEffect(jiggling) {
@@ -1652,6 +1692,12 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         else -> 0L
     }
 
+    /** Takes [id] off the home screen, popping like a soap bubble where it stood. */
+    fun popOff(id: String) {
+        bubbles.pop(listOf(id))
+        viewModel.removeItem(id)
+    }
+
     /** Asks before something is taken off the home screen, the way a phone does. Undo still follows. */
     fun askRemove(target: HoldTarget) {
         val apps = if (libraryMode) "App Library" else "app drawer"
@@ -1662,7 +1708,10 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     title = "Remove “$name”?",
                     message = "Removing from the Dock will keep the app in your $apps.",
                     buttons = listOf(
-                        AlertButton("Remove from Dock") { viewModel.toggleDock(target.key) },
+                        AlertButton("Remove from Dock") {
+                            bubbles.pop(listOf(dockBubble(target.key)))
+                            viewModel.toggleDock(target.key)
+                        },
                         AlertButton("Uninstall App", danger = true) { viewModel.uninstall(target.key) },
                         AlertButton("Cancel") {},
                     ),
@@ -1674,7 +1723,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     title = "Remove “${appsByKey[item.key]?.label ?: "this app"}”?",
                     message = "Removing from Home Screen will keep the app in your $apps.",
                     buttons = listOf(
-                        AlertButton("Remove from Home Screen") { viewModel.removeItem(item.id) },
+                        AlertButton("Remove from Home Screen") { popOff(item.id) },
                         AlertButton("Uninstall App", danger = true) { viewModel.uninstall(item.key) },
                         AlertButton("Cancel") {},
                     ),
@@ -1683,14 +1732,14 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 is com.gabriel.zenithui.data.ShortcutCell -> alert = HomeAlert(
                     title = "Remove “${item.label}”?",
                     message = "Its app keeps the shortcut.",
-                    buttons = listOf(AlertButton("Remove", danger = true) { viewModel.removeItem(item.id) }, AlertButton("Cancel") {}),
+                    buttons = listOf(AlertButton("Remove", danger = true) { popOff(item.id) }, AlertButton("Cancel") {}),
                 )
 
                 is FolderCell -> alert = HomeAlert(
                     title = "Remove “${item.title}”?",
                     message = "Removing from Home Screen will keep all its apps in your $apps.",
                     buttons = listOf(
-                        AlertButton("Remove from Home Screen", danger = true) { viewModel.removeItem(item.id) },
+                        AlertButton("Remove from Home Screen", danger = true) { popOff(item.id) },
                         AlertButton("Cancel") {},
                     ),
                 )
@@ -1701,14 +1750,14 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     alert = HomeAlert(
                         title = "Remove “$name”?",
                         message = "You can add it again from Add Widget.",
-                        buttons = listOf(AlertButton("Remove", danger = true) { viewModel.removeItem(item.id) }, AlertButton("Cancel") {}),
+                        buttons = listOf(AlertButton("Remove", danger = true) { popOff(item.id) }, AlertButton("Cancel") {}),
                     )
                 }
 
                 is StackCell -> alert = HomeAlert(
                     title = "Remove this stack?",
                     message = "All ${item.members.size} widgets in it go. You can add them again from Add Widget.",
-                    buttons = listOf(AlertButton("Remove", danger = true) { viewModel.removeItem(item.id) }, AlertButton("Cancel") {}),
+                    buttons = listOf(AlertButton("Remove", danger = true) { popOff(item.id) }, AlertButton("Cancel") {}),
                 )
 
                 null -> Unit
@@ -1729,9 +1778,13 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 holdMenu.close()
                 when (row.what) {
                     HoldDo.SHORTCUT -> holdShortcuts.getOrNull(row.index)?.let { launchApp(it.key) }
-                    HoldDo.EDIT_HOME -> startEdit()
+                    HoldDo.EDIT_HOME -> startEdit(open.frame.center)
                     HoldDo.EDIT_NAME -> appKey?.let { showSheet(HomeSheet.EditApp(it)) }
-                    HoldDo.RESIZE -> resizingId = id
+                    // Into edit mode, with this app's corner out as well as the widgets'.
+                    HoldDo.RESIZE -> {
+                        startEdit(open.frame.center)
+                        if (editing) resizingId = id
+                    }
                     HoldDo.ADD_TO_HOME -> appKey?.let { key ->
                         val page = viewModel.addAppToFirstFreeSlot(key)
                         if (page == null) Toast.makeText(context, "Every page is full", Toast.LENGTH_SHORT).show() else revealPage(page)
@@ -1828,9 +1881,10 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 val by = pointer - open.start
                 val pickedUp = HoldGesture.picksUp(by.x, by.y, pickUpSlop, holdMenu.above, holdMenu.onMenu, settings.lockLayout)
                 if (pickedUp) {
-                    // Picked up, the home screen is being edited, and stays so when the thing is put down.
+                    // Picked up, the home screen is being edited, and stays so when the thing is put
+                    // down. The wave wakes everything from what was picked up.
                     holdMenu.close(pickedUp = true)
-                    editing = true
+                    if (!editing) beginEditing(open.frame.center)
                 }
                 pickedUp
             }
@@ -1849,7 +1903,10 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         )
     }
 
-    CompositionLocalProvider(LocalWidgetWorld provides widgetWorld) {
+    // The wallpaper a little darker, when Customise has been asked for that: a veil over it, under
+    // everything that stands on it, and the same darkening on the copy of it the glass shows.
+    val dimmed = animateFloatAsState(if (settings.dimWallpaper) WALLPAPER_DIM else 0f, tween(300), label = "dimWallpaper")
+    CompositionLocalProvider(LocalWidgetWorld provides widgetWorld, LocalWallpaperDim provides dimmed) {
     Box(
         Modifier
             .fillMaxSize()
@@ -1930,12 +1987,10 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         // A wallpaper changing with the theme fades in here, behind everything.
         WallpaperFade(wallpaperIncoming, wallpaperOffset)
 
-        // The wallpaper a little darker, when Customise has been asked for that: a veil over it and
-        // under everything that stands on it.
-        val dimmed by animateFloatAsState(if (settings.dimWallpaper) 0.3f else 0f, tween(300), label = "dimWallpaper")
-        if (dimmed > 0.001f) {
+        // The veil that dims the wallpaper; the glass darkens its own copy by as much.
+        if (dimmed.value > 0.001f) {
             androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
-                drawRect(androidx.compose.ui.graphics.Color.Black.copy(alpha = dimmed))
+                drawRect(androidx.compose.ui.graphics.Color.Black.copy(alpha = dimmed.value))
             }
         }
 
@@ -2040,7 +2095,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                                             when {
                                                 resizingId != null -> resizingId = null
                                                 // A tap on the wallpaper is one of the ways out of edit mode.
-                                                editing -> endEdit()
+                                                editing -> endEdit(pageOrigin + at)
                                                 else -> ringAt(pageOrigin + at)
                                             }
                                         },
@@ -2052,7 +2107,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                                         },
                                         // Holding an empty spot starts edit mode, as on a phone;
                                         // Customise is the brush in its bar.
-                                        onLongPress = { if (resizingId == null && !editing) startEdit() },
+                                        onLongPress = { at -> if (resizingId == null && !editing) startEdit(pageOrigin + at) },
                                     )
                                 },
                         ) {
@@ -2098,6 +2153,13 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                                     },
                                     onRestoreWidget = { item, info -> viewModel.addHostedWidget(info, replacing = item.id) },
                                     onResizeDone = { resizingId = null },
+                                    onResizePull = { item, starting ->
+                                        if (starting) {
+                                            viewModel.beginChange()
+                                        } else {
+                                            viewModel.endChange({ "${viewModel.nameOf(item.id)} resized" })
+                                        }
+                                    },
                                     onGathered = { haptic.tick() },
                                     onOpenApp = { launchApp(it) },
                                     onOpenFolder = { folder, icon -> openFolder(folder.id, icon) },
@@ -2107,6 +2169,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                                     editing = editing,
                                     onBead = { askRemove(HoldTarget.Item(it.id)) },
                                     beads = !customising,
+                                    bubbles = bubbles,
                                     onSearch = { openDrawer(search = true) },
                                     onNoteChange = { viewModel.setNote(it) },
                                     onAmbient = { ambient = true },
@@ -2164,19 +2227,17 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 // Part of the home screen, it sinks, fades and softens with it as the drawer, a
                 // folder, an app or Settings comes over it.
                 searchBand = { band ->
-                    val removed by viewModel.removed.collectAsState()
-                    val removedWhat = when (removed.size) {
-                        0 -> null
-                        1 -> "${removedName(removed.first(), appsByKey)} removed"
-                        else -> "${removed.size} things removed"
-                    }
+                    // What Undo would take back: outside edit mode the one change left over, for a
+                    // few seconds; edited, every change made, newest first, for as long as it lasts.
+                    val undo by viewModel.undoable.collectAsState()
+                    val undoShown = undo?.takeIf { editing != it.timed && !customising }
                     // Edited, the pill stretches into the bar of controls; while something is
                     // carried the bar draws back into the pill, which shows the pages, so the
                     // dock is free to be dropped on.
                     val barShown = editing && !drag.isDragging && !customising
                     Box(band.zIndex(1f), contentAlignment = Alignment.Center) {
                         AnimatedVisibility(
-                            visible = !barShown && (removedWhat == null || editing),
+                            visible = !barShown && (undoShown == null || editing),
                             enter = bandSwapIn(motion.reduced),
                             exit = bandSwapOut(motion.reduced),
                         ) {
@@ -2198,10 +2259,24 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                             )
                         }
                         UndoPill(
-                            what = removedWhat,
-                            key = removed.firstOrNull()?.id,
+                            what = undoShown?.label,
+                            key = undoShown?.key,
                             millis = com.gabriel.zenithui.data.UNDO_MS,
-                            onUndo = { viewModel.undoRemove().firstOrNull()?.let { back -> revealPage(back.page) } },
+                            more = undoShown?.more ?: 0,
+                            timed = undoShown?.timed ?: true,
+                            // It happened on another page: the screen turns there to show it undone.
+                            // What comes back to the page, rather than moving back on it, blows
+                            // back together.
+                            onUndo = {
+                                val had = layout.mapTo(HashSet()) { it.id }
+                                val docked = settings.dock.toHashSet()
+                                val back = viewModel.undo()
+                                bubbles.back(
+                                    back.filter { it.id !in had }.map { it.id } +
+                                        viewModel.settings.value.dock.filter { it !in docked }.map(::dockBubble)
+                                )
+                                back.firstOrNull()?.let { revealPage(it.page) }
+                            },
                             // Edited, Undo stands just above the bar rather than in its place.
                             modifier = Modifier.padding(horizontal = 16.dp).offset(y = if (editing) (-56).dp else 0.dp),
                         )
@@ -2212,7 +2287,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                             onAdd = { widgetsOpen = true },
                             onCustomise = { customising = true },
                             onPages = { overview = true },
-                            onDone = { endEdit() },
+                            onDone = { at -> endEdit(at) },
                         )
                     }
                 },
@@ -2234,6 +2309,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                             editing = editing,
                             onBead = { askRemove(HoldTarget.Dock(it)) },
                             beads = !customising,
+                            bubbles = bubbles,
                             jiggleClock = { jiggleClock.floatValue },
                             jiggleStrength = { jiggleStrength.value },
                             onReorder = { from, to -> viewModel.moveInDock(from, to) },
@@ -2395,58 +2471,6 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             )
         }
 
-        // Down from the top edge while something is being resized, and back up when it is done.
-        AnimatedVisibility(
-            visible = resizingId != null,
-            enter = edgeIn(motion.reduced),
-            exit = edgeOut(motion.reduced),
-            modifier = Modifier.align(Alignment.TopCenter),
-        ) {
-            Row(
-                Modifier
-                    .statusBarsPadding()
-                    .padding(start = BAR_ROOM, top = 12.dp, end = BAR_ROOM, bottom = BAR_ROOM)
-                    .pressBounce(0.96f)
-                    .glass(ZenithShapes.pill, strength = 1.2f, solid = 0.4f)
-                    .clickable { resizingId = null }
-                    .padding(horizontal = 20.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = "Pull the pointer to resize · tap to finish",
-                    color = palette.onGlass,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium,
-                )
-            }
-        }
-
-        // The same thing in taps: a widget's named sizes, and arrows that move it a cell at a time.
-        // It comes up from the foot of the screen, and on its way back down it is still the bar
-        // for whatever was last being resized.
-        val reshaping = resizingId?.let { id -> layout.firstOrNull { it.id == id } }
-        val reshaped = remember { arrayOfNulls<HomeItem>(1) }
-        if (reshaping != null) reshaped[0] = reshaping
-        AnimatedVisibility(
-            visible = reshaping != null,
-            enter = edgeIn(motion.reduced, fromFoot = true),
-            exit = edgeOut(motion.reduced, toFoot = true),
-            modifier = Modifier.align(Alignment.BottomCenter),
-        ) {
-            val item = reshaped[0]
-            if (item != null) ResizeBar(
-                item = item,
-                columns = settings.columns,
-                rows = settings.rows,
-                onSize = { size -> viewModel.resizeWidgetTo(item.id, size.spanX, size.spanY) },
-                onNudge = { dCol, dRows -> viewModel.nudgeItem(item.id, dCol, dRows) },
-                onDone = { resizingId = null },
-                modifier = Modifier
-                    .navigationBarsPadding()
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
-            )
-        }
-
         // ------------------------------------------------------------ drag layer
         if (drag.isDragging) {
             // Rest on a neighbour for a moment before a folder is on the cards.
@@ -2535,7 +2559,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                         showSheet(HomeSheet.Wallpapers)
                     },
                     onClock = {
-                        endEdit()
+                        endEdit(quietly = true)
                         ambient = true
                     },
                     onHelp = {
@@ -2543,7 +2567,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                         showSheet(HomeSheet.Help)
                     },
                     onSettings = {
-                        endEdit()
+                        endEdit(quietly = true)
                         settingsOpen = true
                     },
                     // The grid it sets is worked out for this screen and the home screen settled

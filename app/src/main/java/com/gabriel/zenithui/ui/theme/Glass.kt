@@ -135,6 +135,7 @@ fun Modifier.glass(
     val levels = LocalGlassLevels.current
     val screen = LocalScreenSize.current
     val wallpaperOffset = LocalWallpaperOffset.current
+    val wallpaperDim = LocalWallpaperDim.current
     val tilt = LocalTilt.current
     val tuning = LocalGlassTuning.current
     val onWallpaper = LocalOnWallpaper.current
@@ -276,6 +277,7 @@ fun Modifier.glass(
                     squircleN = squircleN,
                     wall = wall,
                     ring = glassRing?.drawn(),
+                    dim = wallpaperDim.value,
                 )
             }
         }
@@ -699,6 +701,12 @@ internal fun DrawScope.drawLiquidGlass(
      * rim brightens as the ring passes the pane's middle ([paneLight]).
      */
     ring: RingNow? = null,
+    /**
+     * How much darker the wallpaper is drawn under the pane ([LocalWallpaperDim]), so what the
+     * glass shows of it is as dark as what is round it. Glass with no copy of the wallpaper shows
+     * the veil itself and needs no telling.
+     */
+    dim: Float = 0f,
 ) {
     if (paneSize.width <= 0f || paneSize.height <= 0f || look.opacity <= 0f) return
     // The light sits up and to the left, and swings the other way as the phone tips.
@@ -711,7 +719,7 @@ internal fun DrawScope.drawLiquidGlass(
 
     if (canSee && lens != null && Build.VERSION.SDK_INT >= 33) {
         drawIntoCanvas {
-            lens.draw(it.nativeCanvas, paneSize, outline, origin, screen, shown, density, look, light, dark, touch, leaning, squircleN, ringHere)
+            lens.draw(it.nativeCanvas, paneSize, outline, origin, screen, shown, density, look, light, dark, touch, leaning, squircleN, ringHere, dim)
         }
         return
     }
@@ -759,6 +767,8 @@ internal fun DrawScope.drawLiquidGlass(
                 filterQuality = FilterQuality.Low,
             )
         }
+        // The veil the home screen lays over the wallpaper, when it is dimmed, on the copy too.
+        if (dim > 0f) drawRect(Color.Black, size = paneSize, alpha = dim.coerceAtMost(1f) * look.opacity)
         // Glass made from the wallpaper takes a little of the colour under its middle into the veil.
         drawRect(tintMix(look.wash, wall, look.wallTint), size = paneSize, alpha = look.opacity)
         // No shader to see how dark the picture is under each point, so the lift goes on evenly

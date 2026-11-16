@@ -1,5 +1,6 @@
 package com.gabriel.zenithui.ui.theme
 
+import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
@@ -33,6 +34,9 @@ import kotlin.math.max
 // as it passes over it. There is one ring for the whole screen, read by every pane while drawing, as
 // the tilt is. Its rules are kept apart from drawing so they can be tested without a phone; how it is
 // drawn on the wallpaper, and the gleam it puts on what is not glass, are at the end.
+//
+// Edit mode sends the same ring as a wave: a quicker one that wakes everything on the home screen as
+// it reaches it, and a slower, fainter one that settles it all again ([RingStyle]).
 
 /**
  * A ring as it is at one moment: where it started, [centre]; how far it has run, [radius]; how wide
@@ -42,18 +46,6 @@ import kotlin.math.max
  */
 @Immutable
 data class RingNow(val centre: Offset, val radius: Float, val width: Float, val strength: Float)
-
-/**
- * How far a ring has run [elapsedMs] after the tap, in pixels, to have run [reachPx] by [durationMs]:
- * fast at first and slowing as it spreads, as a ring on water does (a cubic ease-out).
- */
-fun ringRadius(elapsedMs: Float, reachPx: Float, durationMs: Float = RING_MS): Float {
-    val left = 1f - ringProgress(elapsedMs, durationMs)
-    return reachPx * (1f - left * left * left)
-}
-
-/** How bright a ring is [elapsedMs] after the tap: all of it under the finger, and none once it has run out. */
-fun ringStrength(elapsedMs: Float, durationMs: Float = RING_MS): Float = 1f - ringProgress(elapsedMs, durationMs)
 
 /**
  * How much of [ring]'s light falls on something [distancePx] from where the ring started: all of its
@@ -70,6 +62,54 @@ fun paneLight(distancePx: Float, ring: RingNow): Float {
 /** How far through its run a ring is [elapsedMs] after the tap: 0 at the tap, 1 once it has run out. */
 private fun ringProgress(elapsedMs: Float, durationMs: Float): Float =
     if (durationMs <= 0f) 1f else (elapsedMs / durationMs).coerceIn(0f, 1f)
+
+/**
+ * How a ring runs: how long it takes ([durationMs]); how far out it is at each moment ([spreadAt],
+ * from how far through its run it is to how much of its reach it has crossed, both 0 to 1); and how
+ * bright it is then ([strengthAt]), at most [peak]. [TAP] is a tap on the wallpaper's ring; [WAKE]
+ * the quicker wave that wakes the home screen as editing starts; [CALM] the slower, fainter one that
+ * settles it as editing ends.
+ */
+@Immutable
+class RingStyle(
+    val durationMs: Float,
+    private val spread: (Float) -> Float,
+    private val fade: (Float) -> Float,
+    val peak: Float = 1f,
+) {
+    fun spreadAt(progress: Float): Float = spread(progress.coerceIn(0f, 1f))
+
+    fun strengthAt(progress: Float): Float = peak * fade(progress.coerceIn(0f, 1f))
+
+    /** How far through its run, 0 to 1, a ring of this kind is as it has crossed [part] of its reach. */
+    fun progressAt(part: Float): Float {
+        if (part <= 0f) return 0f
+        if (part >= 1f) return 1f
+        // Every kind spreads outwards the whole time, so the moment can be closed in on.
+        var early = 0f
+        var late = 1f
+        repeat(32) {
+            val mid = (early + late) / 2f
+            if (spreadAt(mid) < part) early = mid else late = mid
+        }
+        return (early + late) / 2f
+    }
+
+    companion object {
+        /**
+         * Fast at first and slowing as it spreads, as a ring on water does (a cubic ease-out), and
+         * all its light under the finger, fading evenly to none as it runs out.
+         */
+        val TAP = RingStyle(RING_MS, spread = { 1f - (1f - it) * (1f - it) * (1f - it) }, fade = { 1f - it })
+        val WAKE = RingStyle(WAKE_RING_MS, spread = WAVE_CURVE::transform, fade = ::waveFade)
+        val CALM = RingStyle(CALM_RING_MS, spread = WAVE_CURVE::transform, fade = ::waveFade, peak = CALM_PEAK)
+    }
+}
+
+/** A wave's light: most of it until a little past halfway, then fading to nothing as it runs out. */
+private fun waveFade(progress: Float): Float =
+    if (progress < WAVE_HOLD) 1f - (1f - WAVE_HELD) * progress / WAVE_HOLD
+    else WAVE_HELD * (1f - (progress - WAVE_HOLD) / (1f - WAVE_HOLD))
 
 /**
  * How wide a ring's band of light is [elapsedMs] after the tap, in pixels at [density] pixels to the
@@ -97,12 +137,16 @@ internal fun ringReach(at: Offset, screen: Size): Float =
  */
 @Stable
 class GlassRing(var screen: Size = Size.Zero, var density: Float = 1f) {
-    // Where and when the ring started, and how far it is to run: plain values, written only as a
-    // ring starts. What tells the panes to draw again is the frame below.
+    // Where and when the ring started, how far it is to run and how: plain values, written only as
+    // a ring starts. What tells the panes to draw again is the frame below.
     private var centre = Offset.Zero
     private var startedAt = 0L
     private var reach = 0f
     private var started = false
+    private var style = RingStyle.TAP
+
+    /** Started, but to be timed from the next frame drawn, which has not come yet. */
+    private var pending = false
 
     /** The frame being drawn while a ring runs, and [IDLE] while none does: the one thing a pane reads. */
     private val frame = mutableLongStateOf(IDLE)
@@ -111,25 +155,53 @@ class GlassRing(var screen: Size = Size.Zero, var density: Float = 1f) {
     private val wake = Channel<Unit>(Channel.CONFLATED)
 
     /**
-     * Sends a ring out from [at], on the screen in pixels, at [nowNanos] on the frame clock. One that
-     * is still running gives way to it.
+     * Sends a ring of [style] out from [at], on the screen in pixels, at [nowNanos] on the frame
+     * clock. One that is still running gives way to it.
      */
-    fun start(at: Offset, nowNanos: Long) {
+    fun start(at: Offset, nowNanos: Long, style: RingStyle = RingStyle.TAP) {
         centre = at
         startedAt = nowNanos
+        pending = false
+        this.style = style
         // By the time it ends its band has passed the farthest corner, not just reached it.
-        reach = ringReach(at, screen) + 2f * ringWidth(RING_MS, density)
+        reach = ringReach(at, screen) + 2f * ringWidth(style.durationMs, density, style.durationMs)
         started = true
         wake.trySend(Unit)
     }
 
+    /**
+     * Sends a ring of [style] out from [at], timed from the next frame drawn: for a ring sent where
+     * there is no frame time to hand, so that it starts exactly as its first frame is drawn.
+     */
+    fun startOnNextFrame(at: Offset, style: RingStyle) {
+        start(at, 0L, style)
+        pending = true
+    }
+
     /** The ring at [nowNanos] on the frame clock: null before any has started, and once it has run out. */
     fun now(nowNanos: Long): RingNow? {
-        if (!started) return null
+        if (!started || pending) return null
         // A frame drawn the moment a ring starts can be stamped a little before it.
         val elapsed = ((nowNanos - startedAt) / NANOS_PER_MS).coerceAtLeast(0f)
-        if (elapsed >= RING_MS) return null
-        return RingNow(centre, ringRadius(elapsed, reach), ringWidth(elapsed, density), ringStrength(elapsed))
+        val run = style.durationMs
+        if (elapsed >= run) return null
+        val progress = elapsed / run
+        return RingNow(centre, reach * style.spreadAt(progress), ringWidth(elapsed, density, run), style.strengthAt(progress))
+    }
+
+    /**
+     * How long from [nowNanos] on the frame clock, in milliseconds, until the ring running now
+     * reaches [at] on the screen: 0 once it has passed there, for somewhere off the screen, and with
+     * no ring running. A ring still waiting for its first frame is counted from that frame.
+     */
+    fun reachesIn(at: Offset, nowNanos: Long): Float {
+        if (!started) return 0f
+        if (at.x < 0f || at.y < 0f || at.x > screen.width || at.y > screen.height) return 0f
+        val elapsed = if (pending) 0f else ((nowNanos - startedAt) / NANOS_PER_MS).coerceAtLeast(0f)
+        val run = style.durationMs
+        if (elapsed >= run || reach <= 0f) return 0f
+        val arrives = style.progressAt((at - centre).getDistance() / reach) * run
+        return (arrives - elapsed).coerceAtLeast(0f)
     }
 
     /** The ring on the frame being drawn, or null while none is running: for reading while drawing. */
@@ -160,6 +232,10 @@ class GlassRing(var screen: Size = Size.Zero, var density: Float = 1f) {
      * runs out on says so at once, so the panes draw without it once rather than twice.
      */
     private fun step(nanos: Long): Boolean {
+        if (pending) {
+            startedAt = nanos
+            pending = false
+        }
         val running = now(nanos) != null
         frame.longValue = if (running) nanos else IDLE
         return running
@@ -251,6 +327,20 @@ private const val GLEAM = 0.18f
 
 /** How long a ring takes to run out and fade, in milliseconds. */
 internal const val RING_MS = 1200f
+
+/** How long the wave that wakes the home screen takes to cross it, and the one that settles it. */
+private const val WAKE_RING_MS = 640f
+private const val CALM_RING_MS = 950f
+
+/** A wave quick off the finger and slowing as it spreads. */
+private val WAVE_CURVE = CubicBezierEasing(0.2f, 0.55f, 0.45f, 1f)
+
+/** How much of its light a wave keeps until how far through its run, before it fades. */
+private const val WAVE_HELD = 0.85f
+private const val WAVE_HOLD = 0.55f
+
+/** How bright the settling wave is beside the waking one. */
+private const val CALM_PEAK = 0.6f
 
 /** How wide a ring's band of light is as it leaves the finger, and how much wider it gets, in dp. */
 private const val RING_WIDTH_DP = 20f

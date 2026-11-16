@@ -23,6 +23,12 @@ import com.gabriel.zenithui.data.CheckIn
 import com.gabriel.zenithui.data.Backup
 import com.gabriel.zenithui.data.BillingRepository
 import com.gabriel.zenithui.data.DropPlanner
+import com.gabriel.zenithui.data.Arrangement
+import com.gabriel.zenithui.data.EditHistory
+import com.gabriel.zenithui.data.EditStep
+import com.gabriel.zenithui.data.EditSteps
+import com.gabriel.zenithui.data.UNDO_MS
+import com.gabriel.zenithui.data.Undoable
 import com.gabriel.zenithui.data.FolderCell
 import com.gabriel.zenithui.data.GridDensity
 import com.gabriel.zenithui.data.HomeItem
@@ -80,13 +86,32 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
     val widgetHost = com.gabriel.zenithui.data.ZenithWidgetHost.get(application)
 
     // Declared before init, which tidies widget numbers and must know what Undo still holds.
-    private val _removed = MutableStateFlow<List<HomeItem>>(emptyList())
 
-    /** What was just taken off the home screen, while it can still be put back: see [undoRemove]. */
-    val removed: StateFlow<List<HomeItem>> = _removed.asStateFlow()
+    /** Whether the home screen is being edited: every change made then can be taken back in turn. */
+    private var editing = false
 
-    /** Lets go, once Undo's time is up, of what the last removal held. */
+    /** The changes made since edit mode began, newest last: see [undo]. */
+    private var history = EditHistory()
+
+    /**
+     * The one change Undo can take back outside edit mode, for [UNDO_MS]: something taken off the
+     * home screen, or the last change edit mode made.
+     */
+    private var lingering: EditStep? = null
+
+    /** Lets go, once Undo's time is up, of what [lingering] held. */
     private var letGo: kotlinx.coroutines.Job? = null
+
+    /** How many [change]s deep this is: a change made inside another is part of that one. */
+    private var changing = 0
+
+    /** How the home screen was arranged when the outermost [change] began. */
+    private var changeBefore: Arrangement? = null
+
+    private val _undoable = MutableStateFlow<Undoable?>(null)
+
+    /** What Undo would take back now, if anything: for its capsule in edit mode, its pill outside it. */
+    val undoable: StateFlow<Undoable?> = _undoable.asStateFlow()
     private val widgetManager = android.appwidget.AppWidgetManager.getInstance(application)
 
     /** Zenith's server, if this build has one; a test build may reach one on the test PC. */
@@ -411,7 +436,7 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
      */
     fun restoreBackup(text: String, fromAccount: Boolean = false): Boolean {
         val (restored, items) = Backup.decode(text) ?: return false
-        finishRemoval()
+        forgetUndo()
         val current = settings.value
         // The backup's Looks join the ones saved here; one in both is the backup's.
         val incoming = Backup.looks(text)
@@ -671,7 +696,7 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
      * out, and a Plus wallpaper without Plus keeps the wallpaper there is.
      */
     fun applyLook(look: com.gabriel.zenithui.data.Look, fromElsewhere: Boolean = false) {
-        finishRemoval()
+        forgetUndo()
         val current = settings.value
         var (next, items) = com.gabriel.zenithui.data.Looks.apply(current, look)
         if (fromElsewhere) {
@@ -866,7 +891,7 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     override fun onCleared() {
-        finishRemoval()
+        forgetUndo()
         wallpaperSource.stopWatching()
         director.stop()
         repository.stopObserving()
@@ -1071,7 +1096,9 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
         // Nothing taken off can come back onto a home screen that is starting again.
         letGo?.cancel()
         letGo = null
-        _removed.value = emptyList()
+        history = EditHistory()
+        lingering = null
+        _undoable.value = null
         store.reset()
         // Every other app's widget goes with the layout it was on.
         runCatching { widgetHost.deleteHost() }
@@ -1108,7 +1135,7 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
             of(com.gabriel.zenithui.data.Looks.apply(ZenithSettings(), look).second)
         }
         // What Undo can still put back holds its widgets too.
-        return (of(layout.value + _removed.value) + inLooks).toSet()
+        return (of(layout.value + undoHolds()) + inLooks).toSet()
     }
 
     // ---------------------------------------------------------------- settings
@@ -1372,7 +1399,9 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
      * Resizes another app's widget, or a stack, where it stands: never smaller than its widget
      * says it can be, and only into room that is free.
      */
-    fun resizeHosted(id: String, spanX: Int, spanY: Int): Boolean {
+    fun resizeHosted(id: String, spanX: Int, spanY: Int): Boolean = change("${nameOf(id)} resized") { resizeHostedNow(id, spanX, spanY) }
+
+    private fun resizeHostedNow(id: String, spanX: Int, spanY: Int): Boolean {
         val item = layout.value.firstOrNull { it.id == id } ?: return false
         val s = settings.value
         val (minX, minY) = when (item) {
@@ -1442,7 +1471,7 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
      * moves aside moves with it, all in one change, so nothing is ever seen half moved. [dx] and
      * [dy] are a free-placement offset to keep within the spot.
      */
-    fun applyDrop(id: String, page: Int, plan: DropPlanner.Plan, dx: Float = 0f, dy: Float = 0f) =
+    fun applyDrop(id: String, page: Int, plan: DropPlanner.Plan, dx: Float = 0f, dy: Float = 0f) = change(movedTo(id, page)) {
         store.mutateLayout { items ->
             items.map { item ->
                 val aside = plan.moves[item.id]
@@ -1455,14 +1484,16 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
                 }
             }
         }
+    }
 
-    fun moveItem(id: String, page: Int, col: Int, row: Int) = store.mutateLayout { items ->
-        items.map { if (it.id == id) it.moved(page, col, row) else it }
+    fun moveItem(id: String, page: Int, col: Int, row: Int) = change(movedTo(id, page)) {
+        store.mutateLayout { items -> items.map { if (it.id == id) it.moved(page, col, row) else it } }
     }
 
     /**
-     * Takes [id] off the home screen. For [UNDO_MS] it can be put back with [undoRemove], so what
-     * it holds — another app's widget's number, a shortcut's pin — is kept until then.
+     * Takes [id] off the home screen. It can be put back with [undo]: for [UNDO_MS], or while the
+     * home screen is still being edited, so what it holds — another app's widget's number, a
+     * shortcut's pin — is kept until then.
      */
     fun removeItem(id: String) = removeItems(listOf(id))
 
@@ -1470,74 +1501,190 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
     fun removeItems(ids: List<String>) {
         val gone = layout.value.filter { it.id in ids }
         if (gone.isEmpty()) return
-        // What was taken off before is past putting back now.
-        finishRemoval()
-        store.mutateLayout { items -> items.filterNot { it.id in ids } }
-        _removed.value = gone
-        letGo = viewModelScope.launch {
-            kotlinx.coroutines.delay(com.gabriel.zenithui.data.UNDO_MS)
-            finishRemoval()
+        val label = if (gone.size == 1) "${EditSteps.nameOf(gone.single(), appsByKey())} removed" else "${gone.size} things removed"
+        change(label, removal = true) { store.mutateLayout { items -> items.filterNot { it.id in ids } } }
+    }
+
+    // ---------------------------------------------------------------- undo
+
+    /**
+     * Makes [block] one change Undo can take back, named [label] once it is done ("Mail moved").
+     * While the home screen is edited every change is one, taken back in turn; otherwise only
+     * something taken off it is, for [UNDO_MS], as it always was. A change made inside another is
+     * part of that one, and a change that changes nothing is none.
+     */
+    fun <T> change(label: () -> String, removal: Boolean = false, block: () -> T): T {
+        beginChange()
+        try {
+            return block()
+        } finally {
+            endChange(label, removal)
         }
     }
 
+    fun <T> change(label: String, removal: Boolean = false, block: () -> T): T = change({ label }, removal, block)
+
     /**
-     * Puts back what was just taken off: where it was, if that spot is still free, or else in the
-     * first opening. It comes back under a new id, so the page sees it arrive and springs it out
-     * of its spot. Answers with where it went, or null when there was nothing to put back.
+     * A change that takes a while to make, as pulling a widget's corner does: everything changed
+     * until [endChange] is one change, however many steps it went through on the way.
      */
-    fun undoRemove(): List<HomeItem> {
-        val items = _removed.value
-        if (items.isEmpty()) return emptyList()
+    fun beginChange() {
+        if (changing++ == 0) changeBefore = arrangement()
+    }
+
+    /** Ends what [beginChange] began, naming it [label] once it is done. */
+    fun endChange(label: () -> String, removal: Boolean = false) {
+        if (changing == 0 || --changing > 0) return
+        val before = changeBefore ?: return
+        changeBefore = null
+        val step = EditSteps.of(label(), before, arrangement()) ?: return
+        when {
+            editing -> history = history.with(step)
+            removal -> linger(step)
+            else -> return
+        }
+        offerUndo()
+    }
+
+    /** What the item [id] is called in Undo's words, as it is now. */
+    fun nameOf(id: String): String = layout.value.firstOrNull { it.id == id }?.let { EditSteps.nameOf(it, appsByKey()) } ?: "Item"
+
+    /**
+     * Edit mode began or ended. Ending it keeps its last change for the usual [UNDO_MS] and lets go
+     * of the rest; beginning it again while that can still be taken back carries it on.
+     */
+    fun setEditing(on: Boolean) {
+        if (on == editing) return
+        editing = on
+        if (on) {
+            lingering?.let { history = EditHistory(listOf(it)) }
+            lingering = null
+            letGo?.cancel()
+            letGo = null
+        } else {
+            val last = history.newest
+            val earlier = history.steps.dropLast(1)
+            history = EditHistory()
+            if (last != null) linger(last)
+            release(earlier)
+        }
+        offerUndo()
+    }
+
+    /**
+     * Takes back the newest change: in edit mode the last one made, and the one before on the next
+     * tap; otherwise the one left over. Answers with what it put back or moved back, as it now is,
+     * for the screen to turn to and show coming back; empty with nothing to take back.
+     */
+    fun undo(): List<HomeItem> {
+        val step = history.takeNewest()?.let { (newest, rest) ->
+            history = rest
+            newest
+        } ?: lingering?.also {
+            lingering = null
+            letGo?.cancel()
+            letGo = null
+        } ?: return emptyList()
+        val s = settings.value
+        val now = arrangement()
+        val back = EditSteps.undo(step, now, s.columns, s.rows)
+        if (back.dock != now.dock || back.pages != now.pages) {
+            store.restore(s.copy(dock = back.dock, pages = back.pages), back.items)
+        } else {
+            store.setLayout(back.items)
+        }
+        // What the change had put on and is gone again lets go of what it held.
+        release(listOf(step))
+        offerUndo()
+        val was = now.items.toSet()
+        return back.items.filter { it !in was }
+    }
+
+    private fun arrangement() = Arrangement(layout.value, settings.value.dock, settings.value.pages)
+
+    private fun appsByKey(): Map<String, AppInfo> = apps.value.associateBy { it.key }
+
+    /** "Mail moved", or "Mail moved to page 2" when it went to another page. */
+    private fun movedTo(id: String, page: Int): () -> String {
+        val item = layout.value.firstOrNull { it.id == id }
+        return {
+            val name = item?.let { EditSteps.nameOf(it, appsByKey()) } ?: "Item"
+            if (item != null && item.page != page) "$name moved to page ${page + 1}" else "$name moved"
+        }
+    }
+
+    /** [step] is the one Undo offers for [UNDO_MS]; the one it offered before is past taking back. */
+    private fun linger(step: EditStep) {
+        val old = lingering
+        lingering = step
+        letGo?.cancel()
+        letGo = viewModelScope.launch {
+            kotlinx.coroutines.delay(UNDO_MS)
+            val gone = lingering ?: return@launch
+            lingering = null
+            letGo = null
+            release(listOf(gone))
+            offerUndo()
+        }
+        if (old != null) release(listOf(old))
+    }
+
+    private fun offerUndo() {
+        val newest = history.newest
+        val left = lingering
+        _undoable.value = when {
+            editing && newest != null -> Undoable(newest.label, history.more, timed = false, key = newest)
+            left != null -> Undoable(left.label, 0, timed = true, key = left)
+            else -> null
+        }
+    }
+
+    /** Everything Undo could still put back or take off. */
+    private fun undoHolds(): List<HomeItem> = history.holds() + (lingering?.let { it.before.items + it.after.items } ?: emptyList())
+
+    /** Nothing done before can be taken back: the home screen has been replaced, or is going. */
+    private fun forgetUndo() {
+        val all = history.steps + listOfNotNull(lingering)
+        history = EditHistory()
+        lingering = null
         letGo?.cancel()
         letGo = null
-        _removed.value = emptyList()
-        val s = settings.value
-        val back = ArrayList<HomeItem>()
-        for (item in items) {
-            // Each put back counts as taken for the next, so two never land on one spot.
-            val placed = LayoutBuilder.putBack(layout.value + back, item, s.columns, s.rows, rowStep()) ?: continue
-            back += placed.withId(LayoutBuilder.newId())
-        }
-        store.mutateLayout { it + back }
-        return back
+        release(all)
+        offerUndo()
     }
 
     // ---------------------------------------------------------------- the page overview
 
     /** Page [from] moved to [to], everything on it going with it. */
-    fun movePage(from: Int, to: Int) {
-        finishRemoval()
+    fun movePage(from: Int, to: Int) = change("Pages moved") {
         store.setLayout(com.gabriel.zenithui.data.PageOrder.move(layout.value, from, to))
     }
 
     /** Page [page] taken away, and all that is on it; the pages after it close up. */
-    fun removePage(page: Int) {
-        finishRemoval()
+    fun removePage(page: Int) = change("Page ${page + 1} taken away", removal = true) {
         val s = settings.value
         val count = maxOf((layout.value.maxOfOrNull { it.page } ?: 0) + 1, s.pages)
-        if (count <= 1) return
-        val (kept, gone) = com.gabriel.zenithui.data.PageOrder.remove(layout.value, page)
-        store.setLayout(kept)
-        store.update { it.copy(pages = (count - 1).coerceAtLeast(1)) }
-        // What only that page held is let go: shortcuts' pins, and other apps' widgets.
-        gone.filterIsInstance<ShortcutCell>().filter { g -> kept.none { it is ShortcutCell && it.key == g.key } }
-            .forEach { repository.pinShortcut(it.key, pinned = false) }
-        tidyWidgetIds()
+        if (count <= 1) return@change
+        val (kept, _) = com.gabriel.zenithui.data.PageOrder.remove(layout.value, page)
+        store.restore(s.copy(pages = (count - 1).coerceAtLeast(1)), kept)
+        // What only that page held — shortcuts' pins, other apps' widgets — is let go once Undo can
+        // no longer bring the page back: see [release].
     }
 
-    /** What the last removal held is given back now: it is past putting back. */
-    private fun finishRemoval() {
-        letGo?.cancel()
-        letGo = null
-        val goneAll = _removed.value
-        if (goneAll.isEmpty()) return
-        _removed.value = emptyList()
-        // Another app's widget gives its number back, so Android stops keeping it up to date —
-        // unless a saved Look still holds it.
+    /**
+     * Lets go of what [steps] held that nothing can bring back any more: another app's widget's
+     * number, so Android stops keeping it up to date, and a shortcut's pin, so its app may tidy it
+     * away. Kept while it is on the home screen, in a saved Look, or in a change Undo can still
+     * take back.
+     */
+    private fun release(steps: List<EditStep>) {
+        if (steps.isEmpty()) return
         val stillHeld = heldWidgetIds(includeLooks = true)
-        for (gone in goneAll) {
-            // A shortcut no page holds any more is let go, so the app may tidy it away.
-            if (gone is ShortcutCell && layout.value.none { it is ShortcutCell && it.key == gone.key }) {
+        val holding = layout.value + undoHolds()
+        val seen = HashSet<String>()
+        for (gone in steps.flatMap { it.before.items + it.after.items }) {
+            if (!seen.add(gone.id)) continue
+            if (gone is ShortcutCell && holding.none { it is ShortcutCell && it.key == gone.key }) {
                 repository.pinShortcut(gone.key, pinned = false)
             }
             when (gone) {
@@ -1553,7 +1700,7 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
      * free spot nearest it on its page, in the order they were gathered. One with no room left on
      * that page stays where it was.
      */
-    fun landBeside(mainId: String, gathered: List<String>) {
+    fun landBeside(mainId: String, gathered: List<String>) = change("${gathered.size + 1} things moved") {
         val s = settings.value
         store.mutateLayout { items -> LayoutBuilder.landBeside(items, mainId, gathered, s.columns, s.rows, rowStep()) }
     }
@@ -1574,7 +1721,10 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
      * page has room. With no size given it is the widget's ordinary one; any size asked for is
      * fitted to what the widget and the grid allow. [wantY] is in row units.
      */
-    fun addWidget(type: String, wantX: Int? = null, wantY: Int? = null): Int? {
+    fun addWidget(type: String, wantX: Int? = null, wantY: Int? = null): Int? =
+        change("${Widgets.byType(type)?.title ?: "Widget"} added") { addWidgetNow(type, wantX, wantY) }
+
+    private fun addWidgetNow(type: String, wantX: Int?, wantY: Int?): Int? {
         val spec = Widgets.byType(type) ?: return null
         val s = settings.value
         val (spanX, spanY) = if (wantX != null && wantY != null) {
@@ -1590,7 +1740,9 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     /** Resizes a widget where it stands, in whole rows unless free placement is on, refusing sizes that would overlap or overflow. */
-    fun resizeWidget(id: String, spanX: Int, spanY: Int): Boolean {
+    fun resizeWidget(id: String, spanX: Int, spanY: Int): Boolean = change("${nameOf(id)} resized") { resizeWidgetNow(id, spanX, spanY) }
+
+    private fun resizeWidgetNow(id: String, spanX: Int, spanY: Int): Boolean {
         val widget = layout.value.firstOrNull { it.id == id } as? WidgetCell ?: return false
         val spec = Widgets.byType(widget.type) ?: return false
         val s = settings.value
@@ -1613,7 +1765,9 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
      * Gives a widget one of the gallery's named sizes while it is on the page: where it stands if
      * there is room, otherwise the closest opening on its page. False when the page has no room.
      */
-    fun resizeWidgetTo(id: String, spanX: Int, spanY: Int): Boolean {
+    fun resizeWidgetTo(id: String, spanX: Int, spanY: Int): Boolean = change("${nameOf(id)} resized") { resizeWidgetToNow(id, spanX, spanY) }
+
+    private fun resizeWidgetToNow(id: String, spanX: Int, spanY: Int): Boolean {
         val widget = layout.value.firstOrNull { it.id == id } as? WidgetCell ?: return false
         val spec = Widgets.byType(widget.type) ?: return false
         val s = settings.value
@@ -1624,24 +1778,14 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     /**
-     * Moves an item one cell across or one row up or down from the resize bar. A row is a whole
-     * row, or a quarter of one with free placement on. False when the page ends there or
-     * something is in the way.
-     */
-    fun nudgeItem(id: String, dCol: Int, dRows: Int): Boolean {
-        val s = settings.value
-        val next = Reshape.nudged(layout.value, id, dCol, dRows * rowStep(), s.columns, s.rows) ?: return false
-        if (next != layout.value) store.setLayout(next)
-        return true
-    }
-
-    /**
-     * Resizes an app icon where it stands, for the resize pointer: [spanX] columns wide and [rows]
+     * Resizes an app icon where it stands, for its corner: [spanX] columns wide and [rows]
      * whole rows tall, anything up to the whole page. 1 by 1 is an ordinary icon; anything bigger is
      * a super icon, stretched to fill it. It never moves the icon — it is under your finger — so a
      * size with no room is refused, and false comes back.
      */
-    fun resizeApp(id: String, spanX: Int, rows: Int): Boolean {
+    fun resizeApp(id: String, spanX: Int, rows: Int): Boolean = change("${nameOf(id)} resized") { resizeAppNow(id, spanX, rows) }
+
+    private fun resizeAppNow(id: String, spanX: Int, rows: Int): Boolean {
         val app = layout.value.firstOrNull { it.id == id } as? AppCell ?: return false
         val s = settings.value
         val sx = spanX.coerceIn(1, s.columns)
@@ -1730,7 +1874,20 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     /** Drop one app onto another to make a folder; drop onto a folder to add to it. */
-    fun combine(draggedId: String, targetId: String) = store.mutateLayout { items ->
+    fun combine(draggedId: String, targetId: String) = change(combined(draggedId, targetId)) { combineNow(draggedId, targetId) }
+
+    /** "Folder made", or "Mail moved" for an app put in a folder that was already there. */
+    private fun combined(draggedId: String, targetId: String): () -> String {
+        val name = nameOf(draggedId)
+        val intoFolder = layout.value.firstOrNull { it.id == targetId } is FolderCell
+        val before = layout.value.mapTo(HashSet()) { it.id }
+        return {
+            val made = layout.value.firstOrNull { it is FolderCell && it.id !in before } as? FolderCell
+            if (intoFolder || made == null) "$name moved" else "${made.title.ifBlank { "Folder" }} made"
+        }
+    }
+
+    private fun combineNow(draggedId: String, targetId: String) = store.mutateLayout { items ->
         val dragged = items.firstOrNull { it.id == draggedId } ?: return@mutateLayout items
         val target = items.firstOrNull { it.id == targetId } ?: return@mutateLayout items
         when {
@@ -1758,7 +1915,10 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
      * Takes one app out of a folder and puts it back on the page, rather than throwing it away.
      * A folder left holding one app becomes that app again; an empty one disappears.
      */
-    fun removeFromFolder(folderId: String, key: String) = store.mutateLayout { items ->
+    fun removeFromFolder(folderId: String, key: String) =
+        change("${appsByKey()[key]?.label ?: "App"} moved") { removeFromFolderNow(folderId, key) }
+
+    private fun removeFromFolderNow(folderId: String, key: String) = store.mutateLayout { items ->
         val folder = items.firstOrNull { it.id == folderId } as? FolderCell ?: return@mutateLayout items
         val keys = folder.keys.filterNot { it == key }
         val s = settings.value
@@ -1800,11 +1960,18 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
 
     private fun dockLimit(): Int = LayoutBuilder.dockLimit(settings.value.columns)
 
-    /** Adds [key] to the dock or takes it off. False when it was to be added and the dock is full. */
+    /**
+     * Adds [key] to the dock or takes it off. False when it was to be added and the dock is full.
+     * Taken off, it is a removal Undo can take back, as one taken off a page is.
+     */
     fun toggleDock(key: String): Boolean {
         val dock = settings.value.dock
         if (key !in dock && dock.size >= dockLimit()) return false
-        store.update { it.copy(dock = if (key in it.dock) it.dock - key else it.dock + key) }
+        val leaving = key in dock
+        val name = { appsByKey()[key]?.label ?: "App" }
+        change({ if (leaving) "${name()} removed" else "${name()} added" }, removal = leaving) {
+            store.update { it.copy(dock = if (key in it.dock) it.dock - key else it.dock + key) }
+        }
         return true
     }
 
@@ -1814,7 +1981,9 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
      * Takes an app off the home screen and slots it into the dock at [index]. False when the dock
      * is already full, in which case the app stays exactly where it was.
      */
-    fun moveToDock(itemId: String, index: Int): Boolean {
+    fun moveToDock(itemId: String, index: Int): Boolean = change("${nameOf(itemId)} moved") { moveToDockNow(itemId, index) }
+
+    private fun moveToDockNow(itemId: String, index: Int): Boolean {
         val cell = layout.value.firstOrNull { it.id == itemId } as? AppCell ?: return false
         val dock = settings.value.dock
         if (cell.key !in dock) {
@@ -1828,7 +1997,10 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     /** Moves a dock icon from one position to another. */
-    fun moveInDock(from: Int, to: Int) = store.update { current ->
+    fun moveInDock(from: Int, to: Int) =
+        change("${settings.value.dock.getOrNull(from)?.let { appsByKey()[it]?.label } ?: "App"} moved") { moveInDockNow(from, to) }
+
+    private fun moveInDockNow(from: Int, to: Int) = store.update { current ->
         if (from !in current.dock.indices) return@update current
         val dock = current.dock.toMutableList()
         val key = dock.removeAt(from)
@@ -1843,7 +2015,10 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
      * at all it stays in the dock, as it would on a phone, and null comes back; otherwise the id of
      * the icon now on the page.
      */
-    fun moveDockToHome(key: String, page: Int, exactCol: Float, exactRow: Float, colWidthInRowUnits: Float): String? {
+    fun moveDockToHome(key: String, page: Int, exactCol: Float, exactRow: Float, colWidthInRowUnits: Float): String? =
+        change("${appsByKey()[key]?.label ?: "App"} moved") { moveDockToHomeNow(key, page, exactCol, exactRow, colWidthInRowUnits) }
+
+    private fun moveDockToHomeNow(key: String, page: Int, exactCol: Float, exactRow: Float, colWidthInRowUnits: Float): String? {
         val parts = key.split('/', limit = 2)
         if (parts.size != 2) return null
         val arriving = AppCell(LayoutBuilder.newId(), page, 0, 0, parts[0], parts[1])

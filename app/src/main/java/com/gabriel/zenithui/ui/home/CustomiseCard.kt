@@ -8,11 +8,12 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -22,7 +23,6 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -75,6 +75,7 @@ private val FILL_STRONG = Color.White.copy(alpha = 0.22f)
  * It stands on the wallpaper, so it is the same clear glass in Light and in Dark. A touch on the home
  * screen above it, or Back, puts it away.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun CustomiseCard(
     visible: Boolean,
@@ -203,10 +204,13 @@ internal fun CustomiseCard(
                 }
             }
 
-            // The ways on. They put the card away as they go.
-            Row(
-                Modifier.fillMaxWidth().padding(top = 14.dp).horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            // The ways on, all of them in sight: they wrap onto a second line rather than run off
+            // the card's edge, where the last of them was cut in half. They put the card away as
+            // they go.
+            FlowRow(
+                Modifier.fillMaxWidth().padding(top = 14.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 if (showNewLook) Capsule("Use the New Look", onNewLook)
                 if (showMakeHome) Capsule("Make Zenith Your Home Screen", onMakeHome)

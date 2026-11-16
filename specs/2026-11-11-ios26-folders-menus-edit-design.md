@@ -96,9 +96,51 @@ the brush Customise, the dots the pages, Done ends it) and draws back into the p
 something is carried. Edited, a thing is picked up the moment the finger moves on it, with no hold,
 on the page and in the dock; held still, its menu still comes. A tap opens nothing but a folder. Done,
 a tap on the wallpaper, Back and the home button end it. With the layout locked, a hold on the
-wallpaper says "The layout is locked" in a capsule of glass with "Unlock". The bin is gone. Undo
-stands just above the bar. Still to come in this part: the Customise card, the corner to pull, the
-wave, the glass beads and their pop, and Undo for every change.
+wallpaper says "The layout is locked" in a capsule of glass with "Unlock". The bin is gone.
+
+Customise is a card at the foot of the screen; the glass on the home screen sees the wallpaper as
+dimmed as it is, so with "Dim the wallpaper" on the panes darken with it, and the ways on wrap onto
+a second line when they do not fit on one. Undo, while editing, takes back every change in turn
+(something moved, dropped, made into a folder, taken out of one, resized, added or taken off, a page
+moved or taken away, the dock) and says how many there are behind it ("Mail moved +2"); it stands
+just above the bar. Taking a change back puts back only what it touched, so anything that has
+changed since without it stays as it is. Outside edit mode only a removal is offered, for five
+seconds, as before, and leaving edit mode leaves the last change on offer the same way. Taking an
+app off the dock is a removal like any other, so Undo puts it back too.
+
+The minuses are beads of glass. Each wells up out of its corner like a drop (tiny and tucked in,
+then out, wide, tall and still) and sinks back as edit mode ends, and shows the corner under it a
+quarter bigger, on the page and in the dock. What a minus takes off pops like a soap bubble where
+it stood: a quick swell as it brightens, then a ring that spreads and fades, with a few droplets,
+and fewer when several go within a second. Undo blows it back together: the ring and droplets close
+in and it forms again with a wobble, and its bead wells up once it has. Anything that leaves the
+page another way (into the dock, a folder or another page) still shrinks away. With movement
+reduced it fades.
+
+Edit mode starts with a wave of light: the ring a tap on the wallpaper sends, quicker (640 ms, fast
+off the finger and slowing as it spreads), from wherever it was started (the finger on the
+wallpaper, the thing held or picked up). Each thing on the home screen wakes as the ring reaches it:
+it starts to wiggle with a small jolt, a little wide then a little tall (a third as much for a
+widget), and its bead wells up; the glass lights up as the ring passes, as it does for a tap. Done,
+a tap on the wallpaper, Back or Home send a slower, fainter wave (950 ms) from where they were, and
+each thing settles as it reaches it, its wiggle dying away like water going still and its bead
+sinking. Anything off the screen wakes or settles at once, as everything does with movement reduced,
+and leaving for the bedside clock or Settings from Customise settles it all at once.
+
+Widgets show a corner to pull, the arc of white the mockup has hugging each one's bottom right
+corner, coming with the bead as the wave wakes it and drawing back into the corner as edit mode
+ends. Pulled, it follows the finger and the widget snaps to whole cells and rows as it passes them
+(any number of quarter rows with free placement), with a light tick; while it is pulled the widget
+stops wiggling and stands over its neighbours, a thin outline shows the size asked for, red where
+there is no room rather than pushing anything aside, and a capsule of glass above the finger says
+the size (“2 × 3”). Let go, the corner grows back where the finger left it and glides onto the
+widget's. A whole pull is one change for Undo (“Battery resized”). “Resize” in an app's menu starts
+edit mode with that app's corner out instead of its bead; a tap on it, or on the wallpaper, puts the
+corner away and edit mode carries on. To a screen reader the corner is “Resize Battery” with its
+size, and offers Wider, Narrower, Taller and Shorter, as far as the page goes (`Reshape.steps`). The
+resize bar, its arrows and the old pointer are gone; a widget's named sizes are still in its menu.
+
+Part 2 is built.
 
 The plan for the whole part:
 

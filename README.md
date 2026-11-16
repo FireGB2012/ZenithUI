@@ -162,9 +162,13 @@ stretching, and a press is a small one with no wobble.
   first notification and shrinks away with the last.
 - **Icon style** — **Original**, **Tinted** (each app's one-colour symbol in the words' colour on a
   plain dark or white tile, as Android 13 does) or **Glass** (the symbol on a tile of clear glass, the
-  way iOS draws clear icons). The symbol is the adaptive icon's monochrome layer where the app has
-  one, its foreground where that is a logo on its own, and otherwise what stands out of the icon
-  from its own tile (`IconLoader.loadGlyph`). An icon you chose yourself stays as you chose it.
+  way iOS draws clear icons). In the drawer, an open folder and a folder's tiny icons, where it
+  already lies in glass, a Glass tile is glass lying in glass (`glassOnGlass`): a light frost, the
+  same hairline of light on its edge as every pane, moving with the tilt, a soft shadow straight
+  down, and in Light a soft grey band round its rim. The symbol is the adaptive icon's monochrome
+  layer where the app has one, its foreground where that is a logo on its own, and otherwise what
+  stands out of the icon from its own tile (`IconLoader.loadGlyph`). An icon you chose yourself
+  stays as you chose it.
 - **Shapes and names** — nine icon shapes (iPhone, Squircle, Circle, Rounded, Square, Pebble,
   Teardrop, Hexagon, Clover), one path each in `IconShapes` for the pictures and the tiles alike;
   names in three sizes inside the same strip, so nothing on the page moves, and **Name shadow**, a

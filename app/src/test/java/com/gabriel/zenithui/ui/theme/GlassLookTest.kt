@@ -6,6 +6,7 @@ import androidx.compose.ui.geometry.Size
 import com.gabriel.zenithui.data.GlassBody
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -159,5 +160,81 @@ class GlassLookTest {
                 assertTrue(pane.frost in 0f..3f)
             }
         }
+    }
+
+    @Test
+    fun `glass lying in glass is a frost that lifts it, thin in the dark and whiter in the light`() {
+        // Over a dark drawer or folder a thin white frost; over a pale one a fuller one, or white
+        // glass on a white page would not be there at all, but still thin enough to see through.
+        assertTrue(onGlassFrost(dark = true) in 0.06f..0.14f)
+        assertTrue(onGlassFrost(dark = false) in 0.2f..0.35f)
+        // Never the flat plate of the ink it was: it is lighter than what it lies in, in both.
+        assertTrue(onGlassFrost(dark = false) > onGlassFrost(dark = true))
+    }
+
+    @Test
+    fun `glass lying in glass catches the light as every pane does, and as much`() {
+        for (dark in listOf(true, false)) for (strength in listOf(0.2f, 0.8f, 1.2f)) {
+            val tile = onGlassLook(dark, strength)
+            assertEquals(look(GlassMaterial.Clear, strength, dark = dark).shine, tile.shine, 1e-4f)
+            assertTrue(tile.rimmed)
+        }
+    }
+
+    @Test
+    fun `a tile's hairline of light is 1_6 dp, and a tiny tile's a thirtieth of its side`() {
+        // An icon in the drawer: the hairline every pane has.
+        assertEquals(1.6f * 2.625f, rimHairline(Size(157.5f, 157.5f), 2.625f), 1e-4f)
+        // One of a folder's tiny tiles, 12 dp: thinner, or it would be all rim.
+        assertEquals(31.5f / 30f, rimHairline(Size(31.5f, 31.5f), 2.625f), 1e-4f)
+        // A wide, short pane goes by its shorter side.
+        assertEquals(60f / 30f, rimHairline(Size(600f, 60f), 3f), 1e-4f)
+    }
+
+    @Test
+    fun `glass lying in a pale page shows the bend round its rim as a soft grey band, a miniature's for a miniature`() {
+        // In the dark the frost and the light already show where it is.
+        assertNull(onGlassBand(dark = true, sideDp = 62f))
+        val band = onGlassBand(dark = false, sideDp = 62f)!!
+        // All the way round, as a lens's rim is, not a shadow falling one way; soft and faint.
+        assertEquals(0f, band.dropDp, 0f)
+        assertTrue(band.blurDp in 3f..7f)
+        assertTrue(band.alpha in 0.02f..0.08f)
+        // A folder's tiny tile has a miniature's.
+        assertEquals(band.blurDp * 12f / 62f, onGlassBand(dark = false, sideDp = 12f)!!.blurDp, 1e-3f)
+    }
+
+    @Test
+    fun `a shadow is black, as dark as it says, and fades with the pane`() {
+        val shadow = GlassShadow(blurDp = 7f, dropDp = 2f, alpha = 0.05f)
+        // To within a step of a colour's alpha, which is kept in 256 steps.
+        val step = 1f / 255f
+        assertEquals(0.05f, shadow.colour().alpha, step)
+        assertEquals(0.025f, shadow.colour(opacity = 0.5f).alpha, step)
+        assertEquals(0f, shadow.colour().red, 0f)
+        assertEquals(0f, shadow.colour().green, 0f)
+        assertEquals(0f, shadow.colour().blue, 0f)
+    }
+
+    @Test
+    fun `glass lying in glass floats just off it on a soft shadow straight down, a miniature's for a miniature`() {
+        for (dark in listOf(true, false)) {
+            val shadow = onGlassShadow(dark, sideDp = 62f)
+            // Soft, and falling straight down.
+            assertTrue(shadow.dropDp > 0f && shadow.blurDp > 2f * shadow.dropDp)
+            // It floats lower than a pane: at any size from a folder's tiny tile up, its shadow is
+            // softer and closer than a pane's of that size, and no darker.
+            for (side in listOf(12f, 28f, 62f, 120f)) {
+                val tile = onGlassShadow(dark, sideDp = side)
+                val pane = glassShadows(GlassMaterial.Clear, dark, glassThickness(Size(side, side), 1f)).first()
+                assertTrue(tile.blurDp < pane.blurDp && tile.dropDp < pane.dropDp && tile.alpha <= pane.alpha)
+            }
+            // A folder's tiny tile is a miniature of the drawer's, and so is its shadow.
+            val tiny = onGlassShadow(dark, sideDp = 12f)
+            assertEquals(shadow.blurDp * 12f / 62f, tiny.blurDp, 1e-3f)
+            assertEquals(shadow.dropDp * 12f / 62f, tiny.dropDp, 1e-3f)
+        }
+        // Deeper in the dark, where it has to show against a dark page, as a pane's is.
+        assertTrue(onGlassShadow(dark = true, sideDp = 62f).alpha > onGlassShadow(dark = false, sideDp = 62f).alpha)
     }
 }

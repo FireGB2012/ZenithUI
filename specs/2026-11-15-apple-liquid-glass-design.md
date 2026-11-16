@@ -57,6 +57,31 @@ From Apple's own description of Liquid Glass and its material, and the motion gu
   narrow brighter band at the edge, a hairline rim lit up and to the left and opposite, and one soft
   shadow.
 
+## Glass icons lying in glass (2026-11-16)
+
+Gabriel: "down in the drawer make the icons liquid glass if you picked that icon in settings cuz rn
+they just look like plastic not liquid glass". With Glass icons, a tile in the drawer, an open
+folder or a folder's preview was a flat plate of the ink at 12%: a grey slab with no edge and no
+light, which is plastic. It cannot be a pane of its own there (it would show the sharp wallpaper
+through a hole in the drawer), so it is drawn from what it can know without seeing behind itself
+(`glassOnGlass`, `drawGlassOnGlass`):
+
+- **A frost that lifts it** a step from what it lies in: white at 9% over a dark page, 26% over a
+  pale one, thin enough that the page's colour shows through.
+- **The same light as every pane**: the hairline on the edge and the soft light just inside it, from
+  the same lamp, brightest up and to the left and again opposite, moving as the phone tilts. On a tile
+  too small for 1.6 dp the hairline is a thirtieth of its side (`rimHairline`), so a folder's tiny
+  tiles are glass with a rim, not all rim.
+- **A soft shadow straight down**, lower than a pane's as it floats just off what it lies in: as soft
+  as an eighth of its side, falling a thirtieth, 8% in Dark and 5% in Light (`onGlassShadow`). A
+  folder's tiny tile, a miniature of the drawer's, has a miniature's shadow. No close shadow: on a
+  pale page it inked a line round the tile.
+- **In Light, the lens band round its rim**: on a pale page there is nothing behind it to bend into
+  view, so the band where the glass curves away shows as a soft grey just inside the edge, all the
+  way round, a twelfth of its side wide, at 5% (`onGlassBand`). The white hairline shows against it.
+  None in Dark, where the frost and the light already show the edge.
+- A tile 96 px or bigger lights up under a finger as a pane does; a folder's tiny ones do not.
+
 ## Motion
 
 Apple's springs keep to a response of 0.2 to 0.5 s and a damping ratio of 0.7 to 1.0 for nearly
@@ -89,6 +114,10 @@ unchanged; so is the app-wide Pressing setting.
 - Screenshots of a home screen's worth of glass (widgets, folder, icons, buttons, Search, the dock,
   a hold menu, edit-mode beads) over a dark painted wallpaper, a striped and gridded one, and a bright
   one, in Dark and Light, before and after, rendered the same way.
+
+- Glass icons in the drawer: `GlassLookTest` holds the frost, the light, the hairline, the shadow
+  and the band first; then a row of the old plates and a row of the new tiles were rendered over a
+  dark and a pale drawer, at full size and as a folder's tiny tiles.
 
 ## Not checked
 

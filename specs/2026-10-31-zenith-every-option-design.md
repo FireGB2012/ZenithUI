@@ -86,6 +86,8 @@ Track D's Now playing reads.
 ### Decided while building
 - Over the drawer, in a folder's pane and in an App Library card, a Glass icon gets a pale plate
   rather than a pane of its own: glass inside glass would show the sharp wallpaper through a hole.
+  (2026-11-16: the plate looked like plastic; it is now glass lying in glass, see
+  `specs/2026-11-15-apple-liquid-glass-design.md`.)
 - A renamed app takes its place in the drawer by its new name (`AppEdits.relabel`). A name is kept
   as typed and only trimmed where it is shown, or a space could never be typed between two words.
 - Hide name is for the home screen only; the drawer always names its apps.

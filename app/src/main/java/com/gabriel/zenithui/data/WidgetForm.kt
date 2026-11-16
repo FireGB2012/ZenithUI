@@ -44,77 +44,70 @@ enum class WidgetForm {
 object WidgetLayouts {
 
     /**
-     * [kind] is the widget's type without its "No glass" prefix ([Widgets.baseType]); [width] and
-     * [height] are its size on the home page, in dp; [toggles] is how many controls the Quick
-     * Toggles widget has been given. [bare] is whether it is the "No glass" version, which keeps
-     * the layouts Weather and Calendar had before they were set out the iOS way. Null for a kind
-     * that has no layouts of its own.
+     * [kind] is the widget's type without its "No glass" prefix ([Widgets.baseType]), which is set
+     * out just as the glass one is; [width] and [height] are its size on the home page, in dp;
+     * [toggles] is how many controls the Quick Toggles widget has been given. Null for a kind that has
+     * no layouts of its own.
      */
-    fun note(kind: String, width: Float, height: Float, toggles: Int = 4, bare: Boolean = false): String? {
+    fun note(kind: String, width: Float, height: Float, toggles: Int = 4): String? {
         val form = WidgetForm.of(width, height)
         return when (kind) {
             "clock" -> when (form) {
-                WidgetForm.Mini -> "Just the time, as large as it will go."
-                WidgetForm.Strip -> "The time, with the day and the date beside it."
-                WidgetForm.Square -> "Hours over minutes, like a Lock Screen, with the day and the date."
-                WidgetForm.Wide -> "The time, with the day, the date and a greeting beside it."
-                WidgetForm.Tall -> "A clock face, with the time and the date under it."
-                WidgetForm.Big -> "A large clock face: the date and the time above it, a greeting below."
+                WidgetForm.Mini -> "A clock face, and nothing else."
+                WidgetForm.Strip -> "The time, the day and the date; wider, your next alarm too."
+                WidgetForm.Square -> "A clock face with its hours round it, and the day on it."
+                WidgetForm.Wide -> "A greeting, the time and the date, beside a clock face."
+                WidgetForm.Tall -> "A clock face, the time and the date under it, and your next alarm or a greeting."
+                WidgetForm.Big -> "A greeting, the date and the time across the top, a large clock face, and your next alarm."
             }
             "battery" -> when (form) {
-                WidgetForm.Mini -> "A thin ring, with the charge inside it."
-                WidgetForm.Strip -> "A bar that fills with the charge, and the percentage."
-                WidgetForm.Square -> "A ring round the charge, and whether it is charging."
-                WidgetForm.Wide -> "A ring, with the charge, its state and a gauge beside it."
-                WidgetForm.Tall -> "A tall capsule that fills from the bottom, with the charge."
-                WidgetForm.Big -> "A large ring with the charge in the middle, and a gauge under it."
+                WidgetForm.Mini -> "A ring round the charge."
+                WidgetForm.Strip -> "A battery filled as far as the charge, the percentage, and what it is doing."
+                WidgetForm.Square -> "A ring round the charge, and what it is doing under it."
+                WidgetForm.Wide -> "The ring, with what it is doing and the battery's state beside it."
+                WidgetForm.Tall -> "The ring, what it is doing, and the battery's state at the foot."
+                WidgetForm.Big -> "A large ring, and four tiles: power, temperature, health and voltage."
             }
             "calendar" -> when (form) {
-                WidgetForm.Mini -> "The day of the week over today's date."
-                WidgetForm.Strip -> "Today's date, with the day and the month beside it."
-                WidgetForm.Square ->
-                    if (bare) "The day, a big date and the month, like a tear-off calendar."
-                    else "The day in red, a big date, and your next event."
-                WidgetForm.Wide ->
-                    if (bare) "Today on the left, the whole month on the right."
-                    else "Today's date on the left, and your next three events beside it."
-                WidgetForm.Tall -> "The whole month, headed by today."
-                WidgetForm.Big ->
-                    if (bare) "The whole month, large, with today's date over it."
-                    else "Today's date across the top, and the rest of the day's events under it."
+                WidgetForm.Mini -> "The day over today's date."
+                WidgetForm.Strip -> "Today's date, and your next event beside it."
+                WidgetForm.Square -> "The day in red, a big date, and your next event."
+                WidgetForm.Wide -> "Today's date, with the week and your next events beside it."
+                WidgetForm.Tall -> "Today's date over the month, and your next events under it."
+                WidgetForm.Big -> "Today's date across the top; the month and the day's events side by side."
             }
             "notes" -> when (form) {
-                WidgetForm.Mini -> "A pencil, and a couple of lines to write on."
-                WidgetForm.Strip -> "One line to jot on."
-                WidgetForm.Square -> "A little card to write on."
-                WidgetForm.Wide -> "A sticky note, with a margin down its side."
-                WidgetForm.Tall -> "Ruled paper, with today's date."
-                WidgetForm.Big -> "A notepad page: a heading, today's date and ruled lines."
+                WidgetForm.Mini -> "Your note's first words."
+                WidgetForm.Strip -> "Your note on one line, to jot on."
+                WidgetForm.Square -> "A note to write on, its first line its title."
+                WidgetForm.Wide -> "A wide note, with today's date."
+                WidgetForm.Tall -> "A tall note, with today's date."
+                WidgetForm.Big -> "A large note, with today's date, in bigger writing."
             }
             "toggles" -> togglesNote(ToggleGrid.of(width, height, toggles), toggles.coerceAtLeast(1))
             "media" -> when (form) {
                 WidgetForm.Mini -> "The album's picture, with play and pause on it."
-                WidgetForm.Strip -> "The song and who it is by, beside a play button."
-                WidgetForm.Square -> "The picture, the song and the controls under it."
-                WidgetForm.Wide -> "The picture on the left; the song, the controls and how far in on the right."
-                WidgetForm.Tall -> "A big picture, the song under it, and the controls at the foot."
-                WidgetForm.Big -> "The picture large, the song, how far in, and the controls."
+                WidgetForm.Strip -> "The picture, the song and play; wider, next too."
+                WidgetForm.Square -> "The picture and play at the top, the song and how far in under them."
+                WidgetForm.Wide -> "The picture on the left; the song, how far in and the controls on the right."
+                WidgetForm.Tall -> "The picture across the top; the song, how far in and the controls under it."
+                WidgetForm.Big -> "The picture and the song side by side; how far in and large controls under them."
             }
             "world" -> when (form) {
-                WidgetForm.Mini -> "The first city's time, and a sun or a moon."
-                WidgetForm.Strip -> "Up to three cities in a line, each with its time."
-                WidgetForm.Square -> "A city to a line: its time, and how far from yours."
-                WidgetForm.Wide -> "The cities side by side, each with a clock face."
-                WidgetForm.Tall -> "A city to a row, each with its clock face and its time."
-                WidgetForm.Big -> "Clock faces for every city, with the time, the day and the gap."
+                WidgetForm.Mini -> "The first city's clock face, its name on it."
+                WidgetForm.Strip -> "Two cities in a line, four when wider, each with its time."
+                WidgetForm.Square -> "Three cities, a line each: how far from yours, and the time."
+                WidgetForm.Wide -> "Up to four cities side by side, each a clock face."
+                WidgetForm.Tall -> "Up to four cities down the widget, each a clock face with its time."
+                WidgetForm.Big -> "Four large clock faces, two by two, with each city's time and how far."
             }
             "countdown" -> when (form) {
-                WidgetForm.Mini -> "The days left, and nothing else."
-                WidgetForm.Strip -> "The days left, and what they are to."
-                WidgetForm.Square -> "A ring that fills as the day comes, round the days left."
-                WidgetForm.Wide -> "The ring on the left; what it is to and the date on the right."
-                WidgetForm.Tall -> "The ring, the days left and what they are to, under one another."
-                WidgetForm.Big -> "A large ring round the days left, the date and the weeks to go."
+                WidgetForm.Mini -> "The days left."
+                WidgetForm.Strip -> "The days left, what to and when; wider, how far along."
+                WidgetForm.Square -> "What to, the days left, and the wait as dots."
+                WidgetForm.Wide -> "The days left and the date on the left; the wait as dots on the right."
+                WidgetForm.Tall -> "The days left and the date, and the wait as dots under them."
+                WidgetForm.Big -> "The days left large, and the wait as a field of dots, a dot a day where it fits."
             }
             "photo" -> when (form) {
                 WidgetForm.Mini -> "A small square of your photo."
@@ -126,33 +119,27 @@ object WidgetLayouts {
             }
             "todo" -> when (form) {
                 WidgetForm.Mini -> "How many things are left to do."
-                WidgetForm.Strip -> "The next thing to do, and a tick for it."
-                WidgetForm.Square -> "The first few things, with a tick by each."
-                WidgetForm.Wide -> "The list in two columns, with a line to add one."
-                WidgetForm.Tall -> "The whole list, a line to add one at the foot."
-                WidgetForm.Big -> "The whole list, how many are left, and a line to add one."
+                WidgetForm.Strip -> "The next thing to do, its tick, and how many more."
+                WidgetForm.Square -> "The first few things to do, with a tick by each."
+                WidgetForm.Wide -> "The list in two columns."
+                WidgetForm.Tall -> "The list, and a line to add one at the foot."
+                WidgetForm.Big -> "The whole list, a line to add one, and a way to clear what is done."
             }
             "aura" -> when (form) {
                 WidgetForm.Mini -> "Your streak under a flame."
-                WidgetForm.Strip -> "Your streak and your aura in a line."
-                WidgetForm.Square -> "Your streak, large, and the week behind it as dots."
-                WidgetForm.Wide -> "The streak on the left; the week and your aura on the right."
+                WidgetForm.Strip -> "The flame and your streak; wider, your aura and the week as dots."
+                WidgetForm.Square -> "Your streak, large, and this week's days ticked off."
+                WidgetForm.Wide -> "The streak on the left; this week and your aura on the right."
                 WidgetForm.Tall -> "The flame, the streak, the week and your aura, down the widget."
-                WidgetForm.Big -> "The streak, the week and your aura."
+                WidgetForm.Big -> "A large flame and streak, your aura, and this week."
             }
             "weather" -> when (form) {
-                WidgetForm.Mini -> "The temperature and the sky."
-                WidgetForm.Strip -> "The temperature, the sky and the place, in a line."
-                WidgetForm.Square ->
-                    if (bare) "The temperature large, the sky, and today's high and low."
-                    else "The place, the temperature large, the sky, and today's high and low."
-                WidgetForm.Wide ->
-                    if (bare) "Now on the left, the next hours on the right."
-                    else "The place, the temperature and the sky, with now and the next five hours under them."
-                WidgetForm.Tall -> "Now at the top, the next hours down the widget."
-                WidgetForm.Big ->
-                    if (bare) "Now, today's high and low, and the next hours with their skies."
-                    else "Now and the next hours, and the next five days, each with its low and high on a bar."
+                WidgetForm.Mini -> "The sky and the temperature."
+                WidgetForm.Strip -> "The sky, the temperature, and today's high and low; wider, the place too."
+                WidgetForm.Square -> "The place, the temperature large, the sky, and today's high and low on a bar."
+                WidgetForm.Wide -> "Now on the left, and the next hours charted on the right."
+                WidgetForm.Tall -> "Now and today's bar, and the next hours down the widget."
+                WidgetForm.Big -> "Now, the next hours charted, and the days ahead on bars."
             }
             else -> null
         }

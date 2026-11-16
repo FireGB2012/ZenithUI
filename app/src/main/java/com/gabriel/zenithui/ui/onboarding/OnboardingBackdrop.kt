@@ -31,10 +31,15 @@ import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalDensity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
+import com.gabriel.zenithui.data.ThemeMaterial
 import com.gabriel.zenithui.ui.theme.LocalPalette
+import com.gabriel.zenithui.ui.theme.LocalParallax
+import com.gabriel.zenithui.ui.theme.LocalTheme
+import com.gabriel.zenithui.ui.theme.TiltRest
 import kotlinx.coroutines.launch
 import kotlin.math.cos
 import kotlin.math.hypot
@@ -119,15 +124,20 @@ private val ORB_ALPHA_LIGHT = floatArrayOf(0.12f, 0.10f, 0.07f)
 /** Drift periods in seconds, across and down, for each light; none share a beat. */
 private val ORB_PERIOD = arrayOf(doubleArrayOf(23.0, 29.0), doubleArrayOf(31.0, 37.0), doubleArrayOf(41.0, 19.0))
 private val ORB_PHASE = floatArrayOf(0f, 2.1f, 4.2f)
+
+/** How far each light drifts as the phone leans, in dp: the biggest, furthest light the most. */
+private val ORB_DEPTH_DP = floatArrayOf(18f, 12f, 8f)
 private const val TAU = 6.2831855f
 
 /** The pulse ring is built once at this radius and scaled, so it never needs a new shader per frame. */
 private const val PULSE_UNIT = 1000f
 
 /**
- * The light behind setup: a neutral page, black to iOS's dark grey or its pale grey to white, with
- * three soft white lights drifting over it. The first time setup opens they rise up from below the
- * screen, like a sunrise.
+ * The light behind setup: the theme's page (in Liquid Glass black to iOS's dark grey, or its pale
+ * grey to white) with three soft lights drifting over it, white in Liquid Glass and Clean, the
+ * theme's own colours in Neon and Retro. The first time setup opens they rise up from below the
+ * screen, like a sunrise. Tilt the phone and they drift with it, each by a different amount, as
+ * light far behind the glass would ([LocalParallax]; not with movement reduced).
  */
 @Composable
 fun OnboardingBackdrop(
@@ -180,10 +190,17 @@ fun OnboardingBackdrop(
     }
 
     val dark = palette.dark
-    // White light, with no colour in it: Zenith has one look, and the lights are only light.
-    val lights = List(3) { Color.White }
+    // White light, with no colour in it, in a theme that is only glass or only paper; a theme with
+    // colours of its own lights setup in them.
+    val theme = LocalTheme.current
+    val lights = when (theme.material) {
+        ThemeMaterial.NEON, ThemeMaterial.RETRO -> listOf(palette.accent, palette.accentAlt, palette.accent)
+        else -> List(3) { Color.White }
+    }
     val strength = if (dark) ORB_ALPHA_DARK else ORB_ALPHA_LIGHT
     val backdrop = palette.backdrop
+    val parallax = LocalParallax.current
+    val pixels = LocalDensity.current.density
 
     Spacer(
         modifier
@@ -233,6 +250,8 @@ fun OnboardingBackdrop(
                     drawRect(base)
                     val seconds = clock.seconds
                     val glow = intro.value * (0.6f + 0.4f * energy.value)
+                    // Read while drawing, so leaning the phone redraws the light and nothing else.
+                    val lean = parallax.value
                     drawIntoCanvas { canvas ->
                         val native = canvas.nativeCanvas
                         for (index in 0 until 3) {
@@ -242,8 +261,10 @@ fun OnboardingBackdrop(
                             // Folded into each period first, so the angle stays small and exact.
                             val across = ((seconds / period[0]) % 1.0).toFloat()
                             val down = ((seconds / period[1]) % 1.0).toFloat()
-                            val x = (anchor.x + 0.08f * sin(TAU * across + phase)) * width
-                            val y = (anchor.y + 0.06f * cos(TAU * down + phase)) * height
+                            // With the tilt, not against it: these are far behind everything else.
+                            val drift = TiltRest.parallaxShift(lean, ORB_DEPTH_DP[index], pixels)
+                            val x = (anchor.x + 0.08f * sin(TAU * across + phase)) * width - drift.x
+                            val y = (anchor.y + 0.06f * cos(TAU * down + phase)) * height - drift.y
                             val paint = paints[index]
                             paint.alpha = (strength[index] * glow * 255f).toInt().coerceIn(0, 255)
                             native.save()

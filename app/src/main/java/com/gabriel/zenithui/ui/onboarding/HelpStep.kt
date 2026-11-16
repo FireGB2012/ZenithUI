@@ -43,8 +43,9 @@ import com.gabriel.zenithui.ui.theme.ZenithShapes
 import com.gabriel.zenithui.ui.theme.glass
 
 /**
- * The last stop of setup, under the finished phone: the three moves that unlock everything else.
- * The full list lives in Customise, under How it works, where [TipList] shows it.
+ * The last stop of setup, under the finished phone, on the card setup's controls sit on: the three
+ * moves that unlock everything else. The full list lives in Customise, under How it works, where
+ * [TipList] shows it.
  */
 @Composable
 fun QuickTips(play: Boolean) {
@@ -52,8 +53,7 @@ fun QuickTips(play: Boolean) {
     Column(
         Modifier
             .fillMaxWidth()
-            .padding(horizontal = 28.dp)
-            .padding(bottom = 8.dp),
+            .padding(horizontal = 18.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         QuickTip(Icons.Rounded.SwipeUp, "Swipe up", "for all your apps and search.", order = 0, play = play)

@@ -195,3 +195,89 @@ accent and Retro a solid one.
 *(My call)* Corners: Clean keeps 72% of each, Neon 85%, Retro half and at most 10 dp, cut off
 straight; pills stay pills except in Retro. What is content keeps its own colours whatever the
 theme: the wallpaper, photos, widget colours, the quick toggles' tones, app icons.
+
+## 5. A new setup, and Optimizing Zenith
+
+Setup keeps its steps, their order and what each one saves; what changes is how it looks and feels,
+one new choice (the theme) and one new step (Optimizing Zenith).
+
+**How it looks.** The soft light that drifts behind setup is now over the theme's own page, and
+leans with the phone in Liquid Glass (`LocalParallax`, three lights at three depths, and the phone
+preview a little the other way). On the stage the controls sit on one frosted card, and it is one
+card all the way through: as the step changes it takes the new controls' shape on the same spring
+as their height, rather than being swapped for another, and it fades where a step has nothing on it
+(while the page is built, and once it is finished). Where you are is a row of glass dots, the one
+you are on drawn out into a pill of the accent. Every tap ticks (the button, the chips, the theme
+cards, back); the page being built, the work being done and the hand-off each give the firmer
+confirm.
+
+**The steps.**
+
+1. **Hello**: "hello", large, fading and scaling in as before and cycling through the languages, with
+   a glow behind it that comes up with the first word and breathes slowly on the backdrop's clock.
+   The button says **Get started**.
+2. **Your name**: stop typing for 650 ms and setup answers, "Nice to meet you, Gabriel.", popping up
+   under the field on a bouncy spring, with a tick and a ring of light from behind the words. Its
+   room is kept, so nothing moves when it comes. The line above the question is the hello alone now,
+   so the name is said once. Skip still skips.
+3. **Pick a theme**: the four themes as cards a quarter of the row wide, each drawn in itself
+   (`ThemeMiniature`, the same drawing as Settings' theme cards), with Auto, Light and Dark under
+   them. A tap turns all of setup into that theme at once: setup is inside `ZenithTheme`, so it is
+   the same cross-fade as Settings', the phone preview included. Building saves it as your theme.
+4. **What goes on it?** and 5. **Putting it together**, as before.
+6. **Optimizing Zenith**, the moment the page is built.
+7. **Zenith Plus** and 8. **Three quick moves**, as before; then **Take me home** gives a short
+   celebration (a ring of light from the button, the phone lit and a band of light across it) and
+   after 260 ms the phone grows into the home screen as setup's light and glass dissolve round it.
+
+**Optimizing Zenith does the work, in order** (`OptimizeJob`, run by `ZenithViewModel.optimize` in
+the view model's own time, so it carries on whatever setup does):
+
+- **Apps**: every app and its name read again, as the drawer lists them.
+- **Icons**: every app's icon drawn at exactly the drawer's size and kept in memory (`IconLoader.warm`),
+  counted one by one ("Caching app icons… 42 of 118").
+- **Drawer**: each icon's main colour, for By colour (`IconLoader.colours`, now counting as it goes).
+- **Glass**: the wallpaper's softened copies, which the glass and the frost show ("Preparing the
+  glass"; "Preparing your wallpaper" in a theme not made of glass).
+- **Graphics**: the glass's shader and the blur behind a sheet drawn once by setup's screen, at 1%
+  opacity in a corner of the card (`GraphicsWarmUp`): Liquid Glass's lens over the wallpaper's copies,
+  or the theme's own panel, and the blur at the theme's strength. A phone compiles each kind of
+  drawing the first time it is asked to; this way it is setup that waits, not the first sheet.
+- **Save**: what setup chose, on disk rather than on its way there (`SettingsStore.flush`).
+
+The card shows the job in hand in words, a glass channel that the accent fills, the percentage and
+the time left. Both numbers come from the work (`Optimizing`, tested in `OptimizingTest`): each job's
+units are weighed by what one costs (an icon is the yardstick; reading the apps is 4, the glass 6,
+the graphics 2), the percentage never says 100 before everything is done, and the time left is the
+time so far spread over what is still to do, said as a person would ("About 3 seconds left"), and
+not guessed at all until a twentieth of the work and a third of a second are behind it.
+
+*(My call)* **Light or dark moved onto the theme step**, under the cards, rather than being a step
+of its own: they are one decision about how it looks, and setup keeps its number of steps.
+
+*(My call)* **Neon says it is always dark** on the theme step while it is picked, as the appearance
+page does; Light and Dark are kept for the other themes.
+
+*(My call)* **Where the work goes.** Right after the page is built, before Plus: the home screen it
+readies exists by then, and what is left of setup (Plus, the tips) gives it time to finish if you
+skip ahead. It starts by itself; there is nothing to press.
+
+*(My call)* **It can be skipped**, three seconds in: "Finish in the background", in the button's
+place, moves on while the work carries on. The brief asks that setup never slow you down; nothing
+is lost by not watching it.
+
+*(My call)* **The drawer's own warm-up waits for it.** Before, the drawer started drawing its icons as
+soon as the app list was known, setup or not. During setup it now waits until Optimizing Zenith has
+drawn them (or setup is done), so the two never draw the same icons on the same thread and the count
+on the card is the real work, not a race with a copy of itself.
+
+*(My call)* **Lit for a moment at each end.** "All set" stays up 450 ms at 100% before the finished
+page takes its place; the celebration before the hand-off is 260 ms. With animations off there is
+neither: the step ends when the work does and the hand-off is immediate.
+
+*(My call)* **The tilt only in Liquid Glass**, as on the home screen: in the other themes nothing
+follows the tilt. Neon and Retro light setup in their own colours; Liquid Glass and Clean keep white
+light. Neon's phone preview glows in its accent.
+
+*(My call)* "hello" is lower case, like the rest of the words it cycles through, and as the iPhone
+writes it.

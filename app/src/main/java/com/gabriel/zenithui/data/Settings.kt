@@ -516,6 +516,12 @@ class SettingsStore private constructor(context: Context) {
 
     fun mutateLayout(transform: (List<HomeItem>) -> List<HomeItem>) = setLayout(transform(_layout.value))
 
+    /**
+     * Waits until everything written so far is on disk rather than on its way there: setup's last
+     * step, so what it chose is there however soon Zenith is stopped. Off the main thread.
+     */
+    fun flush(): Boolean = prefs.edit().commit()
+
     /** Puts a whole backup back in one step, so nothing is half restored. */
     fun restore(settings: ZenithSettings, items: List<HomeItem>) {
         _settings.value = settings

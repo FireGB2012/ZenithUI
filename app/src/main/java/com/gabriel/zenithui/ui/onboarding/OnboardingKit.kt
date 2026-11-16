@@ -37,11 +37,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.gabriel.zenithui.ui.common.pressBounce
+import com.gabriel.zenithui.ui.common.rememberTick
 import com.gabriel.zenithui.ui.theme.GlassMaterial
 import com.gabriel.zenithui.ui.theme.GlassMotion
 import com.gabriel.zenithui.ui.theme.LocalPalette
@@ -49,6 +52,7 @@ import com.gabriel.zenithui.ui.theme.ZenithShapes
 import com.gabriel.zenithui.ui.theme.corners
 import com.gabriel.zenithui.ui.theme.glass
 import com.gabriel.zenithui.ui.theme.inkOnTint
+import com.gabriel.zenithui.ui.theme.themed
 import kotlinx.coroutines.delay
 
 /** How far a piece of a screen travels as it arrives, and the beat between neighbours. */
@@ -141,6 +145,7 @@ fun Lede(text: String, modifier: Modifier = Modifier) {
 @Composable
 fun PrimaryButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val palette = LocalPalette.current
+    val tick = rememberTick()
     val fill by animateColorAsState(palette.accent, tween(420), label = "buttonFill")
     // Dark text on anything lighter than a mid tone: white on Sunset's orange was hard to read.
     val ink = inkOnTint(fill)
@@ -156,7 +161,10 @@ fun PrimaryButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifi
                 tinted = true,
                 motion = GlassMotion.Flex,
             )
-            .clickable(onClick = onClick),
+            .clickable {
+                tick()
+                onClick()
+            },
         contentAlignment = Alignment.Center,
     ) {
         AnimatedContent(
@@ -172,6 +180,7 @@ fun PrimaryButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifi
 /** The quiet way out: plain text, full width, easy to hit. */
 @Composable
 fun QuietButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val tick = rememberTick()
     Text(
         text = text,
         color = LocalPalette.current.onGlass.copy(alpha = 0.72f),
@@ -182,53 +191,70 @@ fun QuietButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier
             .fillMaxWidth()
             .pressBounce(0.97f)
             .clip(corners(18.dp))
-            .clickable(onClick = onClick)
+            .clickable {
+                tick()
+                onClick()
+            }
             .padding(vertical = 14.dp),
     )
 }
 
-/** Where you are in setup: a few short marks, the current one longer and lit. */
+/**
+ * Where you are in setup: a row of glass dots, the one you are on drawn out into a short pill and
+ * filled with the accent, the ones behind you filled a little with the words' colour.
+ */
 @Composable
 fun StepMarks(current: Int, total: Int, modifier: Modifier = Modifier) {
     val palette = LocalPalette.current
-    Row(modifier, horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(
+        modifier.clearAndSetSemantics { contentDescription = "Step ${current + 1} of $total" },
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         repeat(total) { index ->
             val width by animateDpAsState(
-                if (index == current) 22.dp else 10.dp,
+                if (index == current) MARK_LONG else MARK_DOT,
                 spring(dampingRatio = 1f, stiffness = 380f),
                 label = "markWidth",
             )
-            val color by animateColorAsState(
+            val fill by animateColorAsState(
                 when {
-                    index == current -> palette.onGlass
-                    index < current -> palette.onGlass.copy(alpha = 0.45f)
-                    else -> palette.onGlass.copy(alpha = 0.18f)
+                    index == current -> palette.accent
+                    index < current -> palette.onGlass.copy(alpha = 0.40f)
+                    else -> Color.Transparent
                 },
                 tween(300),
-                label = "markColor",
+                label = "markFill",
             )
             Box(
                 Modifier
                     .width(width)
-                    .height(4.dp)
-                    .clip(RoundedCornerShape(50))
-                    .background(color)
+                    .height(MARK_DOT)
+                    .glass(ZenithShapes.pill, strength = 0.9f, material = GlassMaterial.Clear, shadow = false)
+                    // Inside the glass, which has already cut it to its shape.
+                    .background(fill),
             )
         }
     }
 }
 
+private val MARK_DOT = 8.dp
+private val MARK_LONG = 24.dp
+
 /** A choice you can turn on and off: filled when on, a hairline outline when off. */
 @Composable
 fun ChoiceChip(label: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val palette = LocalPalette.current
+    val tick = rememberTick()
     val fill by animateColorAsState(
         if (selected) palette.onGlass else Color.Transparent,
         tween(220),
         label = "chipFill",
     )
+    // On the words' colour, whichever of near-black or white stands out from it, in any theme.
+    val onFill = if (palette.onGlass.luminance() > 0.5f) Color(0xFF0B0C10) else Color.White
     val ink by animateColorAsState(
-        if (selected) (if (palette.dark) Color(0xFF0B0C10) else Color.White) else palette.onGlass.copy(alpha = 0.78f),
+        if (selected) onFill else palette.onGlass.copy(alpha = 0.78f),
         tween(220),
         label = "chipInk",
     )
@@ -237,14 +263,19 @@ fun ChoiceChip(label: String, selected: Boolean, onClick: () -> Unit, modifier: 
         tween(220),
         label = "chipOutline",
     )
+    // A pill, or in a theme that cuts its corners, cut like the rest.
+    val shape = themed(RoundedCornerShape(50))
     Box(
         modifier
             .height(42.dp)
             .pressBounce(0.94f)
-            .clip(RoundedCornerShape(50))
+            .clip(shape)
             .background(fill)
-            .border(1.dp, outline, RoundedCornerShape(50))
-            .clickable(onClick = onClick),
+            .border(1.dp, outline, shape)
+            .clickable {
+                tick()
+                onClick()
+            },
         contentAlignment = Alignment.Center,
     ) {
         Text(label, color = ink, fontSize = 14.sp, fontWeight = FontWeight.Medium)

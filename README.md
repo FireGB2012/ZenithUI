@@ -13,19 +13,36 @@ look, light or dark, with iOS blue for actions: the six colour themes are gone
 
 ## First run
 
-1. **Hello**, and then **your name**, which is used across the launcher. It can be skipped.
-2. **Light or dark?** — Auto, Light or Dark. Zenith has one look, so there is no colour to pick.
-3. **What goes on it?** — the widgets for page one (Clock, Toggles, Battery, Calendar, Note) and the
+Setup is Liquid Glass from end to end: frosted cards over soft light that drifts across the theme's
+page (and leans with the phone, in Liquid Glass), one glass button at the bottom that never moves,
+spring transitions, entrances a beat apart, a tick under each tap and glass dots for where you are.
+
+1. **Hello** — "hello", large, fading and scaling in with a soft glow behind it, cycling through
+   other languages; then **Get started**.
+2. **Your name**, used across the launcher. Stop typing and setup answers back: "Nice to meet you,
+   Gabriel." pops up under the field. It can be skipped.
+3. **Pick a theme** — the four themes as small cards, each drawn in itself, and Auto, Light or Dark
+   under them. A tap turns the whole of setup into that theme there and then, the phone included.
+4. **What goes on it?** — the widgets for page one (Clock, Toggles, Battery, Calendar, Note) and the
    grid: iPhone, which it starts on, Compact, Balanced or Roomy. A live phone shows each choice.
-4. **Putting it together** — not a fake wait: while it runs, the launcher reads every launchable
+5. **Putting it together** — not a fake wait: while it runs, the launcher reads every launchable
    activity, picks a dock from your dialer/messenger/browser/camera, groups apps into folders by
    their declared category and places the widgets you chose, and the phone on screen is put back
    together a piece at a time, with a tick for each. The home screen it builds is on the new look:
-   the grid you picked, the iPhone's icon shape, colour widgets and the glass dock.
-5. **Zenith Plus**, where it is on offer: what it adds, the prices in full, and a "Not now" as easy
+   the grid you picked, the iPhone's icon shape, colour widgets, the glass dock and your theme.
+6. **Optimizing Zenith** — real work, in this order (`OptimizeJob`): every app and its name read
+   again; every icon drawn at the drawer's size and kept in memory, so the drawer never draws one
+   as it moves; each icon's colour, for the drawer's By colour; the wallpaper's softened copies the
+   glass shows; the glass's shader and the blur behind a sheet drawn once, out of sight
+   (`GraphicsWarmUp`), so the phone has them ready; and what setup chose written to disk. A glass
+   bar fills as it goes, with the job in words ("Caching app icons… 42 of 118"), the percentage and
+   the time left, both worked out from the work done (`Optimizing`), never a clock. After three
+   seconds **Finish in the background** lets you move on; the work carries on.
+7. **Zenith Plus**, where it is on offer: what it adds, the prices in full, and a "Not now" as easy
    to hit as the yes.
-6. **Three quick moves** — swipe up, hold an icon, hold an empty spot — and the phone grows into your
-   home screen.
+8. **Three quick moves** — swipe up, hold an icon, hold an empty spot — and **Take me home**: a ring
+   of light from the button, the phone lights up, and it grows into your home screen as setup's
+   glass dissolves around it.
 
 ## Home screen
 

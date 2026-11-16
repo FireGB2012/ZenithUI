@@ -67,6 +67,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
@@ -85,16 +87,20 @@ import com.gabriel.zenithui.data.GridDensity
 import com.gabriel.zenithui.data.HomeItem
 import com.gabriel.zenithui.data.LayoutBuilder
 import com.gabriel.zenithui.data.NewLook
+import com.gabriel.zenithui.data.Themes
 import com.gabriel.zenithui.data.ZenithSettings
 import com.gabriel.zenithui.data.findActivity
+import com.gabriel.zenithui.ui.common.LocalMotionLevel
 import com.gabriel.zenithui.ui.common.pressBounce
+import com.gabriel.zenithui.ui.common.rememberTick
 import com.gabriel.zenithui.ui.common.rememberAnimationsEnabled
 import com.gabriel.zenithui.ui.theme.LocalPalette
-import com.gabriel.zenithui.ui.theme.NeutralLook
 import com.gabriel.zenithui.ui.theme.ZenithTheme
 import com.gabriel.zenithui.ui.theme.glass
+import com.gabriel.zenithui.ui.theme.palette
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -107,6 +113,15 @@ private val FORM_MAX_WIDTH = 480.dp
 /** How long each thing takes to click into place while the home screen is being put together. */
 private const val ASSEMBLE_STEP_MS = 110L
 
+/** How long "All set" at a hundred percent stays up before the finished phone takes its place. */
+private const val ALL_SET_HOLD_MS = 450L
+
+/** How long the work runs before setup offers to let it finish in the background. */
+private const val SKIP_AFTER_MS = 3_000L
+
+/** The celebration before the hand-off: how long the light has before the phone starts to grow. */
+private const val CELEBRATE_MS = 260L
+
 /** Keeps the widget picks across the activity being rebuilt, as rememberSaveable does for the rest. */
 private val WIDGET_LIST_SAVER = listSaver<SnapshotStateList<String>, String>(
     save = { it.toList() },
@@ -116,11 +131,14 @@ private val WIDGET_LIST_SAVER = listSaver<SnapshotStateList<String>, String>(
 internal object Steps {
     const val HELLO = 0
     const val NAME = 1
+    /** The theme, and light or dark. */
     const val LOOK = 2
     const val HOME = 3
     const val BUILD = 4
-    const val PLUS = 5
-    const val TIPS = 6
+    /** "Optimizing Zenith": the work that makes the first home screen and drawer fast. */
+    const val OPTIMIZE = 5
+    const val PLUS = 6
+    const val TIPS = 7
 }
 
 /** The three places you can be: the greeting, your name, and the stage with your phone on it. */
@@ -131,11 +149,12 @@ private object Phase {
 }
 
 /**
- * First run: a hello, your name, light or dark, what goes on the page, and then the page itself
- * being put together in front of you — before it grows to fill the screen and becomes your home
- * screen. Soft light drifts behind all of it and follows you from step to step. The button at the
- * bottom never moves; only what is above it changes, so it feels like one place rather than a
- * stack of screens.
+ * First run: a hello, your name, a theme and light or dark, what goes on the page, and then the
+ * page itself being put together in front of you, Zenith readying everything it will need
+ * ("Optimizing Zenith", real work with real progress), and a moment of light before it grows to
+ * fill the screen and becomes your home screen. Soft light drifts behind all of it and follows you
+ * from step to step. The button at the bottom never moves; only what is above it changes, so it
+ * feels like one place rather than a stack of screens. Picking a theme turns all of setup into it.
  */
 @Composable
 fun OnboardingFlow(
@@ -152,15 +171,21 @@ fun OnboardingFlow(
     val animate = rememberAnimationsEnabled()
     val plus by viewModel.plus.collectAsState()
     val apps by viewModel.apps.collectAsState()
+    val glassLevels by viewModel.glassLevels.collectAsState()
+    val reduced = !animate || LocalMotionLevel.current.reduced
     val appsByKey = remember(apps) { apps.associateBy { it.key } }
 
     var step by rememberSaveable { mutableIntStateOf(Steps.HELLO) }
     var name by rememberSaveable { mutableStateOf("") }
     var appearance by rememberSaveable { mutableStateOf("dark") }
+    var themeId by rememberSaveable { mutableStateOf(Themes.DEFAULT) }
     // Setup starts on the new look's grid, the iPhone's, which it offers first.
     var densityId by rememberSaveable { mutableStateOf(GridDensity.Four.id) }
     val widgets = rememberSaveable(saver = WIDGET_LIST_SAVER) { mutableStateListOf("clock", "toggles") }
     var built by rememberSaveable { mutableStateOf(false) }
+    var optimized by rememberSaveable { mutableStateOf(false) }
+    // Offered once the work has run a while: it carries on in the background either way.
+    var offerSkip by remember { mutableStateOf(false) }
     // Which hello was on screen, so the name screen can answer in the same language.
     var greeting by rememberSaveable { mutableIntStateOf(0) }
     var helloReady by rememberSaveable { mutableStateOf(false) }
@@ -169,7 +194,9 @@ fun OnboardingFlow(
     var nameSeen by rememberSaveable { mutableStateOf(false) }
     var lookSeen by rememberSaveable { mutableStateOf(false) }
     // Not saved: if the app is rebuilt mid hand-off, you land back on the tips and tap again.
+    var celebrating by remember { mutableStateOf(false) }
     var finishing by remember { mutableStateOf(false) }
+    val button = remember { Spot() }
     // Read once, before anything changes it: the sunrise is for the very first look only.
     val sunrise = remember { !helloSeen && step == Steps.HELLO }
 
@@ -199,6 +226,7 @@ fun OnboardingFlow(
         ZenithSettings(
             userName = name,
             appearance = appearance,
+            theme = themeId,
             glass = 0.85f,
             columns = columns,
             rows = rows,
@@ -208,6 +236,8 @@ fun OnboardingFlow(
     ).copy(gridDensity = gridDensity.id)
     // And its icons are drawn in the new look's shape from the first, as that home screen's are.
     LaunchedEffect(Unit) { viewModel.previewNewLook() }
+    // Setup shows the theme being picked in it, not one that was being tried in Settings.
+    LaunchedEffect(Unit) { Themes.trying.value = null }
 
     // The page the preview shows is laid out by the same code that builds the real one.
     val dock by produceState(emptyList<String>(), apps, columns) {
@@ -237,7 +267,7 @@ fun OnboardingFlow(
     LaunchedEffect(step) {
         if (step != Steps.BUILD || built) return@LaunchedEffect
         val work = launch(Dispatchers.Default) {
-            viewModel.buildHome(name, appearance, chosen, gridDensity, columns, rows)
+            viewModel.buildHome(name, appearance, chosen, gridDensity, columns, rows, theme = themeId)
         }
         // Clear the page while the controls fold away and the phone grows into their space…
         shown = 0
@@ -256,7 +286,7 @@ fun OnboardingFlow(
         view.performHapticFeedback(
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) HapticFeedbackConstants.CONFIRM else HapticFeedbackConstants.LONG_PRESS
         )
-        // Its own scope, so tapping on straight away does not cut the flourish off half lit.
+        // Its own scope, so moving on straight away does not cut the flourish off half lit.
         scope.launch {
             haloBoost.animateTo(3f, tween(280))
             haloBoost.animateTo(1.2f, spring(dampingRatio = 1f, stiffness = 60f))
@@ -265,10 +295,38 @@ fun OnboardingFlow(
             sweep.snapTo(0f)
             sweep.animateTo(1f, tween(850, easing = FastOutSlowInEasing))
         }
+        // Straight on to the work that makes it fast, while the light is still crossing it.
+        step = Steps.OPTIMIZE
+    }
+
+    // "Optimizing Zenith": the view model does the work, in its own time, and says how far it has
+    // got; this only starts it and waits for it to be done.
+    LaunchedEffect(step) {
+        if (step != Steps.OPTIMIZE || optimized) return@LaunchedEffect
+        viewModel.startOptimizing()
+        viewModel.optimizing.first { it?.finished == true }
+        // "All set", at a hundred percent, for long enough to be read.
+        delay(ALL_SET_HOLD_MS)
+        optimized = true
+        view.performHapticFeedback(
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) HapticFeedbackConstants.CONFIRM else HapticFeedbackConstants.LONG_PRESS
+        )
+        scope.launch {
+            haloBoost.animateTo(2.2f, tween(240))
+            haloBoost.animateTo(1.2f, spring(dampingRatio = 1f, stiffness = 60f))
+        }
+    }
+    LaunchedEffect(step) {
+        offerSkip = false
+        if (step != Steps.OPTIMIZE) return@LaunchedEffect
+        delay(SKIP_AFTER_MS)
+        offerSkip = true
     }
 
     // The hand-off: everything but the phone fades, the phone grows until its screen is the
-    // screen, and the real home screen takes its place in the same frame it lands.
+    // screen, and the real home screen takes its place in the same frame it lands. The glass of
+    // setup goes with it: the light behind fades and the preview's own background dissolves, so
+    // your wallpaper is already there when the home screen takes over.
     LaunchedEffect(finishing) {
         if (!finishing) return@LaunchedEffect
         var committed = false
@@ -313,7 +371,7 @@ fun OnboardingFlow(
     }
     // Always taken. This is the home screen's activity, so an unhandled back would close it and
     // Android would start it again from scratch — setup included, with everything you picked lost.
-    BackHandler { if (!finishing) back() }
+    BackHandler { if (!finishing && !celebrating) back() }
 
     ZenithTheme(settings = preview, screenSize = screenSize) {
         val palette = LocalPalette.current
@@ -336,7 +394,9 @@ fun OnboardingFlow(
         val scene = when (step) {
             Steps.HELLO -> BackdropScene.Hello
             Steps.NAME -> BackdropScene.Name
-            Steps.BUILD -> if (built) BackdropScene.Stage else BackdropScene.Build
+            // The lights gather behind the phone while it is built and readied.
+            Steps.BUILD -> BackdropScene.Build
+            Steps.OPTIMIZE -> if (optimized) BackdropScene.Stage else BackdropScene.Build
             Steps.PLUS -> BackdropScene.Plus
             else -> BackdropScene.Stage
         }
@@ -424,6 +484,7 @@ fun OnboardingFlow(
                             greeting = greeting,
                             playIntro = !nameSeen,
                             canFocus = transition.currentState == transition.targetState,
+                            onGreeted = { origin -> scope.launch { pulse.fire(origin, palette.accent) } },
                         )
 
                         else -> Box(
@@ -437,6 +498,7 @@ fun OnboardingFlow(
                             StudioStep(
                                 step = step,
                                 built = built,
+                                optimized = optimized,
                                 name = name,
                                 settings = preview,
                                 items = items,
@@ -450,13 +512,28 @@ fun OnboardingFlow(
                                 density = gridDensity,
                                 playIntro = !lookSeen,
                                 deviceCorner = deviceCorner,
+                                // Handed down as it is, so only the card reads it: it changes with
+                                // every icon, and the rest of setup has no need to hear of each one.
+                                optimizing = viewModel.optimizing,
+                                glassLevels = glassLevels,
+                                appearanceDark = preview.isDark(systemDark),
+                                reduced = reduced,
+                                onTheme = { theme, origin ->
+                                    themeId = theme.id
+                                    // In the words' colour of the theme being turned to: the screen
+                                    // cross-fades into it, and the ring has to show on the new one.
+                                    val ink = theme.palette(Themes.isDark(theme, preview.isDark(systemDark))).onGlass
+                                    scope.launch { pulse.fire(origin, ink) }
+                                },
                                 onAppearance = { mode, origin ->
                                     appearance = mode
                                     // In the words' colour of the look being turned to: the page
                                     // changes at once, and the ring has to show on the new one.
-                                    val ink = NeutralLook.of(preview.copy(appearance = mode).isDark(systemDark)).onGlass
+                                    val theme = Themes.byId(themeId)
+                                    val ink = theme.palette(Themes.isDark(theme, preview.copy(appearance = mode).isDark(systemDark))).onGlass
                                     scope.launch { pulse.fire(origin, ink) }
                                 },
+                                onGraphicsWarm = { viewModel.graphicsWarmed() },
                                 onToggleWidget = { type -> if (type in widgets) widgets.remove(type) else widgets.add(type) },
                                 onDensity = { densityId = it.id },
                                 halo = { restHalo * haloBoost.value * chrome.value },
@@ -468,10 +545,16 @@ fun OnboardingFlow(
                     }
                 }
 
-                // The one place the next move always is. It steps aside only while the home
-                // screen is being put together, when there is nothing to press.
+                // The one place the next move always is. It steps aside while the home screen is
+                // being put together, when there is nothing to press, and while Zenith readies
+                // itself, until that has run long enough to be worth offering to finish unseen.
+                val quiet = step == Steps.OPTIMIZE && !optimized
                 AnimatedVisibility(
-                    visible = step != Steps.BUILD || built,
+                    visible = when (step) {
+                        Steps.BUILD -> false
+                        Steps.OPTIMIZE -> optimized || offerSkip
+                        else -> true
+                    },
                     enter = fadeIn(tween(260)) + expandVertically(spring(dampingRatio = 1f, stiffness = 300f)),
                     exit = fadeOut(tween(140)) + shrinkVertically(spring(dampingRatio = 1f, stiffness = 300f)),
                 ) {
@@ -484,43 +567,89 @@ fun OnboardingFlow(
                             .graphicsLayer { alpha = chrome.value },
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-                        PrimaryButton(
-                            text = when (step) {
-                                Steps.HELLO -> "Let's go"
-                                Steps.NAME -> if (name.isBlank()) "Skip" else "Continue"
-                                Steps.LOOK -> "Continue"
-                                Steps.HOME -> "Build my home screen"
-                                Steps.BUILD, Steps.PLUS -> "Continue"
-                                else -> "Take me home"
+                        AnimatedContent(
+                            targetState = quiet,
+                            transitionSpec = {
+                                fadeIn(tween(220, delayMillis = 60))
+                                    .togetherWith(fadeOut(tween(120)))
+                                    .using(SizeTransform(clip = false) { _, _ -> spring(dampingRatio = 1f, stiffness = 300f, visibilityThreshold = IntSize(1, 1)) })
                             },
-                            onClick = {
-                                when (step) {
-                                    Steps.HELLO -> if (helloReady) {
-                                        helloSeen = true
-                                        step = Steps.NAME
-                                    } else {
-                                        helloReady = true
-                                    }
+                            contentAlignment = Alignment.Center,
+                            label = "nextMove",
+                        ) { skip ->
+                            if (skip) {
+                                // The work goes on without you watching it: nothing is lost.
+                                QuietButton(
+                                    text = "Finish in the background",
+                                    onClick = { if (step == Steps.OPTIMIZE && !optimized) step = if (offerPlus) Steps.PLUS else Steps.TIPS },
+                                    modifier = Modifier.widthIn(max = 400.dp),
+                                )
+                            } else {
+                                PrimaryButton(
+                                    text = when (step) {
+                                        Steps.HELLO -> "Get started"
+                                        Steps.NAME -> if (name.isBlank()) "Skip" else "Continue"
+                                        Steps.LOOK -> "Continue"
+                                        Steps.HOME -> "Build my home screen"
+                                        Steps.BUILD, Steps.OPTIMIZE, Steps.PLUS -> "Continue"
+                                        else -> "Take me home"
+                                    },
+                                    onClick = {
+                                        when (step) {
+                                            Steps.HELLO -> if (helloReady) {
+                                                helloSeen = true
+                                                step = Steps.NAME
+                                            } else {
+                                                helloReady = true
+                                            }
 
-                                    Steps.NAME -> leaveName()
-                                    Steps.LOOK -> {
-                                        lookSeen = true
-                                        step = Steps.HOME
-                                    }
+                                            Steps.NAME -> leaveName()
+                                            Steps.LOOK -> {
+                                                lookSeen = true
+                                                step = Steps.HOME
+                                            }
 
-                                    Steps.HOME -> step = Steps.BUILD
-                                    Steps.BUILD -> if (built) step = if (offerPlus) Steps.PLUS else Steps.TIPS
-                                    // Only reachable if the sheet went away on its own.
-                                    Steps.PLUS -> step = Steps.TIPS
-                                    else -> if (!finishing) finishing = true
-                                }
-                            },
-                            modifier = Modifier
-                                .widthIn(max = 400.dp)
-                                // The greeting gets a moment to itself before the button arrives;
-                                // its slot is kept, so nothing shifts when it does.
-                                .reveal(step != Steps.HELLO || helloReady),
-                        )
+                                            Steps.HOME -> step = Steps.BUILD
+                                            Steps.BUILD, Steps.OPTIMIZE -> if (optimized) step = if (offerPlus) Steps.PLUS else Steps.TIPS
+                                            // Only reachable if the sheet went away on its own.
+                                            Steps.PLUS -> step = Steps.TIPS
+                                            else -> if (!celebrating && !finishing) {
+                                                celebrating = true
+                                                if (!animate) {
+                                                    finishing = true
+                                                } else {
+                                                    // A moment of light before the hand-off: a ring
+                                                    // from under your finger, the phone lighting up
+                                                    // and a band of light across it, then it grows.
+                                                    view.performHapticFeedback(
+                                                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) HapticFeedbackConstants.CONFIRM else HapticFeedbackConstants.LONG_PRESS
+                                                    )
+                                                    scope.launch { pulse.fire(button.centre, palette.accent) }
+                                                    scope.launch {
+                                                        haloBoost.animateTo(3f, tween(220))
+                                                        haloBoost.animateTo(1.4f, spring(dampingRatio = 1f, stiffness = 90f))
+                                                    }
+                                                    scope.launch {
+                                                        sweep.snapTo(0f)
+                                                        sweep.animateTo(1f, tween(620, easing = FastOutSlowInEasing))
+                                                    }
+                                                    scope.launch {
+                                                        delay(CELEBRATE_MS)
+                                                        finishing = true
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    },
+                                    modifier = Modifier
+                                        .widthIn(max = 400.dp)
+                                        .onGloballyPositioned { button.centre = it.boundsInRoot().center }
+                                        // The greeting gets a moment to itself before the button arrives;
+                                        // its slot is kept, so nothing shifts when it does.
+                                        .reveal(step != Steps.HELLO || helloReady),
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -572,7 +701,7 @@ fun OnboardingFlow(
             }
 
             // Nothing takes a touch while the phone is growing into your home screen.
-            if (finishing) {
+            if (celebrating || finishing) {
                 Box(
                     Modifier
                         .fillMaxSize()
@@ -590,6 +719,7 @@ fun OnboardingFlow(
 @Composable
 private fun TopBar(visible: Boolean, progress: Int, onBack: () -> Unit) {
     val palette = LocalPalette.current
+    val tick = rememberTick()
     // Always the same height, shown or not, so nothing below it shifts between steps.
     Row(
         Modifier
@@ -606,7 +736,10 @@ private fun TopBar(visible: Boolean, progress: Int, onBack: () -> Unit) {
                         .size(48.dp)
                         .pressBounce(0.9f)
                         .clip(CircleShape)
-                        .clickable(onClick = onBack),
+                        .clickable {
+                            tick()
+                            onBack()
+                        },
                     contentAlignment = Alignment.Center,
                 ) {
                     Box(

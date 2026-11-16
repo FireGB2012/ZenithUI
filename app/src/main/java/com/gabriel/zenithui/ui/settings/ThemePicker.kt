@@ -26,14 +26,12 @@ import androidx.compose.material.icons.rounded.StarBorder
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
@@ -45,6 +43,7 @@ import com.gabriel.zenithui.data.Theme
 import com.gabriel.zenithui.data.Themes
 import com.gabriel.zenithui.data.ZenithSettings
 import com.gabriel.zenithui.ui.common.LocalMotionLevel
+import com.gabriel.zenithui.ui.common.ThemeMiniature
 import com.gabriel.zenithui.ui.common.pressBounce
 import com.gabriel.zenithui.ui.common.rememberTick
 import com.gabriel.zenithui.ui.common.unfoldIn
@@ -52,9 +51,6 @@ import com.gabriel.zenithui.ui.common.unfoldOut
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.LocalTheme
 import com.gabriel.zenithui.ui.theme.ZenithFonts
-import com.gabriel.zenithui.ui.theme.ZenithShapes
-import com.gabriel.zenithui.ui.theme.glass
-import com.gabriel.zenithui.ui.theme.palette
 import com.gabriel.zenithui.ui.theme.shape
 import androidx.compose.material.icons.rounded.Favorite
 
@@ -143,7 +139,6 @@ private fun ThemeCard(
     modifier: Modifier = Modifier,
 ) {
     val page = LocalPalette.current
-    val its = remember(theme, dark) { theme.palette(dark) }
     val ring by animateColorAsState(if (shown) page.accent else Color.Transparent, tween(220), label = "themeRing")
     val cardShape = LocalTheme.current.shape(CARD)
     Column(
@@ -166,34 +161,7 @@ private fun ThemeCard(
                 .padding(3.dp),
         ) {
             // Drawn in its own theme: its material, corners, colours and font.
-            CompositionLocalProvider(LocalTheme provides theme, LocalPalette provides its) {
-                val inner = theme.shape(INNER)
-                Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .height(98.dp)
-                        .clip(inner)
-                        .background(Brush.verticalGradient(its.backdrop.let { if (it.size == 1) it + it else it }))
-                        .padding(9.dp),
-                ) {
-                    Column(
-                        Modifier
-                            .fillMaxWidth()
-                            .glass(RoundedCornerShape(12.dp), strength = 0.9f, solid = 0.5f)
-                            .padding(horizontal = 10.dp, vertical = 8.dp),
-                    ) {
-                        Text("Aa", color = its.ink, fontFamily = font, fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
-                        Spacer(Modifier.height(5.dp))
-                        Box(Modifier.fillMaxWidth(0.7f).height(5.dp).clip(theme.shape(RoundedCornerShape(3.dp))).background(its.ink.copy(alpha = 0.28f)))
-                    }
-                    Box(
-                        Modifier
-                            .align(Alignment.BottomEnd)
-                            .size(width = 46.dp, height = 20.dp)
-                            .glass(ZenithShapes.pill, tint = its.accent, tinted = true, strength = 1f),
-                    )
-                }
-            }
+            ThemeMiniature(theme, dark, font, Modifier.fillMaxWidth().height(98.dp))
             // Yours: a star you can tap, on every card, filled on the one that is yours.
             Box(
                 Modifier
@@ -238,4 +206,3 @@ private fun ThemeCard(
 }
 
 private val CARD = RoundedCornerShape(20.dp)
-private val INNER = RoundedCornerShape(17.dp)

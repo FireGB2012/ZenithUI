@@ -365,15 +365,21 @@ class IconLoader(context: Context, private val repo: AppRepository) {
     /**
      * The main colour of each app's icon, for the drawer's By colour: what its coloured pixels
      * come to together, the more coloured the more they count, so a white logo on a red tile is red.
+     * [onEach] hears how far it has got, as [warm]'s does.
      */
-    suspend fun colours(keys: List<String>): Map<String, IconColour> = withContext(Dispatchers.IO) {
+    suspend fun colours(
+        keys: List<String>,
+        onEach: (done: Int, total: Int) -> Unit = { _, _ -> },
+    ): Map<String, IconColour> = withContext(Dispatchers.IO) {
         val found = HashMap<String, IconColour>()
-        for (key in keys) {
-            synchronized(colours) { colours[key] }?.let { found[key] = it; continue }
-            val picture = load(key, 64) ?: continue
-            val colour = mainColour(picture) ?: continue
-            synchronized(colours) { colours[key] = colour }
-            found[key] = colour
+        keys.forEachIndexed { index, key ->
+            val known = synchronized(colours) { colours[key] }
+            val colour = known ?: load(key, 64)?.let { mainColour(it) }
+            if (colour != null) {
+                if (known == null) synchronized(colours) { colours[key] = colour }
+                found[key] = colour
+            }
+            onEach(index + 1, keys.size)
         }
         found
     }

@@ -216,12 +216,12 @@ class HomeGeometry(
         const val SEARCH_PILL_HEIGHT_DP = 32f
 
         /**
-         * How tall the floating glass dock is, in dp: the biggest icon a page can have, 68 dp, with
+         * How tall the floating glass dock is, in dp: the biggest icon a page can have, 78 dp, with
          * 12 dp above and below it. It does not follow the page, for the band's reason: on a cramped
          * page the icons shrink to fit their rows, and a dock that shrank with them would hand the
          * page more room, the icons would grow again, and the two would chase each other.
          */
-        const val DOCK_HEIGHT_DP = 92f
+        const val DOCK_HEIGHT_DP = 102f
 
         /** How far the floating dock stands in from the left and right edges of the screen, in dp. */
         const val DOCK_SIDE_INSET_DP = 10f
@@ -277,17 +277,37 @@ class HomeGeometry(
         private const val DOCK_FILL = 0.9f
 
         /**
-         * How big an icon is, worked out from the cell it sits in rather than chosen: as on an
-         * iPhone, a little under two thirds of the cell's width, kept between sizes that read well,
-         * and never so tall that it pushes its label out or so wide that it meets its neighbours.
+         * How big an icon is, worked out from the cell it sits in rather than chosen: nearly three
+         * quarters of the cell's width ([ICON_SHARE]), a little bigger than an iPhone's, and more
+         * with no names under them ([LARGE_ICON_SHARE]), as an iPhone's Large icons take the room
+         * their names had. Kept between sizes that read well, and never so tall that it pushes its
+         * label out or so wide that it meets its neighbours.
          */
         fun iconSizeDp(cellWidthDp: Float, rowHeightDp: Float, showLabels: Boolean): Float {
             val labelSpace = if (showLabels) 24f else 4f
+            val share = if (showLabels) ICON_SHARE else LARGE_ICON_SHARE
             return minOf(
-                (cellWidthDp * 0.64f).coerceIn(52f, 68f),
+                (cellWidthDp * share).coerceIn(SMALLEST_ICON_DP, BIGGEST_ICON_DP),
                 (rowHeightDp - labelSpace - 8f).coerceAtLeast(28f),
                 (cellWidthDp - 8f).coerceAtLeast(28f),
             )
         }
+
+        /** How much of a column's width an icon takes with its name under it, and with none. */
+        const val ICON_SHARE = 0.72f
+        const val LARGE_ICON_SHARE = 0.8f
+
+        /** The smallest and the biggest an icon on a page is, in dp, whatever its cell. */
+        private const val SMALLEST_ICON_DP = 56f
+        private const val BIGGEST_ICON_DP = 78f
+
+        /**
+         * How big an icon in the drawer is, in a column [cellWidthDp] wide: a little smaller than
+         * the page's, as an iPhone's App Library's are, and never smaller than the 60 dp it always
+         * was, so five or six columns keep theirs.
+         */
+        fun drawerIconDp(cellWidthDp: Float): Float = (cellWidthDp * DRAWER_ICON_SHARE).coerceIn(60f, 68f)
+
+        private const val DRAWER_ICON_SHARE = 0.68f
     }
 }

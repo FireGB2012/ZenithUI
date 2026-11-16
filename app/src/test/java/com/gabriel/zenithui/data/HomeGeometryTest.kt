@@ -257,7 +257,9 @@ class HomeGeometryTest {
         // that shrank with icons shrinking to fit cramped rows would hand the page more room, the
         // icons would grow again, and the two would chase each other on every frame.
         val biggest = HomeGeometry.iconSizeDp(Float.MAX_VALUE, Float.MAX_VALUE, showLabels = true)
-        assertEquals(68f, biggest, 0f)
+        assertEquals(78f, biggest, 0f)
+        // Larger icons, with no names, are no bigger than that at their biggest, so the dock holds them too.
+        assertEquals(biggest, HomeGeometry.iconSizeDp(Float.MAX_VALUE, Float.MAX_VALUE, showLabels = false), 0f)
         assertTrue(HomeGeometry.DOCK_HEIGHT_DP >= biggest + 2 * 12f)
         assertTrue(HomeGeometry.DOCK_CORNER_DP <= HomeGeometry.DOCK_HEIGHT_DP / 2)
         assertTrue(HomeGeometry.SEARCH_PILL_HEIGHT_DP < HomeGeometry.SEARCH_BAND_DP)
@@ -348,18 +350,49 @@ class HomeGeometryTest {
     }
 
     @Test
-    fun `icons are about two thirds of a cell, between 52 and 68 dp`() {
-        // As on an iPhone, 0.64 of a column: 61.9 dp of the Pixel 10a's 96.8 dp columns...
-        assertEquals(0.64f * iphone.cellWidth / iphone.density, iphone.iconDp, 0.001f)
-        assertEquals(163, iphone.icon)
-        // ...and never less than 52 dp or more than 68...
-        assertEquals(52f, HomeGeometry.iconSizeDp(70f, 131f, showLabels = true), 0.001f)
-        assertEquals(68f, HomeGeometry.iconSizeDp(120f, 180f, showLabels = true), 0.001f)
+    fun `icons are nearly three quarters of a cell, between 56 and 78 dp`() {
+        // Bigger than an iPhone's, as asked: 0.72 of a column, 69.7 dp of the Pixel 10a's 96.8 dp
+        // columns, where they were 0.64 and 61.9 dp...
+        assertEquals(0.72f * iphone.cellWidth / iphone.density, iphone.iconDp, 0.001f)
+        assertEquals(183, iphone.icon)
+        // ...and never less than 56 dp or more than 78...
+        assertEquals(56f, HomeGeometry.iconSizeDp(70f, 131f, showLabels = true), 0.001f)
+        assertEquals(78f, HomeGeometry.iconSizeDp(120f, 180f, showLabels = true), 0.001f)
         // ...never so tall that the label is pushed out of the row, where with labels off the row
         // gives the icon that room back...
         assertEquals(48f, HomeGeometry.iconSizeDp(96.8f, 80f, showLabels = true), 0.001f)
-        assertEquals(0.64f * 96.8f, HomeGeometry.iconSizeDp(96.8f, 80f, showLabels = false), 0.001f)
+        assertEquals(80f - 4f - 8f, HomeGeometry.iconSizeDp(96.8f, 80f, showLabels = false), 0.001f)
         // ...and never wider than its cell less a margin.
         assertEquals(48f, HomeGeometry.iconSizeDp(56f, 131f, showLabels = true), 0.001f)
+    }
+
+    @Test
+    fun `larger icons, with no names, are larger`() {
+        // As an iPhone's Large icons are: they take the room their names had, 0.8 of a column,
+        // 77.4 dp on the Pixel 10a's iPhone grid against 69.7 with names.
+        val large = HomeGeometry(
+            width = 1017, height = 1785, columns = 4, rows = 6, density = 2.625f, showLabels = false,
+            rowRatio = HomeGeometry.IPHONE_ROW_RATIO,
+        )
+        assertEquals(0.8f * large.cellWidth / large.density, large.iconDp, 0.001f)
+        assertTrue(large.icon > iphone.icon)
+        // Every page still has room for them: the same rules as with names hold without.
+        everyPage { g ->
+            if (!g.showLabels) {
+                val named = HomeGeometry(g.width, g.height, g.columns, g.rows, g.density, showLabels = true)
+                assertTrue(g.icon >= named.icon)
+            }
+        }
+    }
+
+    @Test
+    fun `the drawer's icons are bigger where it has the room, and never smaller than they were`() {
+        // Four across a 411 dp phone, less the drawer's margins: 0.68 of a column, 64.4 dp.
+        assertEquals(0.68f * 94.75f, HomeGeometry.drawerIconDp(94.75f), 0.001f)
+        // Five or six across keep the 60 dp they always had...
+        assertEquals(60f, HomeGeometry.drawerIconDp(75.8f), 0f)
+        assertEquals(60f, HomeGeometry.drawerIconDp(63f), 0f)
+        // ...and on a tablet's wide columns they stop at 68.
+        assertEquals(68f, HomeGeometry.drawerIconDp(160f), 0f)
     }
 }

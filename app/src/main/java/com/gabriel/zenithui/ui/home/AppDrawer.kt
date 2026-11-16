@@ -87,6 +87,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.gabriel.zenithui.data.AppInfo
+import com.gabriel.zenithui.data.HomeGeometry
 import com.gabriel.zenithui.data.AppSearch
 import com.gabriel.zenithui.data.ZenithSettings
 import com.gabriel.zenithui.ui.common.AppIcon
@@ -414,6 +415,8 @@ fun AppDrawer(
                 // How many rows of apps the drawer shows at once, and one over: every one of them
                 // rises in as it opens, not only the top few.
                 val rowsOnShow = (maxHeight / DRAWER_ROW).toInt() + 2
+                // As big as its columns have room for, less the grid's margins each side.
+                val iconSize = HomeGeometry.drawerIconDp(((maxWidth - 32.dp) / columns.coerceAtLeast(1)).value).dp
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(if (shelves) 2 else columns),
                     state = gridState,
@@ -507,7 +510,7 @@ fun AppDrawer(
                             AppTile(
                                 key = app.key,
                                 label = app.label,
-                                iconSize = STANDARD_ICON_SIZE,
+                                iconSize = iconSize,
                                 showLabel = true,
                                 shape = ZenithShapes.forIconShape(settings.iconShape),
                                 badge = true,

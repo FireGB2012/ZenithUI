@@ -40,8 +40,12 @@ settings are still kept, for old backups and Looks.)
   or an unfolded phone, it is Balanced. Compact, Balanced, Roomy and Custom are still there, with the
   numbers they always had.
 - **Icons** are cut to an iPhone's rounded square, its corners continuous (the **iPhone** shape),
-  about 64% of a cell's width. Their names are white with a soft shadow on the home screen, in light
-  and in dark, as on an iPhone; the drawer and folders keep their own ink.
+  72% of a cell's width (56 to 78 dp), a little bigger than an iPhone's, and 80% with **Larger
+  icons, with no names** (Customise), which take the room their names had. Each app's logo stands
+  off its tile as on iOS 26 (`LogoLift`): a soft shadow straight down under it, its face lit from
+  above, and a hairline of light on its edge. Their names are white with a soft shadow on the home
+  screen, in light and in dark, as on an iPhone; the drawer and folders keep their own ink. See
+  `specs/2026-11-16-3d-logos-and-bigger-icons-design.md`.
 - **Widgets** are square: Small (2×2), Medium (4×2) and Large (4×4), with one corner radius, each with
   its name under it like an icon's (another app's widget shows its app's name). On the iPhone grid a
   widget reaches a few dp past its icons at the sides (`HomeGeometry.widgetReach`), so a 2×2 is

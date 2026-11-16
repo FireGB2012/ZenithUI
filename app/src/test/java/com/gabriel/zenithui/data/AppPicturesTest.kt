@@ -242,4 +242,14 @@ class AppPicturesTest {
         assertFalse(PictureRules.blank(IntArray(width * height) { 0xFF2A2A2A.toInt() }, width, height))
         assertFalse(PictureRules.blank(IntArray(0), 0, 0))
     }
+
+    @Test
+    fun `the helper is offered only where this copy of Zenith has it`() {
+        assertTrue(PictureRules.offered(sdk = 30, declared = true))
+        assertTrue(PictureRules.offered(sdk = 36, declared = true))
+        // The copy that installs by tapping it goes without: Play Protect refuses it otherwise.
+        assertFalse(PictureRules.offered(sdk = 36, declared = false))
+        // Android 10 has no screenshots for accessibility services.
+        assertFalse(PictureRules.offered(sdk = 29, declared = true))
+    }
 }

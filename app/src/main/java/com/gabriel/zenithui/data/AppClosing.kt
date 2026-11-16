@@ -12,7 +12,11 @@ enum class CloseRoute {
     Handshake,
     /** A card holding a picture of the app shrinks into its icon, or into the middle of the screen. */
     Picture,
-    /** A card in the icon's colour shrinks into it: the Closing card of Advanced animation settings. */
+    /**
+     * A card in the icon's colour, the one the app opened on, shrinks into it, or into the middle of
+     * the screen: what every phone gets with no handshake and no picture (the Closing card of
+     * Advanced animation settings).
+     */
     Card,
     /** Only the icon landing in its place. */
     Land,
@@ -25,7 +29,7 @@ object CloseRules {
     /** Settings → Motion & feel → Closing apps: into its icon, every way the phone allows. */
     const val INTO_ICON = "icon"
 
-    /** Only the landing, and the colour card if it is turned up: how it was before. */
+    /** Only the landing, and the colour card if it is set to a size: how it was before. */
     const val PLAIN = "plain"
 
     /** How long after Android's question its answer still decides how the app closes. */
@@ -34,8 +38,22 @@ object CloseRules {
     /** How long Android has to say the window has reached the icon before Zenith carries on without it. */
     const val HANDSHAKE_WAIT_MS = 900L
 
-    /** Below this the Closing card is off. */
+    /** Below this the Closing card is at Auto: [CARD_START] closing Into its icon, no card closing Plain. */
     const val CARD_OFF = 0.005f
+
+    /**
+     * How far to full size the closing card sets off from, left at Auto. Smaller than a picture
+     * does: by the time Zenith is seen Android's own close has already taken the app away, and the
+     * card carries on from about where it left it instead of filling the screen again.
+     */
+    const val CARD_START = 0.72f
+
+    /**
+     * How long after resuming Zenith waits to be seen before closing the app anyway. Resuming is
+     * part of the same step as starting, and a phone that shows a launcher not built into it only
+     * once its own close is done (One UI) resumes it well before then.
+     */
+    const val SIGHT_WAIT_MS = 450L
 
     /** Between these shares of the way to full size, a picture of the app takes over from its colour and logo. */
     const val PICTURE_FROM = 0.25f
@@ -51,7 +69,7 @@ object CloseRules {
      * Which way it closes. [asked]: Android asked where the icon is (the gesture handshake);
      * [target]: there is an icon on show to go into; [picture]: there is a picture of the app from
      * this time it was open; [recent]: it was opened lately enough to be the app now closing;
-     * [cardFrom]: the Closing card's size to start from, nothing below [CARD_OFF].
+     * [cardFrom]: the Closing card's size to start from, Auto below [CARD_OFF].
      */
     fun route(style: String, asked: Boolean, target: Boolean, picture: Boolean, recent: Boolean, cardFrom: Float): CloseRoute = when {
         style == PLAIN -> asBefore(target, recent, cardFrom)
@@ -59,8 +77,14 @@ object CloseRules {
         // only play the close a second time.
         asked -> if (target) CloseRoute.Handshake else CloseRoute.None
         picture -> CloseRoute.Picture
-        else -> asBefore(target, recent, cardFrom)
+        // Neither (a Galaxy, buttons, a copy with no picture helper): the card the app opened on
+        // goes back into its icon, or into the middle of the screen with none on show.
+        recent -> CloseRoute.Card
+        else -> CloseRoute.None
     }
+
+    /** How far to full size the closing card sets off from: [cardFrom] if it is set to a size, [CARD_START] at Auto. */
+    fun cardStart(cardFrom: Float): Float = if (cardFrom > CARD_OFF) cardFrom else CARD_START
 
     private fun asBefore(target: Boolean, recent: Boolean, cardFrom: Float): CloseRoute = when {
         !target || !recent -> CloseRoute.None

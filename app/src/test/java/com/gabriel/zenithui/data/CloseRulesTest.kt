@@ -33,14 +33,29 @@ class CloseRulesTest {
     }
 
     @Test
-    fun `with neither, it closes as it always did`() {
-        assertEquals(CloseRoute.Land, route())
+    fun `with neither, the app's card shrinks into its icon, or the middle`() {
+        // What a Galaxy, or any phone with buttons, gets from a copy of Zenith with no picture helper.
+        assertEquals(CloseRoute.Card, route())
+        // Left at Auto, or set to a size: the card is there either way.
+        assertEquals(CloseRoute.Card, route(cardFrom = 0.004f))
         assertEquals(CloseRoute.Card, route(cardFrom = 0.4f))
-        // The colour card's "Off".
-        assertEquals(CloseRoute.Land, route(cardFrom = 0.004f))
-        // Nothing to land on, or opened too long ago to be the app that has just closed.
-        assertEquals(CloseRoute.None, route(target = false))
-        assertEquals(CloseRoute.None, route(recent = false, cardFrom = 0.4f))
+        // No icon on show: into the middle of the screen, fading as it goes, as a picture does.
+        assertEquals(CloseRoute.Card, route(target = false))
+        // Opened too long ago to be the app that has just closed: nothing of Zenith's.
+        assertEquals(CloseRoute.None, route(recent = false))
+        assertEquals(CloseRoute.None, route(recent = false, target = false, cardFrom = 0.4f))
+    }
+
+    @Test
+    fun `the card sets off at its own size unless one is set`() {
+        assertEquals(CloseRules.CARD_START, CloseRules.cardStart(0f), 0f)
+        assertEquals(CloseRules.CARD_START, CloseRules.cardStart(0.004f), 0f)
+        assertEquals(0.4f, CloseRules.cardStart(0.4f), 0f)
+        assertEquals(1f, CloseRules.cardStart(1f), 0f)
+        // Smaller than a picture: Android's own close has already taken the app away, and the card
+        // carries on from about where it left it instead of filling the screen again.
+        assertTrue(CloseRules.CARD_START < Tune.ClosePicture.own)
+        assertTrue(CloseRules.CARD_START > 0.5f)
     }
 
     @Test

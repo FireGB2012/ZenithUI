@@ -6,6 +6,7 @@ import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.IntentFilter
 import android.graphics.Bitmap
 import android.os.Build
@@ -274,6 +275,20 @@ class PictureService : AccessibilityService() {
 
         /** Whether this phone can have it: Android 11 or later. */
         val supported: Boolean get() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
+
+        /**
+         * Whether this copy of Zenith offers it (see [PictureRules.offered]): the copy that installs
+         * by tapping it has none, and its row would only lead to an Accessibility page without Zenith.
+         */
+        fun available(context: Context): Boolean = PictureRules.offered(
+            Build.VERSION.SDK_INT,
+            declared = runCatching {
+                context.packageManager.getServiceInfo(
+                    ComponentName(context, PictureService::class.java),
+                    PackageManager.MATCH_DISABLED_COMPONENTS,
+                )
+            }.isSuccess,
+        )
 
         /** Whether it has been switched on in Android's settings, running or not. */
         fun enabled(context: Context): Boolean {

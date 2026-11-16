@@ -99,6 +99,7 @@ class SettingsJsonTest {
         calendarDeclined = true,
         newLookAsked = true,
         layoutVersion = 2,
+        performance = Performance.LITE,
         plusTrialStart = 1_700_000_000_000L,
         plusPurchased = true,
         hiddenApps = listOf("h/i"),

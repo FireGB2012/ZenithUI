@@ -86,7 +86,9 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.PointerInputScope
 import kotlinx.coroutines.withTimeoutOrNull
 import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -255,7 +257,18 @@ class HomeDragState {
      *  above its bottom edge — widgets live at the top of the page, so a whole top strip cannot be
      *  a trapdoor. See [overRemove]. */
     var removeZone by mutableStateOf(Rect.Zero)
-    var gridOrigin by mutableStateOf(Offset.Zero)
+
+    /**
+     * Where each page's grid is laid out, by page, and which page's grid things are carried over:
+     * the page in view at rest. Where that grid is on the screen is worked out when it is asked
+     * for, rather than written down on every frame the pages move: a swipe, the drawer and the
+     * home screen sinking behind an app all move it, and writing it down each time cost a frame
+     * something for nothing.
+     */
+    internal val grids = HashMap<Int, LayoutCoordinates>()
+    internal var gridPage = 0
+    val gridOrigin: Offset
+        get() = grids[gridPage]?.takeIf { it.isAttached }?.positionInRoot() ?: Offset.Zero
     var cellWidth by mutableStateOf(0f)
     var cellHeight by mutableStateOf(0f)
     /** The icon size the live page settled on, so the ghost is drawn at exactly that size. */
@@ -530,6 +543,23 @@ private class DockPops(first: List<String>) {
     }
 }
 
+/** For a page whose things do not drift apart as it turns. */
+internal val NO_PAGE_OFFSET: () -> Float = { 0f }
+
+/**
+ * Where something on a page is on the screen, worked out from its layout each time it is asked
+ * for. Everything on a page moves on every frame of a swipe, of the drawer opening and of the home
+ * screen sinking behind an app; written down as it went, that was a dozen writes a frame that
+ * redrew every icon's layer for nothing. Asked for, it is only worked out by what needs it: a
+ * gesture, an icon being pushed aside, a wave reaching it. Read with `by`.
+ */
+internal class Placed {
+    var at: LayoutCoordinates? = null
+
+    operator fun getValue(thisRef: Any?, property: kotlin.reflect.KProperty<*>): Offset =
+        at?.takeIf { it.isAttached }?.positionInRoot() ?: Offset.Zero
+}
+
 @Composable
 fun HomePage(
     page: Int,
@@ -579,8 +609,11 @@ fun HomePage(
     freePlacement: Boolean = false,
     /** Right after setup the page flies in; any other time it is simply there. */
     animateEntrance: Boolean = false,
-    /** How far this page is from the middle of the screen while swiping, -1 to 1. */
-    pageOffset: Float = 0f,
+    /**
+     * How far this page is from the middle of the screen while swiping, -1 to 1, for the things on
+     * it to drift apart by. Read only while they are drawn, so a swipe composes nothing.
+     */
+    pageOffset: () -> Float = NO_PAGE_OFFSET,
     /** The arrival clock, in milliseconds; at the end of the arrival, or [FlyIn.AT_REST], everything is in its place. */
     arrivalClock: () -> Float = { FlyIn.AT_REST },
     /** How far out the arrival starts: [FlyIn.FULL] for the fly-in, [FlyIn.SETTLE] for coming back from an app. */
@@ -622,6 +655,7 @@ fun HomePage(
         val cellHeightPx = geometry.unitHeight
         val iconSize = geometry.iconDp.dp
         if (active) {
+            drag.gridPage = page
             drag.cellWidth = cellWidthPx
             drag.cellHeight = cellHeightPx
             drag.iconSize = iconSize
@@ -637,10 +671,8 @@ fun HomePage(
             Modifier
                 .padding(start = with(density) { geometry.originX.toDp() }, top = with(density) { geometry.originY.toDp() })
                 .size(with(density) { geometry.gridWidth.toDp() }, with(density) { geometry.gridHeight.toDp() })
-                .onGloballyPositioned { coords ->
-                    // Only the page in view owns the geometry drops are resolved against.
-                    if (active) drag.gridOrigin = coords.positionInRoot()
-                },
+                // Only the page in view owns the geometry drops are resolved against: see gridPage.
+                .onPlaced { coords -> drag.grids[page] = coords },
         ) {
 
         // Drop hint for the spot the dragged item would land in. When something is already there
@@ -734,8 +766,9 @@ fun HomePage(
 
         items.forEachIndexed { index, item ->
             key(item.id) {
-            var cellRoot by remember { mutableStateOf(Offset.Zero) }
-            var contentRoot by remember { mutableStateOf(Offset.Zero) }
+            // Where its cell is on the screen, worked out when asked: see Placed.
+            val cellPlace = remember { Placed() }
+            val cellRoot by cellPlace
             // One hold on this thing: where the finger is, and whether it has been picked up yet.
             val holdRun = remember { HoldRun() }
             // Where its content is laid out, to turn a touch inside it into a place on the screen.
@@ -875,7 +908,7 @@ fun HomePage(
                     )
                     .offset { cellOffset.value }
                     .requiredSize(cellWidthDp * item.spanX, cellHeightDp * item.spanY)
-                    .onGloballyPositioned { cellRoot = it.positionInRoot() }
+                    .onPlaced { cellPlace.at = it }
                     .then(
                         // Over what is forming, and not grown or shrunk with it.
                         if (returning) {
@@ -918,7 +951,7 @@ fun HomePage(
                         alpha = wayAlpha * gatheredAlpha * (if (opens != null) AppLanding.alphaFor(opens) else 1f)
                         // Parallax: while pages slide, items drift apart from the middle of the page
                         // and settle back together as it lands, so the page has depth.
-                        translationX = pageOffset * cellWidthPx * PAGE_PARALLAX *
+                        translationX = pageOffset() * cellWidthPx * PAGE_PARALLAX *
                             (item.col + item.spanX / 2f - settings.columns / 2f)
                         // Arriving. Read here, while drawing, so the clock ticking recomposes nothing.
                         val clock = arrivalClock()
@@ -952,9 +985,10 @@ fun HomePage(
                         }
                         // Making way: pushed aside while an app opens beside it, knocked back as one
                         // lands, and home again. Worked out from where its middle is on the screen.
-                        val aside = HomeRipple.offsetFor(
-                            Offset(cellRoot.x + cellWidthPx * item.spanX / 2f, cellRoot.y + cellHeightPx * item.spanY / 2f)
-                        )
+                        val aside = HomeRipple.offsetFor {
+                            val at = cellRoot
+                            Offset(at.x + cellWidthPx * item.spanX / 2f, at.y + cellHeightPx * item.spanY / 2f)
+                        }
                         translationX += aside.x
                         translationY += aside.y
                         // Floating a hair above the wallpaper, against the way the phone leans
@@ -1046,10 +1080,7 @@ fun HomePage(
                                 Modifier
                             }
                         )
-                        .onGloballyPositioned {
-                            contentRoot = it.positionInRoot()
-                            contentAt[0] = it
-                        }
+                        .onPlaced { contentAt[0] = it }
                         .then(if (opens != null) Modifier.launchOrigin(opens) else Modifier)
                         .pointerInput(item.id, cellWidthPx, cellHeightPx, settings.columns, resizing, settings.lockLayout, editing) {
                             // While its size is being pulled, the item stays put: a finger resting
@@ -1062,7 +1093,7 @@ fun HomePage(
                             // may be picked up at all (not with the layout locked) is the home
                             // screen's to say, in its answer to each move.
                             val onScreen: (Offset) -> Offset = { local ->
-                                contentAt[0]?.takeIf { it.isAttached }?.localToRoot(local) ?: (contentRoot + local)
+                                contentAt[0]?.takeIf { it.isAttached }?.localToRoot(local) ?: (cellRoot + local)
                             }
                             val began: (Offset) -> Unit = { local ->
                                 longPressHandled = true
@@ -2669,12 +2700,17 @@ fun DockBar(
         }
 
         val from = draggingIndex
-        val spacing = if (keys.size > 1) {
-            val a = slotOf(0)
-            val b = slotOf(1)
-            if (a != null && b != null) b.center.x - a.center.x else iconSizePx
-        } else {
-            iconSizePx
+        val spacing = when {
+            keys.size <= 1 -> iconSizePx
+            // From the page's lines, which stay put as the dock moves. Worked out from where the
+            // dock is on the screen, it composed the whole dock again on every frame of the drawer
+            // opening, or of the home screen sinking behind an app.
+            lefts != null && lefts.size > 1 -> (lefts[1] - lefts[0]).toFloat()
+            else -> {
+                val a = slotOf(0)
+                val b = slotOf(1)
+                if (a != null && b != null) b.center.x - a.center.x else iconSizePx
+            }
         }
         val lifted = liftedNow()
         val target = targetNow()

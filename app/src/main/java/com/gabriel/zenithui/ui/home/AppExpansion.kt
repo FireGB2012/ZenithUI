@@ -445,13 +445,17 @@ object HomeRipple {
         )
     }
 
-    /** How far the item whose middle is at [centre] is out of its place right now. Read while drawing. */
-    fun offsetFor(centre: Offset): Offset {
+    /**
+     * How far the item whose middle is at [centre] is out of its place right now. Read while
+     * drawing. Where its middle is, is only asked for while something is pushing.
+     */
+    fun offsetFor(centre: () -> Offset): Offset {
         val from = origin
         if (!from.isSpecified) return Offset.Zero
         val amount = (push?.invoke() ?: 0f) + wave.value
         if (amount == 0f) return Offset.Zero
-        val (dx, dy) = LaunchMotion.push(centre.x - from.x, centre.y - from.y, amount, reach)
+        val at = centre()
+        val (dx, dy) = LaunchMotion.push(at.x - from.x, at.y - from.y, amount, reach)
         return Offset(dx, dy)
     }
 }

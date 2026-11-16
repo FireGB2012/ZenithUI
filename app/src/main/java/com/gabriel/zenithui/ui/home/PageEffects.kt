@@ -103,6 +103,12 @@ object PageEffects {
     fun over(leaving: Boolean): Float = if (leaving) 0f else 1f
 
     /**
+     * Whether the icons on a page drift apart as it goes, in [style]: the style's alone, the same
+     * at every point of a swipe, so a page is composed with it once and only drawn as it moves.
+     */
+    fun parallax(style: String): Boolean = transform(style, 0f).parallax
+
+    /**
      * How much of the active pill dot [index] has while the pager is at [position] (a page number,
      * with a fraction while turning): 1 for the page in view, shared between two dots in between.
      */

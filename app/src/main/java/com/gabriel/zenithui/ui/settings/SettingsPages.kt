@@ -48,6 +48,8 @@ import androidx.compose.ui.unit.dp
 import com.gabriel.zenithui.data.AnimationPreset
 import com.gabriel.zenithui.data.CloseRules
 import com.gabriel.zenithui.data.PictureService
+import com.gabriel.zenithui.data.Performance
+import com.gabriel.zenithui.data.PhonePerformance
 import com.gabriel.zenithui.data.Badges
 import com.gabriel.zenithui.data.DrawerSort
 import com.gabriel.zenithui.data.GlassBody
@@ -616,6 +618,31 @@ internal fun MotionOptions(settings: ZenithSettings, actions: SettingsActions, o
                         "Quick fades in place of springs. Nothing flies in, jiggles or tilts."
                     } else {
                         "Everything moves. The phone's own Remove animations switch still turns it down."
+                    }
+                )
+            }
+        }
+        GroupDivider(inset = 16.dp)
+        Spot("performance") {
+            val verdict by PhonePerformance.verdict.collectAsState()
+            Column(Modifier.padding(14.dp)) {
+                Caption("Performance")
+                Spacer(Modifier.height(10.dp))
+                Segmented(
+                    options = listOf(Performance.AUTO to "Auto", Performance.FULL to "Full", Performance.LITE to "Lite"),
+                    selected = Performance.of(settings.performance),
+                    onSelect = { value -> change { it.copy(performance = value) } },
+                )
+                Spacer(Modifier.height(8.dp))
+                Note(
+                    when (Performance.of(settings.performance)) {
+                        Performance.FULL -> "All of Liquid Glass: the light follows the tilt, the home screen floats and what is behind frosts over. Heavy for a slower phone."
+                        Performance.LITE -> "The glass stays, its light rests, nothing floats and blur turns to a dim. Smooth on a slower phone."
+                        else -> when (verdict) {
+                            Performance.Verdict.LITE -> "Lite on this phone, so every swipe stays smooth: the glass stays, its light rests, nothing floats and blur turns to a dim."
+                            Performance.Verdict.FULL -> "Full on this phone, which draws all of the glass smoothly."
+                            Performance.Verdict.UNKNOWN -> "Full for now. Zenith is watching how smoothly this phone draws, and turns to Lite if it struggles."
+                        }
                     }
                 )
             }

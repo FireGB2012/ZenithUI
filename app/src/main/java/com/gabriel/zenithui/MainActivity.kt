@@ -85,6 +85,8 @@ class MainActivity : ComponentActivity() {
             WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER,
             WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER,
         )
+        // What this phone's chip says about how much it can draw, before the first frame: see Performance.
+        com.gabriel.zenithui.data.PhonePerformance.start(applicationContext)
         setContent { ZenithApp(viewModel) }
 
         // Ask as soon as the launcher is actually entered — including right after onboarding.
@@ -247,6 +249,11 @@ fun ZenithApp(viewModel: ZenithViewModel) {
     LaunchedEffect(activity) {
         val host = activity ?: return@LaunchedEffect
         RefreshRate.applyFullSpeed(host)
+    }
+    // For a phone whose chip says nothing, Auto watches how its frames keep up (see PhonePerformance).
+    androidx.compose.runtime.DisposableEffect(activity) {
+        val stop = activity?.let { com.gabriel.zenithui.data.PhonePerformance.watch(it) }
+        onDispose { stop?.invoke() }
     }
 
     val view = LocalView.current

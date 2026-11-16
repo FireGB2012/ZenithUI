@@ -75,6 +75,7 @@ import com.gabriel.zenithui.ui.common.pressBounce
 import com.gabriel.zenithui.ui.home.LocalBare
 import com.gabriel.zenithui.ui.home.LocalWidgetFill
 import com.gabriel.zenithui.ui.home.LocalWidgetWorld
+import com.gabriel.zenithui.ui.theme.LocalLite
 import com.gabriel.zenithui.ui.theme.LocalOnWallpaper
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.glassInk
@@ -387,41 +388,43 @@ private fun Progress(now: Playing, times: Boolean) {
 
 /**
  * Three little bars that rise and fall while something plays, in the picture's colour made light
- * enough to read; still, and low, when it is paused or movement is reduced.
+ * enough to read; still, and low, when it is paused or movement is reduced; still, and standing as
+ * they rest, in Lite, which draws nothing that moves by itself.
  */
 @Composable
 private fun Bars(playing: Boolean, glow: Color?, modifier: Modifier) {
     val reduced = LocalMotionLevel.current.reduced
+    val lite = LocalLite.current
     val bare = LocalBare.current
     val colour = when {
         bare -> Color.White
         LocalWidgetFill.current != null || glow == null -> ink()
         else -> lerp(glow, Color.White, 0.45f)
     }
-    val moving = playing && !reduced
+    val moving = playing && !reduced && !lite
     // One turn every few seconds, each bar going up and down a different whole number of times in it,
-    // out of step, so they never all rest at once and the loop has no seam.
+    // out of step, so they never all rest at once and the loop has no seam. Read while drawing, so
+    // the bars move without anything being composed again.
     val turn = if (moving) {
         rememberInfiniteTransition(label = "bars").animateFloat(
             initialValue = 0f,
             targetValue = 1f,
             animationSpec = infiniteRepeatable(tween(3_000, easing = LinearEasing), RepeatMode.Restart),
             label = "turn",
-        ).value
+        )
     } else {
         null
     }
-    val heights = BARS.map { bar ->
-        when {
-            turn != null -> 0.3f + 0.7f * (0.5f + 0.5f * kotlin.math.sin(2f * Math.PI.toFloat() * (turn * bar.beats + bar.from)))
-            playing -> bar.rest
-            else -> 0.25f
-        }
-    }
     Canvas(modifier.then(if (bare) Modifier.glassInk(bevel = 1.dp) else Modifier)) {
+        val now = turn?.value
         val gap = size.width * 0.18f
         val bar = (size.width - gap * 2f) / 3f
-        heights.forEachIndexed { i, share ->
+        BARS.forEachIndexed { i, each ->
+            val share = when {
+                now != null -> 0.3f + 0.7f * (0.5f + 0.5f * kotlin.math.sin(2f * Math.PI.toFloat() * (now * each.beats + each.from)))
+                playing -> each.rest
+                else -> 0.25f
+            }
             val h = (size.height * share).coerceAtLeast(bar)
             drawRoundRect(colour, Offset(i * (bar + gap), size.height - h), Size(bar, h), CornerRadius(bar / 2f))
         }

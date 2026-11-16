@@ -46,3 +46,35 @@ What it does now:
 *(My call)* The blurred copy comes in between 20% and 60% open; the sharp home screen fades out under
 it on a curve that keeps what is behind from showing through by more than a tenth at any moment
 (`DrawerFrost.sharpAlpha`). Before Android 12 nothing blurs, as before, and the home screen only dims.
+
+## 1. The Zenith Notch
+
+Zenith already had most of it, as the island (Plus): a pill round the camera drawn over every app,
+placed from the display cutout, that grows on a spring for music (cover and bars; tapped, the song,
+the artist, how far through, and back, play and next, through `MediaSessionManager` and the
+notification listener), calls and timers, notifications (tapped, the whole message, and a tap opens
+it), the charger and the ringer. So the Notch is that island, finished to the brief:
+
+- **The collapsed state.** At rest it is now a small pill with the battery, its number in it, and up to
+  two status icons: Do Not Disturb (a moon), silent or vibrate (`IslandRules.status`, `battery`). The
+  service follows the battery, the ringer and Do Not Disturb as they change.
+- **Its name.** Settings, search and Plus call it the Zenith Notch; the code keeps `island`.
+- **Permissions, explained.** Turning it on, or tapping either permission row, opens a sheet that says
+  what the permission is for, what Zenith does not do with it, and the steps on Android's page, with a
+  picture of the Notch it unlocks (`NotchAccessSheet`), before Android's page opens.
+- **Its style** follows the theme: see part 4.
+
+*(My call)* **An overlay, not an accessibility service.** Both can draw over other apps; the overlay is
+the more reliable. Play allows accessibility services only for accessibility, so a notch built on one
+risks the listing; Android 13 and later hide accessibility services behind "restricted settings" for
+apps not installed from Play, and Android's own page warns that the app wants full control of the
+phone; and some phones switch them off by themselves. The overlay already runs on the Pixel and the
+Galaxy, and works round the one thing an accessibility overlay would do better (taking a tap on the
+status bar itself) with the strip under it that also takes taps.
+
+*(My call)* **The pill at rest is on for everyone**, those who had the island on before included,
+since the brief makes it the Notch's resting state; an island that was set to the camera alone before
+the switch existed keeps that, and the switch turns it off.
+
+*(My call)* Searching Settings for "battery" still finds Keep Zenith loaded first; the pill at rest is
+found by "notch", "status", "percent" and "rest".

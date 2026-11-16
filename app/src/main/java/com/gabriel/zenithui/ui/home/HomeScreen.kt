@@ -264,6 +264,8 @@ private sealed interface HomeSheet {
     data object LockHelper : HomeSheet
     /** What the app picture helper is, before Android's page for it opens. */
     data object AppPictures : HomeSheet
+    /** What one of the Notch's permissions is for, before Android's page for it opens. */
+    data class NotchAccess(val which: com.gabriel.zenithui.data.NotchAccess) : HomeSheet
     /** What one gesture could do, from Settings → Gestures. */
     data class GestureAction(val gesture: String) : HomeSheet
     /** The World clock's cities. */
@@ -3086,6 +3088,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 appPictures = {
                     if (PictureService.enabled(context)) PictureService.openSettings(context) else showSheet(HomeSheet.AppPictures)
                 },
+                notchAccess = { which -> showSheet(HomeSheet.NotchAccess(which)) },
                 // Saving, switching, scheduling and sharing are Plus; opening a code and
                 // deleting a Look of your own never are.
                 looks = LookActions(
@@ -3261,6 +3264,18 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 HomeSheet.AppPictures -> AppPicturesSheet(
                     visible = up,
                     onOpen = { PictureService.openSettings(context) },
+                    onDismiss = { hideSheet() },
+                )
+
+                is HomeSheet.NotchAccess -> NotchAccessSheet(
+                    visible = up,
+                    which = current.which,
+                    onOpen = {
+                        when (current.which) {
+                            com.gabriel.zenithui.data.NotchAccess.OVER_APPS -> com.gabriel.zenithui.island.IslandService.ask(context)
+                            com.gabriel.zenithui.data.NotchAccess.NOTIFICATIONS -> com.gabriel.zenithui.data.NotificationDots.ask(context)
+                        }
+                    },
                     onDismiss = { hideSheet() },
                 )
 

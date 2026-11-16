@@ -43,6 +43,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Call
+import androidx.compose.material.icons.rounded.DarkMode
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.NotificationsOff
@@ -90,6 +91,7 @@ import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
@@ -99,8 +101,11 @@ import androidx.compose.ui.unit.lerp
 import androidx.compose.ui.unit.max
 import androidx.compose.ui.unit.min
 import androidx.compose.ui.unit.sp
+import com.gabriel.zenithui.data.BatteryLook
 import com.gabriel.zenithui.data.IslandKind
 import com.gabriel.zenithui.data.IslandMoment
+import com.gabriel.zenithui.data.IslandRules
+import com.gabriel.zenithui.data.NotchStatus
 import com.gabriel.zenithui.data.NotificationDots
 import com.gabriel.zenithui.data.Playing
 import com.gabriel.zenithui.ui.common.LocalMotionLevel
@@ -201,6 +206,10 @@ data class IslandState(
     val liveText: String = "",
     /** How full the battery is, in percent. */
     val level: Int = 0,
+    /** On the charger: the battery at rest is green. */
+    val charging: Boolean = false,
+    /** The status icons beside the camera at rest: see [IslandRules.status]. */
+    val status: List<NotchStatus> = emptyList(),
     /** The icon and name of the app a notification or a running clock is from. */
     val appIcon: ImageBitmap? = null,
     val appName: String = "",
@@ -304,13 +313,15 @@ fun IslandCompact(
         IslandKind.NOTIFICATION -> item to min(wide(sender(state)), geometry.words)
         IslandKind.RINGER -> item to wide(ringerLook(state.moment?.text.orEmpty()).first)
         IslandKind.PLUGGED -> wide("Charging") to (BATTERY_WIDE + 5.dp + wide("${state.moment?.level ?: state.level}%"))
+        IslandKind.IDLE -> statusWidth(state.status, item) to RESTING_BATTERY_WIDE
         else -> 0.dp to 0.dp
     }
     val side = min(geometry.end + max(lead, trail) + 7.dp, (geometry.widest - geometry.gap) / 2)
     val targetW = when {
         expanded -> geometry.root
         kind == null -> geometry.rest
-        kind == IslandKind.IDLE -> max(geometry.root + geometry.height * 0.6f, geometry.height * 2.6f)
+        // At rest, as small as the battery and the status icons let it be.
+        kind == IslandKind.IDLE -> max(geometry.gap + side * 2, max(geometry.root + geometry.height * 0.6f, geometry.height * 2.6f))
         else -> geometry.gap + side * 2
     }
     val targetH = if (kind == null && !expanded) geometry.rest else geometry.height
@@ -452,7 +463,19 @@ private fun Sides(kind: IslandKind?, state: IslandState, geometry: IslandGeometr
                 Row(end.padding(end = 3.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("$level%", style = style, color = ISLAND_GREEN, maxLines = 1)
                     Spacer(Modifier.width(5.dp))
-                    Battery(level)
+                    Battery(level, ISLAND_GREEN)
+                }
+            }
+            IslandKind.IDLE -> {
+                // At rest: the status icons on the camera's left, the battery on its right.
+                Row(start.padding(start = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                    state.status.forEachIndexed { index, which ->
+                        if (index > 0) Spacer(Modifier.width(STATUS_GAP))
+                        StatusIcon(which, item * STATUS_SHARE)
+                    }
+                }
+                Box(end.padding(end = 3.dp)) {
+                    RestingBattery(state.level, batteryColour(IslandRules.battery(state.level, state.charging)))
                 }
             }
             else -> Unit
@@ -870,9 +893,90 @@ private fun Bell(mode: String, colour: Color, size: Dp) {
 
 private val BATTERY_WIDE = 23.dp
 
-/** A battery in outline, filled in green as far as it is charged. */
+/** A status icon at rest is this share of the island's icon size, and this far from the next. */
+private const val STATUS_SHARE = 0.72f
+private val STATUS_GAP = 4.dp
+
+/** How wide [status] icons stand side by side, for icons [item] across. */
+private fun statusWidth(status: List<NotchStatus>, item: Dp): Dp =
+    if (status.isEmpty()) 0.dp else item * STATUS_SHARE * status.size + STATUS_GAP * (status.size - 1)
+
+/** The battery's colour at rest: green on the charger, red when low, else the island's ink. */
+private fun batteryColour(look: BatteryLook): Color = when (look) {
+    BatteryLook.CHARGING -> ISLAND_GREEN
+    BatteryLook.LOW -> ISLAND_RED
+    BatteryLook.NORMAL -> INK
+}
+
+private val RESTING_BATTERY_WIDE = 29.dp
+
+/**
+ * The battery at rest, as an iPhone draws it with its percentage on: a battery in outline filled in
+ * [colour] as far as it is charged, with the number in it, cut out of the fill where they cross.
+ */
 @Composable
-private fun Battery(level: Int) {
+private fun RestingBattery(level: Int, colour: Color) {
+    val measurer = rememberTextMeasurer()
+    val style = TextStyle(
+        fontFamily = ISLAND_FONT,
+        fontSize = 9.5.sp,
+        fontWeight = FontWeight.Bold,
+        fontFeatureSettings = "tnum",
+        platformStyle = PlatformTextStyle(includeFontPadding = false),
+    )
+    Canvas(
+        Modifier
+            .size(width = RESTING_BATTERY_WIDE, height = 13.dp)
+            // Drawn on a layer of its own, so the number can cut through the fill to the black under it.
+            .graphicsLayer { compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen },
+    ) {
+        val nub = 2.dp.toPx()
+        val body = Size(size.width - nub - 1.dp.toPx(), size.height)
+        val stroke = 1.1.dp.toPx()
+        drawRoundRect(
+            Color.White.copy(alpha = 0.4f),
+            topLeft = Offset(stroke / 2, stroke / 2),
+            size = Size(body.width - stroke, body.height - stroke),
+            cornerRadius = CornerRadius(3.5.dp.toPx()),
+            style = Stroke(stroke),
+        )
+        drawRoundRect(
+            Color.White.copy(alpha = 0.4f),
+            topLeft = Offset(body.width + 1.dp.toPx(), size.height * 0.33f),
+            size = Size(nub, size.height * 0.34f),
+            cornerRadius = CornerRadius(1.dp.toPx()),
+        )
+        val inset = 2.dp.toPx()
+        drawRoundRect(
+            colour,
+            topLeft = Offset(inset, inset),
+            size = Size((body.width - inset * 2) * (level / 100f).coerceIn(0f, 1f), body.height - inset * 2),
+            cornerRadius = CornerRadius(1.8.dp.toPx()),
+        )
+        val number = measurer.measure("$level", style)
+        drawText(
+            number,
+            color = Color.White,
+            topLeft = Offset((body.width - number.size.width) / 2f, (size.height - number.size.height) / 2f),
+            blendMode = androidx.compose.ui.graphics.BlendMode.Xor,
+        )
+    }
+}
+
+/** One status icon at rest: a moon for Do Not Disturb, the ringer struck through or vibrating. */
+@Composable
+private fun StatusIcon(which: NotchStatus, size: Dp) {
+    val (icon, colour) = when (which) {
+        NotchStatus.QUIET -> Icons.Rounded.DarkMode to Color(0xFFBF5AF2)
+        NotchStatus.SILENT -> Icons.Rounded.NotificationsOff to ISLAND_RED
+        NotchStatus.VIBRATE -> Icons.Rounded.Vibration to INK
+    }
+    Icon(icon, contentDescription = null, tint = colour, modifier = Modifier.size(size))
+}
+
+/** A battery in outline, filled in [colour] as far as it is charged. */
+@Composable
+private fun Battery(level: Int, colour: Color) {
     val fill = remember { Animatable(0f) }
     val reduced = LocalMotionLevel.current.reduced
     LaunchedEffect(level) { fill.animateTo(level / 100f, if (reduced) tween(Motion.REDUCED_MS) else tween(700, easing = FastOutSlowInEasing)) }
@@ -884,7 +988,7 @@ private fun Battery(level: Int) {
         drawRoundRect(Color.White.copy(alpha = 0.45f), topLeft = Offset(body.width + 1.dp.toPx(), size.height * 0.33f), size = Size(nub, size.height * 0.34f), cornerRadius = CornerRadius(1.dp.toPx()))
         val inset = 2.2.dp.toPx()
         drawRoundRect(
-            ISLAND_GREEN,
+            colour,
             topLeft = Offset(inset, inset),
             size = Size((body.width - inset * 2) * fill.value, body.height - inset * 2),
             cornerRadius = CornerRadius(1.6.dp.toPx()),

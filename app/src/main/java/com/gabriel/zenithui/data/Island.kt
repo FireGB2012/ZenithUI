@@ -4,10 +4,11 @@ import androidx.compose.runtime.Immutable
 import org.json.JSONObject
 
 /**
- * The island (Zenith Plus, Settings → Island): the camera, stretched. At rest it is the camera
- * and nothing else; it grows out of it for what is going on — music, a call, a timer — and for a
- * moment when something happens: a notification, the ringer changed, the charger plugged in.
- * Only what is changed is saved.
+ * The Zenith Notch (Zenith Plus, Settings → Zenith Notch; "the island" in the code, which is what it
+ * was called first): the camera, stretched. At rest it is a small pill round the camera with the
+ * battery and a status icon or two, or, if you would rather, the camera and nothing else; it grows
+ * out of it for what is going on — music, a call, a timer — and for a moment when something happens:
+ * a notification, the ringer changed, the charger plugged in. Only what is changed is saved.
  */
 @Immutable
 data class IslandSettings(
@@ -20,8 +21,11 @@ data class IslandSettings(
     val charging: Boolean = true,
     /** Ring, vibrate or silent, for a moment as it changes. */
     val ringer: Boolean = true,
-    /** A small pill round the camera even with nothing to show, as on an iPhone. */
-    val always: Boolean = false,
+    /**
+     * At rest, a small pill round the camera with the battery and a status icon or two; off, at rest
+     * it is the camera and nothing more.
+     */
+    val always: Boolean = true,
     /** Out of the way while an app is full screen: a video, a game. */
     val hideFullScreen: Boolean = true,
     /** Out of the way while the phone is on its side. */
@@ -51,8 +55,9 @@ data class IslandSettings(
                 notifications = o.optBoolean("notifications", d.notifications),
                 charging = o.optBoolean("charging", d.charging),
                 ringer = o.optBoolean("ringer", d.ringer),
-                // An island set to a small pill before this was a switch keeps it.
-                always = o.optBoolean("always", o.optString("idle") == "pill"),
+                // An island set to a small pill, or to the camera alone, before this was a switch
+                // keeps what it was set to; otherwise the pill is the notch at rest.
+                always = o.optBoolean("always", if (o.has("idle")) o.optString("idle") == "pill" else d.always),
                 hideFullScreen = o.optBoolean("fullScreen", d.hideFullScreen),
                 hideSideways = o.optBoolean("sideways", d.hideSideways),
             )
@@ -77,7 +82,7 @@ enum class IslandKind {
     /** The charger plugged in, for a moment: how full. */
     PLUGGED,
 
-    /** Nothing going on, and the small pill asked for. */
+    /** Nothing going on: the small pill at rest, with the battery and the status icons. */
     IDLE;
 
     /** Whether a tap opens it into a card: the ones with more to them than fits round the camera. */
@@ -98,6 +103,30 @@ data class IslandMoment(
     val text: String = "",
     val level: Int = 0,
 )
+
+/** One of the two permissions the Notch needs from Android, each explained before Android's page opens. */
+enum class NotchAccess {
+    /** "Display over other apps": for the Notch to be drawn round the camera over every app. */
+    OVER_APPS,
+
+    /** Notification access: for music, calls, timers and messages. */
+    NOTIFICATIONS,
+}
+
+/** A status icon the notch shows at rest, beside the camera. */
+enum class NotchStatus {
+    /** Do Not Disturb is on: a moon. */
+    QUIET,
+
+    /** The ringer is off: a bell, struck through, in red. */
+    SILENT,
+
+    /** The ringer only vibrates. */
+    VIBRATE,
+}
+
+/** How the battery at rest is drawn: green while it charges, red when it runs low, else in the ink. */
+enum class BatteryLook { CHARGING, LOW, NORMAL }
 
 /** What the island shows, and why: as plain functions of what is going on, so they are tested. */
 object IslandRules {
@@ -158,6 +187,28 @@ object IslandRules {
     /** When the island next needs to look again, for a moment ending; null with none to end. */
     fun nextChange(moments: List<IslandMoment>, now: Long): Long? =
         live(moments, now).minOfOrNull { it.at + lasts(it.kind) }
+
+    /**
+     * The status icons beside the camera at rest, two at most: Do Not Disturb first, then the ringer
+     * when it is not ringing. [ringer] is "ring", "vibrate" or "silent". Nothing when all is as usual.
+     */
+    fun status(ringer: String, quiet: Boolean): List<NotchStatus> = buildList {
+        if (quiet) add(NotchStatus.QUIET)
+        when (ringer) {
+            "silent" -> add(NotchStatus.SILENT)
+            "vibrate" -> add(NotchStatus.VIBRATE)
+        }
+    }.take(2)
+
+    /** At or under this much, the battery at rest turns red, as a phone's does. */
+    const val LOW_BATTERY = 20
+
+    /** How the battery at rest is drawn, at [level] percent. */
+    fun battery(level: Int, charging: Boolean): BatteryLook = when {
+        charging -> BatteryLook.CHARGING
+        level <= LOW_BATTERY -> BatteryLook.LOW
+        else -> BatteryLook.NORMAL
+    }
 
     /** Moments kept: the ones still showing, and no more than a handful. */
     fun prune(moments: List<IslandMoment>, now: Long): List<IslandMoment> = live(moments, now).take(MOST)

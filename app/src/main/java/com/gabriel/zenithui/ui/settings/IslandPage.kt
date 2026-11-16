@@ -58,6 +58,7 @@ import com.gabriel.zenithui.data.IslandKind
 import com.gabriel.zenithui.data.IslandMoment
 import com.gabriel.zenithui.data.IslandRules
 import com.gabriel.zenithui.data.IslandSettings
+import com.gabriel.zenithui.data.NotchAccess
 import com.gabriel.zenithui.data.NotificationDots
 import com.gabriel.zenithui.data.Playing
 import com.gabriel.zenithui.data.PlusStatus
@@ -78,10 +79,10 @@ import com.gabriel.zenithui.ui.theme.inkOnTint
 import kotlinx.coroutines.delay
 
 /**
- * Settings → Island: the camera, stretched, over every app (Zenith Plus). At the top, the top of
- * this very phone — its camera where it is and as big as it is — with the island on it, the one
- * drawn over apps; under it, what it shows and when it keeps out of the way. Nothing else to set:
- * it is meant to look right as it is.
+ * Settings → Zenith Notch: the camera, stretched, over every app (Zenith Plus). At the top, the top
+ * of this very phone — its camera where it is and as big as it is — with the Notch on it, the one
+ * drawn over apps; under it, what it shows and when it keeps out of the way. Each of Android's two
+ * permissions is explained in a sheet before Android's own page opens (see NotchAccessSheet).
  */
 @Composable
 internal fun IslandOptions(settings: ZenithSettings, plus: PlusStatus, actions: SettingsActions) {
@@ -102,7 +103,7 @@ internal fun IslandOptions(settings: ZenithSettings, plus: PlusStatus, actions: 
     Group(rise = 1) {
         Spot("island") {
             ToggleRow(
-                title = "Island",
+                title = "Zenith Notch",
                 subtitle = when {
                     !plus.active -> "Plus: your camera, stretched, over every app"
                     island.on && !overApps -> "On, waiting for leave to show over other apps"
@@ -115,7 +116,7 @@ internal fun IslandOptions(settings: ZenithSettings, plus: PlusStatus, actions: 
                     actions.plus()
                 } else {
                     change { it.copy(on = on) }
-                    if (on && !overApps) IslandService.ask(context)
+                    if (on && !overApps) actions.notchAccess(NotchAccess.OVER_APPS)
                 }
             }
         }
@@ -125,8 +126,8 @@ internal fun IslandOptions(settings: ZenithSettings, plus: PlusStatus, actions: 
                 ActionRow(
                     icon = Icons.Rounded.Layers,
                     title = "Let it show over other apps",
-                    subtitle = "Android asks you once: find Zenith, and allow it",
-                    onClick = { IslandService.ask(context) },
+                    subtitle = "Android asks you once: here's why, and how",
+                    onClick = { actions.notchAccess(NotchAccess.OVER_APPS) },
                 )
             }
         }
@@ -136,8 +137,8 @@ internal fun IslandOptions(settings: ZenithSettings, plus: PlusStatus, actions: 
                 ActionRow(
                     icon = Icons.Rounded.NotificationsActive,
                     title = "Let it see notifications",
-                    subtitle = "For music, calls, timers and messages: the access the dots use",
-                    onClick = { NotificationDots.ask(context) },
+                    subtitle = "For music, calls, timers and messages: here's why, and how",
+                    onClick = { actions.notchAccess(NotchAccess.NOTIFICATIONS) },
                 )
             }
         }
@@ -158,7 +159,11 @@ internal fun IslandOptions(settings: ZenithSettings, plus: PlusStatus, actions: 
     }
     Group(rise = 3) {
         Spot("islandAlways") {
-            ToggleRow("Always show it", "A small pill round the camera, even with nothing going on", island.always) { on -> change { it.copy(always = on) } }
+            ToggleRow(
+                "Battery and status at rest",
+                "A small pill round the camera with your battery and Do Not Disturb or silent. Off, it's only the camera",
+                island.always,
+            ) { on -> change { it.copy(always = on) } }
         }
     }
     Group(rise = 4) {
@@ -185,6 +190,7 @@ private fun IslandPreview(island: IslandSettings) {
     val palette = LocalPalette.current
     val geometry = rememberIslandGeometry()
     var musicOn by remember { mutableStateOf(false) }
+    var quietOn by remember { mutableStateOf(false) }
     var callFrom by remember { mutableLongStateOf(0L) }
     var playing by remember { mutableStateOf(true) }
     var moments by remember { mutableStateOf(emptyList<IslandMoment>()) }
@@ -223,6 +229,7 @@ private fun IslandPreview(island: IslandSettings) {
         live = call,
         liveText = call?.let { IslandRules.clock(it.base, false, now) }.orEmpty(),
         level = 64,
+        status = if (quietOn) listOf(com.gabriel.zenithui.data.NotchStatus.QUIET) else emptyList(),
         appName = if (kind == IslandKind.LIVE) "Phone" else "Messages",
         secondary = IslandRules.secondary(island, musicOn && playing, call != null, kind),
     )
@@ -345,6 +352,7 @@ private fun IslandPreview(island: IslandSettings) {
             DemoChip("Notification", false) { moment(IslandKind.NOTIFICATION) }
             DemoChip("Silent", false) { moment(IslandKind.RINGER) }
             DemoChip("Charger", false) { moment(IslandKind.PLUGGED) }
+            DemoChip("Do Not Disturb", quietOn) { quietOn = !quietOn }
         }
     }
 }

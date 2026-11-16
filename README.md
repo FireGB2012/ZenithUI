@@ -588,12 +588,16 @@ the switch is off.
 - **Lock layout**: a hold only opens an item's menu, the dock's icons stay put, and every menu
   offers to unlock. **Hide the status bar**: it comes in for a moment from the very top.
 
-## The island
+## The Zenith Notch
 
-**Island** (Zenith Plus, Settings → Island) is the camera, stretched: black round the camera hole,
-drawn over every app (`island/`). At rest it is exactly the camera and nothing more. When
-something happens it grows out of the camera on a spring, with what it shows in its two rounded
-ends, either side of the lens, and nothing over it:
+**Zenith Notch** (Zenith Plus, Settings → Zenith Notch; the island in the code, `island/`) is the
+camera, stretched: black round the camera hole, drawn over every app. At rest it is a small pill
+round the camera with the battery, its percentage in it as an iPhone draws it (green on the
+charger, red at 20% and under), and a status icon or two on the other side: a moon for Do Not
+Disturb, a struck-through bell for silent, vibrate (`IslandRules.status`). **The pill at rest**
+off, at rest it is exactly the camera and nothing more. When something happens it grows out of the
+camera on a spring, with what it shows in its two rounded ends, either side of the lens, and
+nothing over it:
 
 - **Music**: the cover, and bars in the cover's own colour. Tap for the song, how far through it
   is, and back, play and next.
@@ -617,10 +621,16 @@ width, which keeps it clear of the clock and the status icons. Its words are in 
 sans, like the status bar beside it, whatever font the home screen is in.
 
 Its page has a live preview, the top of this very phone at its own size with the same island on
-it, and buttons to try music, a call, a notification, silent and the charger; then what it shows,
-**Always show it** (a small pill even with nothing going on), and keeping out of the way in full
-screen and sideways. It needs Android's "Display over other apps", and notification access for
-music, calls and notifications; the page asks for each.
+it, and buttons to try music, a call, a notification, silent, the charger and Do Not Disturb; then
+what it shows, the pill at rest, and keeping out of the way in full screen and sideways. It needs
+Android's "Display over other apps", and notification access for music, calls and notifications.
+Each is explained in a sheet before Android's page opens (`NotchAccessSheet`): what it is for, what
+Zenith does not do with it, and the steps on Android's page, which only names the permission.
+
+It runs as an overlay (`TYPE_APPLICATION_OVERLAY`) rather than as an accessibility service: Play
+allows accessibility services only for accessibility, Android 13 and later hide them behind
+"restricted settings" for apps not from Play, and some phones switch them off by themselves; a
+window over other apps is what Android offers for exactly this, and keeps running reliably.
 
 `IslandService` keeps one small window round the camera while the island is on, Plus is active and
 Android allows it, which also keeps it running, and a second one while a card is open. Three

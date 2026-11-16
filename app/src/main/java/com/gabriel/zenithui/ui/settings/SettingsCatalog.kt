@@ -11,7 +11,7 @@ enum class SettingsPage(val title: String, val opensSheet: Boolean = false) {
     Gestures("Gestures"),
     Apps("Apps"),
     Plus("Zenith Plus", opensSheet = true),
-    Island("Island"),
+    Island("Zenith Notch"),
     Looks("Looks"),
     Aura("Aura"),
     /** Only in a build that has a server: see `server.properties`. */
@@ -103,10 +103,10 @@ object SettingsCatalog {
         SettingsEntry("hiddenApps", SettingsPage.Apps, "Hidden apps", "hide private pin plus lock"),
 
         SettingsEntry("plus", SettingsPage.Plus, "Zenith Plus", "subscribe subscription buy trial lifetime purchase"),
-        SettingsEntry("island", SettingsPage.Island, "Island", "dynamic island pill camera notch over apps overlay plus"),
-        SettingsEntry("islandShows", SettingsPage.Island, "What it shows", "island music calls timers charger notifications ringer silent"),
-        SettingsEntry("islandAlways", SettingsPage.Island, "Always show it", "island pill camera rest idle always"),
-        SettingsEntry("islandWhen", SettingsPage.Island, "Out of the way", "island full screen video game sideways landscape hide"),
+        SettingsEntry("island", SettingsPage.Island, "Zenith Notch", "notch dynamic island pill camera over apps overlay plus"),
+        SettingsEntry("islandShows", SettingsPage.Island, "What it shows", "notch island music calls timers charger notifications ringer silent"),
+        SettingsEntry("islandAlways", SettingsPage.Island, "The pill at rest", "notch island pill camera rest idle always percent status do not disturb silent"),
+        SettingsEntry("islandWhen", SettingsPage.Island, "Out of the way", "notch island full screen video game sideways landscape hide"),
         SettingsEntry("lookSave", SettingsPage.Looks, "Save this look", "look looks setup profile preset theme save switch"),
         SettingsEntry("lookSchedule", SettingsPage.Looks, "Schedule", "look time night work automatic switch"),
         SettingsEntry("lookCode", SettingsPage.Looks, "Open a code", "look friend code import featured received", server = true),

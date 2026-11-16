@@ -9,13 +9,30 @@ import org.junit.Test
 
 class IslandTest {
 
-    private val all = IslandSettings(on = true)
+    /** Everything on, but the pill at rest, so what each rule does is seen on its own. */
+    private val all = IslandSettings(on = true, always = false)
     private fun note(at: Long) = IslandMoment(IslandKind.NOTIFICATION, at, "com.chat", "Sam", "Hi")
 
     @Test
-    fun `with nothing going on it is only the camera, or a small pill if asked`() {
-        assertNull(IslandRules.pick(all, musicPlaying = false, live = false, moments = emptyList(), now = 0L))
-        assertEquals(IslandKind.IDLE, IslandRules.pick(all.copy(always = true), false, false, emptyList(), 0L)?.first)
+    fun `with nothing going on it is the small pill at rest, or only the camera if asked`() {
+        assertEquals(IslandKind.IDLE, IslandRules.pick(IslandSettings(on = true), musicPlaying = false, live = false, moments = emptyList(), now = 0L)?.first)
+        assertNull(IslandRules.pick(all, false, false, emptyList(), 0L))
+    }
+
+    @Test
+    fun `at rest it shows two status icons at most, Do Not Disturb first, and none when all is usual`() {
+        assertEquals(emptyList<NotchStatus>(), IslandRules.status("ring", quiet = false))
+        assertEquals(listOf(NotchStatus.SILENT), IslandRules.status("silent", quiet = false))
+        assertEquals(listOf(NotchStatus.VIBRATE), IslandRules.status("vibrate", quiet = false))
+        assertEquals(listOf(NotchStatus.QUIET, NotchStatus.SILENT), IslandRules.status("silent", quiet = true))
+        assertEquals(listOf(NotchStatus.QUIET), IslandRules.status("ring", quiet = true))
+    }
+
+    @Test
+    fun `the battery at rest is green while it charges and red when it runs low`() {
+        assertEquals(BatteryLook.CHARGING, IslandRules.battery(12, charging = true))
+        assertEquals(BatteryLook.LOW, IslandRules.battery(IslandRules.LOW_BATTERY, charging = false))
+        assertEquals(BatteryLook.NORMAL, IslandRules.battery(IslandRules.LOW_BATTERY + 1, charging = false))
     }
 
     @Test
@@ -98,5 +115,9 @@ class IslandTest {
         val mine = IslandSettings(on = true, live = false, always = true, hideSideways = false)
         assertEquals(mine, IslandSettings.fromJson(mine.toJson()))
         assertTrue(IslandSettings.fromJson(JSONObject("""{"idle":"pill","style":"glow","width":1.3}""")).always)
+        // One set to the camera alone before keeps that; one never set gets the pill at rest.
+        assertFalse(IslandSettings.fromJson(JSONObject("""{"idle":"camera"}""")).always)
+        assertTrue(IslandSettings.fromJson(JSONObject("""{"on":true}""")).always)
+        assertFalse(IslandSettings.fromJson(IslandSettings(always = false).toJson()).always)
     }
 }

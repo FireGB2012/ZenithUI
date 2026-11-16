@@ -141,6 +141,8 @@ class SettingsActions(
     val glassStudio: () -> Unit = {},
     /** The fonts Zenith carries, and their licence. */
     val fontLicences: () -> Unit = {},
+    /** Says what one of the Notch's permissions is for, and opens Android's page for it. */
+    val notchAccess: (com.gabriel.zenithui.data.NotchAccess) -> Unit = {},
 )
 
 /**
@@ -547,7 +549,7 @@ private fun summary(page: SettingsPage, settings: ZenithSettings, plus: PlusStat
         plus.subscribed -> "Subscribed"
         plus.trialDaysLeft > 1 -> "${plus.trialDaysLeft} days of your trial left"
         plus.trialDaysLeft == 1 -> "Last day of your trial"
-        else -> "Wallpapers, hidden apps, backup, the island"
+        else -> "Wallpapers, hidden apps, backup, the Notch"
     }
     SettingsPage.Island -> when {
         !plus.active -> "Plus: your camera, stretched, over every app"

@@ -88,6 +88,10 @@ class IslandService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
     private val moments = MutableStateFlow<List<IslandMoment>>(emptyList())
     private val level = MutableStateFlow(0)
+    /** What the pill at rest shows beside the battery: charging, the ringer, Do Not Disturb. */
+    private val charging = MutableStateFlow(false)
+    private val ringerMode = MutableStateFlow("ring")
+    private val quiet = MutableStateFlow(false)
     private val fullScreen = MutableStateFlow(false)
     private val sideways = MutableStateFlow(false)
     private val geometry = MutableStateFlow(IslandGeometry.typical())
@@ -124,6 +128,7 @@ class IslandService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             val percent = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, 0) * 100 / scale
             val now = intent.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) != 0
             level.value = percent
+            charging.value = now
             // The charger going in is a moment; finding it already in, as this starts, is not.
             if (now && !plugged && !isInitialStickyBroadcast) add(IslandMoment(IslandKind.PLUGGED, System.currentTimeMillis(), level = percent))
             plugged = now
@@ -132,13 +137,30 @@ class IslandService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
     private val ringer = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
+            val mode = ringerWord(intent.getIntExtra(AudioManager.EXTRA_RINGER_MODE, AudioManager.RINGER_MODE_NORMAL))
+            ringerMode.value = mode
             if (isInitialStickyBroadcast) return
-            val mode = when (intent.getIntExtra(AudioManager.EXTRA_RINGER_MODE, AudioManager.RINGER_MODE_NORMAL)) {
-                AudioManager.RINGER_MODE_VIBRATE -> "vibrate"
-                AudioManager.RINGER_MODE_SILENT -> "silent"
-                else -> "ring"
-            }
             add(IslandMoment(IslandKind.RINGER, System.currentTimeMillis(), text = mode))
+        }
+    }
+
+    /** Do Not Disturb going on or off: a moon on the pill at rest while it is on. */
+    private val interruptions = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            quiet.value = quietNow()
+        }
+    }
+
+    private fun ringerWord(mode: Int): String = when (mode) {
+        AudioManager.RINGER_MODE_VIBRATE -> "vibrate"
+        AudioManager.RINGER_MODE_SILENT -> "silent"
+        else -> "ring"
+    }
+
+    private fun quietNow(): Boolean {
+        val notifications = getSystemService(android.app.NotificationManager::class.java) ?: return false
+        return notifications.currentInterruptionFilter.let {
+            it != android.app.NotificationManager.INTERRUPTION_FILTER_ALL && it != android.app.NotificationManager.INTERRUPTION_FILTER_UNKNOWN
         }
     }
 
@@ -170,8 +192,11 @@ class IslandService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         pill = view
         lifecycleRegistry.currentState = Lifecycle.State.RESUMED
 
+        getSystemService(AudioManager::class.java)?.let { ringerMode.value = ringerWord(it.ringerMode) }
+        quiet.value = quietNow()
         registerReceiver(battery, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
         registerReceiver(ringer, IntentFilter(AudioManager.RINGER_MODE_CHANGED_ACTION))
+        registerReceiver(interruptions, IntentFilter(android.app.NotificationManager.ACTION_INTERRUPTION_FILTER_CHANGED))
         NowPlaying.watch(this)
         NotificationDots.reconnect(this)
         scope.launch {
@@ -205,7 +230,8 @@ class IslandService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
     /** Works out what the island shows, again whenever anything it shows changes, and as clocks tick. */
     private suspend fun follow() {
-        val flags = combine(fullScreen, sideways, expanded, level) { full, turned, open, percent -> Flags(full, turned, open, percent) }
+        val resting = combine(charging, ringerMode, quiet) { plugged, mode, dnd -> Resting(plugged, IslandRules.status(mode, dnd)) }
+        val flags = combine(fullScreen, sideways, expanded, level, resting) { full, turned, open, percent, rest -> Flags(full, turned, open, percent, rest) }
         combine(SettingsStore.get(this).settings, NowPlaying.now, moments, NotificationDots.live, flags) { settings, music, list, live, f ->
             Inputs(settings, music, list, live, f)
         }.collectLatest { inputs ->
@@ -217,7 +243,8 @@ class IslandService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         }
     }
 
-    private class Flags(val full: Boolean, val turned: Boolean, val open: Boolean, val level: Int)
+    private class Resting(val charging: Boolean, val status: List<com.gabriel.zenithui.data.NotchStatus>)
+    private class Flags(val full: Boolean, val turned: Boolean, val open: Boolean, val level: Int, val resting: Resting)
     private class Inputs(val settings: ZenithSettings, val music: Playing?, val moments: List<IslandMoment>, val live: Map<String, NotificationDots.Live>, val flags: Flags)
 
     /** Shows what is going on at [now]; answers with when it next needs to look again, or null. */
@@ -247,6 +274,8 @@ class IslandService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             live = clock,
             liveText = clock?.let { it.shown ?: IslandRules.clock(it.base, it.countDown, now) }.orEmpty(),
             level = inputs.flags.level,
+            charging = inputs.flags.resting.charging,
+            status = inputs.flags.resting.status,
             appIcon = iconOf(from),
             appName = nameOf(from),
             secondary = secondary,
@@ -494,6 +523,7 @@ class IslandService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         lifecycleRegistry.currentState = Lifecycle.State.DESTROYED
         runCatching { unregisterReceiver(battery) }
         runCatching { unregisterReceiver(ringer) }
+        runCatching { unregisterReceiver(interruptions) }
         listOfNotNull(pill, card).forEach { v -> runCatching { window?.removeViewImmediate(v) } }
         pill = null
         card = null

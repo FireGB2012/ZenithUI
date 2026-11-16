@@ -110,7 +110,10 @@ app off the dock is a removal like any other, so Undo puts it back too.
 
 The minuses are beads of glass. Each wells up out of its corner like a drop (tiny and tucked in,
 then out, wide, tall and still) and sinks back as edit mode ends, and shows the corner under it a
-quarter bigger, on the page and in the dock. What a minus takes off pops like a soap bubble where
+quarter bigger, on the page and in the dock. Since 2026-11-15 a bead is drawn as Apple's glass is:
+a flat pale disc that keeps its grey over the corner it shows, a narrow brighter band where its
+edge bends the light, a hairline rim brightest up and to the left and again opposite, and one soft
+shadow straight down; no longer a shaded drop with a highlight on its face. What a minus takes off pops like a soap bubble where
 it stood: a quick swell as it brightens, then a ring that spreads and fades, with a few droplets,
 and fewer when several go within a second. Undo blows it back together: the ring and droplets close
 in and it forms again with a wobble, and its bead wells up once it has. Anything that leaves the

@@ -34,12 +34,12 @@ import kotlin.math.max
 /**
  * Makes whatever this draws out of glass, the way iOS makes the Lock Screen clock: no pane behind
  * it, the numerals and symbols themselves are the glass. Its own outline becomes a rounded rim, so
- * the wallpaper behind it bends and magnifies towards its edges, a crisp highlight runs along the
- * edges facing the light and moves as the phone tilts, and a soft shade round it keeps it clear of
- * the wallpaper. Each stroke is a rounded bar of glass and is lit as one: the side of it turned
- * from the light is in its own shade, and where its round mirrors the lamp it glints. What is
- * drawn white is clear glass; what is drawn in a colour is glass of that colour, toned by how
- * bright the wallpaper behind it is.
+ * the wallpaper behind it bends and magnifies towards its edges, a hairline of light runs along the
+ * edges, brightest where they face the light and where they face straight away from it, and moves
+ * as the phone tilts, and a soft shade round it keeps it clear of the wallpaper. Like the panes, it
+ * is clear glass and nothing more: no shading of a rounded bar, no glints. What is drawn white is
+ * clear glass; what is drawn in a colour is glass of that colour, toned by how bright the wallpaper
+ * behind it is.
  *
  * [bevel] is how far in from its edges the glass stays curved: about a third of the stroke width
  * looks right, so a big numeral gets a wider rim than a small icon.
@@ -81,7 +81,6 @@ fun Modifier.glassInk(bevel: Dp = 4.dp, halo: Boolean = true): Modifier {
                 strength = strength,
                 halo = halo,
                 lift = lift,
-                lean = lean,
             )?.asComposeRenderEffect()
         }
         .padding(INK_BLEED)
@@ -136,11 +135,9 @@ internal class GlassInkShader(levels: GlassLevels?) {
         halo: Boolean,
         /** How far the glass is lifted off a picture of its own tone: see GlassBody. */
         lift: Float = 0f,
-        /** Which way the phone leans: what the edges bend and reflect slides with it. */
-        lean: Offset = Offset.Zero,
     ): RenderEffect? =
         // The uniforms are copied into the effect as it is made, so every change needs a new one.
-        program(size, origin, screen, wallpaperOffset, bevel, light, strength, halo, lift, lean)
+        program(size, origin, screen, wallpaperOffset, bevel, light, strength, halo, lift)
             ?.let { RenderEffect.createRuntimeShaderEffect(it, "content") }
 
     /** The program with its numbers set for one drawing. `content`, the shape to be made of glass, is still to be given. */
@@ -154,7 +151,6 @@ internal class GlassInkShader(levels: GlassLevels?) {
         strength: Float,
         halo: Boolean,
         lift: Float = 0f,
-        lean: Offset = Offset.Zero,
     ): RuntimeShader? {
         if (size.width <= 0f || size.height <= 0f) return null
         val visible = sharpSize != null && mistSize != null && frostSize != null && hazeSize != null &&
@@ -181,13 +177,11 @@ internal class GlassInkShader(levels: GlassLevels?) {
         shader.setFloatUniform("refraction", 0.55f + 0.45f * strength.coerceAtMost(1.2f))
         val length = hypot(light.x, light.y).coerceAtLeast(0.001f)
         shader.setFloatUniform("light", light.x / length, light.y / length)
-        shader.setFloatUniform("lean", lean.x.coerceIn(-1f, 1f), lean.y.coerceIn(-1f, 1f))
         val lifted = lift.coerceIn(0f, 1f)
-        shader.setFloatUniform("halo", if (halo) 0.26f + 0.10f * lifted else 0f)
+        shader.setFloatUniform("halo", if (halo) 0.22f + 0.10f * lifted else 0f)
         shader.setFloatUniform("gather", INK_GATHER * lifted)
-        shader.setFloatUniform("mirror", MIRROR_CLEAR * strength.coerceAtMost(1f))
         shader.setFloatUniform("glow", GLOW)
-        shader.setFloatUniform("relief", strength.coerceIn(0f, 1f))
+        shader.setFloatUniform("shine", shineFor(strength))
         return shader
     }
 
@@ -222,12 +216,10 @@ internal class GlassInkShader(levels: GlassLevels?) {
             uniform float bevel;
             uniform float refraction;
             uniform float2 light;
-            uniform float2 lean;
             uniform float halo;
             uniform float gather;
-            uniform float mirror;
             uniform float glow;
-            uniform float relief;
+            uniform float shine;
 
             // What is behind a point, as soft as asked: 0 the picture as it is, 3 little but its
             // colours, by blending the prepared pictures either side of that softness.
@@ -290,7 +282,7 @@ internal class GlassInkShader(levels: GlassLevels?) {
 
                 // Through the glass: what is behind is pulled in from further inside, magnified
                 // as through the rounded edge of a thick lens, with a whisper of colour split.
-                float2 bend = (inward * 1.7 * refraction + lean * 0.5) * curve * bevel;
+                float2 bend = inward * 1.7 * refraction * curve * bevel;
                 // Lightly misted through its face, softer where the edge squeezes the picture.
                 float soft = max(0.45 * (1.0 - 0.5 * t), curve);
                 float3 color = float3(
@@ -313,44 +305,23 @@ internal class GlassInkShader(levels: GlassLevels?) {
                 color = mix(color, float3(1.0), 0.12 + gather * lowlight);
                 color *= 1.0 - 1.5 * gather * smoothstep(0.62, 0.95, luma);
 
-                // Reflection: the steep edge of the glass holds the picture just outside the
-                // shape, turned over; and the light it catches is the colour of what is round it.
+                // The light it catches is a little of the colour of what is round it.
                 float3 lamp = float3(1.0);
                 if (seeThrough > 0.5) {
-                    float2 beside = p + normal * ((1.0 - t) * bevel * 2.6 + 0.5 * bevel + 2.0) + lean * bevel * 1.5;
-                    float3 thrown = frosted.eval((beside + origin) * imageScale * frostRatio).rgb;
-                    float bright = dot(thrown, float3(0.2126, 0.7152, 0.0722));
-                    thrown = clamp(mix(float3(bright), thrown, 1.3), 0.0, 1.0);
-                    color = mix(color, thrown, mirror * t * t * t);
                     float3 air = hazed.eval((p + normal * bevel * 2.0 + origin) * imageScale * hazeRatio).rgb;
                     float peak = max(air.r, max(air.g, air.b));
                     float3 tone = mix(float3(1.0), air / max(peak, 0.001), smoothstep(0.04, 0.3, peak));
                     lamp = mix(float3(1.0), tone, glow);
                 }
 
-                // Form. The glass is a rounded bar, and it is light that shows its shape: the
-                // lamp hangs up and to the left, so the side of the bar turned from it is in its
-                // own shade, and where the round of it mirrors the lamp there is a glint.
-                float facing = dot(normal, light);
-                float lit = max(facing, 0.0);
-                float away = max(-facing, 0.0);
-                float3 above = normalize(float3(light * 0.77, 0.64));
-                float3 round3 = float3(normal * t, sqrt(max(1.0 - t * t, 0.0)));
-                float form = dot(round3, above) - above.z;
-                color *= 1.0 - 0.45 * relief * clamp(-form, 0.0, 1.0);
-                float3 toLight = normalize(above + float3(0.0, 0.0, 1.0));
-                float3 toFar = normalize(float3(-above.xy, above.z + 1.0));
-                float level = pow(toLight.z, 12.0);
-                float glint = max(pow(max(dot(round3, toLight), 0.0), 12.0) - level, 0.0)
-                    + 0.35 * max(pow(max(dot(round3, toFar), 0.0), 12.0) - level, 0.0);
-                // Deep in a stroke the glass has no one way it faces, and a glint there would be a speck.
-                glint *= smoothstep(2.0, 6.0, steep);
-
-                // Light: a crisp line along the edges facing it, a weaker one where it leaves,
-                // a soft bloom on the lit curve, and the rim brighter at its grazing angle.
-                float rim = hairline * (0.12 + 0.3 * gather + 0.58 * pow(lit, 1.4) + 0.28 * pow(away, 1.8));
-                float bloom = t * t * t * (0.18 * pow(lit, 2.0) + 0.06 * pow(away, 2.4));
-                color += lamp * (rim + bloom + relief * (0.6 * glint + 0.45 * max(form, 0.0))) + pow(t, 4.0) * 0.04;
+                // Light, on the edge: a crisp line, brightest where the edge faces the lamp and
+                // where it faces straight away, faint between, and a little more light in the curve.
+                // Deep in a stroke the glass has no one way it faces, and there it is all line.
+                float facing = steep > 2.0 ? dot(normal, light) : 0.0;
+                float spec = pow(max(facing, 0.0), 3.0) + 0.65 * pow(max(-facing, 0.0), 3.0);
+                float rim = hairline * (0.22 + 0.3 * gather + 0.85 * spec);
+                float bloom = t * t * t * (0.04 + 0.12 * spec);
+                color += lamp * shine * (rim + bloom);
 
                 float alpha = a + shade * (1.0 - a);
                 return half4(half3(clamp(color, 0.0, 1.0) * a), half(alpha));

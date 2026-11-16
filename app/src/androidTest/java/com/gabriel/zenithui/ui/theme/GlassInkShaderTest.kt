@@ -43,7 +43,7 @@ class GlassInkShaderTest {
                     light = Offset(-0.45f, -1f),
                     strength = 0.8f,
                     halo = halo,
-                    lean = Offset(0.3f, -0.2f),
+                    lift = 0.6f,
                 )
                 assertNotNull(effect)
                 val node = RenderNode("ink").apply {

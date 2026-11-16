@@ -29,10 +29,13 @@ import kotlin.math.min
 /**
  * How a pane of glass answers a finger, after the four buttons of the Liquid Glass design.
  *
- * - **Flex** swells and lights up from the fingertip: plain glass buttons, in sheets.
- * - **Jelly** squishes and wobbles back: tinted glass, the one button that moves you on.
+ * - **Flex** swells and lights up from the fingertip: glass buttons, plain and tinted.
+ * - **Jelly** squishes and springs back: the icons on the home screen.
  * - **Lean** swells and leans towards the finger: clear glass over the wallpaper or the dark.
  * - **Drag** swells most, for a lens that is picked up and moved: the thumb of a row of options.
+ *
+ * Every one of them springs back as Apple's glass does: one small bounce past its rest, and still.
+ * A spring that wobbles on and on makes glass read as jelly.
  */
 enum class GlassMotion { Flex, Jelly, Lean, Drag }
 
@@ -65,22 +68,25 @@ fun pressTarget(motion: GlassMotion, pressed: Boolean, reduced: Boolean): PressT
     )
 }
 
-/** The spring a pane's size moves on, pressed and let go alike. */
+/**
+ * The spring a pane's size moves on, pressed and let go alike: Apple's bounciest, a damping ratio of
+ * 0.7, which goes a twentieth past its rest and settles. The home screen's jelly a little looser.
+ */
 fun pressSpring(motion: GlassMotion, reduced: Boolean): SpringParams = when {
     reduced -> CRITICAL
-    motion == GlassMotion.Jelly -> SpringParams(0.24f, 520f)
-    motion == GlassMotion.Lean -> SpringParams(0.56f, 380f)
-    else -> SpringParams(0.41f, 420f)
+    motion == GlassMotion.Jelly -> SpringParams(0.6f, 520f)
+    motion == GlassMotion.Lean -> SpringParams(0.7f, 380f)
+    else -> SpringParams(0.7f, 420f)
 }
 
-/** Jelly's squash: quick and loose, so it wobbles back. */
-fun squashSpring(reduced: Boolean): SpringParams = if (reduced) CRITICAL else SpringParams(0.18f, 640f)
+/** Jelly's squash: quick, and loose enough to bounce back through itself once. */
+fun squashSpring(reduced: Boolean): SpringParams = if (reduced) CRITICAL else SpringParams(0.45f, 640f)
 
 /** How a leaning pane follows the finger, and comes back upright. */
 fun leanSpring(reduced: Boolean): SpringParams = if (reduced) CRITICAL else SpringParams(0.74f, 260f)
 
-/** How a lens that was let go settles on the option nearest it. */
-fun snapSpring(reduced: Boolean): SpringParams = if (reduced) SpringParams(1f, 700f) else SpringParams(0.57f, 700f)
+/** How a lens that was let go settles on the option nearest it, as a tab bar's lens does. */
+fun snapSpring(reduced: Boolean): SpringParams = if (reduced) SpringParams(1f, 700f) else SpringParams(0.7f, 700f)
 
 /**
  * How far a Lean pane leans towards a [finger] on it, from its [centre]: a tenth of the way across

@@ -60,14 +60,19 @@ class AppRepository(context: Context) {
         result
     }
 
-    fun observePackages(onChanged: () -> Unit) {
+    /**
+     * Calls [onChanged] with the packages Android says were installed, updated, changed or removed,
+     * the moment it says so: the only time the app list, and an app's icon, can have changed.
+     */
+    fun observePackages(onChanged: (Set<String>) -> Unit) {
         if (callback != null) return
+        fun changed(names: Array<out String>?) = onChanged(names.orEmpty().filter { it.isNotEmpty() }.toSet())
         val cb = object : LauncherApps.Callback() {
-            override fun onPackageRemoved(packageName: String?, user: UserHandle?) = onChanged()
-            override fun onPackageAdded(packageName: String?, user: UserHandle?) = onChanged()
-            override fun onPackageChanged(packageName: String?, user: UserHandle?) = onChanged()
-            override fun onPackagesAvailable(names: Array<out String>?, user: UserHandle?, replacing: Boolean) = onChanged()
-            override fun onPackagesUnavailable(names: Array<out String>?, user: UserHandle?, replacing: Boolean) = onChanged()
+            override fun onPackageRemoved(packageName: String?, user: UserHandle?) = changed(arrayOf(packageName.orEmpty()))
+            override fun onPackageAdded(packageName: String?, user: UserHandle?) = changed(arrayOf(packageName.orEmpty()))
+            override fun onPackageChanged(packageName: String?, user: UserHandle?) = changed(arrayOf(packageName.orEmpty()))
+            override fun onPackagesAvailable(names: Array<out String>?, user: UserHandle?, replacing: Boolean) = changed(names)
+            override fun onPackagesUnavailable(names: Array<out String>?, user: UserHandle?, replacing: Boolean) = changed(names)
         }
         runCatching { launcherApps.registerCallback(cb) }
         callback = cb

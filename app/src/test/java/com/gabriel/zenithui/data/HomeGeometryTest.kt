@@ -395,4 +395,17 @@ class HomeGeometryTest {
         // ...and on a tablet's wide columns they stop at 68.
         assertEquals(68f, HomeGeometry.drawerIconDp(160f), 0f)
     }
+
+    @Test
+    fun `the drawer's icons are drawn ahead at exactly the size the drawer asks for them`() {
+        // Four across a 411 dp phone: its columns less the 16 dp margins each side.
+        assertEquals(HomeGeometry.drawerIconDp((411f - 32f) / 4), HomeGeometry.drawerIconDpIn(411f, 4), 0f)
+        // In pixels as Compose rounds a dp: 64.43 dp at 2.625 px a dp is 169 px.
+        val dp = HomeGeometry.drawerIconDpIn(411f, 4)
+        assertEquals((dp * 2.625f).roundToInt(), HomeGeometry.drawerIconPx(411f, 4, 2.625f))
+        // Never smaller or bigger than an icon is ever drawn at, and no crash with no columns yet.
+        assertEquals(48, HomeGeometry.iconPx(10f, 1f))
+        assertEquals(288, HomeGeometry.iconPx(68f, 6f))
+        assertTrue(HomeGeometry.drawerIconPx(411f, 0, 2.625f) in 48..288)
+    }
 }

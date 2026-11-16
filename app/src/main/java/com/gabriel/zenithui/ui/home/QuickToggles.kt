@@ -107,8 +107,10 @@ import com.gabriel.zenithui.ui.theme.GlassMotion
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.LocalZenithFont
 import com.gabriel.zenithui.ui.theme.ZenithPalette
+import com.gabriel.zenithui.ui.theme.themed
 import com.gabriel.zenithui.ui.theme.glassPress
 import com.gabriel.zenithui.ui.theme.inkOnTint
+import com.gabriel.zenithui.ui.theme.inDark
 
 // ---------------------------------------------------------------------- the controls
 
@@ -418,7 +420,7 @@ private fun LitDisc(toggle: QuickToggle, size: Dp, symbol: Dp, modifier: Modifie
 private fun BareSymbol(toggle: QuickToggle, size: Dp) {
     val palette = LocalPalette.current
     val ink by animateColorAsState(
-        targetValue = if (toggle.on) toggle.option.tone.colour(palette.copy(dark = true), bare = true) else Color.White,
+        targetValue = if (toggle.on) toggle.option.tone.colour(palette.inDark(), bare = true) else Color.White,
         animationSpec = tween(320),
         label = "bareInk",
     )
@@ -480,7 +482,7 @@ private fun ToggleCard(toggle: QuickToggle, name: String, scale: Float, modifier
     Column(
         modifier
             .glassPress(GlassMotion.Lean)
-            .clip(CARD_SHAPE)
+            .clip(themed(CARD_SHAPE))
             .then(if (bare) Modifier else Modifier.background(tileBody(palette)))
             .clickable(role = if (toggle.option.id == "torch") Role.Switch else Role.Button, onClick = toggle.onClick)
             .padding(CARD_PAD),

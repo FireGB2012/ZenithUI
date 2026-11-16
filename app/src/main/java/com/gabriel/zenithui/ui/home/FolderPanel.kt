@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -49,6 +48,8 @@ import com.gabriel.zenithui.ui.common.rollOver
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.LocalZenithFont
 import com.gabriel.zenithui.ui.theme.ZenithShapes
+import com.gabriel.zenithui.ui.theme.corners
+import com.gabriel.zenithui.ui.theme.dim
 import com.gabriel.zenithui.ui.theme.glass
 import kotlinx.coroutines.delay
 
@@ -89,7 +90,7 @@ internal fun FolderPanel(
             Modifier
                 .fillMaxSize()
                 .graphicsLayer { alpha = progress().coerceIn(0f, 1f) }
-                .background(Color.Black.copy(alpha = 0.38f))
+                .background(palette.dim(0.38f))
                 // Anywhere outside the pane puts the folder away.
                 .pointerInput(Unit) { detectTapGestures { onDismiss() } }
         )
@@ -119,7 +120,7 @@ internal fun FolderPanel(
                             alpha = open.coerceIn(0f, 1f)
                         }
                     }
-                    .glass(RoundedCornerShape(34.dp), strength = 1.2f, solid = 0.65f)
+                    .glass(corners(34.dp), strength = 1.2f, solid = 0.65f)
                     // A touch on the pane itself is not a touch outside it.
                     .pointerInput(Unit) { detectTapGestures { } }
                     .padding(horizontal = 18.dp, vertical = 16.dp),

@@ -15,6 +15,7 @@ class SettingsJsonTest {
         userName = "Gabriel",
         paletteId = "sunset",
         appearance = "auto",
+        theme = "neon",
         glass = 0.55f,
         glassBody = "solid",
         gridDensity = "roomy",
@@ -161,6 +162,21 @@ class SettingsJsonTest {
         assertTrue(old.appEdits.isEmpty())
         // Apps close back into their icons every way the phone allows.
         assertEquals(CloseRules.INTO_ICON, old.closeAnimation)
+        // And the home screen comes home like liquid.
+        assertEquals("liquid", old.arrival)
+    }
+
+    @Test
+    fun `the arrival every phone had before liquid is liquid now, and any other is kept`() {
+        fun arrival(saved: String) = ZenithSettings.fromJson(JSONObject("""{"arrival":"$saved"}""")).arrival
+        assertEquals("liquid", ZenithSettings().arrival)
+        assertEquals("liquid", arrival("middle"))
+        // From the middle, chosen since there has been liquid, is written so it stays.
+        assertEquals("centre", arrival("centre"))
+        assertEquals("centre", throughText(ZenithSettings(arrival = "centre")).arrival)
+        assertEquals("below", arrival("below"))
+        assertEquals("cascade", arrival("cascade"))
+        assertEquals("liquid", arrival("liquid"))
     }
 
     @Test

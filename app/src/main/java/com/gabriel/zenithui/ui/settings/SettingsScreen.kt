@@ -33,7 +33,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -99,6 +98,7 @@ import com.gabriel.zenithui.ui.common.popOut
 import com.gabriel.zenithui.ui.common.pressBounce
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.LocalZenithFont
+import com.gabriel.zenithui.ui.theme.corners
 import kotlinx.coroutines.delay
 import androidx.compose.material.icons.rounded.AccountCircle
 import com.gabriel.zenithui.data.server.Signed
@@ -141,6 +141,8 @@ class SettingsActions(
     val glassStudio: () -> Unit = {},
     /** The fonts Zenith carries, and their licence. */
     val fontLicences: () -> Unit = {},
+    /** Says what one of the Notch's permissions is for, and opens Android's page for it. */
+    val notchAccess: (com.gabriel.zenithui.data.NotchAccess) -> Unit = {},
 )
 
 /**
@@ -417,9 +419,9 @@ private fun SearchField(query: String, onQuery: (String) -> Unit, modifier: Modi
         modifier
             .fillMaxWidth()
             .height(46.dp)
-            .clip(RoundedCornerShape(16.dp))
+            .clip(corners(16.dp))
             .background(palette.onGlass.copy(alpha = 0.08f))
-            .border(1.5.dp, ring, RoundedCornerShape(16.dp))
+            .border(1.5.dp, ring, corners(16.dp))
             .padding(horizontal = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -547,7 +549,7 @@ private fun summary(page: SettingsPage, settings: ZenithSettings, plus: PlusStat
         plus.subscribed -> "Subscribed"
         plus.trialDaysLeft > 1 -> "${plus.trialDaysLeft} days of your trial left"
         plus.trialDaysLeft == 1 -> "Last day of your trial"
-        else -> "Wallpapers, hidden apps, backup, the island"
+        else -> "Wallpapers, hidden apps, backup, the Notch"
     }
     SettingsPage.Island -> when {
         !plus.active -> "Plus: your camera, stretched, over every app"

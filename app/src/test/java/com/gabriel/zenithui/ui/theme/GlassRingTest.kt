@@ -103,4 +103,34 @@ class GlassRingTest {
             eps,
         )
     }
+
+    @Test
+    fun `the light of coming home runs as the wave does, soft on the wallpaper`() {
+        val light = RingStyle.arrive(520f, 0.6f)
+        assertEquals(520f, light.durationMs, 0f)
+        assertEquals(0.6f, light.peak, 0f)
+        assertTrue("a softer band than a tap's, and hardly a line", light.band < 1f && light.line < light.band)
+        // Slowing as it spreads, but less than edit mode's waves, so it is seen to travel.
+        assertTrue(light.spreadAt(0.2f) > 0.2f && light.spreadAt(0.2f) < RingStyle.WAKE.spreadAt(0.2f))
+        assertEquals(1f - 0.8f * kotlin.math.sqrt(0.8f), light.spreadAt(0.2f), eps)
+        assertEquals(1f, light.spreadAt(1f), 0f)
+        // A tap's ring is as it always was on the wallpaper.
+        assertEquals(1f, RingStyle.TAP.band, 0f)
+        assertEquals(1f, RingStyle.TAP.line, 0f)
+        // What keeps step with a ring knows how far it runs, and it runs that far.
+        val ring = GlassRing(Size(1080f, 2340f), 2.625f)
+        val at = Offset(300f, 1900f)
+        ring.start(at, nowNanos = 0L, style = light)
+        val reach = ring.reachFrom(at, light)
+        assertTrue(reach > ringReach(at, Size(1080f, 2340f)))
+        val half = assertNotNullNow(ring.now(260_000_000L))
+        assertEquals(reach * light.spreadAt(0.5f), half.radius, 0.5f)
+        assertEquals(light.band, half.band, 0f)
+        assertEquals(light.line, half.line, 0f)
+    }
+
+    private fun assertNotNullNow(now: RingNow?): RingNow {
+        assertNotNull(now)
+        return now!!
+    }
 }

@@ -4,11 +4,16 @@ import androidx.compose.runtime.Immutable
 import org.json.JSONObject
 import kotlin.math.roundToInt
 
-/** The parts of opening and closing an app, in the order Settings shows them. */
+/** The parts of opening and closing an app, and of coming home after, in the order Settings shows them. */
 enum class TuneGroup(val title: String, val note: String) {
     Open("Opening an app", "The card that grows out of the icon until it fills the screen."),
     Home("Home screen behind", "What the rest of the home screen does while the app opens, and undoes as you come back."),
     Close("Closing an app", "Android's own close of the app first, then the home screen coming forward again, and the app's icon landing in its place."),
+    Arrive(
+        "Liquid coming home",
+        "With Coming home set to Liquid: as you unlock, or come back from an app, a wave runs out from the app's icon or the " +
+            "middle of the screen, and everything rises into its place as it is reached, catching the light the wave carries.",
+    ),
 }
 
 /** How a number is written out beside its slider. */
@@ -70,7 +75,14 @@ enum class Tune(
     LandStiffness("landStiffness", TuneGroup.Close, "Landing stiffness", 40f, 1200f, 5f, TuneUnit.Plain, 380f, "How fast the icon comes down to size."),
     LandDamping("landDamping", TuneGroup.Close, "Landing damping", 0.2f, 1.2f, 0.01f, TuneUnit.Ratio, 0.5f, "Under 1.00 the icon bounces as it lands."),
     LandFade("landFade", TuneGroup.Close, "Landing fade", 0f, 1f, 0.01f, TuneUnit.Percent, 0.65f, "How faint the icon is as it arrives."),
-    Ripple("ripple", TuneGroup.Close, "Ripple round the icon", 0f, 40f, 1f, TuneUnit.Dp, 12f, "How far the icons round it are knocked back as it lands.");
+    Ripple("ripple", TuneGroup.Close, "Ripple round the icon", 0f, 40f, 1f, TuneUnit.Dp, 12f, "How far the icons round it are knocked back as it lands."),
+
+    ArriveWave("arriveWave", TuneGroup.Arrive, "Wave across the screen", 200f, 1500f, 10f, TuneUnit.Ms, 520f, "How long the wave takes to run from where it starts to the far corner of the screen."),
+    ArriveStiffness("arriveStiffness", TuneGroup.Arrive, "Rising stiffness", 40f, 1200f, 5f, TuneUnit.Plain, 220f, "How fast each thing rises into its place once the wave reaches it."),
+    ArriveDamping("arriveDamping", TuneGroup.Arrive, "Rising damping", 0.3f, 1.2f, 0.01f, TuneUnit.Ratio, 0.8f, "Under 1.00 each thing rises a hair past its place and settles back."),
+    ArriveFrom("arriveFrom", TuneGroup.Arrive, "Rises from", 0.5f, 1f, 0.01f, TuneUnit.Percent, 0.8f, "How big each thing is as it starts to rise. At 100% it only fades in."),
+    ArrivePull("arrivePull", TuneGroup.Arrive, "Drawn in", 0f, 80f, 1f, TuneUnit.Dp, 24f, "How much nearer the wave's start what is far from it begins, before it flows out to its place."),
+    ArriveLight("arriveLight", TuneGroup.Arrive, "Light of the wave", 0f, 1f, 0.01f, TuneUnit.Percent, 0.6f, "How bright the ring of light is that runs with the wave, lighting the glass as it passes. 0% turns it off.");
 
     /** [value] on the nearest step, inside the range. */
     fun snap(value: Float): Float {
@@ -142,6 +154,7 @@ enum class AnimationPreset(
             Tune.ReturnStiffness to 220f, Tune.ReturnDamping to 0.88f,
             Tune.LandScale to 1.08f, Tune.LandStiffness to 300f, Tune.LandDamping to 0.75f, Tune.LandFade to 0.3f,
             Tune.Ripple to 0f,
+            Tune.ArriveWave to 600f, Tune.ArriveStiffness to 180f, Tune.ArriveDamping to 1f, Tune.ArriveFrom to 0.86f,
         ),
     ),
     Bouncy(
@@ -158,6 +171,7 @@ enum class AnimationPreset(
             Tune.ReturnStiffness to 260f, Tune.ReturnDamping to 0.6f,
             Tune.LandScale to 1.3f, Tune.LandStiffness to 420f, Tune.LandDamping to 0.42f, Tune.LandFade to 0.5f,
             Tune.Ripple to 18f,
+            Tune.ArriveStiffness to 260f, Tune.ArriveDamping to 0.6f, Tune.ArriveFrom to 0.74f, Tune.ArrivePull to 32f,
         ),
     ),
     Dynamic(
@@ -169,6 +183,7 @@ enum class AnimationPreset(
             Tune.OpenArc to 0f, Tune.IconPush to 4f,
             Tune.ReturnDamping to 0.9f,
             Tune.LandScale to 1.1f, Tune.LandDamping to 0.8f, Tune.Ripple to 4f,
+            Tune.ArriveDamping to 0.92f, Tune.ArriveFrom to 0.86f, Tune.ArrivePull to 16f,
         ),
     ),
     Sweet(
@@ -180,6 +195,7 @@ enum class AnimationPreset(
             Tune.HomeBlur to 14f, Tune.IconPush to 14f,
             Tune.ReturnDamping to 0.62f,
             Tune.LandDamping to 0.45f, Tune.Ripple to 16f,
+            Tune.ArriveWave to 640f, Tune.ArriveDamping to 0.72f, Tune.ArrivePull to 30f, Tune.ArriveLight to 0.75f,
         ),
     ),
     Classic(

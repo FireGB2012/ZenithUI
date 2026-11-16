@@ -121,6 +121,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.IntOffset
 import com.gabriel.zenithui.data.GestureActions
@@ -199,6 +200,9 @@ import com.gabriel.zenithui.ui.settings.AccountActions
  */
 private val PAGE_FLIP_EDGE = 16.dp
 
+/** How much of the theme's page frosts over the home screen behind the drawer, in a theme that blurs nothing. */
+private const val DRAWER_VEIL = 0.45f
+
 /** Coming home longer than this after opening an app does not shrink it back into its icon. */
 private const val CLOSE_WINDOW_MS = 30 * 60 * 1000L
 
@@ -260,6 +264,8 @@ private sealed interface HomeSheet {
     data object LockHelper : HomeSheet
     /** What the app picture helper is, before Android's page for it opens. */
     data object AppPictures : HomeSheet
+    /** What one of the Notch's permissions is for, before Android's page for it opens. */
+    data class NotchAccess(val which: com.gabriel.zenithui.data.NotchAccess) : HomeSheet
     /** What one gesture could do, from Settings → Gestures. */
     data class GestureAction(val gesture: String) : HomeSheet
     /** The World clock's cities. */
@@ -521,8 +527,36 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
     }
     val overRemove by remember { derivedStateOf { drag.overRemove } }
     val edgeFlipPx = with(LocalDensity.current) { PAGE_FLIP_EDGE.toPx() }
-    val drawerProgress = if (dragging) dragProgress else drawer.value
-    val drawerOpen = drawerProgress > 0.5f
+    // How far open the drawer is: read only where it is placed or drawn, never while the home
+    // screen is composed, so a frame of the swipe composes nothing. The lines it crosses are
+    // derived, so only crossing one of them composes anything.
+    val drawerNow: () -> Float = remember { { if (dragging) dragProgress else drawer.value } }
+    val drawerShown by remember { derivedStateOf { drawerNow() > 0.002f } }
+    // Moving under a finger or on its spring: the light on its glass, and on the home screen's
+    // behind it, stays where it was until it is still (see HeldTilt).
+    val drawerMoving = remember { derivedStateOf { dragging || drawer.isRunning } }
+    val drawerCovers = remember { derivedStateOf { drawerNow() > 0.002f } }
+    // Open and still: what the drawer asks for only once it is there, so asking costs the swipe nothing.
+    val drawerSettled by remember { derivedStateOf { !dragging && !drawer.isRunning && drawer.value > 0.999f } }
+    // The home screen's blur behind the drawer: a copy of it blurred once and faded in over it, not a
+    // blur grown frame by frame (see DrawerFrost), as far as the theme blurs what is behind. Android 12
+    // and later; before that the home screen only dims behind the drawer, as it always did there. A
+    // theme that blurs nothing (Clean, Retro) lays a veil of its page over it instead, on any phone.
+    val theme = com.gabriel.zenithui.ui.theme.LocalTheme.current
+    val blurBehind = theme.blurBehind.dp
+    val canFrost = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S && blurBehind > 0.dp
+    val homeLayer = androidx.compose.ui.graphics.rememberGraphicsLayer()
+    val frost = remember { derivedStateOf { DrawerFrost.amount(drawerNow()) } }
+    val frosting by remember { derivedStateOf { frost.value > 0f } }
+    val frostPx = with(LocalDensity.current) { blurBehind.coerceAtLeast(1.dp).toPx() }
+    val frostEffect = remember(frostPx) {
+        androidx.compose.ui.graphics.BlurEffect(frostPx, frostPx, androidx.compose.ui.graphics.TileMode.Clamp)
+    }
+    val liveTilt = com.gabriel.zenithui.ui.theme.LocalTilt.current
+    val liveParallax = com.gabriel.zenithui.ui.theme.LocalParallax.current
+    val homeTilt = remember(liveTilt) { com.gabriel.zenithui.ui.theme.HeldTilt(liveTilt, drawerCovers) }
+    val homeParallax = remember(liveParallax) { com.gabriel.zenithui.ui.theme.HeldTilt(liveParallax, drawerCovers) }
+    val drawerTilt = remember(liveTilt) { com.gabriel.zenithui.ui.theme.HeldTilt(liveTilt, drawerMoving) }
 
     fun showSheet(next: HomeSheet) {
         sheet = next
@@ -708,24 +742,54 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
     var closingFrom by remember { androidx.compose.runtime.mutableFloatStateOf(1f) }
     var closingVanishes by remember { mutableStateOf(false) }
 
-    // Arriving. One clock for the whole home screen: at 0 everything is out from the middle, at
-    // FlyIn.TOTAL_MS it is all in its place. It is wound back while nobody can see — at a cold
-    // start, or when Zenith is stopped — and let run once the home screen is on show again.
+    // Arriving. One clock for the whole home screen: at 0 everything is out, and by the end of the
+    // arrival (FlyIn.TOTAL_MS, or a liquid wave's own end) it is all in its place, where the clock is
+    // left past the end of every style (FlyIn.AT_REST). It is wound back while nobody can see — at a
+    // cold start, or when Zenith is stopped — and let run once the home screen is on show again.
     val flyOnStart = remember { !entrance && !motion.reduced }
-    val arrivalClock = remember { Animatable(if (flyOnStart) 0f else FlyIn.TOTAL_MS.toFloat()) }
+    val arrivalClock = remember { Animatable(if (flyOnStart) 0f else FlyIn.AT_REST) }
     val arrivalDepth = remember { mutableFloatStateOf(FlyIn.FULL) }
     val arrivalPending = remember { BooleanArray(1).also { it[0] = flyOnStart } }
+    /**
+     * Coming home like liquid (Motion & feel → Coming home → Liquid): the wave everything rises on
+     * this time, read by everything on the home screen while drawing. Null for any other style.
+     */
+    val arrivalWave = remember { mutableStateOf<LiquidWave?>(null) }
+    /**
+     * Where the next liquid wave starts, on the screen: the icon the app being closed goes back
+     * into, worked out as Zenith comes forward. With none, as after an unlock, the middle.
+     */
+    val arrivalFrom = remember { arrayOfNulls<Offset>(1) }
     val power = remember(context) { context.getSystemService(android.os.PowerManager::class.java) }
+
+    /**
+     * The wave to come home on, when Coming home is Liquid, from [arrivalFrom] or the middle of the
+     * screen, on the numbers in Advanced animation settings. Its light runs on the one ring of light,
+     * so the screen is measured for it as the ring itself is.
+     */
+    fun liquidWave(): LiquidWave? {
+        if (settings.arrival != LiquidArrival.STYLE) return null
+        val width = drawerWidthPx.takeIf { it > 0f } ?: hostView.width.toFloat()
+        val height = drawerHeightPx.takeIf { it > 0f } ?: hostView.height.toFloat()
+        glassRing.screen = androidx.compose.ui.geometry.Size(width, height)
+        glassRing.density = ringDensity
+        val at = arrivalFrom[0] ?: Offset(width / 2f, height / 2f)
+        return LiquidArrival.wave(at, liveTuning, pxPerDp) { glassRing.reachFrom(at, it) }
+    }
 
     fun arrive() {
         if (!arrivalPending[0] || waitingForAndroid[0]) return
         arrivalPending[0] = false
+        val wave = liquidWave()
+        arrivalWave.value = wave
+        // The light runs with the wave, lighting every pane of glass as it rises, unless it is off.
+        if (wave != null && wave.light.peak > 0f) sendWave(wave.centre, wave.light)
+        val total = wave?.totalMs ?: FlyIn.TOTAL_MS.toFloat()
         scope.launch {
             arrivalClock.snapTo(0f)
-            arrivalClock.animateTo(
-                FlyIn.TOTAL_MS.toFloat(),
-                tween(FlyIn.TOTAL_MS, easing = androidx.compose.animation.core.LinearEasing),
-            )
+            arrivalClock.animateTo(total, tween(total.roundToInt(), easing = androidx.compose.animation.core.LinearEasing))
+            // Arrived: past the end of every style, so a change of style finds nothing part way in.
+            arrivalClock.snapTo(FlyIn.AT_REST)
         }
     }
     LaunchedEffect(Unit) {
@@ -742,6 +806,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             pagerState.scrollToPage(0)
             if (!liveMotion.reduced) {
                 arrivalDepth.floatValue = FlyIn.FULL
+                arrivalFrom[0] = null
                 arrivalPending[0] = true
                 arrive()
             }
@@ -759,7 +824,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
     // open over the home screen, and then goes on as one put on by hand does.
     val lookDue by viewModel.lookDue.collectAsState()
     val idle = !dragging && drag.item == null && !sheetVisible && !settingsOpen && !widgetsOpen &&
-        drawerProgress < 0.002f && folderUp == null && card == null && resizingId == null && !ambient && !overview &&
+        !drawerShown && folderUp == null && card == null && resizingId == null && !ambient && !overview &&
         !askingNewLook && !searchShown && holdMenu.open == null && alert == null && !editing && !customising
     LaunchedEffect(lookDue, idle) {
         if (lookDue != null && idle) {
@@ -774,7 +839,8 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
     androidx.compose.runtime.DisposableEffect(Unit) {
         val atRest = {
             restingNow && card == null && !holdSunk && !homeSink.isRunning && abs(homeSink.value) < 0.002f &&
-                arrivalClock.value >= FlyIn.TOTAL_MS - 0.5f && !AppLanding.busy && !HomeRipple.swinging &&
+                arrivalClock.value >= (arrivalWave.value?.totalMs ?: FlyIn.TOTAL_MS.toFloat()) - 0.5f &&
+                !AppLanding.busy && !HomeRipple.swinging &&
                 !pagerState.isScrollInProgress && abs(pagerState.currentPageOffsetFraction) < 0.002f
         }
         IconPlaces.atRest = atRest
@@ -1018,10 +1084,12 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         returningKey[0] = null
         returningCard[0] = null
         launchedAt[0] = 0L
-        // Everything zooms, and ripples, about the icon the app goes back into.
+        // Everything zooms, and ripples, about the icon the app goes back into, and coming home
+        // like liquid its wave starts there.
         val spot = closed?.spot
         val about = spot?.bounds?.center ?: closed?.opened?.from?.center
         if (about != null) HomeRipple.origin = about
+        arrivalFrom[0] = about
         // A card or a picture on its way into the icon: the icon is out of sight from the first frame.
         closed?.takeIf { it.route == CloseRoute.Card || it.route == CloseRoute.Picture }?.landKey?.let(AppLanding::hold)
         val turn = ++forwardTurn[0]
@@ -1227,6 +1295,8 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     // thing seen is an unlock: the full fly-in. Stopped behind an app: a settle.
                     if (!liveMotion.reduced) {
                         arrivalDepth.floatValue = if (power?.isInteractive == false) FlyIn.FULL else FlyIn.SETTLE
+                        // From the middle, unless an app is closed on the way home (see comeForward).
+                        arrivalFrom[0] = null
                         arrivalPending[0] = true
                         scope.launch { arrivalClock.snapTo(0f) }
                     }
@@ -1819,10 +1889,11 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         }
     }
 
-    val homeBlur by animateDpAsState(
+    val designedBlur = animateDpAsState(
         // The liquid glass opening frosts the home screen behind the growing glass.
         targetValue = when {
-            drawerProgress > 0.55f -> 20.dp
+            // (Behind the drawer the home screen frosts over by a blurred copy fading in instead:
+            // see DrawerFrost.)
             // An open folder has the home screen out of focus behind it.
             folderUp != null -> 14.dp
             // So has Search, open out of its pill; below Android 12 the blur does nothing, and the
@@ -1839,6 +1910,10 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         animationSpec = tween(110),
         label = "homeBlur",
     )
+    // As far as the theme blurs what is behind: Liquid Glass's is the blur as it is drawn, and Clean
+    // and Retro have none, only the dim.
+    val blurShare = theme.blurBehind / com.gabriel.zenithui.data.Themes.LiquidGlass.blurBehind
+    val homeBlur = designedBlur.value * blurShare
     val homePressed by viewModel.homePressed.collectAsState()
     val environmentTick by viewModel.environmentTick.collectAsState()
     val wallpaperIncoming by viewModel.wallpaperIncoming.collectAsState()
@@ -1881,7 +1956,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         }
     }
 
-    BackHandler(enabled = overview || (card != null && cardOpening) || drawerProgress > 0.002f || sheetVisible || resizingId != null || ambient || folderUp != null || holdMenu.open != null || editing) {
+    BackHandler(enabled = overview || (card != null && cardOpening) || drawerShown || sheetVisible || resizingId != null || ambient || folderUp != null || holdMenu.open != null || editing) {
         // A held thing's menu is the topmost of these: from its colours back to its rows, then away.
         if (holdMenu.open != null) {
             if (holdMenu.colours) holdMenu.colours = false else holdMenu.close()
@@ -2338,7 +2413,8 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     // the drawer, and comes forward again as the page is pulled away.
                     val covered = homeCover.amount()
                     val sink = if (motion.reduced) 1f else homeScaleUnderPage(covered)
-                    val scale = (1f - 0.06f * drawerProgress) * zoom * sink
+                    val drawerOpenBy = drawerNow()
+                    val scale = (1f - 0.06f * drawerOpenBy) * zoom * sink
                     scaleX = scale
                     scaleY = scale
                     // It zooms about the icon the app came from, as far as asked, so the eye is
@@ -2351,7 +2427,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     )
                     val sunk = depth.coerceIn(0f, 1f)
                     // Settings is glass over the wallpaper; the home screen is not seen through it.
-                    alpha = (1f - 0.55f * drawerProgress) * (1f - t[Tune.HomeDim] * sunk) * (1f - covered)
+                    alpha = (1f - 0.55f * drawerOpenBy) * (1f - t[Tune.HomeDim] * sunk) * (1f - covered)
                     // Pulled down for the swipe-down gesture: after the finger, but less and less.
                     if (!motion.reduced) translationY = band(pulled(), PULL_REACH.toPx())
                 }
@@ -2362,12 +2438,39 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 // The ring of light from a tap, on the wallpaper under everything on the home screen.
                 .ringOfLight(glassRing)
         ) {
+            // The home screen as it is, kept as a layer of its own: behind the drawer a blurred copy of
+            // it fades in over it (see DrawerFrost), and that copy is drawn from this same layer. In a
+            // theme that blurs nothing it goes out as its veil comes in, so the drawer stands over the
+            // wallpaper rather than over the icons it has just covered.
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .then(
+                        when {
+                            canFrost -> Modifier
+                                .graphicsLayer { alpha = DrawerFrost.sharpAlpha(frost.value) }
+                                .drawWithContent {
+                                    homeLayer.record { this@drawWithContent.drawContent() }
+                                    drawLayer(homeLayer)
+                                }
+                            blurBehind <= 0.dp -> Modifier.graphicsLayer { alpha = DrawerFrost.sharpAlpha(frost.value) }
+                            else -> Modifier
+                        }
+                    )
+            ) {
             // Picking something up on the home screen answers a beat sooner than Android's usual
             // long press, so moving things feels immediate rather than like waiting for permission.
             val baseConfiguration = androidx.compose.ui.platform.LocalViewConfiguration.current
             val quickHold = remember(baseConfiguration) { QuickHold(baseConfiguration) }
             // Every pane of glass on the home screen, and every icon, reads the ring while drawing.
-            androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalViewConfiguration provides quickHold, LocalGlassRing provides glassRing) {
+            // Behind the drawer the light on them stays where it was, so the blurred copy of the home
+            // screen is worked out once, not again for every frame the phone moves in the hand.
+            androidx.compose.runtime.CompositionLocalProvider(
+                androidx.compose.ui.platform.LocalViewConfiguration provides quickHold,
+                LocalGlassRing provides glassRing,
+                com.gabriel.zenithui.ui.theme.LocalTilt provides homeTilt,
+                com.gabriel.zenithui.ui.theme.LocalParallax provides homeParallax,
+            ) {
             HomeLayout(
                 // The page and the gestures made on it. Nothing is written above it any more; while
                 // Zenith is not the home app the hint to make it so stands there instead, above the
@@ -2512,6 +2615,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                                     pageOffset = if (turn.parallax) offset else 0f,
                                     arrivalClock = { arrivalClock.value },
                                     arrivalDepth = { arrivalDepth.floatValue },
+                                    arrivalWave = { arrivalWave.value },
                                     jiggleClock = { jiggleClock.floatValue },
                                     jiggleStrength = { jiggleStrength.value },
                                     modifier = Modifier
@@ -2582,7 +2686,10 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                                 // the clock that moves it and keeps the wallpaper in place behind it.
                                 tracking = { arrivalClock.value },
                                 modifier = Modifier
-                                    .arriving({ arrivalClock.value }, { arrivalDepth.floatValue }, distance = 0.85f, from = 40.dp, style = settings.arrival)
+                                    .arriving(
+                                        { arrivalClock.value }, { arrivalDepth.floatValue }, distance = 0.85f, from = 40.dp,
+                                        style = settings.arrival, wave = { arrivalWave.value },
+                                    )
                                     // Where it is, for the field to stretch out of and shrink back into.
                                     .onGloballyPositioned { pillPlaced[0] = it }
                                     // Not drawn while the field's glass is out of it, standing in its
@@ -2675,7 +2782,10 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                             // It spans the screen and stands its slab in from the edges itself, its apps
                             // still under the page's columns.
                             modifier = room
-                                .arriving({ arrivalClock.value }, { arrivalDepth.floatValue }, distance = 1f, from = 56.dp, style = settings.arrival)
+                                .arriving(
+                                    { arrivalClock.value }, { arrivalDepth.floatValue }, distance = 1f, from = 56.dp,
+                                    style = settings.arrival, wave = { arrivalWave.value },
+                                )
                                 .navigationBarsPadding()
                                 .padding(bottom = 10.dp),
                             // It arrives moved on a layer, so its glass reads the clock that moves it and
@@ -2691,6 +2801,28 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 // Nothing floats over the page: Undo stands in the band, in Search's place.
                 overlays = {},
             )
+            }
+            }
+            // A theme with no blur: a veil of its page over the wallpaper, faded in as the copy would
+            // be while the home screen goes out, so what is behind the drawer is quiet, not bare.
+            if (blurBehind <= 0.dp && frosting) {
+                val veil = palette.backdrop.first()
+                Box(Modifier.matchParentSize().drawBehind { drawRect(veil, alpha = DRAWER_VEIL * frost.value) })
+            }
+            // The blurred copy: worked out once as it starts to come in, then only faded, which costs
+            // the swipe nothing. Once the drawer is open it is the home screen's blur, and follows it.
+            if (canFrost && frosting) {
+                Box(
+                    Modifier
+                        .matchParentSize()
+                        .graphicsLayer {
+                            renderEffect = frostEffect
+                            alpha = frost.value
+                            // As Modifier.blur does: the blur kept inside the screen's edges.
+                            clip = true
+                        }
+                        .drawBehind { drawLayer(homeLayer) }
+                )
             }
         }
 
@@ -2726,7 +2858,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
 
         // Undo is part of the home screen now, in Search's place in the band: see HomeLayout's searchBand.
 
-        if (drawerProgress > 0.002f || drawerEverOpened) {
+        if (drawerShown || drawerEverOpened) {
             // In the order chosen in Settings. By colour needs every icon's colour, worked out once.
             val colours by produceState(emptyMap<String, com.gabriel.zenithui.data.IconColour>(), drawerApps, settings.drawerSort) {
                 if (settings.drawerSort == com.gabriel.zenithui.data.DrawerSort.COLOUR) value = viewModel.icons.colours(drawerApps.map { it.key })
@@ -2735,18 +2867,20 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 com.gabriel.zenithui.data.DrawerSort.sort(drawerApps, settings.drawerSort, settings.launchCounts, viewModel.repository::installedAt, colours)
             }
             val workApps by viewModel.workApps.collectAsState()
-            // Every app's shortcuts, asked for once each time the drawer opens, for its search.
-            val opened = drawerProgress > 0.5f
-            val allShortcuts by produceState(emptyList<AppShortcut>(), opened) {
-                if (opened) value = viewModel.allShortcuts()
+            // Every app's shortcuts, asked for once each time the drawer is open, for its search: once
+            // it has come to rest, so the answer never arrives in the middle of the swipe.
+            val allShortcuts by produceState(emptyList<AppShortcut>(), drawerSettled) {
+                if (drawerSettled) value = viewModel.allShortcuts()
             }
+            // While it moves, the light on its glass and icons stays where it was.
+            androidx.compose.runtime.CompositionLocalProvider(com.gabriel.zenithui.ui.theme.LocalTilt provides drawerTilt) {
             AppDrawer(
                 apps = sortedApps,
                 groups = libraryGroups,
                 horizontal = libraryMode,
                 settings = settings,
                 focusSearch = focusSearch,
-                progress = drawerProgress,
+                progress = drawerNow,
                 onDrag = { delta -> dragDrawer(delta) },
                 onDragStopped = { velocity -> settleDrawer(velocity) },
                 onOpen = {
@@ -2771,7 +2905,9 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     openSetting(link)
                 },
                 onCopy = { text -> copyAnswer(text) },
+                onIconSize = { px -> viewModel.drawerIconsAre(px) },
             )
+            }
         }
 
         // ------------------------------------------------------------ search
@@ -3010,6 +3146,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 appPictures = {
                     if (PictureService.enabled(context)) PictureService.openSettings(context) else showSheet(HomeSheet.AppPictures)
                 },
+                notchAccess = { which -> showSheet(HomeSheet.NotchAccess(which)) },
                 // Saving, switching, scheduling and sharing are Plus; opening a code and
                 // deleting a Look of your own never are.
                 looks = LookActions(
@@ -3185,6 +3322,18 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 HomeSheet.AppPictures -> AppPicturesSheet(
                     visible = up,
                     onOpen = { PictureService.openSettings(context) },
+                    onDismiss = { hideSheet() },
+                )
+
+                is HomeSheet.NotchAccess -> NotchAccessSheet(
+                    visible = up,
+                    which = current.which,
+                    onOpen = {
+                        when (current.which) {
+                            com.gabriel.zenithui.data.NotchAccess.OVER_APPS -> com.gabriel.zenithui.island.IslandService.ask(context)
+                            com.gabriel.zenithui.data.NotchAccess.NOTIFICATIONS -> com.gabriel.zenithui.data.NotificationDots.ask(context)
+                        }
+                    },
                     onDismiss = { hideSheet() },
                 )
 

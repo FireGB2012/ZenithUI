@@ -34,7 +34,6 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Brush
@@ -43,6 +42,7 @@ import androidx.compose.material3.Text
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -52,6 +52,7 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import com.gabriel.zenithui.ui.theme.LocalGlassRing
+import com.gabriel.zenithui.ui.theme.corners
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
@@ -79,12 +80,26 @@ import com.gabriel.zenithui.ui.common.LocalMotionLevel
 import com.gabriel.zenithui.ui.common.Motion
 import com.gabriel.zenithui.ui.common.rememberTick
 import com.gabriel.zenithui.ui.theme.GlassMaterial
+import com.gabriel.zenithui.ui.theme.LocalPalette
+import com.gabriel.zenithui.ui.theme.LocalTheme
 import com.gabriel.zenithui.ui.theme.ZenithShapes
 import com.gabriel.zenithui.ui.theme.glass
+import com.gabriel.zenithui.ui.theme.isGlass
+import com.gabriel.zenithui.ui.theme.wallPaneInk
 import kotlin.math.roundToInt
 
 /** iOS's blue for the one main action, as the rest of Zenith has it on glass over the wallpaper. */
 private val ACTION_BLUE = Color(0xFF0A84FF)
+
+/** The one main action on a pane on the wallpaper: [ACTION_BLUE] in Liquid Glass, else the theme's accent. */
+@Composable
+@ReadOnlyComposable
+private fun actionColour(): Color = if (LocalTheme.current.isGlass) ACTION_BLUE else LocalPalette.current.accent
+
+/** The words on [actionColour]. */
+@Composable
+@ReadOnlyComposable
+private fun onActionColour(): Color = if (LocalTheme.current.isGlass) Color.White else LocalPalette.current.onAccent
 
 /** The bar's own size: as tall as this, and at least this wide, wider with more pages to show. */
 private val BAR_HEIGHT = 48.dp
@@ -171,18 +186,19 @@ private fun BarButton(icon: ImageVector, name: String, onClick: () -> Unit) {
     val tick = rememberTick()
     val source = remember { MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
+    val ink = wallPaneInk()
     Box(
         Modifier
             .size(BAR_BUTTON)
             .clip(CircleShape)
-            .background(Color.White.copy(alpha = if (pressed) 0.28f else 0.16f))
+            .background(ink.copy(alpha = if (pressed) 0.28f else 0.16f))
             .clickable(interactionSource = source, indication = null, role = Role.Button) {
                 tick()
                 onClick()
             },
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, contentDescription = name, tint = Color.White, modifier = Modifier.size(20.dp))
+        Icon(icon, contentDescription = name, tint = ink, modifier = Modifier.size(20.dp))
     }
 }
 
@@ -193,6 +209,7 @@ private fun BarDots(pageCount: Int, position: () -> Float, onClick: () -> Unit) 
     val dot = 7.dp
     val gap = 7.dp
     val long = 20.dp
+    val ink = wallPaneInk()
     Box(
         Modifier
             .height(BAR_BUTTON)
@@ -212,7 +229,7 @@ private fun BarDots(pageCount: Int, position: () -> Float, onClick: () -> Unit) 
                     val near = (1f - kotlin.math.abs(at - page)).coerceIn(0f, 1f)
                     val width = dot.toPx() + (long.toPx() - dot.toPx()) * near
                     drawRoundRect(
-                        Color.White.copy(alpha = 0.45f + 0.55f * near),
+                        ink.copy(alpha = 0.45f + 0.55f * near),
                         topLeft = Offset(x, y - dot.toPx() / 2f),
                         size = Size(width, dot.toPx()),
                         cornerRadius = CornerRadius(dot.toPx() / 2f),
@@ -241,7 +258,7 @@ private fun DoneButton(onClick: (Offset) -> Unit) {
                 scaleY = press
             }
             .clip(CircleShape)
-            .background(ACTION_BLUE)
+            .background(actionColour())
             .clickable(interactionSource = source, indication = null, role = Role.Button) {
                 tick()
                 onClick(middle[0])
@@ -249,7 +266,7 @@ private fun DoneButton(onClick: (Offset) -> Unit) {
             .padding(horizontal = 16.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text("Done", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+        Text("Done", color = onActionColour(), fontSize = 15.sp, fontWeight = FontWeight.Bold, maxLines = 1)
     }
 }
 
@@ -480,13 +497,13 @@ internal fun GlassToast(toast: HomeToast?, onDone: () -> Unit, modifier: Modifie
                     }
                 }
                 .bodyWithoutWallpaper(22.dp)
-                .glass(RoundedCornerShape(22.dp), strength = 1.2f, solid = 0.5f, tracking = { up })
+                .glass(corners(22.dp), strength = 1.2f, solid = 0.5f, tracking = { up })
                 .padding(start = 16.dp, end = if (said.action != null) 6.dp else 16.dp, top = 6.dp, bottom = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
                 said.words,
-                color = Color.White,
+                color = wallPaneInk(),
                 fontSize = 14.sp,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 2,
@@ -498,14 +515,14 @@ internal fun GlassToast(toast: HomeToast?, onDone: () -> Unit, modifier: Modifie
                 Box(
                     Modifier
                         .clip(CircleShape)
-                        .background(ACTION_BLUE)
+                        .background(actionColour())
                         .clickable(enabled = toast != null, role = Role.Button) {
                             said.onAction()
                             onDone()
                         }
                         .padding(horizontal = 14.dp, vertical = 7.dp),
                 ) {
-                    Text(said.action, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                    Text(said.action, color = onActionColour(), fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1)
                 }
             }
         }

@@ -124,6 +124,7 @@ import com.gabriel.zenithui.ui.theme.addOutline
 import com.gabriel.zenithui.ui.theme.glass
 import com.gabriel.zenithui.ui.theme.glassInk
 import com.gabriel.zenithui.ui.theme.inkOnTint
+import com.gabriel.zenithui.ui.theme.inDark
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import com.gabriel.zenithui.ui.home.widgets.CalendarWidget
@@ -366,7 +367,7 @@ private fun WordsOnCard(fill: WidgetFill, content: @Composable () -> Unit) {
 private fun WordsOnWallpaper(content: @Composable () -> Unit) {
     if (LocalOnWallpaper.current) {
         CompositionLocalProvider(
-            LocalPalette provides LocalPalette.current.copy(dark = true),
+            LocalPalette provides LocalPalette.current.inDark(),
             LocalTextStyle provides LocalTextStyle.current.merge(
                 TextStyle(shadow = labelShadow(onWallpaper = true, legacyShadow = false, density = LocalDensity.current.density))
             ),

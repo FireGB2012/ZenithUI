@@ -24,7 +24,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Apps
 import androidx.compose.material.icons.rounded.GridView
@@ -34,6 +33,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -44,6 +44,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.Role
@@ -60,10 +61,13 @@ import com.gabriel.zenithui.ui.common.LocalMotionLevel
 import com.gabriel.zenithui.ui.common.Motion
 import com.gabriel.zenithui.ui.common.rememberTick
 import com.gabriel.zenithui.ui.common.LocalIconStyle
+import com.gabriel.zenithui.ui.theme.corners
 import com.gabriel.zenithui.ui.theme.glass
+import com.gabriel.zenithui.ui.theme.wallPaneInk
 
-private val FILL = Color.White.copy(alpha = 0.13f)
-private val FILL_STRONG = Color.White.copy(alpha = 0.22f)
+/** What lies on the card under its words, in their ink (see [wallPaneInk]): faint, and when chosen less so. */
+private val fill: Color @Composable @ReadOnlyComposable get() = wallPaneInk().copy(alpha = 0.13f)
+private val fillStrong: Color @Composable @ReadOnlyComposable get() = wallPaneInk().copy(alpha = 0.22f)
 
 /**
  * Customise: a card of glass at the foot of the home screen, with the home screen itself above it
@@ -143,7 +147,7 @@ internal fun CustomiseCard(
                     if (!reduced) translationY = size.height * 0.6f * (1f - up.value)
                 }
                 .bodyWithoutWallpaper(40.dp)
-                .glass(RoundedCornerShape(40.dp), strength = 1.2f, solid = 0.5f, tracking = { up.value })
+                .glass(corners(40.dp), strength = 1.2f, solid = 0.5f, tracking = { up.value })
                 // A touch on the card between its controls is the card's own.
                 .pointerInput(Unit) { awaitEachGesture { awaitFirstDown().consume() } }
                 .semantics { paneTitle = "Customise" }
@@ -153,7 +157,7 @@ internal fun CustomiseCard(
                 RoundToggle(Icons.Rounded.LightMode, "Dim the wallpaper", on = dim) { onDim(!dim) }
                 Text(
                     "Customise",
-                    color = Color.White,
+                    color = wallPaneInk(),
                     fontSize = 17.sp,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
@@ -180,15 +184,15 @@ internal fun CustomiseCard(
             }
 
             Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("Widgets", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                Row(Modifier.clip(RoundedCornerShape(15.dp)).background(FILL).padding(3.dp)) {
+                Text("Widgets", color = wallPaneInk(), fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                Row(Modifier.clip(corners(15.dp)).background(fill).padding(3.dp)) {
                     for (look in listOf(WidgetLooks.COLOUR, WidgetLooks.GLASS)) {
                         val on = WidgetLooks.of(widgetLook) == look
                         val tick = rememberTick()
                         Box(
                             Modifier
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(if (on) FILL_STRONG else Color.Transparent)
+                                .clip(corners(12.dp))
+                                .background(if (on) fillStrong else Color.Transparent)
                                 .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, role = Role.RadioButton) {
                                     if (!on) {
                                         tick()
@@ -198,7 +202,7 @@ internal fun CustomiseCard(
                                 .semantics { stateDescription = if (on) "Chosen" else "Not chosen" }
                                 .padding(horizontal = 14.dp, vertical = 6.dp),
                         ) {
-                            Text(WidgetLooks.label(look), color = Color.White, fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                            Text(WidgetLooks.label(look), color = wallPaneInk(), fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
                         }
                     }
                 }
@@ -223,15 +227,16 @@ internal fun CustomiseCard(
     }
 }
 
-/** A round button that is either on (white, with a dark symbol) or off. */
+/** A round button that is either on (the words' ink, with the symbol cut out of it) or off. */
 @Composable
 private fun RoundToggle(icon: ImageVector, name: String, on: Boolean, onClick: () -> Unit) {
     val tick = rememberTick()
+    val ink = wallPaneInk()
     Box(
         Modifier
             .size(40.dp)
             .clip(CircleShape)
-            .background(if (on) Color.White else FILL)
+            .background(if (on) ink else fill)
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, role = Role.Switch) {
                 tick()
                 onClick()
@@ -239,7 +244,7 @@ private fun RoundToggle(icon: ImageVector, name: String, on: Boolean, onClick: (
             .semantics { stateDescription = if (on) "On" else "Off" },
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, contentDescription = name, tint = if (on) Color.Black else Color.White, modifier = Modifier.size(22.dp))
+        Icon(icon, contentDescription = name, tint = if (on) (if (ink.luminance() > 0.5f) Color.Black else Color.White) else ink, modifier = Modifier.size(22.dp))
     }
 }
 
@@ -264,19 +269,19 @@ private fun StyleTile(style: String, chosen: Boolean, sampleKey: String?, shape:
                     AppIcon(key = sampleKey, label = "", size = 54.dp, shape = shape)
                 }
             } else {
-                Box(Modifier.size(54.dp).clip(shape).background(FILL_STRONG))
+                Box(Modifier.size(54.dp).clip(shape).background(fillStrong))
             }
         }
         Spacer(Modifier.height(7.dp))
         Text(
             IconStyles.label(style),
-            color = Color.White,
+            color = wallPaneInk(),
             fontSize = 13.sp,
             fontWeight = FontWeight.SemiBold,
             maxLines = 1,
             modifier = Modifier
-                .clip(RoundedCornerShape(12.dp))
-                .background(if (chosen) FILL_STRONG else Color.Transparent)
+                .clip(corners(12.dp))
+                .background(if (chosen) fillStrong else Color.Transparent)
                 .padding(horizontal = 11.dp, vertical = 4.dp),
         )
     }
@@ -286,11 +291,11 @@ private fun StyleTile(style: String, chosen: Boolean, sampleKey: String?, shape:
 private fun Capsule(words: String, onClick: () -> Unit) {
     Box(
         Modifier
-            .clip(RoundedCornerShape(16.dp))
-            .background(FILL)
+            .clip(corners(16.dp))
+            .background(fill)
             .clickable(role = Role.Button, onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 8.dp),
     ) {
-        Text(words, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+        Text(words, color = wallPaneInk(), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
     }
 }

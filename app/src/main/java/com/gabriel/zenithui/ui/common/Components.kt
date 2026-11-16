@@ -70,6 +70,14 @@ import com.gabriel.zenithui.ui.theme.inkOnTint
 
 val LocalIconLoader = staticCompositionLocalOf<IconLoader> { error("IconLoader not provided") }
 
+/**
+ * True where icons come and go faster than a file can be read, as in the drawer's list: an icon
+ * there starts from one already in memory or none, and never reads its saved copy while it is
+ * composed. The drawer's are all kept in memory ahead of time (see IconLoader.warm), so this costs
+ * nothing there but the wait for one that has not been drawn yet.
+ */
+val LocalIconFromMemory = staticCompositionLocalOf { false }
+
 /** A super icon: the app's icon stretched to fill [modifier]'s width, as HyperOS draws them. */
 @Composable
 fun WideAppIcon(key: String, label: String, modifier: Modifier = Modifier) {
@@ -143,7 +151,7 @@ fun IconLabel(text: String, modifier: Modifier = Modifier, textAlign: TextAlign?
     val density = LocalDensity.current.density
     Text(
         text = text,
-        color = labelInk(style.onWallpaper, palette.onGlass),
+        color = labelInk(style.onWallpaper, palette.onGlass, palette.wallInk),
         fontSize = style.size,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
@@ -155,11 +163,12 @@ fun IconLabel(text: String, modifier: Modifier = Modifier, textAlign: TextAlign?
 }
 
 /**
- * The ink a name is written in. On the wallpaper it is white whatever the palette: a light
- * palette's dark ink could not be read over a dark wallpaper. Anywhere else, the drawer and the
- * folder panel, it is the palette's own ink, [onGlass], which their surfaces are made for.
+ * The ink a name is written in. On the wallpaper it is white whatever the palette, or the theme's
+ * own light ink for names there ([wall]: Retro's is cream): a light palette's dark ink could not be
+ * read over a dark wallpaper. Anywhere else, the drawer and the folder panel, it is the palette's
+ * own ink, [onGlass], which their surfaces are made for.
  */
-internal fun labelInk(onWallpaper: Boolean, onGlass: Color): Color = if (onWallpaper) Color.White else onGlass
+internal fun labelInk(onWallpaper: Boolean, onGlass: Color, wall: Color = Color.White): Color = if (onWallpaper) wall else onGlass
 
 /**
  * The shadow under a name. On the wallpaper it is always there: a soft one, a dp below the words
@@ -230,7 +239,8 @@ private fun StyledIcon(key: String, label: String, px: Int, shape: Shape, style:
     val loader = LocalIconLoader.current
     val palette = LocalPalette.current
     val onWallpaper = LocalOnWallpaper.current
-    val ready = remember(key, px, version) { loader.peekGlyph(key, px) }
+    val fromMemory = LocalIconFromMemory.current
+    val ready = remember(key, px, version) { if (fromMemory) loader.peekGlyphMemory(key, px) else loader.peekGlyph(key, px) }
     val glyph by produceState(initialValue = ready, key, px, version) {
         value = loader.loadGlyph(key, px) ?: value
     }
@@ -347,7 +357,8 @@ private fun PlainIcon(key: String, label: String, size: Dp, px: Int, shape: Shap
     // the plate shown while the picture loads, and is not always the same.
     val cut = remember(version) { ZenithShapes.forIconShape(loader.iconShape) }
     // Starts from the icon already to hand, so returning home or scrolling never flashes a blank.
-    val ready = remember(key, px, version) { loader.peek(key, px) }
+    val fromMemory = LocalIconFromMemory.current
+    val ready = remember(key, px, version) { if (fromMemory) loader.peekMemory(key, px) else loader.peek(key, px) }
     val bitmap by produceState(initialValue = ready, key, px, version) {
         value = loader.load(key, px) ?: value
     }

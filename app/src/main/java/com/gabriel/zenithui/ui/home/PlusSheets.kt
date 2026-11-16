@@ -85,6 +85,7 @@ import com.gabriel.zenithui.ui.settings.Toggle
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.LocalZenithFont
 import com.gabriel.zenithui.ui.theme.ZenithShapes
+import com.gabriel.zenithui.ui.theme.corners
 import com.gabriel.zenithui.ui.theme.glass
 import com.gabriel.zenithui.ui.theme.inkOnTint
 
@@ -327,7 +328,7 @@ private fun PlusHero(status: PlusStatus, modifier: Modifier = Modifier) {
                 .size(46.dp)
                 // The star lands a beat after the card it is on, with a bounce of its own.
                 .appearIn(delayMillis = 180, fromScale = 0.3f, riseFrom = 0f)
-                .clip(RoundedCornerShape(15.dp))
+                .clip(corners(15.dp))
                 .background(palette.onGlass.copy(alpha = 0.10f)),
             contentAlignment = Alignment.Center,
         ) {
@@ -383,7 +384,7 @@ private fun FeatureRow(icon: ImageVector, title: String, detail: String, unlocke
         Box(
             Modifier
                 .size(38.dp)
-                .clip(RoundedCornerShape(12.dp))
+                .clip(corners(12.dp))
                 .background(palette.onGlass.copy(alpha = 0.08f)),
             contentAlignment = Alignment.Center,
         ) {
@@ -606,7 +607,7 @@ fun HiddenAppsSheet(
                             Row(
                                 Modifier
                                     .fillMaxWidth()
-                                    .clip(RoundedCornerShape(16.dp))
+                                    .clip(corners(16.dp))
                                     .clickable(interactionSource = touch, indication = LocalIndication.current) { onToggle(app.key) }
                                     .padding(horizontal = 6.dp, vertical = 8.dp),
                                 verticalAlignment = Alignment.CenterVertically,

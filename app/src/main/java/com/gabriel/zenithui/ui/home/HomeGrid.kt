@@ -148,11 +148,14 @@ import com.gabriel.zenithui.ui.theme.IconOutlineShape
 import com.gabriel.zenithui.ui.theme.LocalOnWallpaper
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.LocalParallax
+import com.gabriel.zenithui.ui.theme.LocalTheme
 import com.gabriel.zenithui.ui.theme.PressLight
 import com.gabriel.zenithui.data.HoldTuning
 import com.gabriel.zenithui.ui.theme.TiltRest
 import com.gabriel.zenithui.ui.theme.ZenithShapes
 import com.gabriel.zenithui.ui.theme.glass
+import com.gabriel.zenithui.ui.theme.isGlass
+import com.gabriel.zenithui.ui.theme.wallPaneInk
 import androidx.compose.ui.unit.round
 import com.gabriel.zenithui.ui.theme.withAccent
 import kotlinx.coroutines.launch
@@ -366,24 +369,51 @@ class HomeDragState {
 /**
  * The parts of the home screen that are not on the grid — the line at the top, the dots, the
  * search bar, the dock — arriving with it: up or down from [from] and fading in, as late as
- * [distance] says (0 with the middle of the page, 1 with its corners).
+ * [distance] says (0 with the middle of the page, 1 with its corners). Coming home like liquid
+ * ([wave]), they rise as the wave reaches their middle, as everything on the page does.
  */
-internal fun Modifier.arriving(clock: () -> Float, depth: () -> Float, distance: Float, from: Dp, style: String = "middle"): Modifier =
-    graphicsLayer {
-        val at = clock()
-        if (at < FlyIn.TOTAL_MS) {
-            val out = (1f - FlyIn.progress(at, FlyIn.delayMs(distance))) * depth()
-            // From below everything rises, and in a cascade everything drops in; from the middle
-            // each comes in from its own side.
-            val reach = when (style) {
-                "below" -> abs(from.toPx())
-                "cascade" -> -abs(from.toPx())
-                else -> from.toPx()
+@Composable
+internal fun Modifier.arriving(
+    clock: () -> Float,
+    depth: () -> Float,
+    distance: Float,
+    from: Dp,
+    style: String = "centre",
+    wave: () -> LiquidWave? = { null },
+): Modifier {
+    // Where its middle is on the screen, kept from its layout, for the wave to find it by.
+    val middle = remember { arrayOf(Offset.Unspecified) }
+    val spot = remember { LiquidSpot() }
+    return this
+        .onGloballyPositioned { middle[0] = it.positionInRoot() + Offset(it.size.width / 2f, it.size.height / 2f) }
+        .graphicsLayer {
+            val at = clock()
+            val liquid = wave()
+            if (liquid != null) {
+                if (at < liquid.totalMs) {
+                    spot.meet(liquid) { middle[0] }
+                    val out = spot.out(at) * depth()
+                    translationX = spot.startX * out
+                    translationY = spot.startY * out
+                    val grown = liquid.scaleAt(out)
+                    scaleX = grown
+                    scaleY = grown
+                    alpha = LiquidArrival.alphaAt(out)
+                }
+            } else if (at < FlyIn.TOTAL_MS) {
+                val out = (1f - FlyIn.progress(at, FlyIn.delayMs(distance))) * depth()
+                // From below everything rises, and in a cascade everything drops in; from the middle
+                // each comes in from its own side.
+                val reach = when (style) {
+                    "below" -> abs(from.toPx())
+                    "cascade" -> -abs(from.toPx())
+                    else -> from.toPx()
+                }
+                translationY = reach * out
+                alpha = (1f - out * out).coerceIn(0f, 1f)
             }
-            translationY = reach * out
-            alpha = (1f - out * out).coerceIn(0f, 1f)
         }
-    }
+}
 
 /** Things stepping aside on [page] for the carried item, as [plan] has them. */
 @Immutable
@@ -551,10 +581,12 @@ fun HomePage(
     animateEntrance: Boolean = false,
     /** How far this page is from the middle of the screen while swiping, -1 to 1. */
     pageOffset: Float = 0f,
-    /** The arrival clock, in milliseconds; at [FlyIn.TOTAL_MS] or beyond everything is in its place. */
-    arrivalClock: () -> Float = { FlyIn.TOTAL_MS.toFloat() },
+    /** The arrival clock, in milliseconds; at the end of the arrival, or [FlyIn.AT_REST], everything is in its place. */
+    arrivalClock: () -> Float = { FlyIn.AT_REST },
     /** How far out the arrival starts: [FlyIn.FULL] for the fly-in, [FlyIn.SETTLE] for coming back from an app. */
     arrivalDepth: () -> Float = { 0f },
+    /** The wave the home screen is coming home on, like liquid; null for any other way of arriving. */
+    arrivalWave: () -> LiquidWave? = { null },
     /** Seconds on the clock every item on the page jiggles to, while something is being carried. */
     jiggleClock: () -> Float = { 0f },
     /** How hard: 0 at rest, 1 while something is in the air. It eases in and out. */
@@ -807,6 +839,8 @@ fun HomePage(
                 LaunchedEffect(Unit) { back.animateTo(1f, tween(BeadMotion.BACK_MS, easing = LinearEasing)) }
             }
             val formed by remember { derivedStateOf { back.value >= BACK_FORMED } }
+            // Coming home like liquid: when the wave reaches it, and where from, kept while it runs.
+            val liquid = remember { LiquidSpot() }
             // Woken by the wave of light as it reaches it, and settled by the calm one.
             val wake = rememberEditWake(editing) {
                 Offset(cellRoot.x + (ringFrame.left + ringFrame.right) / 2f, cellRoot.y + (ringFrame.top + ringFrame.bottom) / 2f)
@@ -886,11 +920,28 @@ fun HomePage(
                         // and settle back together as it lands, so the page has depth.
                         translationX = pageOffset * cellWidthPx * PAGE_PARALLAX *
                             (item.col + item.spanX / 2f - settings.columns / 2f)
-                        // Arriving: out from the middle and a little small, then in to its place
-                        // and a touch past it. Read here, while drawing, so the clock ticking
-                        // recomposes nothing.
+                        // Arriving. Read here, while drawing, so the clock ticking recomposes nothing.
                         val clock = arrivalClock()
-                        if (clock < FlyIn.TOTAL_MS) {
+                        val wave = arrivalWave()
+                        if (wave != null) {
+                            // Like liquid: as the wave reaches its middle it rises into its place,
+                            // from a little small, faint and nearer where the wave started, and a
+                            // hair past it.
+                            if (clock < wave.totalMs) {
+                                liquid.meet(wave) {
+                                    Offset(cellRoot.x + (ringFrame.left + ringFrame.right) / 2f, cellRoot.y + (ringFrame.top + ringFrame.bottom) / 2f)
+                                }
+                                val out = liquid.out(clock) * arrivalDepth()
+                                translationX += liquid.startX * out
+                                translationY += liquid.startY * out
+                                val grown = wave.scaleAt(out)
+                                scaleX *= grown
+                                scaleY *= grown
+                                alpha *= LiquidArrival.alphaAt(out)
+                            }
+                        } else if (clock < FlyIn.TOTAL_MS) {
+                            // Out from the middle and a little small, then in to its place and a
+                            // touch past it.
                             val out = (1f - FlyIn.progress(clock, flyIn.delayMs)) * arrivalDepth()
                             translationX += flyIn.x * out
                             translationY = flyIn.y * out
@@ -1991,7 +2042,8 @@ private fun BoxScope.ResizeCorner(
     // Pulled, the corner gives way to the outline, whose own corner is under the finger; let go, it
     // grows back where the finger left it and glides onto the thing's corner.
     val arc by animateFloatAsState(if (pulling) 0f else 1f, tween(if (pulling) 120 else 220), label = "cornerArc")
-    val outline by animateColorAsState(if (blocked) Color(0xFFFF5A5F) else Color.White, tween(160), label = "outline")
+    // On the wallpaper, in the theme's ink for it; red where there is no room.
+    val outline by animateColorAsState(if (blocked) Color(0xFFFF5A5F) else palette.wallInk, tween(160), label = "outline")
     val grow = 4.dp
 
     /**
@@ -2668,10 +2720,14 @@ fun DockBar(
                     // wallpaper, or on the wallpaper.
                     Text(
                         text = if (highlight) "Let go to add it" else "Drag an app here to add it to the dock",
-                        color = Color.White.copy(alpha = 0.85f),
+                        // On a theme's solid dock, in its own ink instead.
+                        color = (if (paned) wallPaneInk() else LocalPalette.current.wallInk).copy(alpha = 0.85f),
                         fontSize = 12.sp,
                         style = LocalTextStyle.current.merge(
-                            TextStyle(shadow = labelShadow(onWallpaper = true, legacyShadow = LocalLabelStyle.current.shadow, density = density.density))
+                            TextStyle(
+                                shadow = if (paned && !LocalTheme.current.isGlass) null
+                                else labelShadow(onWallpaper = true, legacyShadow = LocalLabelStyle.current.shadow, density = density.density),
+                            )
                         ),
                         modifier = Modifier.padding(vertical = 10.dp),
                     )

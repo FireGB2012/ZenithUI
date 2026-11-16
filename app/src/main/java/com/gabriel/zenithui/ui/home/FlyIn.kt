@@ -10,11 +10,19 @@ import kotlin.math.roundToInt
  *
  * Coming home from the lock screen or a cold start it is the full fly-in; coming back from an app
  * it is the same movement over a fraction of the distance: a settle.
+ *
+ * Liquid, the first of the [styles], is on the same clock but times itself: see [LiquidArrival].
  */
 object FlyIn {
 
     /** From the first item moving to the last one down, in milliseconds. */
     const val TOTAL_MS = 600
+
+    /**
+     * Where the arrival clock is left once the home screen has arrived, whichever way it did: past
+     * the end of every style, so changing the style never finds the home screen part way in.
+     */
+    const val AT_REST = 1_000_000f
 
     /** How long any one item takes over its own journey. */
     private const val TRAVEL_MS = 380
@@ -29,8 +37,12 @@ object FlyIn {
     /** How far past its place an item goes before it comes back. */
     private const val OVERSHOOT = 1.1f
 
-    /** The ways the home screen can arrive: from the middle (the first), from below, and in a cascade. */
-    val styles = listOf("middle", "below", "cascade")
+    /**
+     * The ways the home screen can arrive: like liquid (the first, see [LiquidArrival]), from the
+     * middle, from below, and in a cascade. From the middle is "centre": "middle" is what every
+     * phone had before liquid, and is read as liquid now (see `ZenithSettings.fromJson`).
+     */
+    val styles = listOf(LiquidArrival.STYLE, "centre", "below", "cascade")
 
     /** How far under its place an item rises from, and how far over it one drops from, in page heights. */
     private const val RISE = 0.18f
@@ -43,7 +55,8 @@ object FlyIn {
      * Where an item whose middle is [x], [y] pixels from the middle of a page [width] by [height]
      * starts its arrival in [style], and when it sets off. From the middle: out where it is,
      * nearest the middle first. From below: under its place, the foot of the page first. Cascade:
-     * over its place, a column at a time from the left.
+     * over its place, a column at a time from the left. Liquid has a wave of its own, and anything
+     * else comes from the middle.
      */
     fun start(style: String, x: Float, y: Float, width: Float, height: Float): Start {
         val w = width.coerceAtLeast(1f)

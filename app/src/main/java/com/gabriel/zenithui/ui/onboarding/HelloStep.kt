@@ -28,6 +28,7 @@ import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.center
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.BlurEffect
 import androidx.compose.ui.graphics.Brush
@@ -51,16 +52,19 @@ import androidx.compose.ui.unit.sp
 import com.gabriel.zenithui.ui.common.Motion
 import com.gabriel.zenithui.ui.common.pressBounce
 import com.gabriel.zenithui.ui.theme.LocalPalette
+import com.gabriel.zenithui.ui.theme.LocalTheme
+import com.gabriel.zenithui.ui.theme.isGlass
 import com.gabriel.zenithui.ui.theme.LocalZenithFont
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.math.cos
 
 /** Hello, in a handful of languages. Danish is in there because Zenith was made in Denmark. */
-val HELLO_WORDS = listOf("hey there", "hola", "bonjour", "ciao", "hallo", "olá", "hej", "こんにちは")
+val HELLO_WORDS = listOf("hello", "hola", "bonjour", "ciao", "hallo", "olá", "hej", "こんにちは")
 
-/** "Hey there!", or with a name, "Hola, Gabriel!" — whichever word was on screen when you moved on. */
+/** "Hello!", or with a name, "Hola, Gabriel!" — whichever word was on screen when you moved on. */
 fun greetingFor(index: Int, name: String): String {
     val word = HELLO_WORDS[index.mod(HELLO_WORDS.size)].replaceFirstChar { it.uppercase() }
     val first = name.trim()
@@ -109,10 +113,19 @@ private const val SMALLEST_WORD_SP = 36
 /** Room around each word so its blur is not cut off at the edge of its layer. */
 private val WORD_PADDING = 16.dp
 
+/** The glow behind the greeting: how strong at its middle, how it comes up, and its slow breath. */
+private const val GLOW_DARK = 0.16f
+private const val GLOW_LIGHT = 0.12f
+private const val GLOW_IN_MS = 900
+private const val GLOW_PERIOD_S = 6.0
+private const val GLOW_BREATH = 0.25f
+private const val GLOW_TAU = 6.2831855f
+
 /**
- * The first thing you see: "hey there", written large, cycling through other languages while the
- * light rises behind it. Nothing to fill in; the button arrives after a beat, and a tap anywhere
- * brings it sooner. Tapping the word itself moves on to the next one.
+ * The first thing you see: "hello", written large, fading and scaling in and cycling through other
+ * languages with a soft glow behind it, while the light rises behind everything. Nothing to fill in;
+ * the button arrives after a beat, and a tap anywhere brings it sooner. Tapping the word itself
+ * moves on to the next one.
  */
 @Composable
 fun HelloStep(
@@ -150,7 +163,7 @@ fun HelloStep(
         Column(
             Modifier
                 .fillMaxWidth()
-                .clearAndSetSemantics { contentDescription = "Hey there. Welcome to Zenith." },
+                .clearAndSetSemantics { contentDescription = "Hello. Welcome to Zenith." },
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             GreetingWords(
@@ -251,6 +264,17 @@ private fun GreetingWords(
     val sink = with(density) { 8.dp.toPx() }
     val blockHeight = with(density) { (LARGEST_WORD_SP.sp.toPx() * 1.25f).toDp() } + WORD_PADDING * 2
 
+    // The glow behind the word: white light in the dark, the accent's in Light and in a theme with
+    // colour of its own. It comes up with the first word and then breathes, slowly, on the clock.
+    val glowColour = if (palette.dark && LocalTheme.current.isGlass) Color.White else palette.accent
+    val glowStrength = if (palette.dark) GLOW_DARK else GLOW_LIGHT
+    val glowIn = remember { Animatable(if (animate && delayFirst) 0f else 1f) }
+    LaunchedEffect(Unit) {
+        if (glowIn.value >= 1f) return@LaunchedEffect
+        delay(FIRST_WORD_DELAY_MS)
+        glowIn.animateTo(1f, tween(GLOW_IN_MS, easing = Motion.emphasized))
+    }
+
     BoxWithConstraints(
         Modifier
             .fillMaxWidth()
@@ -277,6 +301,25 @@ private fun GreetingWords(
                 size.sp
             }
         }
+
+        Spacer(
+            Modifier
+                .matchParentSize()
+                .drawWithCache {
+                    // Drawn past its own bounds on purpose, so the light has no edge.
+                    val radius = size.width * 0.6f
+                    val glow = Brush.radialGradient(
+                        listOf(glowColour.copy(alpha = glowStrength), glowColour.copy(alpha = 0f)),
+                        center = size.center,
+                        radius = radius,
+                    )
+                    onDrawBehind {
+                        val phase = ((clock.seconds % GLOW_PERIOD_S) / GLOW_PERIOD_S).toFloat()
+                        val breath = 1f - GLOW_BREATH * (0.5f + 0.5f * cos(GLOW_TAU * phase))
+                        drawCircle(glow, radius = radius, center = size.center, alpha = (glowIn.value * breath).coerceIn(0f, 1f))
+                    }
+                },
+        )
 
         slots.forEach { slot ->
             key(slot) {

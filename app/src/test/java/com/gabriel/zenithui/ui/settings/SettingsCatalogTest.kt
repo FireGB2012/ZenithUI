@@ -111,7 +111,26 @@ class SettingsCatalogTest {
         assertEquals("motionClose", found("landing").first())
         assertEquals("motionHome", found("zoom").first())
         assertTrue("motionOpen" in found("stiffness") && "motionClose" in found("damping"))
+        // Coming home's own numbers, found after the choice of how it comes.
+        assertEquals(listOf("arrival", "motionArrive"), found("coming home"))
+        assertTrue("motionArrive" in found("wave") && "arrival" in found("liquid"))
         SettingsCatalog.on(SettingsPage.AdvancedMotion).forEach { assertTrue(it.id, it.id.startsWith("motion")) }
+    }
+
+    @Test
+    fun `the themes are found by name, and so is your favourite`() {
+        listOf("theme", "liquid glass", "clean", "neon", "retro", "favourite", "favorite").forEach {
+            assertEquals(it, "theme", found(it).first())
+        }
+        assertEquals(SettingsPage.Theme, SettingsCatalog.entries.first { it.id == "theme" }.page)
+    }
+
+    @Test
+    fun `the Notch's size and position are found by what people would call them`() {
+        assertEquals("islandFit", found("notch size").first())
+        assertEquals("islandFit", found("notch position").first())
+        assertTrue("islandFit" in found("nudge"))
+        assertEquals(SettingsPage.Island, SettingsCatalog.entries.first { it.id == "islandFit" }.page)
     }
 
     @Test

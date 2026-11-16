@@ -74,7 +74,7 @@ object Looks {
      * and an old Look has to put on the wallpaper it was saved with.
      */
     val KEYS = listOf(
-        "paletteId", "appearance", "glass", "glassPanels", "glassShine", "font", "numberFont",
+        "paletteId", "appearance", "theme", "glass", "glassPanels", "glassShine", "font", "numberFont",
         "customAccent", "customAccentAlt", "customBackdrop", "customDark",
         "wallAccent", "wallAccentAlt", "wallBackdrop", "wallDark", "glassTuning", "dayPalettes",
         "wallpaperStyle", "wallpaperPalette", "wallpaperLock", "wallpaperFollow",

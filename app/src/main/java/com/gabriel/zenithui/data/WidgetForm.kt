@@ -37,73 +37,6 @@ enum class WidgetForm {
 }
 
 /**
- * How the Quick Toggles widget sets out the controls chosen for it at one size: on whichever grid
- * gives each of them the most room, as many of them as can still be pressed, and in which style.
- * Sizes are in dp.
- */
-data class ToggleGrid(
-    /** How many of the chosen controls there is room for, counted from the first. */
-    val shown: Int,
-    val columns: Int,
-    val rows: Int,
-    val cellWidth: Float,
-    val cellHeight: Float,
-    val style: Style,
-    /** Whether a tile has room for a second line under its name. */
-    val detail: Boolean,
-) {
-    enum class Style {
-        /** Big cells: a tile for each, with its name. */
-        Tiles,
-
-        /** One column of wide cells: a button with its name beside it. */
-        List,
-
-        /** Round buttons with their names underneath. */
-        Named,
-
-        /** Round buttons only. */
-        Buttons,
-    }
-
-    companion object {
-        /** Below this each control would be too small to press reliably. */
-        const val MIN_CELL = 30f
-
-        /** The height of cell from which a tile has room for a second line under its name. */
-        const val DETAIL_FROM = 92f
-
-        /**
-         * [chosen] controls in a widget [width] by [height]. A widget too small for all of them
-         * shows the first few that still fit at a size you can press, rather than shrinking them
-         * all to specks.
-         */
-        fun of(width: Float, height: Float, chosen: Int): ToggleGrid {
-            val pad = if (WidgetForm.of(width, height) == WidgetForm.Mini) 6f else 12f
-            val innerWidth = width - pad * 2
-            val innerHeight = height - pad * 2
-            fun rowsFor(count: Int, columns: Int) = (count + columns - 1) / columns
-            fun room(count: Int, columns: Int) = minOf(innerWidth / columns, innerHeight / rowsFor(count, columns))
-            fun bestColumns(count: Int) = (1..count).maxByOrNull { room(count, it) } ?: 1
-            val shown = (chosen.coerceAtLeast(1) downTo 1).firstOrNull { room(it, bestColumns(it)) >= MIN_CELL } ?: 1
-            val columns = bestColumns(shown)
-            val rows = rowsFor(shown, columns)
-            val cellWidth = innerWidth / columns
-            val cellHeight = innerHeight / rows
-            // Big cells become named tiles; a single column of wide cells becomes a list;
-            // otherwise round buttons, named underneath when there is room.
-            val style = when {
-                cellWidth >= 120f && cellHeight >= 80f -> Style.Tiles
-                columns == 1 && cellWidth >= 110f -> Style.List
-                cellHeight >= 66f && cellWidth >= 58f -> Style.Named
-                else -> Style.Buttons
-            }
-            return ToggleGrid(shown, columns, rows, cellWidth, cellHeight, style, detail = style == Style.Tiles && cellHeight >= DETAIL_FROM)
-        }
-    }
-}
-
-/**
  * What a widget shows at one size, in a line: the widget showcase says it under each size, so the
  * sizes can be told apart by more than their outline. Each line describes the layout the widget
  * itself picks for that shape of space ([WidgetForm.of]), and nothing it does not draw.
@@ -225,13 +158,5 @@ object WidgetLayouts {
         }
     }
 
-    private fun togglesNote(grid: ToggleGrid, chosen: Int): String {
-        val how = when (grid.style) {
-            ToggleGrid.Style.Tiles -> if (grid.detail) "Tiles, each with its name and On, Off or Open under it." else "Tiles, each with its name."
-            ToggleGrid.Style.List -> "A list, each control with its name beside it."
-            ToggleGrid.Style.Named -> "Round buttons, each with its name under it."
-            ToggleGrid.Style.Buttons -> "Round buttons, the icons alone."
-        }
-        return if (grid.shown < chosen) "$how Room for ${grid.shown} of your $chosen." else how
-    }
+    private fun togglesNote(grid: ToggleGrid, chosen: Int): String = grid.note(chosen)
 }

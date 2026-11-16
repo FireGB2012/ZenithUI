@@ -27,6 +27,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Layers
 import androidx.compose.material.icons.rounded.NotificationsActive
+import androidx.compose.material.icons.rounded.RestartAlt
 import androidx.compose.material.icons.rounded.SignalCellularAlt
 import androidx.compose.material.icons.rounded.Wifi
 import androidx.compose.material3.Icon
@@ -34,6 +35,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -58,7 +60,10 @@ import com.gabriel.zenithui.data.IslandKind
 import com.gabriel.zenithui.data.IslandMoment
 import com.gabriel.zenithui.data.IslandRules
 import com.gabriel.zenithui.data.IslandSettings
+import com.gabriel.zenithui.data.NotchAccess
+import com.gabriel.zenithui.data.NotchFit
 import com.gabriel.zenithui.data.NotificationDots
+import com.gabriel.zenithui.data.NotchStatus
 import com.gabriel.zenithui.data.Playing
 import com.gabriel.zenithui.data.PlusStatus
 import com.gabriel.zenithui.data.ZenithSettings
@@ -74,14 +79,15 @@ import com.gabriel.zenithui.ui.common.rememberTick
 import com.gabriel.zenithui.ui.common.unfoldIn
 import com.gabriel.zenithui.ui.common.unfoldOut
 import com.gabriel.zenithui.ui.theme.LocalPalette
+import com.gabriel.zenithui.ui.theme.corners
 import com.gabriel.zenithui.ui.theme.inkOnTint
 import kotlinx.coroutines.delay
 
 /**
- * Settings → Island: the camera, stretched, over every app (Zenith Plus). At the top, the top of
- * this very phone — its camera where it is and as big as it is — with the island on it, the one
- * drawn over apps; under it, what it shows and when it keeps out of the way. Nothing else to set:
- * it is meant to look right as it is.
+ * Settings → Zenith Notch: the camera, stretched, over every app (Zenith Plus). At the top, the top
+ * of this very phone — its camera where it is and as big as it is — with the Notch on it, the one
+ * drawn over apps; under it, what it shows and when it keeps out of the way. Each of Android's two
+ * permissions is explained in a sheet before Android's own page opens (see NotchAccessSheet).
  */
 @Composable
 internal fun IslandOptions(settings: ZenithSettings, plus: PlusStatus, actions: SettingsActions) {
@@ -102,7 +108,7 @@ internal fun IslandOptions(settings: ZenithSettings, plus: PlusStatus, actions: 
     Group(rise = 1) {
         Spot("island") {
             ToggleRow(
-                title = "Island",
+                title = "Zenith Notch",
                 subtitle = when {
                     !plus.active -> "Plus: your camera, stretched, over every app"
                     island.on && !overApps -> "On, waiting for leave to show over other apps"
@@ -115,7 +121,7 @@ internal fun IslandOptions(settings: ZenithSettings, plus: PlusStatus, actions: 
                     actions.plus()
                 } else {
                     change { it.copy(on = on) }
-                    if (on && !overApps) IslandService.ask(context)
+                    if (on && !overApps) actions.notchAccess(NotchAccess.OVER_APPS)
                 }
             }
         }
@@ -125,8 +131,8 @@ internal fun IslandOptions(settings: ZenithSettings, plus: PlusStatus, actions: 
                 ActionRow(
                     icon = Icons.Rounded.Layers,
                     title = "Let it show over other apps",
-                    subtitle = "Android asks you once: find Zenith, and allow it",
-                    onClick = { IslandService.ask(context) },
+                    subtitle = "Android asks you once: here's why, and how",
+                    onClick = { actions.notchAccess(NotchAccess.OVER_APPS) },
                 )
             }
         }
@@ -136,8 +142,8 @@ internal fun IslandOptions(settings: ZenithSettings, plus: PlusStatus, actions: 
                 ActionRow(
                     icon = Icons.Rounded.NotificationsActive,
                     title = "Let it see notifications",
-                    subtitle = "For music, calls, timers and messages: the access the dots use",
-                    onClick = { NotificationDots.ask(context) },
+                    subtitle = "For music, calls, timers and messages: here's why, and how",
+                    onClick = { actions.notchAccess(NotchAccess.NOTIFICATIONS) },
                 )
             }
         }
@@ -158,10 +164,45 @@ internal fun IslandOptions(settings: ZenithSettings, plus: PlusStatus, actions: 
     }
     Group(rise = 3) {
         Spot("islandAlways") {
-            ToggleRow("Always show it", "A small pill round the camera, even with nothing going on", island.always) { on -> change { it.copy(always = on) } }
+            ToggleRow(
+                "Battery and status at rest",
+                "A small pill round the camera with your battery and Do Not Disturb or silent. Off, it's only the camera",
+                island.always,
+            ) { on -> change { it.copy(always = on) } }
         }
     }
     Group(rise = 4) {
+        Spot("islandFit") {
+            val fit = island.fit
+            fun refit(transform: (NotchFit) -> NotchFit) = change { it.copy(fit = transform(it.fit)) }
+            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Caption("Size and position")
+                PillSlider("Width", fit.width, NotchFit.WIDTH, share(fit.width)) { v -> refit { NotchFit.of(v, it.height, it.x, it.y) } }
+                PillSlider("Height", fit.height, NotchFit.HEIGHT, share(fit.height)) { v -> refit { NotchFit.of(it.width, v, it.x, it.y) } }
+                PillSlider("Left and right", fit.x, NotchFit.X, nudge(fit.x, "right", "left")) { v -> refit { NotchFit.of(it.width, it.height, v, it.y) } }
+                PillSlider("Up and down", fit.y, NotchFit.Y, nudge(fit.y, "down", "up")) { v -> refit { NotchFit.of(it.width, it.height, it.x, v) } }
+                Note("It stays at the top, round the camera: a little bigger or smaller, a few dp either way, to sit just right on this phone.")
+            }
+        }
+        // The way back, only while there is something to go back from; its arrow turns once round.
+        var resets by remember { mutableIntStateOf(0) }
+        AnimatedVisibility(visible = !island.fit.isDefault, enter = unfoldIn(reduced), exit = unfoldOut(reduced)) {
+            Column {
+                GroupDivider()
+                ActionRow(
+                    icon = Icons.Rounded.RestartAlt,
+                    title = "Reset to default",
+                    subtitle = "As it's made for this phone's camera",
+                    spin = resets,
+                    onClick = {
+                        change { it.copy(fit = NotchFit()) }
+                        resets++
+                    },
+                )
+            }
+        }
+    }
+    Group(rise = 5) {
         Spot("islandWhen") {
             ToggleRow("Out of the way in full screen", "A video or a game has the whole screen to itself", island.hideFullScreen) { on -> change { it.copy(hideFullScreen = on) } }
             GroupDivider()
@@ -170,8 +211,21 @@ internal fun IslandOptions(settings: ZenithSettings, plus: PlusStatus, actions: 
     }
     Note(
         "It only shows what the phone's own music and notifications already show. Nothing is kept, and nothing leaves the phone.",
-        Modifier.riseIn(5).padding(horizontal = 14.dp),
+        Modifier.riseIn(6).padding(horizontal = 14.dp),
     )
+}
+
+/** "112%" from 1.12: a share of the Notch's own size. */
+private fun share(value: Float): String = "${Math.round(value * 100f)}%"
+
+/** "On the camera", or "3 dp right" from 3 and "3 dp left" from -3. */
+private fun nudge(value: Float, more: String, less: String): String {
+    val dp = Math.round(value)
+    return when {
+        dp == 0 -> "On the camera"
+        dp > 0 -> "$dp dp $more"
+        else -> "${-dp} dp $less"
+    }
 }
 
 /**
@@ -183,8 +237,20 @@ internal fun IslandOptions(settings: ZenithSettings, plus: PlusStatus, actions: 
 @Composable
 private fun IslandPreview(island: IslandSettings) {
     val palette = LocalPalette.current
-    val geometry = rememberIslandGeometry()
+    val geometry = rememberIslandGeometry().copy(fit = island.fit)
+    // While its size and position are being set the pill shows, even if it is off at rest, so
+    // there is something to see move; a moment after the last change it goes back to what it was.
+    var fitting by remember { mutableStateOf(false) }
+    var lastFit by remember { mutableStateOf(island.fit) }
+    LaunchedEffect(island.fit) {
+        if (island.fit == lastFit) return@LaunchedEffect
+        lastFit = island.fit
+        fitting = true
+        delay(FITTING_MS)
+        fitting = false
+    }
     var musicOn by remember { mutableStateOf(false) }
+    var quietOn by remember { mutableStateOf(false) }
     var callFrom by remember { mutableLongStateOf(0L) }
     var playing by remember { mutableStateOf(true) }
     var moments by remember { mutableStateOf(emptyList<IslandMoment>()) }
@@ -207,7 +273,7 @@ private fun IslandPreview(island: IslandSettings) {
     } else {
         null
     }
-    val picked = IslandRules.pick(island, musicOn && playing, call != null, moments, now)
+    val picked = IslandRules.pick(island.copy(always = island.always || fitting), musicOn && playing, call != null, moments, now)
     val showing = if (expanded) held ?: picked else picked
     LaunchedEffect(showing?.first) { if (showing?.first?.opens != true) expanded = false }
     val music = Playing(
@@ -223,6 +289,7 @@ private fun IslandPreview(island: IslandSettings) {
         live = call,
         liveText = call?.let { IslandRules.clock(it.base, false, now) }.orEmpty(),
         level = 64,
+        status = if (quietOn) listOf(NotchStatus.QUIET) else emptyList(),
         appName = if (kind == IslandKind.LIVE) "Phone" else "Messages",
         secondary = IslandRules.secondary(island, musicOn && playing, call != null, kind),
     )
@@ -245,7 +312,7 @@ private fun IslandPreview(island: IslandSettings) {
                 Modifier
                     .fillMaxWidth()
                     .height(tall * scale)
-                    .clip(RoundedCornerShape(30.dp)),
+                    .clip(corners(30.dp)),
             ) {
                 Box(
                     Modifier.layout { measurable, _ ->
@@ -263,7 +330,7 @@ private fun IslandPreview(island: IslandSettings) {
                     Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(palette.backdrop.first(), palette.backdrop.last()))))
                     Column(Modifier.padding(start = 16.dp, end = 16.dp, top = geometry.statusBar + 14.dp)) {
                         listOf(0.9f, 0.6f, 0.75f).forEach { share ->
-                            Box(Modifier.fillMaxWidth(share).height(16.dp).clip(RoundedCornerShape(8.dp)).background(palette.onGlass.copy(alpha = 0.10f)))
+                            Box(Modifier.fillMaxWidth(share).height(16.dp).clip(corners(8.dp)).background(palette.onGlass.copy(alpha = 0.10f)))
                             Spacer(Modifier.height(12.dp))
                         }
                     }
@@ -281,7 +348,7 @@ private fun IslandPreview(island: IslandSettings) {
                         Spacer(Modifier.width(4.dp))
                         Icon(Icons.Rounded.Wifi, contentDescription = null, tint = bar, modifier = Modifier.size(14.dp))
                         Spacer(Modifier.width(5.dp))
-                        Box(Modifier.size(width = 20.dp, height = 10.dp).clip(RoundedCornerShape(3.dp)).background(bar.copy(alpha = 0.9f)))
+                        Box(Modifier.size(width = 20.dp, height = 10.dp).clip(corners(3.dp)).background(bar.copy(alpha = 0.9f)))
                     }
                     Box(
                         Modifier.fillMaxWidth().offset(x = geometry.centreX - geometry.width / 2, y = geometry.top),
@@ -345,9 +412,13 @@ private fun IslandPreview(island: IslandSettings) {
             DemoChip("Notification", false) { moment(IslandKind.NOTIFICATION) }
             DemoChip("Silent", false) { moment(IslandKind.RINGER) }
             DemoChip("Charger", false) { moment(IslandKind.PLUGGED) }
+            DemoChip("Do Not Disturb", quietOn) { quietOn = !quietOn }
         }
     }
 }
+
+/** How long the pill stays in the preview after its size or position last changed. */
+private const val FITTING_MS = 1_800L
 
 /** A button under the preview: lit while what it stands for is going on. */
 @Composable

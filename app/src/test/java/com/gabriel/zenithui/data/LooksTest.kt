@@ -259,11 +259,11 @@ class LooksTest {
 
     @Test
     fun `a backup carries the Looks, and one from before Looks carries none`() {
-        val text = Backup.encode(mine, layout, listOf(look()))
-        assertEquals(listOf(look()), Backup.looks(text))
-        assertEquals(mine to layout, Backup.decode(text))
-        assertEquals(emptyList<Look>(), Backup.looks(Backup.encode(mine, layout)))
-        assertFalse(JSONObject(Backup.encode(mine, layout)).has("looks"))
-        assertEquals(emptyList<Look>(), Backup.looks("""{"format":"something else","looks":[]}"""))
+        val text = Backup.encode(ZenithConfig(mine, layout, listOf(look())))
+        assertEquals(ZenithConfig(mine, layout, listOf(look())), Backup.decode(text))
+        val before = Backup.encode(ZenithConfig(mine, layout))
+        assertEquals(emptyList<Look>(), Backup.decode(before)?.looks)
+        assertFalse(JSONObject(before).has("looks"))
+        assertNull(Backup.decode("""{"format":"something else","looks":[]}"""))
     }
 }

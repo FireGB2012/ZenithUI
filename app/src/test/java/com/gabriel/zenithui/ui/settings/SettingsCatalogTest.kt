@@ -118,6 +118,22 @@ class SettingsCatalogTest {
     }
 
     @Test
+    fun `the themes are found by name, and so is your favourite`() {
+        listOf("theme", "liquid glass", "clean", "neon", "retro", "favourite", "favorite").forEach {
+            assertEquals(it, "theme", found(it).first())
+        }
+        assertEquals(SettingsPage.Theme, SettingsCatalog.entries.first { it.id == "theme" }.page)
+    }
+
+    @Test
+    fun `the Notch's size and position are found by what people would call them`() {
+        assertEquals("islandFit", found("notch size").first())
+        assertEquals("islandFit", found("notch position").first())
+        assertTrue("islandFit" in found("nudge"))
+        assertEquals(SettingsPage.Island, SettingsCatalog.entries.first { it.id == "islandFit" }.page)
+    }
+
+    @Test
     fun `the account and its backup are found when the build has a server`() {
         assertEquals("account", SettingsCatalog.search("sign in").first().id)
         assertTrue("account" in SettingsCatalog.search("google").map { it.id })

@@ -80,7 +80,9 @@ import com.gabriel.zenithui.ui.common.unfoldIn
 import com.gabriel.zenithui.ui.common.unfoldOut
 import com.gabriel.zenithui.ui.theme.LocalOnWallpaper
 import com.gabriel.zenithui.ui.theme.LocalPalette
+import com.gabriel.zenithui.ui.theme.corners
 import com.gabriel.zenithui.ui.theme.glass
+import com.gabriel.zenithui.ui.theme.inDark
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -192,7 +194,7 @@ private fun WidgetPicture(info: AppWidgetProviderInfo) {
  */
 @Composable
 private fun MissingWidget(provider: String, onRestore: (AppWidgetProviderInfo) -> Unit, white: Boolean = false) {
-    val palette = LocalPalette.current.let { if (white) it.copy(dark = true) else it }
+    val palette = LocalPalette.current.let { if (white) it.inDark() else it }
     val context = LocalContext.current
     val found = remember(provider) {
         runCatching {
@@ -399,7 +401,7 @@ fun HostedWidgetPicker(
         }
         Column(
             Modifier
-                .clip(RoundedCornerShape(24.dp))
+                .clip(corners(24.dp))
                 .background(palette.onGlass.copy(alpha = 0.06f)),
         ) {
             groups.forEachIndexed { index, group ->
@@ -460,14 +462,14 @@ private fun ProviderCard(info: AppWidgetProviderInfo, cellDp: Float, rowDp: Floa
             .width(150.dp)
             .appearIn(fromScale = 0.9f, riseFrom = 14f, gentle = true)
             .pressBounce(0.96f)
-            .clip(RoundedCornerShape(20.dp))
+            .clip(corners(20.dp))
             .clickable(onClick = onClick),
     ) {
         Box(
             Modifier
                 .fillMaxWidth()
                 .height(110.dp)
-                .clip(RoundedCornerShape(16.dp))
+                .clip(corners(16.dp))
                 .background(palette.onGlass.copy(alpha = 0.08f)),
             contentAlignment = Alignment.Center,
         ) {

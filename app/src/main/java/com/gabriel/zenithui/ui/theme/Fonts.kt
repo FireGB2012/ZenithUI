@@ -66,6 +66,12 @@ object ZenithFonts {
 
     fun byId(id: String): ZenithFont = all.firstOrNull { it.id == id } ?: all.first()
 
+    /**
+     * The font everything is set in: [chosen], if you chose one, else the theme's own ([themes]).
+     * [SYSTEM], the default, is the theme's: the phone's own sans in Liquid Glass, Inter in Clean.
+     */
+    fun forTheme(chosen: String, themes: String): ZenithFont = if (chosen == SYSTEM || chosen.isEmpty()) byId(themes) else byId(chosen)
+
     fun numbers(id: String, text: ZenithFont): NumberFont = when (id) {
         SAME, "" -> NumberFont(text.family)
         THIN -> NumberFont(FontFamily.SansSerif, FontWeight.Thin)

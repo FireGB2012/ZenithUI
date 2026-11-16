@@ -78,7 +78,11 @@ import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.gabriel.zenithui.ui.theme.LocalPalette
+import com.gabriel.zenithui.ui.theme.LocalTheme
 import com.gabriel.zenithui.ui.theme.glass
+import com.gabriel.zenithui.ui.theme.isGlass
+import com.gabriel.zenithui.ui.theme.shape
+import com.gabriel.zenithui.ui.theme.themePage
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
@@ -111,6 +115,8 @@ fun FullPage(
 ) {
     val focus = LocalFocusManager.current
     val reduced = LocalMotionLevel.current.reduced
+    val palette = LocalPalette.current
+    val theme = LocalTheme.current
     val uncovered = animateFloatAsState(if (covered) 0f else 1f, tween(200), label = "pageUncovered")
     val scope = rememberCoroutineScope()
     // Read when a finger lets go, which can be long after this was composed.
@@ -236,7 +242,8 @@ fun FullPage(
         val filling by remember { derivedStateOf { shown.isIdle && place() < 0.5f } }
 
         // The dim behind it clears as it goes, so nothing is left dimmed behind a page pulled away.
-        Box(Modifier.fillMaxSize().drawBehind { drawRect(Color.Black, alpha = 0.35f * covers()) })
+        val scrim = palette.scrim
+        Box(Modifier.fillMaxSize().drawBehind { drawRect(scrim, alpha = scrim.alpha * covers()) })
         Column(
             Modifier
                 .fillMaxSize()
@@ -245,7 +252,14 @@ fun FullPage(
                 // all the way down.
                 .offset { IntOffset(0, place().roundToInt()) }
                 .then(if (reduced) Modifier.graphicsLayer { alpha = up.value.coerceIn(0f, 1f) } else Modifier)
-                .glass(if (filling) RectangleShape else PAGE_LIFTED, strength = 1.2f, solid = 0.9f, border = false, shadow = false)
+                .then(
+                    // Liquid Glass's page is glass; another theme's is the theme's own page.
+                    if (theme.isGlass) {
+                        Modifier.glass(if (filling) RectangleShape else PAGE_LIFTED, strength = 1.2f, solid = 0.9f, border = false, shadow = false)
+                    } else {
+                        Modifier.themePage(palette, if (filling) RectangleShape else theme.shape(PAGE_LIFTED))
+                    }
+                )
                 // Nothing underneath takes a touch; a tap on empty space puts the keyboard away.
                 .pointerInput(Unit) { detectTapGestures { focus.clearFocus() } }
                 .nestedScroll(pullThrough)

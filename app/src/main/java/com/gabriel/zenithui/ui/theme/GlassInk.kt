@@ -49,6 +49,8 @@ import kotlin.math.max
  */
 @Composable
 fun Modifier.glassInk(bevel: Dp = 4.dp, halo: Boolean = true): Modifier {
+    // In a theme that is not Liquid Glass, what is drawn is drawn as it is: there is no glass to make it of.
+    if (!LocalTheme.current.isGlass) return this
     if (Build.VERSION.SDK_INT < 33) return this.graphicsLayer { alpha = 0.92f }
 
     val levels = LocalGlassLevels.current

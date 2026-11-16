@@ -122,7 +122,7 @@ object Plus {
     val FEATURES = listOf(
         "Hidden apps" to "Keep chosen apps out of the drawer, behind a PIN.",
         "Backup & restore" to "Save your whole home screen to a file and put it back any time.",
-        "Island" to "A pill round the camera, over every app: music, charging, notifications.",
+        "Zenith Notch" to "A pill round the camera, over every app: battery, music, calls, notifications.",
     )
 }
 

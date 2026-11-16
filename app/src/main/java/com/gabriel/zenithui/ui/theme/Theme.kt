@@ -7,6 +7,8 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.State
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
@@ -25,6 +27,8 @@ import com.gabriel.zenithui.data.GlassLevels
 import com.gabriel.zenithui.data.GlassTuning
 import com.gabriel.zenithui.data.IconStyles
 import com.gabriel.zenithui.data.LabelSizes
+import com.gabriel.zenithui.data.Theme
+import com.gabriel.zenithui.data.Themes
 import com.gabriel.zenithui.data.WidgetLooks
 import com.gabriel.zenithui.data.ZenithSettings
 import com.gabriel.zenithui.ui.common.LabelStyle
@@ -34,7 +38,7 @@ import com.gabriel.zenithui.ui.common.LocalPressStyle
 import com.gabriel.zenithui.ui.common.MotionLevel
 import com.gabriel.zenithui.ui.common.rememberAnimationsEnabled
 
-/** The colours everything is drawn in: Zenith's one look in Light or Dark, or a widget's own colour inside it. */
+/** The colours everything is drawn in: the theme's in Light or Dark (see [LocalTheme]), or a widget's own colour inside it. */
 val LocalPalette = staticCompositionLocalOf { NeutralLook.Dark }
 
 /**
@@ -121,51 +125,78 @@ fun ZenithTheme(
     screenSize: IntSize = IntSize.Zero,
     /** The Glass studio's tuning; Zenith's own glass when it is not in effect. */
     glassTuning: GlassTuning = GlassTuning(),
+    /**
+     * Whether a change of theme cross-fades what is on screen: yes for a screen of Zenith's, no
+     * for the Notch's little window over other apps, which changes at once.
+     */
+    crossfade: Boolean = true,
     content: @Composable () -> Unit,
 ) {
-    // One look, iOS's own, in Light or in Dark. The palette once chosen (paletteId) is still kept
-    // in the settings, so old settings, Looks and backups read, but nothing here reads it. With no
-    // palette to cross-fade, Light and Dark change at once, as an iPhone's do.
-    val dark = settings.isDark(isSystemInDarkTheme())
-    val palette = NeutralLook.of(dark)
+    // The theme being tried, if any, else yours: see Themes.trying.
+    val trying by Themes.trying.collectAsState()
+    val requested = Themes.active(settings.theme, trying)
+    val reduced = MotionLevel.of(settings.motion, rememberAnimationsEnabled()).reduced
+    if (crossfade) {
+        ThemeCrossfade(requested, reduced) { shown -> Themed(settings, shown, glass, screenSize, glassTuning, content) }
+    } else {
+        Themed(settings, requested, glass, screenSize, glassTuning, content)
+    }
+}
 
-    // The blue for Material's own controls too (the date picker, the handles that select text),
-    // with white words on it.
+/** Everything [content] is drawn with, in [theme]. */
+@Composable
+private fun Themed(
+    settings: ZenithSettings,
+    theme: Theme,
+    glass: GlassLevels?,
+    screenSize: IntSize,
+    glassTuning: GlassTuning,
+    content: @Composable () -> Unit,
+) {
+    // The theme's colours in Light or in Dark: Neon is always dark, the others follow Appearance.
+    // Light and Dark change at once, as an iPhone's do; a change of theme cross-fades.
+    val dark = Themes.isDark(theme, settings.isDark(isSystemInDarkTheme()))
+    val palette = remember(theme, dark) { theme.palette(dark) }
+
+    // The accent for Material's own controls too (the date picker, the handles that select text),
+    // with the theme's words on it.
     val scheme = if (palette.dark) {
         darkColorScheme(
             primary = palette.accent,
             secondary = palette.accent,
             background = palette.backdrop.first(),
-            surface = Color(0x1FFFFFFF),
-            onPrimary = Color.White,
-            onBackground = Color.White,
-            onSurface = Color.White,
+            surface = palette.surface,
+            onPrimary = palette.onAccent,
+            onBackground = palette.ink,
+            onSurface = palette.ink,
         )
     } else {
         lightColorScheme(
             primary = palette.accent,
             secondary = palette.accent,
             background = palette.backdrop.first(),
-            surface = Color(0x33FFFFFF),
-            onPrimary = Color.White,
-            onBackground = Color(0xFF10131A),
-            onSurface = Color(0xFF10131A),
+            surface = palette.surface,
+            onPrimary = palette.onAccent,
+            onBackground = palette.ink,
+            onSurface = palette.ink,
         )
     }
 
-    val font = ZenithFonts.byId(settings.font)
+    // Your own font if you chose one; with the default, the theme's.
+    val font = ZenithFonts.forTheme(settings.font, theme.font)
     val typography = remember(font) { typographyIn(font.family) }
     val numbers = remember(font, settings.numberFont) { ZenithFonts.numbers(settings.numberFont, font) }
 
     // One sensor for the whole launcher: the light every glass surface reads, and how far the tilt
-    // floats the home screen, which it does not with movement reduced.
-    val tilt = rememberTilt(settings.glassShine, floats = !MotionLevel.of(settings.motion, rememberAnimationsEnabled()).reduced)
+    // floats the home screen, which it does not with movement reduced. Only glass catches the light.
+    val tilt = rememberTilt(settings.glassShine && theme.isGlass, floats = !MotionLevel.of(settings.motion, rememberAnimationsEnabled()).reduced)
 
     // One lens for the wallpaper, shared by every pane of glass, made again only when the wallpaper
     // changes: a page of panes coming into view no longer compiles the shader once for each.
-    val lens = rememberLens(glass)
+    val lens = rememberLens(if (theme.isGlass) glass else null)
 
     CompositionLocalProvider(
+        LocalTheme provides theme,
         LocalTilt provides tilt.light,
         LocalParallax provides tilt.parallax,
         LocalPalette provides palette,
@@ -189,7 +220,7 @@ fun ZenithTheme(
             colorScheme = scheme,
             typography = typography,
             shapes = MaterialTheme.shapes.copy(
-                extraLarge = androidx.compose.foundation.shape.RoundedCornerShape(34.dp),
+                extraLarge = theme.shape(androidx.compose.foundation.shape.RoundedCornerShape(34.dp)) as androidx.compose.foundation.shape.CornerBasedShape,
             ),
             content = content,
         )

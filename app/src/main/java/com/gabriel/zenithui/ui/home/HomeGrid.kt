@@ -148,11 +148,14 @@ import com.gabriel.zenithui.ui.theme.IconOutlineShape
 import com.gabriel.zenithui.ui.theme.LocalOnWallpaper
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.LocalParallax
+import com.gabriel.zenithui.ui.theme.LocalTheme
 import com.gabriel.zenithui.ui.theme.PressLight
 import com.gabriel.zenithui.data.HoldTuning
 import com.gabriel.zenithui.ui.theme.TiltRest
 import com.gabriel.zenithui.ui.theme.ZenithShapes
 import com.gabriel.zenithui.ui.theme.glass
+import com.gabriel.zenithui.ui.theme.isGlass
+import com.gabriel.zenithui.ui.theme.wallPaneInk
 import androidx.compose.ui.unit.round
 import com.gabriel.zenithui.ui.theme.withAccent
 import kotlinx.coroutines.launch
@@ -2039,7 +2042,8 @@ private fun BoxScope.ResizeCorner(
     // Pulled, the corner gives way to the outline, whose own corner is under the finger; let go, it
     // grows back where the finger left it and glides onto the thing's corner.
     val arc by animateFloatAsState(if (pulling) 0f else 1f, tween(if (pulling) 120 else 220), label = "cornerArc")
-    val outline by animateColorAsState(if (blocked) Color(0xFFFF5A5F) else Color.White, tween(160), label = "outline")
+    // On the wallpaper, in the theme's ink for it; red where there is no room.
+    val outline by animateColorAsState(if (blocked) Color(0xFFFF5A5F) else palette.wallInk, tween(160), label = "outline")
     val grow = 4.dp
 
     /**
@@ -2716,10 +2720,14 @@ fun DockBar(
                     // wallpaper, or on the wallpaper.
                     Text(
                         text = if (highlight) "Let go to add it" else "Drag an app here to add it to the dock",
-                        color = Color.White.copy(alpha = 0.85f),
+                        // On a theme's solid dock, in its own ink instead.
+                        color = (if (paned) wallPaneInk() else LocalPalette.current.wallInk).copy(alpha = 0.85f),
                         fontSize = 12.sp,
                         style = LocalTextStyle.current.merge(
-                            TextStyle(shadow = labelShadow(onWallpaper = true, legacyShadow = LocalLabelStyle.current.shadow, density = density.density))
+                            TextStyle(
+                                shadow = if (paned && !LocalTheme.current.isGlass) null
+                                else labelShadow(onWallpaper = true, legacyShadow = LocalLabelStyle.current.shadow, density = density.density),
+                            )
                         ),
                         modifier = Modifier.padding(vertical = 10.dp),
                     )

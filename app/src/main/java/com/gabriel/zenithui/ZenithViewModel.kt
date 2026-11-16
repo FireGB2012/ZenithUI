@@ -10,6 +10,7 @@ import com.gabriel.zenithui.data.AppEdits
 import com.gabriel.zenithui.data.AppInfo
 import com.gabriel.zenithui.data.AppRepository
 import com.gabriel.zenithui.data.AppShortcut
+import com.gabriel.zenithui.data.ConfigRepository
 import com.gabriel.zenithui.data.IconSource
 import com.gabriel.zenithui.data.HostedWidgetCell
 import com.gabriel.zenithui.data.StackCell
@@ -37,6 +38,8 @@ import com.gabriel.zenithui.data.IconLoader
 import com.gabriel.zenithui.data.LayoutBuilder
 import com.gabriel.zenithui.data.LayoutTidy
 import com.gabriel.zenithui.data.NewLook
+import com.gabriel.zenithui.data.OptimizeJob
+import com.gabriel.zenithui.data.Optimizing
 import com.gabriel.zenithui.data.PageGrid
 import com.gabriel.zenithui.data.occupyItem
 import com.gabriel.zenithui.data.Plus
@@ -45,7 +48,6 @@ import com.gabriel.zenithui.data.PriceAmounts
 import com.gabriel.zenithui.data.SubscriptionPlan
 import com.gabriel.zenithui.data.ROW_UNITS
 import com.gabriel.zenithui.data.Reshape
-import com.gabriel.zenithui.data.SettingsStore
 import com.gabriel.zenithui.data.WidgetCell
 import com.gabriel.zenithui.data.Widgets
 import com.gabriel.zenithui.data.WallStyle
@@ -66,17 +68,21 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 class ZenithViewModel(application: Application) : AndroidViewModel(application) {
 
-    val store = SettingsStore.get(application)
+    /** Where everything Zenith remembers is kept: on this phone, for now. See [ConfigRepository]. */
+    val store: ConfigRepository = ConfigRepository.get(application)
     val repository = AppRepository(application)
     val icons = IconLoader(application, repository)
     private val wallpaperSource = WallpaperSource(application)
@@ -215,6 +221,66 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
 
     fun noteHomePrompt() = store.update { it.copy(homePrompts = it.homePrompts + 1) }
 
+    // ---------------------------------------------------------------- drawer icons
+
+    /**
+     * How big, in pixels, the drawer draws its icons: worked out from the screen until the drawer
+     * has been laid out once, and from then on as the drawer itself says ([drawerIconsAre]).
+     */
+    private val drawerIconPx = MutableStateFlow(guessDrawerIconPx())
+
+    private fun guessDrawerIconPx(): Int {
+        val metrics = getApplication<Application>().resources.displayMetrics
+        val current = settings.value
+        val columns = current.drawerColumns.takeIf { it > 0 } ?: current.columns
+        return com.gabriel.zenithui.data.HomeGeometry.drawerIconPx(metrics.widthPixels / metrics.density, columns, metrics.density)
+    }
+
+    /** Whether the drawer has said how big it draws its icons, so [drawerIconPx] is no longer a guess. */
+    private var drawerMeasured = false
+
+    /** The drawer, as it is laid out, says how big it draws its icons: they are drawn ahead at that size. */
+    fun drawerIconsAre(px: Int) {
+        if (px > 0) {
+            drawerMeasured = true
+            drawerIconPx.value = px
+        }
+    }
+
+    /**
+     * Whether the drawer's icons may be drawn ahead. While setup is on screen they wait for its
+     * "Optimizing Zenith" step, which draws them while saying how far it has got, so they are not
+     * drawn behind setup's own movement; once Zenith is set up they are drawn at once.
+     */
+    private val drawerIconsWanted = MutableStateFlow(store.settings.value.onboarded)
+
+    /**
+     * Every app the drawer can show, drawn once at the drawer's size off the main thread as soon as
+     * the app list is known, and kept in memory: the drawer never draws or reads an icon while it
+     * moves. Asked again whenever an app is installed, updated or removed, or the icons change look,
+     * which draws only what is new; what was kept for apps that have gone is let go.
+     */
+    private fun keepDrawerIconsReady() {
+        viewModelScope.launch {
+            combine(drawerIconsWanted, settings.map { it.onboarded }) { wanted, onboarded -> wanted || onboarded }.first { it }
+            combine(
+                apps,
+                repository.workApps,
+                drawerIconPx,
+                settings.map { it.iconStyle }.distinctUntilChanged(),
+                icons.version,
+            ) { list, work, px, style, _ -> Triple(list + work, px, style) }
+                .collectLatest { (list, px, style) ->
+                    icons.warm(
+                        purpose = "drawer",
+                        keys = list.map { it.key },
+                        sizePx = px,
+                        glyphs = com.gabriel.zenithui.data.IconStyles.of(style) != com.gabriel.zenithui.data.IconStyles.ORIGINAL,
+                    )
+                }
+        }
+    }
+
     init {
         upgradeLayout()
         icons.prime(settings.value.iconPack, settings.value.iconShape)
@@ -245,10 +311,13 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             repository.apps.collect { icons.invalidate() }
         }
-        repository.observePackages {
+        repository.observePackages { changed ->
+            // An app updated may have a new icon: it is drawn again, not shown from before.
+            icons.forget(changed)
             viewModelScope.launch { repository.refresh() }
             viewModelScope.launch { repository.refreshWork() }
         }
+        keepDrawerIconsReady()
         tidyWidgetIds()
         // Photos left over from a home screen another Look was put on over, kept by nothing now.
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) { icons.tidyPhotos(photosInUse()) }
@@ -426,7 +495,7 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
 
     fun setHiddenPin(pin: String) = store.update { it.copy(hiddenPin = pin.filter { c -> c.isDigit() }.take(6)) }
 
-    fun backupText(): String = Backup.encode(settings.value, layout.value, store.looks.value)
+    fun backupText(): String = Backup.encode(store.config())
 
     /**
      * Puts a backup back. The trial and the purchase are deliberately taken from the phone you
@@ -435,30 +504,28 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
      * the one on this phone stays.
      */
     fun restoreBackup(text: String, fromAccount: Boolean = false): Boolean {
-        val (restored, items) = Backup.decode(text) ?: return false
+        val backup = Backup.decode(text) ?: return false
         forgetUndo()
         val current = settings.value
-        // The backup's Looks join the ones saved here; one in both is the backup's.
-        val incoming = Backup.looks(text)
-        if (incoming.isNotEmpty()) {
-            val ids = incoming.map { it.id }.toSet()
-            store.setLooks((incoming + store.looks.value.filterNot { it.id in ids }).take(com.gabriel.zenithui.data.Looks.MOST))
-        }
-        store.restore(
-            settings = restored.copy(
-                plusTrialStart = current.plusTrialStart,
-                plusPurchased = current.plusPurchased,
-                hiddenPin = if (fromAccount) current.hiddenPin else restored.hiddenPin,
-                // A photo chosen as an icon on another phone is not on this one: that app has its own again.
-                appEdits = restored.appEdits
-                    .mapValues { (_, edit) ->
-                        val lost = IconSource.parse(edit.icon) is IconSource.Photo && !icons.hasPhoto(edit.icon)
-                        if (lost) edit.copy(icon = "") else edit
-                    }
-                    .filterValues { !it.isEmpty },
-                onboarded = true,
+        val restored = backup.settings
+        // The backup's Looks and themes join the ones saved here; one in both is the backup's.
+        val back = backup.over(store.config())
+        store.replace(
+            back.copy(
+                settings = restored.copy(
+                    plusTrialStart = current.plusTrialStart,
+                    plusPurchased = current.plusPurchased,
+                    hiddenPin = if (fromAccount) current.hiddenPin else restored.hiddenPin,
+                    // A photo chosen as an icon on another phone is not on this one: that app has its own again.
+                    appEdits = restored.appEdits
+                        .mapValues { (_, edit) ->
+                            val lost = IconSource.parse(edit.icon) is IconSource.Photo && !icons.hasPhoto(edit.icon)
+                            if (lost) edit.copy(icon = "") else edit
+                        }
+                        .filterValues { !it.isEmpty },
+                    onboarded = true,
+                ),
             ),
-            items = items,
         )
         upgradeLayout()
         tidyWidgetIds()
@@ -583,7 +650,7 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
      */
     suspend fun backUpToAccount(): String? = seenThrough {
         val signed = accounts.signed.value ?: return@seenThrough SIGN_IN_FIRST
-        when (val reply = server.saveBackup(signed.token, Backup.encode(AccountRules.forAccount(settings.value), layout.value, store.looks.value))) {
+        when (val reply = server.saveBackup(signed.token, Backup.encode(store.config().copy(settings = AccountRules.forAccount(settings.value))))) {
             is Reply.Ok -> {
                 accounts.update(signed.account.copy(backupAt = reply.value))
                 null
@@ -888,6 +955,9 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
         /** As many photos as the frame holds, and the longest side each is kept at. */
         const val FRAME_MOST = 12
         const val FRAME_SIDE = 1440
+
+        /** How long "Optimizing Zenith" waits for setup's screen to draw the glass and the blur. */
+        const val GRAPHICS_WAIT_MS = 2_000L
     }
 
     override fun onCleared() {
@@ -1028,6 +1098,8 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
         density: GridDensity,
         columns: Int,
         rows: Int,
+        /** The theme setup's Theme step chose: it becomes your theme, the one Zenith starts in. */
+        theme: String = com.gabriel.zenithui.data.Themes.DEFAULT,
     ) {
         val installed = repository.refresh()
         val dock = repository.suggestedDock(LayoutBuilder.setupDockSize(columns))
@@ -1039,6 +1111,7 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
             NewLook.apply(it).copy(
                 userName = name.trim(),
                 appearance = appearance,
+                theme = com.gabriel.zenithui.data.Themes.byId(theme).id,
                 gridDensity = density.id,
                 columns = columns,
                 rows = rows,
@@ -1057,6 +1130,98 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
         // too. Setup has drawn them in it already (previewNewLook), and then this changes nothing.
         settings.value.let { saved -> icons.configure(saved.iconPack, saved.iconShape) }
         wallpaperSource.refresh()
+    }
+
+    private val _optimizing = MutableStateFlow<Optimizing?>(null)
+
+    /** How far setup's "Optimizing Zenith" has got ([optimize]), or null before it has started. */
+    val optimizing: StateFlow<Optimizing?> = _optimizing.asStateFlow()
+
+    private var optimizeJob: kotlinx.coroutines.Job? = null
+
+    /** Set by setup's screen once it has drawn the glass and the blur ([graphicsWarmed]). */
+    private val graphicsWarm = kotlinx.coroutines.CompletableDeferred<Unit>()
+
+    /** Setup's screen has drawn the glass and the blur once: see GraphicsWarmUp. */
+    fun graphicsWarmed() {
+        graphicsWarm.complete(Unit)
+    }
+
+    /**
+     * Starts setup's "Optimizing Zenith" ([optimize]) in the view model's own time, so it carries on
+     * if setup moves on before it is done. Asked again while it runs, it does nothing.
+     */
+    fun startOptimizing() {
+        if (optimizeJob?.isActive == true) return
+        optimizeJob = viewModelScope.launch { optimize() }
+    }
+
+    /**
+     * What the first home screen, the first swipe into the drawer and the first sheet would
+     * otherwise work out as they appear, done now, each job saying how far it has got
+     * ([optimizing]; the jobs are [OptimizeJob]'s). Run again, it finds
+     * most of it done and is quick.
+     */
+    private suspend fun optimize() {
+        fun report(job: OptimizeJob, done: Int, total: Int) = _optimizing.update { it?.with(job, done, total) }
+        _optimizing.value = Optimizing.start(
+            apps = apps.value.size + repository.workApps.value.size,
+            startedAtMs = SystemClock.elapsedRealtime(),
+        )
+        // Every app and its name, A to Z, as the drawer lists them.
+        var keys = (apps.value + repository.workApps.value).map { it.key }
+        optimizeStep(OptimizeJob.APPS) {
+            val installed = repository.refresh()
+            repository.refreshWork()
+            keys = (installed + repository.workApps.value).map { it.key }
+        }
+        report(OptimizeJob.ICONS, 0, keys.size)
+        report(OptimizeJob.DRAWER, 0, keys.size)
+
+        // Every icon at the drawer's size, kept in memory: the drawer never draws one as it moves.
+        // Until the drawer has been laid out its size is worked out from the grid setup chose.
+        optimizeStep(OptimizeJob.ICONS) {
+            if (!drawerMeasured) drawerIconPx.value = guessDrawerIconPx()
+            val glyphs = com.gabriel.zenithui.data.IconStyles.of(settings.value.iconStyle) != com.gabriel.zenithui.data.IconStyles.ORIGINAL
+            icons.warm(purpose = "drawer", keys = keys, sizePx = drawerIconPx.value, glyphs = glyphs) { done, total ->
+                report(OptimizeJob.ICONS, done, total)
+            }
+        }
+        // From here the drawer keeps them, drawing again only what changes.
+        drawerIconsWanted.value = true
+
+        // Each icon's colour, so the drawer's By colour has nothing to work out the first time.
+        optimizeStep(OptimizeJob.DRAWER) {
+            icons.colours(keys) { done, total -> report(OptimizeJob.DRAWER, done, total) }
+        }
+
+        // The wallpaper's softened copies, which the glass bends and the frost shows.
+        optimizeStep(OptimizeJob.GLASS) { wallpaperSource.refresh() }
+
+        // The glass's shader and the blur, drawn once by setup's screen; a phone that has not drawn
+        // them in a moment is not waited for, since the first pane will draw them anyway.
+        optimizeStep(OptimizeJob.GRAPHICS) {
+            kotlinx.coroutines.withTimeoutOrNull(GRAPHICS_WAIT_MS) { graphicsWarm.await() }
+        }
+
+        // What setup chose, on disk rather than on its way there.
+        optimizeStep(OptimizeJob.SAVE) { store.save() }
+    }
+
+    /**
+     * One of [optimize]'s jobs, counted as done when it ends, however it ends. One that fails is not
+     * worth stopping setup over: what it would have done gets done the first time it is needed, as
+     * it always was before there was a step for it.
+     */
+    private suspend fun optimizeStep(job: OptimizeJob, work: suspend () -> Unit) {
+        try {
+            work()
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (failed: Exception) {
+            android.util.Log.w("ZenithOptimize", "$job did not finish", failed)
+        }
+        _optimizing.update { at -> at?.let { it.with(job, it.of(job).total, it.of(job).total) } }
     }
 
     /**
@@ -1089,6 +1254,7 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
     fun markOnboarded(entrance: Boolean = true) {
         homeEntrancePending = entrance
         setupHandoffPending = !entrance
+        drawerIconsWanted.value = true
         store.update { it.copy(onboarded = true) }
     }
 

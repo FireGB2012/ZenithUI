@@ -23,6 +23,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -43,6 +44,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Call
+import androidx.compose.material.icons.rounded.DarkMode
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.NotificationsOff
@@ -58,6 +60,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -90,6 +93,7 @@ import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
@@ -99,18 +103,26 @@ import androidx.compose.ui.unit.lerp
 import androidx.compose.ui.unit.max
 import androidx.compose.ui.unit.min
 import androidx.compose.ui.unit.sp
+import com.gabriel.zenithui.data.BatteryLook
 import com.gabriel.zenithui.data.IslandKind
 import com.gabriel.zenithui.data.IslandMoment
+import com.gabriel.zenithui.data.IslandRules
+import com.gabriel.zenithui.data.NotchFit
+import com.gabriel.zenithui.data.NotchStatus
 import com.gabriel.zenithui.data.NotificationDots
 import com.gabriel.zenithui.data.Playing
+import com.gabriel.zenithui.data.ThemeMaterial
 import com.gabriel.zenithui.ui.common.LocalMotionLevel
 import com.gabriel.zenithui.ui.common.Motion
 import com.gabriel.zenithui.ui.common.pressBounce
+import com.gabriel.zenithui.ui.theme.LocalPalette
+import com.gabriel.zenithui.ui.theme.LocalTheme
 import kotlinx.coroutines.delay
 
 /**
  * Where this phone's camera is, and everything the island is sized from: in dp, from the top left
- * of the screen. The island is the camera stretched, so all of it follows from the camera.
+ * of the screen. The island is the camera stretched, so all of it follows from the camera, and then
+ * from how it was made to fit ([fit]): a little wider or taller, and nudged a few dp at most.
  */
 @Immutable
 data class IslandGeometry(
@@ -120,14 +132,19 @@ data class IslandGeometry(
     val holeY: Dp,
     val statusBar: Dp,
     val width: Dp,
+    val fit: NotchFit = NotchFit(),
 ) {
-    /** The island's height: the camera and a hair round it, so the two read as one thing. */
-    val height: Dp get() = if (hole > 0.dp) (hole + 3.dp).coerceIn(22.dp, 34.dp) else 26.dp
+    /** The island's height: the camera and a hair round it, so the two read as one thing; then as tall as asked. */
+    val height: Dp get() = ((if (hole > 0.dp) (hole + 3.dp).coerceIn(22.dp, 34.dp) else 26.dp) * fit.height).coerceIn(18.dp, 46.dp)
 
-    /** Its top: centred on the camera, or in the middle of the status bar on a phone with none. */
-    val top: Dp get() = if (hole > 0.dp) holeY - height / 2 else ((statusBar - height) / 2).coerceAtLeast(2.dp)
+    /**
+     * Its top: centred on the camera, or in the middle of the status bar on a phone with none; then
+     * nudged as asked, but never off the top of the screen.
+     */
+    val top: Dp get() = ((if (hole > 0.dp) holeY - height / 2 else ((statusBar - height) / 2).coerceAtLeast(2.dp)) + fit.y.dp).coerceAtLeast(0.dp)
 
-    val centreX: Dp get() = if (hole > 0.dp) holeX else width / 2
+    /** Its middle: the camera's, nudged as asked, and never so far that it leaves the screen. */
+    val centreX: Dp get() = ((if (hole > 0.dp) holeX else width / 2) + fit.x.dp).coerceIn(height, (width - height).coerceAtLeast(height))
 
     /** Kept clear in the middle, for the camera: it, and a little either side of it. */
     val gap: Dp get() = if (hole > 0.dp) hole + 10.dp else 8.dp
@@ -153,7 +170,7 @@ data class IslandGeometry(
      * The widest the island grows round the camera: a little under half the screen, which leaves
      * the clock on one side and the status icons on the other clear of it, as they sit above it.
      */
-    val widest: Dp get() = max(width * 0.46f, root + height * 2)
+    val widest: Dp get() = (max(width * 0.46f, root + height * 2) * fit.width).coerceAtMost((width - 24.dp).coerceAtLeast(root))
 
     /** The most room words have in one of the island's ends; a longer name is cut short. */
     val words: Dp get() = (widest - gap) / 2 - end - 7.dp
@@ -201,6 +218,10 @@ data class IslandState(
     val liveText: String = "",
     /** How full the battery is, in percent. */
     val level: Int = 0,
+    /** On the charger: the battery at rest is green. */
+    val charging: Boolean = false,
+    /** The status icons beside the camera at rest: see [IslandRules.status]. */
+    val status: List<NotchStatus> = emptyList(),
     /** The icon and name of the app a notification or a running clock is from. */
     val appIcon: ImageBitmap? = null,
     val appName: String = "",
@@ -224,6 +245,25 @@ class IslandActions(
 private val INK = Color.White
 private val QUIET = Color.White.copy(alpha = 0.6f)
 private val ISLAND = Color.Black
+
+/**
+ * The Notch's edge in the theme in use. In Liquid Glass and Clean it is black round the camera and
+ * nothing more, the camera's own colour; Neon outlines it in its glowing accent, and Retro in its
+ * warm one, thick, so it is drawn in the theme as everything else is. Null for none.
+ */
+private class NotchEdge(val colour: Color, val width: Dp)
+
+@Composable
+@ReadOnlyComposable
+private fun notchEdge(): NotchEdge? {
+    val theme = LocalTheme.current
+    val palette = LocalPalette.current
+    return when (theme.material) {
+        ThemeMaterial.NEON -> NotchEdge(palette.accent.copy(alpha = 0.9f), 1.2.dp)
+        ThemeMaterial.RETRO -> NotchEdge(palette.accent, 1.5.dp)
+        else -> null
+    }
+}
 val ISLAND_GREEN = Color(0xFF30D158)
 val ISLAND_ORANGE = Color(0xFFFF9F0A)
 val ISLAND_RED = Color(0xFFFF453A)
@@ -291,6 +331,7 @@ fun IslandCompact(
 ) {
     val reduced = LocalMotionLevel.current.reduced
     val density = LocalDensity.current
+    val edge = notchEdge()
     val measurer = rememberTextMeasurer()
     val style = sideText()
     fun wide(text: String): Dp = with(density) { measurer.measure(text, style, maxLines = 1).size.width.toDp() }
@@ -304,14 +345,20 @@ fun IslandCompact(
         IslandKind.NOTIFICATION -> item to min(wide(sender(state)), geometry.words)
         IslandKind.RINGER -> item to wide(ringerLook(state.moment?.text.orEmpty()).first)
         IslandKind.PLUGGED -> wide("Charging") to (BATTERY_WIDE + 5.dp + wide("${state.moment?.level ?: state.level}%"))
+        IslandKind.IDLE -> statusWidth(state.status, item) to RESTING_BATTERY_WIDE
         else -> 0.dp to 0.dp
     }
     val side = min(geometry.end + max(lead, trail) + 7.dp, (geometry.widest - geometry.gap) / 2)
+    val natural = when (kind) {
+        // At rest, as small as the battery and the status icons let it be.
+        IslandKind.IDLE -> max(geometry.gap + side * 2, max(geometry.root + geometry.height * 0.6f, geometry.height * 2.6f))
+        else -> geometry.gap + side * 2
+    }
     val targetW = when {
         expanded -> geometry.root
         kind == null -> geometry.rest
-        kind == IslandKind.IDLE -> max(geometry.root + geometry.height * 0.6f, geometry.height * 2.6f)
-        else -> geometry.gap + side * 2
+        // As wide as it was made to fit, but never so narrow that what is in its ends is cut.
+        else -> min(max(natural * geometry.fit.width, geometry.gap + (geometry.end + max(lead, trail)) * 2), geometry.widest)
     }
     val targetH = if (kind == null && !expanded) geometry.rest else geometry.height
     val width by animateDpAsState(targetW, if (reduced) tween(Motion.REDUCED_MS) else islandSpring(230f, 0.76f), label = "islandWidth")
@@ -357,7 +404,8 @@ fun IslandCompact(
                             scaleY = squeeze
                         }
                         .clip(RoundedCornerShape(50))
-                        .background(ISLAND),
+                        .background(ISLAND)
+                        .then(edge?.let { Modifier.border(it.width, it.colour, RoundedCornerShape(50)) } ?: Modifier),
                 ) {
                     if (!expanded) {
                         AnimatedContent(
@@ -392,7 +440,8 @@ fun IslandCompact(
                                 }
                                 .size(geometry.height)
                                 .clip(CircleShape)
-                                .background(ISLAND),
+                                .background(ISLAND)
+                                .then(edge?.let { Modifier.border(it.width, it.colour, CircleShape) } ?: Modifier),
                             contentAlignment = Alignment.Center,
                         ) {
                             when (state.secondary) {
@@ -452,7 +501,19 @@ private fun Sides(kind: IslandKind?, state: IslandState, geometry: IslandGeometr
                 Row(end.padding(end = 3.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("$level%", style = style, color = ISLAND_GREEN, maxLines = 1)
                     Spacer(Modifier.width(5.dp))
-                    Battery(level)
+                    Battery(level, ISLAND_GREEN)
+                }
+            }
+            IslandKind.IDLE -> {
+                // At rest: the status icons on the camera's left, the battery on its right.
+                Row(start.padding(start = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                    state.status.forEachIndexed { index, which ->
+                        if (index > 0) Spacer(Modifier.width(STATUS_GAP))
+                        StatusIcon(which, item * STATUS_SHARE)
+                    }
+                }
+                Box(end.padding(end = 3.dp)) {
+                    RestingBattery(state.level, batteryColour(IslandRules.battery(state.level, state.charging)))
                 }
             }
             else -> Unit
@@ -480,6 +541,7 @@ fun IslandCard(
     modifier: Modifier = Modifier,
 ) {
     val reduced = LocalMotionLevel.current.reduced
+    val edge = notchEdge()
     val progress = remember { Animatable(0f) }
     val closed by rememberUpdatedState(onClosed)
     LaunchedEffect(open) {
@@ -548,7 +610,9 @@ fun IslandCard(
             }
             val shape = silhouette(geometry, now, corner, this)
             drawPath(shape, ISLAND)
-            drawPath(shape, Color.White.copy(alpha = 0.09f * p.coerceIn(0f, 1f)), style = Stroke(1.dp.toPx()))
+            // A hairline marks it on a dark app; in Neon and Retro it is the theme's edge, in the accent.
+            val rim = edge?.colour ?: Color.White.copy(alpha = 0.09f)
+            drawPath(shape, rim.copy(alpha = rim.alpha * p.coerceIn(0f, 1f)), style = Stroke((edge?.width ?: 1.dp).toPx()))
         }
         // What is in the card, at its full size, seen only inside the card as it grows.
         CompositionLocalProvider(LocalTextStyle provides ISLAND_TEXT) {
@@ -870,9 +934,90 @@ private fun Bell(mode: String, colour: Color, size: Dp) {
 
 private val BATTERY_WIDE = 23.dp
 
-/** A battery in outline, filled in green as far as it is charged. */
+/** A status icon at rest is this share of the island's icon size, and this far from the next. */
+private const val STATUS_SHARE = 0.72f
+private val STATUS_GAP = 4.dp
+
+/** How wide [status] icons stand side by side, for icons [item] across. */
+private fun statusWidth(status: List<NotchStatus>, item: Dp): Dp =
+    if (status.isEmpty()) 0.dp else item * STATUS_SHARE * status.size + STATUS_GAP * (status.size - 1)
+
+/** The battery's colour at rest: green on the charger, red when low, else the island's ink. */
+private fun batteryColour(look: BatteryLook): Color = when (look) {
+    BatteryLook.CHARGING -> ISLAND_GREEN
+    BatteryLook.LOW -> ISLAND_RED
+    BatteryLook.NORMAL -> INK
+}
+
+private val RESTING_BATTERY_WIDE = 29.dp
+
+/**
+ * The battery at rest, as an iPhone draws it with its percentage on: a battery in outline filled in
+ * [colour] as far as it is charged, with the number in it, cut out of the fill where they cross.
+ */
 @Composable
-private fun Battery(level: Int) {
+private fun RestingBattery(level: Int, colour: Color) {
+    val measurer = rememberTextMeasurer()
+    val style = TextStyle(
+        fontFamily = ISLAND_FONT,
+        fontSize = 9.5.sp,
+        fontWeight = FontWeight.Bold,
+        fontFeatureSettings = "tnum",
+        platformStyle = PlatformTextStyle(includeFontPadding = false),
+    )
+    Canvas(
+        Modifier
+            .size(width = RESTING_BATTERY_WIDE, height = 13.dp)
+            // Drawn on a layer of its own, so the number can cut through the fill to the black under it.
+            .graphicsLayer { compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen },
+    ) {
+        val nub = 2.dp.toPx()
+        val body = Size(size.width - nub - 1.dp.toPx(), size.height)
+        val stroke = 1.1.dp.toPx()
+        drawRoundRect(
+            Color.White.copy(alpha = 0.4f),
+            topLeft = Offset(stroke / 2, stroke / 2),
+            size = Size(body.width - stroke, body.height - stroke),
+            cornerRadius = CornerRadius(3.5.dp.toPx()),
+            style = Stroke(stroke),
+        )
+        drawRoundRect(
+            Color.White.copy(alpha = 0.4f),
+            topLeft = Offset(body.width + 1.dp.toPx(), size.height * 0.33f),
+            size = Size(nub, size.height * 0.34f),
+            cornerRadius = CornerRadius(1.dp.toPx()),
+        )
+        val inset = 2.dp.toPx()
+        drawRoundRect(
+            colour,
+            topLeft = Offset(inset, inset),
+            size = Size((body.width - inset * 2) * (level / 100f).coerceIn(0f, 1f), body.height - inset * 2),
+            cornerRadius = CornerRadius(1.8.dp.toPx()),
+        )
+        val number = measurer.measure("$level", style)
+        drawText(
+            number,
+            color = Color.White,
+            topLeft = Offset((body.width - number.size.width) / 2f, (size.height - number.size.height) / 2f),
+            blendMode = androidx.compose.ui.graphics.BlendMode.Xor,
+        )
+    }
+}
+
+/** One status icon at rest: a moon for Do Not Disturb, the ringer struck through or vibrating. */
+@Composable
+private fun StatusIcon(which: NotchStatus, size: Dp) {
+    val (icon, colour) = when (which) {
+        NotchStatus.QUIET -> Icons.Rounded.DarkMode to Color(0xFFBF5AF2)
+        NotchStatus.SILENT -> Icons.Rounded.NotificationsOff to ISLAND_RED
+        NotchStatus.VIBRATE -> Icons.Rounded.Vibration to INK
+    }
+    Icon(icon, contentDescription = null, tint = colour, modifier = Modifier.size(size))
+}
+
+/** A battery in outline, filled in [colour] as far as it is charged. */
+@Composable
+private fun Battery(level: Int, colour: Color) {
     val fill = remember { Animatable(0f) }
     val reduced = LocalMotionLevel.current.reduced
     LaunchedEffect(level) { fill.animateTo(level / 100f, if (reduced) tween(Motion.REDUCED_MS) else tween(700, easing = FastOutSlowInEasing)) }
@@ -884,7 +1029,7 @@ private fun Battery(level: Int) {
         drawRoundRect(Color.White.copy(alpha = 0.45f), topLeft = Offset(body.width + 1.dp.toPx(), size.height * 0.33f), size = Size(nub, size.height * 0.34f), cornerRadius = CornerRadius(1.dp.toPx()))
         val inset = 2.2.dp.toPx()
         drawRoundRect(
-            ISLAND_GREEN,
+            colour,
             topLeft = Offset(inset, inset),
             size = Size((body.width - inset * 2) * fill.value, body.height - inset * 2),
             cornerRadius = CornerRadius(1.6.dp.toPx()),

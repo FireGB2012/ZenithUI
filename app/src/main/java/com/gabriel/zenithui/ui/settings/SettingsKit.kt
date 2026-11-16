@@ -38,8 +38,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
@@ -90,6 +90,10 @@ import com.gabriel.zenithui.ui.common.rollOver
 import com.gabriel.zenithui.ui.common.wordsChange
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.ZenithShapes
+import com.gabriel.zenithui.ui.theme.corners
+import com.gabriel.zenithui.ui.theme.themeSurface
+import com.gabriel.zenithui.ui.theme.themeTile
+import com.gabriel.zenithui.ui.theme.themeTileInk
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 
@@ -144,17 +148,19 @@ internal fun Modifier.riseIn(index: Int): Modifier {
  */
 @Composable
 internal fun Group(padding: Dp = 0.dp, rise: Int? = null, content: @Composable ColumnScope.() -> Unit) {
-    val palette = LocalPalette.current
     Column(
         Modifier
             .fillMaxWidth()
             .then(if (rise != null) Modifier.riseIn(rise) else Modifier)
-            .clip(RoundedCornerShape(22.dp))
-            .background(palette.onGlass.copy(alpha = 0.07f))
+            // The theme's block: a faint wash in Liquid Glass, a card in Clean, and so on.
+            .themeSurface(GROUP_SHAPE)
             .padding(padding),
         content = content,
     )
 }
+
+private val GROUP_SHAPE = RoundedCornerShape(22.dp)
+private val TILE_SHAPE = RoundedCornerShape(11.dp)
 
 @Composable
 internal fun GroupDivider(inset: Dp = 64.dp) {
@@ -228,11 +234,10 @@ internal fun NavRow(icon: ImageVector, tile: List<Color>, title: String, summary
                     scaleY = grown
                     rotationZ = -9f * lean.value
                 }
-                .clip(RoundedCornerShape(11.dp))
-                .background(Brush.linearGradient(tile)),
+                .themeTile(tile, TILE_SHAPE),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+            Icon(icon, contentDescription = null, tint = themeTileInk(tile), modifier = Modifier.size(20.dp))
         }
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
@@ -292,7 +297,7 @@ internal fun ActionRow(
         Box(
             Modifier
                 .size(36.dp)
-                .clip(RoundedCornerShape(11.dp))
+                .clip(corners(11.dp))
                 .background(tint.copy(alpha = 0.1f)),
             contentAlignment = Alignment.Center,
         ) {
@@ -456,7 +461,7 @@ internal fun PillSlider(
                 scaleX = grown
                 scaleY = grown
             }
-            .clip(RoundedCornerShape(16.dp))
+            .clip(corners(16.dp))
             .background(palette.onGlass.copy(alpha = 0.08f))
             // The fill is drawn, not laid out, so following a finger composes nothing again.
             .drawBehind {

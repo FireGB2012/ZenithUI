@@ -131,6 +131,11 @@ fun Modifier.glass(
      */
     wallpaperTint: Boolean = false,
 ): Modifier {
+    // A theme that is not Liquid Glass draws every pane in its own material.
+    val theme = LocalTheme.current
+    if (!theme.isGlass) {
+        return themedPanel(theme, shape, tint, tinted, opacity, border, solid, shadow, interactive, motion, pressEnabled, light)
+    }
     val palette = LocalPalette.current
     val backdrop = LocalBackdrop.current
     val levels = LocalGlassLevels.current
@@ -755,47 +760,7 @@ internal fun DrawScope.drawLiquidGlass(
 
     if (canSee && softened != null) {
         // Android 12: the softened wallpaper, lined up with the real one, under the same veil.
-        val scale = max(screen.width / softened.width.toFloat(), screen.height / softened.height.toFloat()) *
-            SYSTEM_WALLPAPER_ZOOM
-        val width = (softened.width * scale).roundToInt()
-        val height = (softened.height * scale).roundToInt()
-        val left = (-origin.x - (width - screen.width) * shown.x).roundToInt()
-        val top = (-origin.y - (height - screen.height) * shown.y).roundToInt()
-        drawImage(
-            image = softened,
-            dstOffset = IntOffset(left, top),
-            dstSize = IntSize(width, height),
-            alpha = look.opacity,
-            filterQuality = FilterQuality.Low,
-        )
-        // A pane inside something that is still growing is larger than the room it has on screen,
-        // and can reach past the right or the foot of the picture as it is lined up. The picture's
-        // last column and last row are drawn out over what that would leave bare, which is what
-        // the shader does at its edges too.
-        val beyondRight = ceil(paneSize.width).toInt() - (left + width)
-        if (beyondRight > 0) {
-            drawImage(
-                image = softened,
-                srcOffset = IntOffset(softened.width - 1, 0),
-                srcSize = IntSize(1, softened.height),
-                dstOffset = IntOffset(left + width, top),
-                dstSize = IntSize(beyondRight, height),
-                alpha = look.opacity,
-                filterQuality = FilterQuality.Low,
-            )
-        }
-        val beyondFoot = ceil(paneSize.height).toInt() - (top + height)
-        if (beyondFoot > 0) {
-            drawImage(
-                image = softened,
-                srcOffset = IntOffset(0, softened.height - 1),
-                srcSize = IntSize(softened.width, 1),
-                dstOffset = IntOffset(left, top + height),
-                dstSize = IntSize(width + beyondRight.coerceAtLeast(0), beyondFoot),
-                alpha = look.opacity,
-                filterQuality = FilterQuality.Low,
-            )
-        }
+        drawSoftenedWallpaper(softened, origin, screen, shown, paneSize, look.opacity)
         // The veil the home screen lays over the wallpaper, when it is dimmed, on the copy too.
         if (dim > 0f) drawRect(Color.Black, size = paneSize, alpha = dim.coerceAtMost(1f) * look.opacity)
         // Glass made from the wallpaper takes a little of the colour under its middle into the veil.
@@ -850,6 +815,55 @@ internal fun DrawScope.drawLiquidGlass(
     // pane's middle is.
     val ringLight = ringHere?.let { paneLight(hypot(it.centre.x - paneSize.width / 2f, it.centre.y - paneSize.height / 2f), it) } ?: 0f
     drawRim(paneSize, outline, look, light, dark, ringLight)
+}
+
+/**
+ * The softened wallpaper behind a pane, lined up with the real one: where a pane at [origin] in a
+ * window [screen] big sees it, Android having scrolled it to [shown]. What glass without its lens
+ * shows, and what Neon's smoke is laid over.
+ */
+internal fun DrawScope.drawSoftenedWallpaper(softened: ImageBitmap, origin: Offset, screen: IntSize, shown: Offset, paneSize: Size, alpha: Float) {
+    val scale = max(screen.width / softened.width.toFloat(), screen.height / softened.height.toFloat()) *
+        SYSTEM_WALLPAPER_ZOOM
+    val width = (softened.width * scale).roundToInt()
+    val height = (softened.height * scale).roundToInt()
+    val left = (-origin.x - (width - screen.width) * shown.x).roundToInt()
+    val top = (-origin.y - (height - screen.height) * shown.y).roundToInt()
+    drawImage(
+        image = softened,
+        dstOffset = IntOffset(left, top),
+        dstSize = IntSize(width, height),
+        alpha = alpha,
+        filterQuality = FilterQuality.Low,
+    )
+    // A pane inside something that is still growing is larger than the room it has on screen,
+    // and can reach past the right or the foot of the picture as it is lined up. The picture's
+    // last column and last row are drawn out over what that would leave bare, which is what
+    // the shader does at its edges too.
+    val beyondRight = ceil(paneSize.width).toInt() - (left + width)
+    if (beyondRight > 0) {
+        drawImage(
+            image = softened,
+            srcOffset = IntOffset(softened.width - 1, 0),
+            srcSize = IntSize(1, softened.height),
+            dstOffset = IntOffset(left + width, top),
+            dstSize = IntSize(beyondRight, height),
+            alpha = alpha,
+            filterQuality = FilterQuality.Low,
+        )
+    }
+    val beyondFoot = ceil(paneSize.height).toInt() - (top + height)
+    if (beyondFoot > 0) {
+        drawImage(
+            image = softened,
+            srcOffset = IntOffset(0, softened.height - 1),
+            srcSize = IntSize(softened.width, 1),
+            dstOffset = IntOffset(left, top + height),
+            dstSize = IntSize(width + beyondRight.coerceAtLeast(0), beyondFoot),
+            alpha = alpha,
+            filterQuality = FilterQuality.Low,
+        )
+    }
 }
 
 /**
@@ -928,6 +942,8 @@ private val RIM_GLOW_WIDTHS = floatArrayOf(7f, 4f)
  */
 @Composable
 fun Modifier.glassOnGlass(shape: Shape, dark: Boolean, interactive: Boolean = false): Modifier {
+    val theme = LocalTheme.current
+    if (!theme.isGlass) return themedOnPanel(theme, shape, interactive)
     val tilt = LocalTilt.current
     val tuning = LocalGlassTuning.current
     val amount = (LocalGlassStrength.current * ON_GLASS_STRENGTH).coerceIn(0f, 1.4f)

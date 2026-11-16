@@ -84,6 +84,7 @@ import com.gabriel.zenithui.ui.common.staggerDelay
 import com.gabriel.zenithui.ui.theme.GlassMaterial
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.LocalZenithFont
+import com.gabriel.zenithui.ui.theme.corners
 import com.gabriel.zenithui.ui.theme.glass
 import com.gabriel.zenithui.ui.theme.inkOnTint
 import kotlin.math.abs
@@ -313,7 +314,7 @@ fun SearchAnswers(
                 Modifier
                     .fillMaxWidth()
                     .pressBounce(0.98f)
-                    .glass(RoundedCornerShape(22.dp), strength = 1.1f)
+                    .glass(corners(22.dp), strength = 1.1f)
                     .clickable { onCopy(shown[0].first.removePrefix("= ")) }
                     .padding(horizontal = 18.dp, vertical = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -336,7 +337,7 @@ fun SearchAnswers(
                         Modifier
                             .fillMaxWidth()
                             .appearIn(delayMillis = staggerDelay(index), riseFrom = 14f, gentle = true)
-                            .clip(RoundedCornerShape(16.dp))
+                            .clip(corners(16.dp))
                             .clickable { onSetting(link) }
                             .padding(horizontal = 10.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -356,7 +357,7 @@ fun SearchAnswers(
                         Modifier
                             .fillMaxWidth()
                             .appearIn(delayMillis = staggerDelay(index), riseFrom = 14f, gentle = true)
-                            .clip(RoundedCornerShape(16.dp))
+                            .clip(corners(16.dp))
                             .clickable { onShortcut(shortcut) }
                             .padding(horizontal = 10.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -399,9 +400,9 @@ fun DrawerTabSheet(
             Modifier
                 .fillMaxWidth()
                 .height(44.dp)
-                .clip(RoundedCornerShape(14.dp))
+                .clip(corners(14.dp))
                 .background(palette.onGlass.copy(alpha = 0.08f))
-                .border(1.5.dp, ring, RoundedCornerShape(14.dp))
+                .border(1.5.dp, ring, corners(14.dp))
                 .padding(horizontal = 12.dp),
             contentAlignment = Alignment.CenterStart,
         ) {
@@ -431,7 +432,7 @@ fun DrawerTabSheet(
                 Row(
                     Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(14.dp))
+                        .clip(corners(14.dp))
                         .clickable { picked = if (on) picked - app.key else picked + app.key }
                         .padding(horizontal = 8.dp, vertical = 7.dp),
                     verticalAlignment = Alignment.CenterVertically,

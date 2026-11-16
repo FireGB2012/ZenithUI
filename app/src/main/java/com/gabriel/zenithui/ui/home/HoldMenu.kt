@@ -49,7 +49,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -110,7 +112,14 @@ import com.gabriel.zenithui.ui.common.AppIcon
 import com.gabriel.zenithui.ui.common.LocalMotionLevel
 import com.gabriel.zenithui.ui.common.Motion
 import com.gabriel.zenithui.ui.theme.LocalBackdrop
+import com.gabriel.zenithui.ui.theme.LocalPalette
+import com.gabriel.zenithui.ui.theme.LocalTheme
+import com.gabriel.zenithui.ui.theme.corners
 import com.gabriel.zenithui.ui.theme.glass
+import com.gabriel.zenithui.ui.theme.isGlass
+import com.gabriel.zenithui.ui.theme.panelFace
+import com.gabriel.zenithui.ui.theme.wallPaneDanger
+import com.gabriel.zenithui.ui.theme.wallPaneInk
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -219,12 +228,21 @@ class HoldMenuState {
 /** The colours a folder or one of Zenith's widgets can take from its menu: none, then the twelve. */
 internal val HOLD_COLOURS: List<Pair<Long, String>> = listOf(0L to "None") + WIDGET_COLOURS
 
-private val INK = Color.White
-private val INK_SOFT = Color.White.copy(alpha = 0.72f)
-private val RED = Color(0xFFFF453A)
-private val HIGHLIGHT = Color.White.copy(alpha = 0.17f)
-private val FILL = Color.White.copy(alpha = 0.13f)
-private val FILL_STRONG = Color.White.copy(alpha = 0.20f)
+/**
+ * The menu's words and what lights under them: white on Liquid Glass, whose glass on the wallpaper
+ * is the same in Light and in Dark, and the theme's own ink on a theme's solid face (see [wallPaneInk]).
+ */
+@Immutable
+private class MenuInk(val ink: Color, val danger: Color, val lifted: Boolean) {
+    val soft = ink.copy(alpha = 0.72f)
+    val highlight = ink.copy(alpha = 0.17f)
+    val fill = ink.copy(alpha = 0.13f)
+    val fillStrong = ink.copy(alpha = 0.20f)
+}
+
+@Composable
+@ReadOnlyComposable
+private fun menuInk() = MenuInk(wallPaneInk(), wallPaneDanger(), lifted = LocalTheme.current.isGlass)
 
 /** How much body the menu's glass has under its white words: the same in Light and in Dark. */
 private const val MENU_BODY = 0.55f
@@ -428,19 +446,27 @@ internal fun HoldMenuLayer(
             )
         }
 
-        // The neck of glass between the icon and the drop, for the moment it lasts.
+        // The neck between the icon and the drop, for the moment it lasts: of the pane's own stuff,
+        // clear glass, or a theme's face with its edge.
+        val theme = LocalTheme.current
+        val neckFill = if (theme.isGlass) {
+            listOf(Color.White.copy(alpha = 0.34f), Color.White.copy(alpha = 0.16f))
+        } else {
+            panelFace(theme, LocalPalette.current, Color.Unspecified, tinted = false, solid = MENU_BODY).let { listOf(it, it) }
+        }
+        val neckEdge = if (theme.isGlass) Color.White.copy(alpha = 0.4f) else LocalPalette.current.edge
         Canvas(Modifier.fillMaxSize()) {
             val neck = drop().neck ?: return@Canvas
             val path = neckPath(neck, layerOrigin)
             drawPath(
                 path,
                 Brush.verticalGradient(
-                    listOf(Color.White.copy(alpha = 0.34f), Color.White.copy(alpha = 0.16f)),
+                    neckFill,
                     startY = min(neck.y0, neck.y1) - layerOrigin.y,
                     endY = max(neck.y0, neck.y1) - layerOrigin.y,
                 ),
             )
-            drawPath(path, Color.White.copy(alpha = 0.4f), style = Stroke(0.75.dp.toPx()))
+            drawPath(path, neckEdge, style = Stroke(0.75.dp.toPx()))
         }
 
         // The pane itself: glass standing on the wallpaper, the size and place the pour gives it.
@@ -596,7 +622,9 @@ private fun MenuLine(
     val pressed by source.collectIsPressedAsState()
     val lit = pressed || state.hover == HoldHit.Row(index)
     val glow by animateFloatAsState(if (lit) 1f else 0f, tween(120), label = "rowLit")
-    val ink = if (row.danger) RED else INK
+    val menu = menuInk()
+    val ink = if (row.danger) menu.danger else menu.ink
+    val highlight = menu.highlight
     Box(
         Modifier
             .fillMaxWidth()
@@ -608,7 +636,7 @@ private fun MenuLine(
                     val inX = 10.dp.toPx()
                     val inY = 2.dp.toPx()
                     drawRoundRect(
-                        HIGHLIGHT.copy(alpha = HIGHLIGHT.alpha * glow),
+                        highlight.copy(alpha = highlight.alpha * glow),
                         topLeft = Offset(inX, inY),
                         size = Size(size.width - 2f * inX, size.height - 2f * inY),
                         cornerRadius = CornerRadius(20.dp.toPx()),
@@ -621,7 +649,7 @@ private fun MenuLine(
         // The symbol's middle is 38 from the menu's edge, the words start at 62: iOS 26's lines.
         Box(Modifier.padding(start = 26.dp).size(24.dp), contentAlignment = Alignment.Center) {
             if (shortcutKey != null) {
-                AppIcon(key = shortcutKey, label = "", size = 24.dp, shape = RoundedCornerShape(7.dp))
+                AppIcon(key = shortcutKey, label = "", size = 24.dp, shape = corners(7.dp))
             } else {
                 Icon(glyphFor(row), contentDescription = null, tint = ink, modifier = Modifier.size(22.dp))
             }
@@ -634,7 +662,7 @@ private fun MenuLine(
                 fontWeight = FontWeight.Normal,
                 letterSpacing = (-0.3).sp,
                 // Red words on glass over a bright wallpaper need the little shadow the mockup gives them.
-                shadow = if (row.danger) Shadow(Color.Black.copy(alpha = 0.4f), Offset(0f, 1f), 2f) else null,
+                shadow = if (row.danger && menu.lifted) Shadow(Color.Black.copy(alpha = 0.4f), Offset(0f, 1f), 2f) else null,
             ),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -655,10 +683,10 @@ private fun MenuLine(
                 contentAlignment = Alignment.Center,
             ) {
                 Box(
-                    Modifier.size(27.dp).clip(CircleShape).background(if (plusLit) FILL_STRONG else FILL),
+                    Modifier.size(27.dp).clip(CircleShape).background(if (plusLit) menu.fillStrong else menu.fill),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(Icons.Rounded.Add, contentDescription = null, tint = INK, modifier = Modifier.size(16.dp))
+                    Icon(Icons.Rounded.Add, contentDescription = null, tint = menu.ink, modifier = Modifier.size(16.dp))
                 }
             }
         }
@@ -668,6 +696,7 @@ private fun MenuLine(
 /** A widget's sizes side by side, each drawn as the cells it covers: the one it is now lit, one with no room greyed. */
 @Composable
 private fun SizeRow(state: HoldMenuState, choices: List<SizeChoice>, columns: Int, rows: Int, onHit: (HoldHit) -> Unit) {
+    val menu = menuInk()
     Row(
         Modifier.fillMaxWidth().height(HoldTuning.SIZE_ROW_DP.dp).padding(horizontal = 18.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -681,8 +710,8 @@ private fun SizeRow(state: HoldMenuState, choices: List<SizeChoice>, columns: In
                     .weight(1f, fill = false)
                     .size(width = 60.dp, height = 40.dp)
                     .hit(state, HoldHit.Size(index))
-                    .clip(RoundedCornerShape(13.dp))
-                    .background(if (choice.current) FILL_STRONG else if (lit) HIGHLIGHT else Color.Transparent)
+                    .clip(corners(13.dp))
+                    .background(if (choice.current) menu.fillStrong else if (lit) menu.highlight else Color.Transparent)
                     .graphicsLayer { alpha = if (choice.fits || choice.current) 1f else 0.3f }
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
@@ -703,7 +732,7 @@ private fun SizeRow(state: HoldMenuState, choices: List<SizeChoice>, columns: In
                     columns = columns,
                     maxRows = min(most, rows).coerceAtLeast(1),
                     modifier = Modifier.fillMaxSize(),
-                    ink = INK,
+                    ink = menu.ink,
                 )
             }
         }
@@ -714,6 +743,7 @@ private fun SizeRow(state: HoldMenuState, choices: List<SizeChoice>, columns: In
 @Composable
 private fun Swatches(state: HoldMenuState, colour: Long, onHit: (HoldHit) -> Unit) {
     val chosen = HOLD_COLOURS.indexOfFirst { it.first == colour }.coerceAtLeast(0)
+    val menu = menuInk()
     val appear = remember { Animatable(0f) }
     LaunchedEffect(Unit) { appear.animateTo(1f, tween(220)) }
     Column(
@@ -740,11 +770,11 @@ private fun Swatches(state: HoldMenuState, colour: Long, onHit: (HoldHit) -> Uni
                                 scaleY = s
                             }
                             .then(
-                                if (index == chosen) Modifier.border(2.dp, INK, CircleShape).padding(4.dp) else Modifier
+                                if (index == chosen) Modifier.border(2.dp, menu.ink, CircleShape).padding(4.dp) else Modifier
                             )
                             .clip(CircleShape)
                             .then(
-                                if (value == 0L) Modifier.border(1.5.dp, INK_SOFT, CircleShape)
+                                if (value == 0L) Modifier.border(1.5.dp, menu.soft, CircleShape)
                                 else Modifier.background(Color(value.toInt()))
                             )
                             .clickable(
@@ -758,6 +788,6 @@ private fun Swatches(state: HoldMenuState, colour: Long, onHit: (HoldHit) -> Uni
             }
         }
         Spacer(Modifier.height(12.dp))
-        Text(HOLD_COLOURS[chosen].second, color = INK_SOFT, fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+        Text(HOLD_COLOURS[chosen].second, color = menu.soft, fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1)
     }
 }

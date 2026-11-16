@@ -101,6 +101,7 @@ import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.NeutralLook
 import com.gabriel.zenithui.ui.theme.Palettes
 import com.gabriel.zenithui.ui.theme.ZenithPalette
+import com.gabriel.zenithui.ui.theme.corners
 import com.gabriel.zenithui.ui.theme.toned
 import com.gabriel.zenithui.ui.theme.wallColors
 import kotlinx.coroutines.Dispatchers
@@ -540,11 +541,11 @@ private fun Thumb(
                 .aspectRatio(0.46f)
                 .onGloballyPositioned { centre[0] = it.boundsInRoot().center }
                 .pressBounce(0.94f)
-                .clip(RoundedCornerShape(16.dp))
+                .clip(corners(16.dp))
                 .border(
                     if (inUse) 2.dp else 1.dp,
                     if (inUse) ui.accent else ui.onGlass.copy(alpha = 0.12f),
-                    RoundedCornerShape(16.dp),
+                    corners(16.dp),
                 )
                 .clickable { onClick(centre[0]) },
         ) {

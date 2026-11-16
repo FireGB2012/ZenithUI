@@ -68,6 +68,7 @@ import com.gabriel.zenithui.ui.common.unfoldIn
 import com.gabriel.zenithui.ui.common.unfoldOut
 import com.gabriel.zenithui.ui.home.springOf
 import com.gabriel.zenithui.ui.theme.LocalPalette
+import com.gabriel.zenithui.ui.theme.corners
 import com.gabriel.zenithui.ui.theme.inkOnTint
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
@@ -367,9 +368,9 @@ private fun MotionPreview(tuning: AnimationTuning, closingPlain: Boolean) {
         Canvas(
             Modifier
                 .size(broad, tall)
-                .clip(RoundedCornerShape(22.dp))
+                .clip(corners(22.dp))
                 .background(Brush.verticalGradient(palette.backdrop))
-                .border(1.dp, palette.onGlass.copy(alpha = 0.18f), RoundedCornerShape(22.dp))
+                .border(1.dp, palette.onGlass.copy(alpha = 0.18f), corners(22.dp))
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,

@@ -245,3 +245,21 @@ private class TiltMotion(private val readings: TiltReadings, private val floats:
         if (!TiltRest.still(readings.parallax.value, float)) readings.floating.value = float
     }
 }
+
+/**
+ * [live], except that while [held] is true it stays where it was last read: glass that is being
+ * moved, or that is behind something being moved, keeps its light where it was instead of following
+ * the phone, so nothing in it is drawn again until it is still. [held] wants to be a state that
+ * changes rarely, such as a derived one, since everything that reads this reads that too.
+ */
+@Stable
+class HeldTilt(private val live: State<Offset>, private val held: State<Boolean>) : State<Offset> {
+    /** Where the light was when it was last read while it was not held. */
+    private var last = androidx.compose.runtime.snapshots.Snapshot.withoutReadObservation { live.value }
+
+    override val value: Offset
+        get() {
+            if (held.value) return last
+            return live.value.also { last = it }
+        }
+}

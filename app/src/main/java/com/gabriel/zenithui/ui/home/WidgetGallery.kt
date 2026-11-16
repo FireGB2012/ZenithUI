@@ -40,7 +40,6 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Layers
@@ -110,6 +109,7 @@ import com.gabriel.zenithui.ui.onboarding.Segmented
 import com.gabriel.zenithui.ui.theme.GlassMaterial
 import com.gabriel.zenithui.ui.theme.LocalBackdrop
 import com.gabriel.zenithui.ui.theme.LocalPalette
+import com.gabriel.zenithui.ui.theme.corners
 import com.gabriel.zenithui.ui.theme.glass
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -434,7 +434,7 @@ private fun WidgetCard(
         modifier
             .pressBounce(0.97f)
             .onGloballyPositioned { centre[0] = it.boundsInRoot().center }
-            .clip(RoundedCornerShape(26.dp))
+            .clip(corners(26.dp))
             .background(palette.onGlass.copy(alpha = 0.06f))
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
@@ -446,7 +446,7 @@ private fun WidgetCard(
             Modifier
                 .fillMaxWidth()
                 .height(wellHeight)
-                .wallpaperWell(RoundedCornerShape(16.dp))
+                .wallpaperWell(corners(16.dp))
                 .padding(10.dp),
             contentAlignment = Alignment.Center,
         ) {
@@ -718,7 +718,7 @@ private fun Stage(
             .padding(horizontal = STAGE_INSET)
             .fillMaxWidth()
             .height(real.maxOf { it.height } * scale + STAGE_MARGIN * 2)
-            .wallpaperWell(RoundedCornerShape(30.dp)),
+            .wallpaperWell(corners(30.dp)),
         contentPadding = PaddingValues(start = (width - real.first().width * scale) / 2, end = (width - real.last().width * scale) / 2),
         horizontalArrangement = Arrangement.spacedBy(STAGE_GAP),
         verticalAlignment = Alignment.CenterVertically,
@@ -796,7 +796,7 @@ private fun SizePicker(
                 Modifier
                     .weight(1f)
                     .pressBounce(0.92f)
-                    .clip(RoundedCornerShape(16.dp))
+                    .clip(corners(16.dp))
                     .clickable(onClickLabel = "Show this size") { onPick(index) }
                     .semantics {
                         contentDescription = "${size.name}, ${size.spanX} by ${size.rows}"

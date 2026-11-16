@@ -28,7 +28,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material3.Icon
@@ -68,6 +67,8 @@ import com.gabriel.zenithui.ui.common.unfoldIn
 import com.gabriel.zenithui.ui.common.unfoldOut
 import com.gabriel.zenithui.ui.onboarding.PhonePreview
 import com.gabriel.zenithui.ui.theme.LocalPalette
+import com.gabriel.zenithui.ui.theme.corners
+import com.gabriel.zenithui.ui.theme.dim
 import com.gabriel.zenithui.ui.theme.glass
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -105,7 +106,7 @@ fun PageOverview(
             Box(
                 Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.42f))
+                    .background(palette.dim(0.42f))
                     .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onDismiss() },
             )
         }
@@ -145,7 +146,7 @@ fun PageOverview(
                     Column(
                         Modifier
                             .padding(top = 16.dp, start = 24.dp, end = 24.dp)
-                            .glass(RoundedCornerShape(26.dp), solid = 0.6f)
+                            .glass(corners(26.dp), solid = 0.6f)
                             .padding(16.dp),
                     ) {
                         Text(
@@ -274,7 +275,7 @@ private fun Tray(
                 Box(
                     Modifier
                         .size(width = tileWidth + 8.dp, height = TILE_HEIGHT + 8.dp)
-                        .border(2.dp, ring, RoundedCornerShape(26.dp))
+                        .border(2.dp, ring, corners(26.dp))
                         .pressBounce(0.95f)
                         .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onGo(page) },
                     contentAlignment = Alignment.Center,
@@ -307,8 +308,8 @@ private fun Tray(
                     Modifier
                         .size(width = tileWidth * 0.7f, height = TILE_HEIGHT * 0.7f)
                         .pressBounce(0.92f)
-                        .clip(RoundedCornerShape(22.dp))
-                        .glass(RoundedCornerShape(22.dp))
+                        .clip(corners(22.dp))
+                        .glass(corners(22.dp))
                         .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
                             tick()
                             onAdd()

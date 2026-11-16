@@ -61,6 +61,7 @@ import com.gabriel.zenithui.ui.common.unfoldIn
 import com.gabriel.zenithui.ui.common.unfoldOut
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.LocalZenithFont
+import com.gabriel.zenithui.ui.theme.corners
 
 /**
  * What one gesture could do: Zenith's own actions first, each saying what it does, then every app
@@ -104,7 +105,7 @@ fun GestureActionSheet(
                         .fillMaxWidth()
                         .padding(bottom = 6.dp)
                         .height(42.dp)
-                        .clip(RoundedCornerShape(14.dp))
+                        .clip(corners(14.dp))
                         .background(palette.onGlass.copy(alpha = 0.08f))
                         .padding(horizontal = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -158,7 +159,7 @@ private fun ChoiceLine(
         modifier
             .fillMaxWidth()
             .pressBounce(0.98f)
-            .clip(RoundedCornerShape(16.dp))
+            .clip(corners(16.dp))
             .background(fill)
             .clickable(onClick = onClick)
             .padding(horizontal = 10.dp, vertical = 10.dp),

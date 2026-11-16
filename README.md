@@ -13,19 +13,36 @@ look, light or dark, with iOS blue for actions: the six colour themes are gone
 
 ## First run
 
-1. **Hello**, and then **your name**, which is used across the launcher. It can be skipped.
-2. **Light or dark?** — Auto, Light or Dark. Zenith has one look, so there is no colour to pick.
-3. **What goes on it?** — the widgets for page one (Clock, Toggles, Battery, Calendar, Note) and the
+Setup is Liquid Glass from end to end: frosted cards over soft light that drifts across the theme's
+page (and leans with the phone, in Liquid Glass), one glass button at the bottom that never moves,
+spring transitions, entrances a beat apart, a tick under each tap and glass dots for where you are.
+
+1. **Hello** — "hello", large, fading and scaling in with a soft glow behind it, cycling through
+   other languages; then **Get started**.
+2. **Your name**, used across the launcher. Stop typing and setup answers back: "Nice to meet you,
+   Gabriel." pops up under the field. It can be skipped.
+3. **Pick a theme** — the four themes as small cards, each drawn in itself, and Auto, Light or Dark
+   under them. A tap turns the whole of setup into that theme there and then, the phone included.
+4. **What goes on it?** — the widgets for page one (Clock, Toggles, Battery, Calendar, Note) and the
    grid: iPhone, which it starts on, Compact, Balanced or Roomy. A live phone shows each choice.
-4. **Putting it together** — not a fake wait: while it runs, the launcher reads every launchable
+5. **Putting it together** — not a fake wait: while it runs, the launcher reads every launchable
    activity, picks a dock from your dialer/messenger/browser/camera, groups apps into folders by
    their declared category and places the widgets you chose, and the phone on screen is put back
    together a piece at a time, with a tick for each. The home screen it builds is on the new look:
-   the grid you picked, the iPhone's icon shape, colour widgets and the glass dock.
-5. **Zenith Plus**, where it is on offer: what it adds, the prices in full, and a "Not now" as easy
+   the grid you picked, the iPhone's icon shape, colour widgets, the glass dock and your theme.
+6. **Optimizing Zenith** — real work, in this order (`OptimizeJob`): every app and its name read
+   again; every icon drawn at the drawer's size and kept in memory, so the drawer never draws one
+   as it moves; each icon's colour, for the drawer's By colour; the wallpaper's softened copies the
+   glass shows; the glass's shader and the blur behind a sheet drawn once, out of sight
+   (`GraphicsWarmUp`), so the phone has them ready; and what setup chose written to disk. A glass
+   bar fills as it goes, with the job in words ("Caching app icons… 42 of 118"), the percentage and
+   the time left, both worked out from the work done (`Optimizing`), never a clock. After three
+   seconds **Finish in the background** lets you move on; the work carries on.
+7. **Zenith Plus**, where it is on offer: what it adds, the prices in full, and a "Not now" as easy
    to hit as the yes.
-6. **Three quick moves** — swipe up, hold an icon, hold an empty spot — and the phone grows into your
-   home screen.
+8. **Three quick moves** — swipe up, hold an icon, hold an empty spot — and **Take me home**: a ring
+   of light from the button, the phone lights up, and it grows into your home screen as setup's
+   glass dissolves around it.
 
 ## Home screen
 
@@ -324,9 +341,9 @@ the next than its rows are from each other. A group pushes in from the side; bac
 Search finds any option by its name or by other words for it ("dark", "vibrate", "battery"), opens
 its page and pulses the row. The Wallpaper & appearance and Home screen pages start with a small
 live copy of your own home screen, drawn by the same code as the real one, so a change is seen as it
-is made. Wallpaper & appearance holds light or dark (Auto, Light or Dark: pages and words change, and
-the home screen's glass stays the same), the font, the wallpaper, the glass and Tilt shine; there is
-no colour to choose.
+is made. Wallpaper & appearance holds the theme (see Themes, below), light or dark (Auto, Light or
+Dark: pages and words change, and the home screen's glass stays the same), the font, the wallpaper,
+and with Liquid Glass the glass and Tilt shine; there is no colour to choose on its own.
 
 **Aura** is one of those pages (`ui/settings/AuraPage.kt`): the balance; the streak as a ladder of
 seven days, each with what it pays; your code to copy or share, and the box for somebody else's.
@@ -421,8 +438,8 @@ Look shows them, and let go of when nothing does.
 
 ## Fonts and the Glass studio
 
-**Font** (Wallpaper & appearance): System, Inter, Condensed, Serif, Mono, Typewriter, Casual, Hand or
-Small caps, for everything; **Numbers** sets the clocks, the battery, the countdown and the weather
+**Font** (Wallpaper & appearance): Theme (the theme's own: the phone's sans in Liquid Glass), Inter,
+Condensed, Serif, Mono, Typewriter, Casual, Hand or Small caps, for everything; **Numbers** sets the clocks, the battery, the countdown and the weather
 in the same font, in Thin, or in any other (`ui/theme/Fonts.kt`). Inter and JetBrains Mono are
 carried in the app, unchanged, under the SIL Open Font Licence (About & help → Fonts shows it in
 full); the rest are the phone's own fonts asked for by name, and a phone without one shows its
@@ -516,9 +533,14 @@ far out of an opening folder each app is) and `AnimationTuning` (the numbers it 
   glints while charging, every other gauge filling the same way as it appears, today's dot drawing
   itself in, toggles that fill with their own colour from the middle as they come on.
 - **The drawer and sheets.** The drawer is put together just after the home screen arrives, out of
-  sight, so the first swipe up is as smooth as the tenth. Rows rise in each time it opens, its
-  title and count turn over as you search, and a wallpaper's preview grows out of the thumbnail
-  that was tapped. A sheet comes up from the edge on a spring and follows a finger: down as far as
+  sight, so the first swipe up is as smooth as the tenth. Every app's icon is drawn at the drawer's
+  size once, on a background thread, as soon as the app list is known, and kept in memory
+  (`IconLoader.warm`); only an app installed, updated or removed is drawn again, when Android says
+  so. A frame of the swipe composes nothing: the drawer's progress is read only where it is placed
+  and drawn, the rows rise in each time it opens on one clock (`DrawerRise`), and behind it the home
+  screen frosts over by a copy of it blurred once and faded in (`DrawerFrost`), its light held still
+  while the drawer moves. Its title and count turn over as you search, and a wallpaper's preview
+  grows out of the thumbnail that was tapped. A sheet comes up from the edge on a spring and follows a finger: down as far as
   it is pulled, up only a little. Let go and it settles, or, past a third of its height or with a
   flick, goes. One sheet opened from another is seen going down as the new one comes up.
 - **Settings and the gallery.** Settings arrives in order — its title, the search box, then each
@@ -583,12 +605,16 @@ the switch is off.
 - **Lock layout**: a hold only opens an item's menu, the dock's icons stay put, and every menu
   offers to unlock. **Hide the status bar**: it comes in for a moment from the very top.
 
-## The island
+## The Zenith Notch
 
-**Island** (Zenith Plus, Settings → Island) is the camera, stretched: black round the camera hole,
-drawn over every app (`island/`). At rest it is exactly the camera and nothing more. When
-something happens it grows out of the camera on a spring, with what it shows in its two rounded
-ends, either side of the lens, and nothing over it:
+**Zenith Notch** (Zenith Plus, Settings → Zenith Notch; the island in the code, `island/`) is the
+camera, stretched: black round the camera hole, drawn over every app. At rest it is a small pill
+round the camera with the battery, its percentage in it as an iPhone draws it (green on the
+charger, red at 20% and under), and a status icon or two on the other side: a moon for Do Not
+Disturb, a struck-through bell for silent, vibrate (`IslandRules.status`). With **The pill at
+rest** off, at rest it is exactly the camera and nothing more. When something happens it grows out of the
+camera on a spring, with what it shows in its two rounded ends, either side of the lens, and
+nothing over it:
 
 - **Music**: the cover, and bars in the cover's own colour. Tap for the song, how far through it
   is, and back, play and next.
@@ -611,11 +637,24 @@ hair, the icons sit in the middle of its rounded ends, and it grows to at most 4
 width, which keeps it clear of the clock and the status icons. Its words are in the phone's own
 sans, like the status bar beside it, whatever font the home screen is in.
 
+**Size and position** makes it fit a camera it does not sit quite right on: 80% to 140% of its
+width and 85% to 135% of its height, and nudged up to 12 dp left or right and 6 dp up or 8 dp down
+(`NotchFit`; about 30 pixels on most phones). It is never dragged about and never leaves the top
+of the screen. While a slider moves, the preview shows the pill even if it is off at rest, and the
+Notch over every app moves with it; **Reset to default** is there while anything has changed.
+
 Its page has a live preview, the top of this very phone at its own size with the same island on
-it, and buttons to try music, a call, a notification, silent and the charger; then what it shows,
-**Always show it** (a small pill even with nothing going on), and keeping out of the way in full
-screen and sideways. It needs Android's "Display over other apps", and notification access for
-music, calls and notifications; the page asks for each.
+it, and buttons to try music, a call, a notification, silent, the charger and Do Not Disturb; then
+what it shows, the pill at rest, its size and position, and keeping out of the way in full screen
+and sideways. It needs
+Android's "Display over other apps", and notification access for music, calls and notifications.
+Each is explained in a sheet before Android's page opens (`NotchAccessSheet`): what it is for, what
+Zenith does not do with it, and the steps on Android's page, which only names the permission.
+
+It runs as an overlay (`TYPE_APPLICATION_OVERLAY`) rather than as an accessibility service: Play
+allows accessibility services only for accessibility, Android 13 and later hide them behind
+"restricted settings" for apps not from Play, and some phones switch them off by themselves; a
+window over other apps is what Android offers for exactly this, and keeps running reliably.
 
 `IslandService` keeps one small window round the camera while the island is on, Plus is active and
 Android allows it, which also keeps it running, and a second one while a card is open. Three
@@ -625,6 +664,34 @@ app's window and keeps the touches inside it (on the Galaxy A55 a tap on the isl
 the status bar), so the island also takes taps on a strip just under it; and Android's own
 Settings hides every app's window over it. It reads only what the phone's notifications and music
 already show, keeps nothing and sends nothing.
+
+## Themes
+
+Zenith is drawn in one of four themes, each a whole design and not only colours (`data/Themes.kt`):
+
+- **Liquid Glass**, everybody's to start with: clear glass over the wallpaper, lit at the rim (see How
+  the glass works).
+- **Clean**: flat and light. White cards with a hairline edge and a short soft shadow, one blue, Inter;
+  graphite in Dark. Nothing blurs.
+- **Neon**: dark, with edges that glow. Smoked glass, cyan edges with a glow round them, magenta as the
+  second colour, condensed type. Always dark.
+- **Retro**: warm and chunky. Cream and brown with burnt orange, thick outlines, hard shadows, corners
+  cut off straight, mono type.
+
+Settings → Wallpaper & appearance → **Theme** shows the four as cards, each drawn in its own theme. A
+tap tries one at once, the whole screen cross-fading into it (`ThemeCrossfade`); the **star** makes it
+yours, the theme Zenith starts in. One only being tried lasts until Zenith next starts. The font's first
+choice, **Theme**, is the theme's own font; a font chosen by name wins in any theme.
+
+A theme is plain data: its material (glass, flat, neon or retro), whether it follows Light and Dark,
+its colours for each, its corners, edge, shadow, glow, blur and font, and it is written to JSON and
+read back whole (`Theme.toJson`, `Theme.fromJson`), so themes can be shared later. Everything reads it:
+`ZenithTheme` provides it (`LocalTheme`) with a palette made from it (`Theme.palette`), and every
+pane is asked for as `Modifier.glass`, which draws the theme's material (`themedPanel` for the three
+that are not glass). Corners go through `corners(r)` and `Theme.shape`; words on a pane over the
+wallpaper through `wallPaneInk`; Settings' groups, tiles and pages through `themeSurface`,
+`themeTile` and `themePage`. Adding a theme is adding a `Theme` to `Themes.all`; `ThemesTest` holds
+each one to its contrast in Light and Dark.
 
 ## How the glass works
 
@@ -755,6 +822,23 @@ the PC, and is skipped without it). What the two say to each other, and what was
 [`specs/2026-10-04-zenith-server-design.md`](specs/2026-10-04-zenith-server-design.md); turning it
 on is in [RELEASING.md](RELEASING.md).
 
+## Where it is all kept
+
+Everything that makes Zenith yours is one config, `ZenithConfig` (`data/ZenithConfig.kt`): your
+settings (the theme you chose, light or dark and the font among them), the layout, the Looks you
+saved and themes of your own (none can be made yet; that is where one will be kept). It is plain
+JSON, and the same JSON as a backup, so a backup is a config written down, one from before reads as
+one, and the server, which keeps a backup as it is sent, already keeps a config.
+
+Nothing saves or loads it except through `ConfigRepository` (`data/ConfigRepository.kt`): the
+settings, layout, Looks and themes as flows, a change seen at once and kept afterwards, a whole
+config put in at once (`replace`), `reset`, and `save`, which waits until everything is kept. The
+one in use is `LocalConfigRepository`: each part in Zenith's preferences under the name it has
+always had (`settings`, `layout`, `looks`, and now `themes`), written only when it changes, and a
+part that cannot be read starts again on its own. `ConfigRepository.get` is the one place that
+chooses it, so a version kept on your own server can be put there later without anything else
+changing. There is no networking in it yet.
+
 ## Building
 
 ```bash
@@ -764,7 +848,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 Compose BOM 2024.12.01, minSdk 29, application ID `com.gabriel.zenith_Launcher`, no third-party libraries:
 only Google's own (Play Billing, and Credential Manager with `googleid` for Continue with Google).
-Settings and layout are stored as JSON in `SharedPreferences` (`SettingsStore`).
+Everything Zenith remembers is one config, kept on the phone: see [Where it is all kept](#where-it-is-all-kept).
 
 For signed release builds and the Play Store checklist see [RELEASING.md](RELEASING.md); store
 copy, graphics and the privacy policy live in [`play/`](play/).

@@ -76,12 +76,19 @@ import com.gabriel.zenithui.ui.home.OnWallpaper
 import com.gabriel.zenithui.ui.home.STANDARD_ICON_SIZE
 import com.gabriel.zenithui.ui.home.SearchPill
 import com.gabriel.zenithui.ui.home.SlotArrangement
+import com.gabriel.zenithui.data.ThemeMaterial
 import com.gabriel.zenithui.ui.theme.LocalPalette
+import com.gabriel.zenithui.ui.theme.LocalParallax
+import com.gabriel.zenithui.ui.theme.LocalTheme
+import com.gabriel.zenithui.ui.theme.TiltRest
 import com.gabriel.zenithui.ui.theme.LocalBackdrop
 import com.gabriel.zenithui.ui.theme.LocalGlassLevels
 import com.gabriel.zenithui.ui.theme.NeutralLook
 import com.gabriel.zenithui.ui.theme.ZenithShapes
 import kotlin.math.min
+
+/** How far the preview floats against the phone's lean, in dp, at the most. */
+private const val PHONE_FLOAT_DP = 5f
 
 /** The phone's position on screen, kept outside state: the zoom reads it every frame and must not recompose. */
 private class PhoneSpot {
@@ -113,11 +120,16 @@ fun PhonePreview(
     halo: () -> Float = { 0f },
     sweep: () -> Float = { 0f },
     zoom: () -> Float = { 0f },
+    /** Whether it floats against the phone's lean: on setup's stage, not where it is a picture in a list. */
+    floats: Boolean = false,
 ) {
     val palette = LocalPalette.current
     val edge = palette.onGlass.copy(alpha = 0.16f)
-    // Soft white light, with no colour in it: Zenith has one look.
-    val glowColour = Color.White
+    // Soft white light, with no colour in it; Neon's glows in its own colour, as its edges do.
+    val glowColour = if (LocalTheme.current.material == ThemeMaterial.NEON) palette.accent else Color.White
+    // Leaning the phone floats the preview a little against the lean, as the lights behind it go
+    // with it: the phone is the nearest thing on screen. None of it is left by the time it fills it.
+    val parallax = LocalParallax.current
     // A full black shadow under a pale phone reads as a smudge; a lighter one reads as depth.
     val shadow = if (palette.dark) Color.Black else Color.Black.copy(alpha = 0.22f)
     val sweepAlpha = if (palette.dark) 0.22f else 0.30f
@@ -164,14 +176,19 @@ fun PhonePreview(
                     .graphicsLayer {
                         val p = zoom()
                         val coordinates = spot.coordinates
+                        if (floats) {
+                            val float = TiltRest.parallaxShift(parallax.value, PHONE_FLOAT_DP, density) * (1f - p)
+                            translationX = float.x
+                            translationY = float.y
+                        }
                         if (p > 0f && coordinates != null && coordinates.isAttached) {
                             val grow = 1f + (1f / scale - 1f) * p
                             scaleX = grow
                             scaleY = grow
                             val root = coordinates.findRootCoordinates().size
                             val origin = coordinates.positionInRoot()
-                            translationX = (root.width / 2f - (origin.x + size.width / 2f)) * p
-                            translationY = (root.height / 2f - (origin.y + size.height / 2f)) * p
+                            translationX += (root.width / 2f - (origin.x + size.width / 2f)) * p
+                            translationY += (root.height / 2f - (origin.y + size.height / 2f)) * p
                         }
                         shadowElevation = 28.dp.toPx() * scale * (1f - p)
                         ambientShadowColor = shadow

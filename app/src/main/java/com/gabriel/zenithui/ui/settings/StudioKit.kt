@@ -42,6 +42,7 @@ import com.gabriel.zenithui.ui.common.rememberTick
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.NumberFont
 import com.gabriel.zenithui.ui.theme.ZenithFonts
+import com.gabriel.zenithui.ui.theme.corners
 import com.gabriel.zenithui.ui.theme.inkOnTint
 import kotlinx.coroutines.launch
 
@@ -77,7 +78,7 @@ private fun FontTile(name: String, sample: String, family: FontFamily, weight: F
         Box(
             Modifier
                 .size(width = 66.dp, height = 54.dp)
-                .border(2.dp, ring, RoundedCornerShape(18.dp))
+                .border(2.dp, ring, corners(18.dp))
                 .padding(inset)
                 .clip(RoundedCornerShape(18.dp - inset))
                 .background(fill),
@@ -109,12 +110,15 @@ private fun TileRow(count: Int, selectedIndex: Int, tile: @Composable (Int) -> U
 
 /** The typeface everything is set in. */
 @Composable
-internal fun FontChoice(selectedId: String, onSelect: (String) -> Unit) {
+internal fun FontChoice(selectedId: String, themeFont: String = ZenithFonts.SYSTEM, onSelect: (String) -> Unit) {
     val fonts = ZenithFonts.all
     val selected = ZenithFonts.byId(selectedId).id
     TileRow(fonts.size, fonts.indexOfFirst { it.id == selected }) { index ->
         val font = fonts[index]
-        FontTile(font.label, "Aa", font.family, FontWeight.Medium, selected = font.id == selected, turn = index) { onSelect(font.id) }
+        // The first is the theme's own font, shown in it: the phone's sans in Liquid Glass.
+        val shown = if (font.id == ZenithFonts.SYSTEM) ZenithFonts.byId(themeFont) else font
+        val label = if (font.id == ZenithFonts.SYSTEM) "Theme" else font.label
+        FontTile(label, "Aa", shown.family, FontWeight.Medium, selected = font.id == selected, turn = index) { onSelect(font.id) }
     }
 }
 
@@ -188,8 +192,8 @@ private fun PageTurnTile(style: String, name: String, selected: Boolean, turn: I
         Box(
             Modifier
                 .size(width = 66.dp, height = 54.dp)
-                .border(2.dp, ring, RoundedCornerShape(18.dp))
-                .clip(RoundedCornerShape(18.dp))
+                .border(2.dp, ring, corners(18.dp))
+                .clip(corners(18.dp))
                 .background(fill),
             contentAlignment = Alignment.Center,
         ) {
@@ -214,11 +218,11 @@ private fun PageTurnTile(style: String, name: String, selected: Boolean, turn: I
                             transformOrigin = TransformOrigin(t.pivotX, t.pivotY)
                             cameraDistance = 8f * density
                         }
-                        .clip(RoundedCornerShape(7.dp))
+                        .clip(corners(7.dp))
                         .background(page),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Box(Modifier.size(9.dp).clip(RoundedCornerShape(3.dp)).background(if (which == 0) dot else palette.onGlass.copy(alpha = 0.6f)))
+                    Box(Modifier.size(9.dp).clip(corners(3.dp)).background(if (which == 0) dot else palette.onGlass.copy(alpha = 0.6f)))
                 }
             }
         }

@@ -44,13 +44,13 @@ import androidx.savedstate.SavedStateRegistry
 import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
+import com.gabriel.zenithui.data.ConfigRepository
 import com.gabriel.zenithui.data.IslandKind
 import com.gabriel.zenithui.data.IslandMoment
 import com.gabriel.zenithui.data.IslandRules
 import com.gabriel.zenithui.data.NotificationDots
 import com.gabriel.zenithui.data.NowPlaying
 import com.gabriel.zenithui.data.Playing
-import com.gabriel.zenithui.data.SettingsStore
 import com.gabriel.zenithui.data.WallpaperPalette
 import com.gabriel.zenithui.data.ZenithSettings
 import com.gabriel.zenithui.ui.common.LocalMotionLevel
@@ -62,6 +62,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -88,6 +91,10 @@ class IslandService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
     private val moments = MutableStateFlow<List<IslandMoment>>(emptyList())
     private val level = MutableStateFlow(0)
+    /** What the pill at rest shows beside the battery: charging, the ringer, Do Not Disturb. */
+    private val charging = MutableStateFlow(false)
+    private val ringerMode = MutableStateFlow("ring")
+    private val quiet = MutableStateFlow(false)
     private val fullScreen = MutableStateFlow(false)
     private val sideways = MutableStateFlow(false)
     private val geometry = MutableStateFlow(IslandGeometry.typical())
@@ -124,6 +131,7 @@ class IslandService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             val percent = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, 0) * 100 / scale
             val now = intent.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) != 0
             level.value = percent
+            charging.value = now
             // The charger going in is a moment; finding it already in, as this starts, is not.
             if (now && !plugged && !isInitialStickyBroadcast) add(IslandMoment(IslandKind.PLUGGED, System.currentTimeMillis(), level = percent))
             plugged = now
@@ -132,13 +140,30 @@ class IslandService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
     private val ringer = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
+            val mode = ringerWord(intent.getIntExtra(AudioManager.EXTRA_RINGER_MODE, AudioManager.RINGER_MODE_NORMAL))
+            ringerMode.value = mode
             if (isInitialStickyBroadcast) return
-            val mode = when (intent.getIntExtra(AudioManager.EXTRA_RINGER_MODE, AudioManager.RINGER_MODE_NORMAL)) {
-                AudioManager.RINGER_MODE_VIBRATE -> "vibrate"
-                AudioManager.RINGER_MODE_SILENT -> "silent"
-                else -> "ring"
-            }
             add(IslandMoment(IslandKind.RINGER, System.currentTimeMillis(), text = mode))
+        }
+    }
+
+    /** Do Not Disturb going on or off: a moon on the pill at rest while it is on. */
+    private val interruptions = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            quiet.value = quietNow()
+        }
+    }
+
+    private fun ringerWord(mode: Int): String = when (mode) {
+        AudioManager.RINGER_MODE_VIBRATE -> "vibrate"
+        AudioManager.RINGER_MODE_SILENT -> "silent"
+        else -> "ring"
+    }
+
+    private fun quietNow(): Boolean {
+        val notifications = getSystemService(android.app.NotificationManager::class.java) ?: return false
+        return notifications.currentInterruptionFilter.let {
+            it != android.app.NotificationManager.INTERRUPTION_FILTER_ALL && it != android.app.NotificationManager.INTERRUPTION_FILTER_UNKNOWN
         }
     }
 
@@ -170,8 +195,11 @@ class IslandService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         pill = view
         lifecycleRegistry.currentState = Lifecycle.State.RESUMED
 
+        getSystemService(AudioManager::class.java)?.let { ringerMode.value = ringerWord(it.ringerMode) }
+        quiet.value = quietNow()
         registerReceiver(battery, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
         registerReceiver(ringer, IntentFilter(AudioManager.RINGER_MODE_CHANGED_ACTION))
+        registerReceiver(interruptions, IntentFilter(android.app.NotificationManager.ACTION_INTERRUPTION_FILTER_CHANGED))
         NowPlaying.watch(this)
         NotificationDots.reconnect(this)
         scope.launch {
@@ -185,6 +213,10 @@ class IslandService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         }
         scope.launch { expanded.collect { open -> if (open) openCard() } }
         scope.launch { follow() }
+        // Made a little wider or nudged in Settings: it moves as the slider does, over every app.
+        scope.launch {
+            ConfigRepository.get(this@IslandService).settings.map { it.island.fit }.distinctUntilChanged().drop(1).collect { measure() }
+        }
     }
 
     private fun compose(content: @Composable () -> Unit) = ComposeView(this).apply {
@@ -192,10 +224,10 @@ class IslandService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         setViewTreeSavedStateRegistryOwner(this@IslandService)
         setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
         setContent {
-            val store = remember { SettingsStore.get(this@IslandService) }
+            val store = remember { ConfigRepository.get(this@IslandService) }
             val settings by store.settings.collectAsState()
             // Theirs, but no tilt sensor: the island has no glass to light.
-            ZenithTheme(settings.copy(glassShine = false)) {
+            ZenithTheme(settings.copy(glassShine = false), crossfade = false) {
                 CompositionLocalProvider(LocalMotionLevel provides MotionLevel.of(settings.motion, systemAnimations())) {
                     content()
                 }
@@ -205,8 +237,9 @@ class IslandService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
     /** Works out what the island shows, again whenever anything it shows changes, and as clocks tick. */
     private suspend fun follow() {
-        val flags = combine(fullScreen, sideways, expanded, level) { full, turned, open, percent -> Flags(full, turned, open, percent) }
-        combine(SettingsStore.get(this).settings, NowPlaying.now, moments, NotificationDots.live, flags) { settings, music, list, live, f ->
+        val resting = combine(charging, ringerMode, quiet) { plugged, mode, dnd -> Resting(plugged, IslandRules.status(mode, dnd)) }
+        val flags = combine(fullScreen, sideways, expanded, level, resting) { full, turned, open, percent, rest -> Flags(full, turned, open, percent, rest) }
+        combine(ConfigRepository.get(this).settings, NowPlaying.now, moments, NotificationDots.live, flags) { settings, music, list, live, f ->
             Inputs(settings, music, list, live, f)
         }.collectLatest { inputs ->
             while (true) {
@@ -217,7 +250,8 @@ class IslandService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         }
     }
 
-    private class Flags(val full: Boolean, val turned: Boolean, val open: Boolean, val level: Int)
+    private class Resting(val charging: Boolean, val status: List<com.gabriel.zenithui.data.NotchStatus>)
+    private class Flags(val full: Boolean, val turned: Boolean, val open: Boolean, val level: Int, val resting: Resting)
     private class Inputs(val settings: ZenithSettings, val music: Playing?, val moments: List<IslandMoment>, val live: Map<String, NotificationDots.Live>, val flags: Flags)
 
     /** Shows what is going on at [now]; answers with when it next needs to look again, or null. */
@@ -247,6 +281,8 @@ class IslandService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             live = clock,
             liveText = clock?.let { it.shown ?: IslandRules.clock(it.base, it.countDown, now) }.orEmpty(),
             level = inputs.flags.level,
+            charging = inputs.flags.resting.charging,
+            status = inputs.flags.resting.status,
             appIcon = iconOf(from),
             appName = nameOf(from),
             secondary = secondary,
@@ -399,6 +435,7 @@ class IslandService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             holeY = ((hole?.exactCenterY() ?: 0f) / density).dp,
             statusBar = (bar / density).dp,
             width = (width / density).dp,
+            fit = ConfigRepository.get(this).settings.value.island.fit,
         )
         geometry.value = shape
         pillParams.x = ((shape.centreX.value - shape.width.value / 2f) * density).toInt()
@@ -494,6 +531,7 @@ class IslandService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         lifecycleRegistry.currentState = Lifecycle.State.DESTROYED
         runCatching { unregisterReceiver(battery) }
         runCatching { unregisterReceiver(ringer) }
+        runCatching { unregisterReceiver(interruptions) }
         listOfNotNull(pill, card).forEach { v -> runCatching { window?.removeViewImmediate(v) } }
         pill = null
         card = null

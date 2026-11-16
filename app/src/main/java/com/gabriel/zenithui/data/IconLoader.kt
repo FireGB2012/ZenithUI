@@ -23,6 +23,8 @@ import com.gabriel.zenithui.ui.theme.SUPERELLIPSE_STEPS
 import com.gabriel.zenithui.ui.theme.SquircleShape
 import com.gabriel.zenithui.ui.theme.superellipseRadius
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -97,6 +99,8 @@ class IconLoader(context: Context, private val repo: AppRepository) {
                 }
                 if (lookChanged) {
                     cache.evictAll()
+                    // Kept icons are of the old look too; whoever kept them asks again (see warm).
+                    kept.clear()
                     fresh.clear()
                     diskDir.listFiles()?.forEach { it.delete() }
                 }
@@ -182,7 +186,7 @@ class IconLoader(context: Context, private val repo: AppRepository) {
     fun peekGlyph(key: String, sizePx: Int): ImageBitmap? = peekSaved(glyphKey(key, sizePx))
 
     private fun peekSaved(cacheKey: String): ImageBitmap? {
-        cache.get(cacheKey)?.let { return it }
+        inMemory(cacheKey)?.let { return it }
         val file = fileFor(cacheKey)
         if (!file.exists()) return null
         val saved = runCatching { android.graphics.BitmapFactory.decodeFile(file.path)?.asImageBitmap() }.getOrNull()
@@ -204,21 +208,98 @@ class IconLoader(context: Context, private val repo: AppRepository) {
     private suspend fun loadAs(key: String, cacheKey: String, draw: (Drawable) -> Bitmap): ImageBitmap? {
         // A saved copy is shown straight away, but rendered once more each run in case the app has
         // changed its icon since.
-        if (cacheKey in fresh) cache.get(cacheKey)?.let { return it }
+        if (cacheKey in fresh) inMemory(cacheKey)?.let { return it }
         if (!configured) return peekSaved(cacheKey)
-        return withContext(Dispatchers.IO) {
-            val drawable = drawableFor(key) ?: return@withContext peekSaved(cacheKey)
-            val bitmap = runCatching { draw(drawable) }.getOrNull()
-                ?: return@withContext peekSaved(cacheKey)
-            val rendered = bitmap.asImageBitmap()
-            cache.put(cacheKey, rendered)
-            fresh += cacheKey
-            // A pack's pictures shown only to be chosen from are not worth a file each.
-            if (!IconSource.isSource(key)) runCatching {
-                fileFor(cacheKey).outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
-            }
-            rendered
+        return withContext(Dispatchers.IO) { drawNow(key, cacheKey, draw) }
+    }
+
+    /** Draws [key]'s picture with [draw] on this thread, keeps it in memory and saves it: see [loadAs]. */
+    private fun drawNow(key: String, cacheKey: String, draw: (Drawable) -> Bitmap): ImageBitmap? {
+        val drawable = drawableFor(key) ?: return peekSaved(cacheKey)
+        val bitmap = runCatching { draw(drawable) }.getOrNull() ?: return peekSaved(cacheKey)
+        val rendered = bitmap.asImageBitmap()
+        cache.put(cacheKey, rendered)
+        // One the drawer keeps to hand is swapped for the new drawing in place.
+        if (kept.containsKey(cacheKey)) kept[cacheKey] = rendered
+        fresh += cacheKey
+        // A pack's pictures shown only to be chosen from are not worth a file each.
+        if (!IconSource.isSource(key)) runCatching {
+            fileFor(cacheKey).outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
         }
+        return rendered
+    }
+
+    // ------------------------------------------------------------ kept to hand
+
+    /**
+     * Icons held in memory for as long as they are wanted, out of the cache's reach: every app at
+     * the size the drawer draws it, by what [warm] was asked to keep them for. The cache may let any
+     * other icon go to make room; these stay, so the drawer never waits for one, however long it is
+     * since it was last opened.
+     */
+    private val kept = java.util.concurrent.ConcurrentHashMap<String, ImageBitmap>()
+
+    /** Which of [kept] each caller of [warm] asked for, so one asking again lets go of only its own. */
+    private val keptFor = HashMap<String, Set<String>>()
+
+    /** The icon only if it is already in memory: it never reads a file, so it is safe in a frame. */
+    fun peekMemory(key: String, sizePx: Int): ImageBitmap? = inMemory(cacheKey(key, sizePx))
+
+    /** The app's symbol only if it is already in memory: see [peekMemory] and [loadGlyph]. */
+    fun peekGlyphMemory(key: String, sizePx: Int): ImageBitmap? = inMemory(glyphKey(key, sizePx))
+
+    private fun inMemory(cacheKey: String): ImageBitmap? = kept[cacheKey] ?: cache.get(cacheKey)
+
+    /**
+     * Draws every one of [keys] at [sizePx] now, off the main thread and behind everything else, and
+     * keeps them in memory until [purpose] asks again with others: the drawer's icons, worked out
+     * once when the launcher starts rather than one by one as its rows come into view. One already
+     * drawn this run costs nothing, so asking again after an app is installed draws only that app.
+     * With [glyphs] (Tinted and Glass icons) an app is drawn as its symbol instead, as those styles
+     * show it, unless it has a picture you chose, which is shown as it is. [onEach] hears how far it
+     * has got, as it goes: setup's "Optimizing Zenith" shows it.
+     */
+    suspend fun warm(
+        purpose: String,
+        keys: List<String>,
+        sizePx: Int,
+        glyphs: Boolean,
+        onEach: (done: Int, total: Int) -> Unit = { _, _ -> },
+    ): Int = withContext(warmer) {
+        if (!configured || sizePx <= 0) return@withContext 0
+        val wanted = LinkedHashMap<String, Pair<String, Boolean>>()
+        for (key in keys) {
+            val symbol = glyphs && !IconSource.isSource(key) && !hasChosen(key)
+            wanted[if (symbol) glyphKey(key, sizePx) else cacheKey(key, sizePx)] = key to symbol
+        }
+        // What this purpose kept before and does not want now goes back to the cache's care.
+        synchronized(keptFor) {
+            keptFor[purpose].orEmpty().forEach { old ->
+                if (old !in wanted && keptFor.none { (other, keys) -> other != purpose && old in keys }) kept.remove(old)
+            }
+            keptFor[purpose] = wanted.keys.toSet()
+        }
+        var done = 0
+        for ((cacheKey, which) in wanted) {
+            ensureActive()
+            val (key, glyph) = which
+            val ready = if (cacheKey in fresh) inMemory(cacheKey) else null
+            val icon = ready ?: drawNow(key, cacheKey) { if (glyph) renderGlyph(it, sizePx) else render(it, sizePx) }
+            if (icon != null) kept[cacheKey] = icon
+            done++
+            onEach(done, wanted.size)
+        }
+        done
+    }
+
+    /**
+     * Forgets that the icons of [packages] were drawn this run, after Android said those apps were
+     * installed again, updated or changed: the next [load] or [warm] draws them afresh, while what
+     * is in memory is shown until it does.
+     */
+    fun forget(packages: Set<String>) {
+        if (packages.isEmpty()) return
+        synchronized(fresh) { fresh.removeAll { IconKeys.packageOf(it) in packages } }
     }
 
     private fun cacheKey(key: String, sizePx: Int) = "$key|$sizePx|$shape|$packName|${chosen[key].orEmpty()}"
@@ -284,15 +365,21 @@ class IconLoader(context: Context, private val repo: AppRepository) {
     /**
      * The main colour of each app's icon, for the drawer's By colour: what its coloured pixels
      * come to together, the more coloured the more they count, so a white logo on a red tile is red.
+     * [onEach] hears how far it has got, as [warm]'s does.
      */
-    suspend fun colours(keys: List<String>): Map<String, IconColour> = withContext(Dispatchers.IO) {
+    suspend fun colours(
+        keys: List<String>,
+        onEach: (done: Int, total: Int) -> Unit = { _, _ -> },
+    ): Map<String, IconColour> = withContext(Dispatchers.IO) {
         val found = HashMap<String, IconColour>()
-        for (key in keys) {
-            synchronized(colours) { colours[key] }?.let { found[key] = it; continue }
-            val picture = load(key, 64) ?: continue
-            val colour = mainColour(picture) ?: continue
-            synchronized(colours) { colours[key] = colour }
-            found[key] = colour
+        keys.forEachIndexed { index, key ->
+            val known = synchronized(colours) { colours[key] }
+            val colour = known ?: load(key, 64)?.let { mainColour(it) }
+            if (colour != null) {
+                if (known == null) synchronized(colours) { colours[key] = colour }
+                found[key] = colour
+            }
+            onEach(index + 1, keys.size)
         }
         found
     }
@@ -722,6 +809,20 @@ class IconLoader(context: Context, private val repo: AppRepository) {
 
         /** The side a photo chosen as an icon is kept at: the most any icon is drawn at. */
         const val PHOTO_SIDE = 288
+
+        /**
+         * Drawing ahead of time happens on a thread of its own, at background priority: whatever
+         * the screen is doing at the time comes first. One for the whole app, however many times
+         * Zenith's screen is made again.
+         */
+        val warmer by lazy {
+            java.util.concurrent.Executors.newSingleThreadExecutor { job ->
+                Thread({
+                    android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND)
+                    job.run()
+                }, "zenith-icons").apply { isDaemon = true }
+            }.asCoroutineDispatcher()
+        }
     }
 }
 

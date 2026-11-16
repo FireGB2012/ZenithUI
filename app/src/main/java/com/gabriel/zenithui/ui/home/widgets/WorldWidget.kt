@@ -124,7 +124,7 @@ internal fun WorldWidget(form: WidgetForm, width: Dp, height: Dp) {
             WidgetForm.Tall -> Column(root.padding(INSET), verticalArrangement = Arrangement.SpaceBetween) {
                 cities.take(4).forEach { city ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Dial(city.at, dialFaceAt(city.at.hour), Modifier.size(46.dp), seconds = false)
+                        Dial(city.at, dialFaceAt(city.at.hour), Modifier.size(56.dp), seconds = false)
                         Spacer(Modifier.width(10.dp))
                         Column(Modifier.weight(1f)) {
                             Words(city.name, Type.body, weight = FontWeight.SemiBold)

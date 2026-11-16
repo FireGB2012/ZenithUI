@@ -217,6 +217,8 @@ private fun DotField(plan: CountdownDots.Plan, colour: Color, modifier: Modifier
                 dot -= 0.5.dp.toPx()
             }
             val gap = dot * 0.55f
+            // The rows evened out, so the last is never a lonely dot or two under full ones.
+            columns = ceil(n / rows.toFloat()).toInt().coerceAtLeast(1)
             val used = columns.coerceAtMost(n)
             // Spread across the room, so a short wait still fills its row from edge to edge, and set
             // in the middle of the room's height.

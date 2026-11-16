@@ -371,7 +371,8 @@ private fun Progress(now: Playing, times: Boolean) {
     Column(Modifier.fillMaxWidth()) {
         Canvas(Modifier.fillMaxWidth().height(4.dp).then(if (bare) Modifier.glassInk(bevel = 1.5.dp) else Modifier)) {
             val h = size.height
-            if (!bare) drawRoundRect(track, cornerRadius = CornerRadius(h / 2f))
+            // In "No glass" the rest of the song is fainter glass, so the bar still reads as a bar.
+            drawRoundRect(if (bare) Color.White.copy(alpha = 0.3f) else track, cornerRadius = CornerRadius(h / 2f))
             drawRoundRect(lit, size = Size((size.width * share).coerceAtLeast(h), h), cornerRadius = CornerRadius(h / 2f))
         }
         if (times) {

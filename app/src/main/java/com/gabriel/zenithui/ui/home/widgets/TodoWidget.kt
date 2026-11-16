@@ -63,8 +63,9 @@ import com.gabriel.zenithui.ui.theme.glassInk
 import com.gabriel.zenithui.ui.theme.inkOnTint
 
 /**
- * To-do: a list you tick off on the widget, headed in blue with how many are left, as a reminders
- * list is. What is done drops below what is not, struck through, and can be ticked back.
+ * To-do: a list you tick off on the widget, headed with how many are left, as a reminders list is,
+ * its ticks blue (its words too on a card). What is done drops below what is not, struck through, and
+ * can be ticked back.
  *
  * - Mini: how many are left.
  * - Strip: the next thing, with its tick, and how many more.

@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
@@ -60,10 +61,11 @@ import java.time.temporal.WeekFields
 import java.util.Locale
 
 /**
- * The Calendar. The day in red capitals over the date, as a calendar page has it, and the day's
- * events from the next one on, each a card with a bar in its calendar's colour, its name, when it is
- * and how long until it starts. The wider ones set the date beside the week; the tall ones under the
- * month. Until Zenith may read the calendar, "Show your events" stands where the events would be.
+ * The Calendar. The day in capitals over the date, as a calendar page has it, red on a card (on the
+ * wallpaper's glass the red is today's disc), and the day's events from the next one on, each a card
+ * with a bar in its calendar's colour, its name, when it is and how long until it starts. The wider
+ * ones set the date beside the week; the tall ones over the month. Until Zenith may read the
+ * calendar, "Show your events" stands where the events would be.
  *
  * - Mini: the day over the date.
  * - Strip: the date, and the next event beside it.
@@ -161,7 +163,7 @@ internal fun CalendarWidget(form: WidgetForm, width: Dp, height: Dp) {
                 }
                 Spacer(Modifier.height(14.dp))
                 Row(Modifier.weight(1f)) {
-                    MonthGrid(today, firstDay, Modifier.width(if (w >= 330.dp) 160.dp else 150.dp), number = 12.sp, cell = 22.dp)
+                    MonthGrid(today, firstDay, Modifier.width(if (w >= 330.dp) 160.dp else 150.dp).fillMaxHeight(), number = 12.sp, cell = 22.dp, roomy = true)
                     Spacer(Modifier.width(16.dp))
                     Events(day, most = Int.MAX_VALUE, card = true, modifier = Modifier.weight(1f).fillMaxHeight())
                 }
@@ -232,8 +234,8 @@ private fun Events(day: Day, most: Int, card: Boolean, modifier: Modifier, more:
 
 /**
  * One event: a bar in its calendar's colour, its name on up to [titleLines], and when it is with how
- * long until it starts, as much of that as fits; red while it is under way. As a [card] it sits in a
- * well of its own.
+ * long until it starts, as much of that as fits; stronger while it is under way, and red where red
+ * can be read. As a [card] it sits in a well of its own.
  */
 @Composable
 private fun EventRow(event: CalendarEvent, now: Long, h24: Boolean, card: Boolean, titleLines: Int) {
@@ -315,28 +317,40 @@ private fun WeekStrip(today: LocalDate, firstDay: DayOfWeek) {
  * days gone by fainter, and today on a red disc.
  */
 @Composable
-private fun MonthGrid(today: LocalDate, firstDay: DayOfWeek, modifier: Modifier, number: TextUnit, cell: Dp) {
+private fun MonthGrid(today: LocalDate, firstDay: DayOfWeek, modifier: Modifier, number: TextUnit, cell: Dp, roomy: Boolean = false) {
     val weeks = remember(today, firstDay) { CalendarFacts.month(YearMonth.from(today), firstDay) }
     val letters = remember(today, firstDay) { CalendarFacts.week(today, firstDay).map { it.dayOfWeek.getDisplayName(TextStyle.NARROW, Locale.getDefault()) } }
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(1.dp)) {
-        Row(Modifier.fillMaxWidth()) {
-            letters.forEach { letter ->
-                Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { Label(letter, size = (number.value - 1.5f).sp) }
-            }
+    BoxWithConstraints(modifier) {
+        // Given the room, the weeks stand a little apart, as on a page of a calendar, and fill more
+        // of the height beside the events; never so far apart that they stop reading as a month.
+        val gap = if (roomy && constraints.hasBoundedHeight) {
+            ((maxHeight - LETTERS - cell * weeks.size) / weeks.size).coerceIn(1.dp, 14.dp)
+        } else {
+            1.dp
         }
-        Spacer(Modifier.height(2.dp))
-        weeks.forEach { week ->
-            Row(Modifier.fillMaxWidth()) {
-                week.forEach { day ->
-                    Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                        if (day != null) DayNumber(day.dayOfMonth, today = day == today, past = day.isBefore(today), size = cell, number = number)
-                        else Spacer(Modifier.size(cell))
+        Column(Modifier.fillMaxWidth()) {
+            Row(Modifier.fillMaxWidth().height(LETTERS)) {
+                letters.forEach { letter ->
+                    Box(Modifier.weight(1f), contentAlignment = Alignment.TopCenter) { Label(letter) }
+                }
+            }
+            weeks.forEachIndexed { i, week ->
+                if (i > 0) Spacer(Modifier.height(gap))
+                Row(Modifier.fillMaxWidth()) {
+                    week.forEach { day ->
+                        Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                            if (day != null) DayNumber(day.dayOfMonth, today = day == today, past = day.isBefore(today), size = cell, number = number)
+                            else Spacer(Modifier.size(cell))
+                        }
                     }
                 }
             }
         }
     }
 }
+
+/** The height of the row of the days' letters over a month, with the room under it. */
+private val LETTERS = 18.dp
 
 /** A day's number in a circle of [size]: on a red disc, in white, for today; fainter for a day gone by. */
 @Composable

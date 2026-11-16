@@ -37,9 +37,12 @@ Toggles and Search, which are untouched.
 - **Colour with a job.** Each widget has one hue, from iOS's: red for the calendar's day, orange
   for the flame, the second hand and alarms, yellow for notes and the sun, green for a healthy
   battery, cyan for rain, blue for lists, indigo for a countdown. A widget's own colour still eases
-  in over it. On pale glass (Light), small coloured words would have no more light in them than the
-  pane, so they turn to ink, as an iPhone's clear widgets do, and the colour stays in the marks
-  (`wordHue`). On a colour card a hue that would not stand out gives way to the card's ink.
+  in over it. On the wallpaper, through its glass or in "No glass", the picture can be any colour,
+  the widget's own among them (the To-do's blue all but vanished on a blue wallpaper), so small
+  coloured words there are in the ink, as an iPhone's clear widgets have them, in Light and Dark
+  alike, and the colour stays in the marks: the flame, the dots, the rings, the ticks, today's disc
+  (`wordHue`). On a colour card, whose colours are known, words keep their hue, and a hue that would
+  not stand out gives way to the card's ink.
 - **Every size designed, then fitted.** Each of the six shapes (Mini, Strip, Square, Wide, Tall,
   Big) is laid out at the phone's own widget size and scaled down as a whole when the cell is
   smaller (`Fitted`), so nothing is cut or squeezed out of place. Strips also have a narrow layout.

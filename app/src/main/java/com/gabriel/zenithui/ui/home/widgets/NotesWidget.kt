@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -21,6 +22,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.draw.drawWithContent
@@ -54,7 +56,7 @@ import java.time.format.DateTimeFormatter
 
 /**
  * Notes: a note you write on the widget itself, its first line set as its title, the way a note is
- * written. Headed in yellow, as notes are.
+ * written. Headed by a yellow note, as notes are (the heading yellow too on a card).
  *
  * - Mini: a note's symbol and the first words.
  * - Strip: the note on one line, its title first, to jot on.
@@ -82,7 +84,14 @@ internal fun NotesWidget(form: WidgetForm, width: Dp, height: Dp, note: String, 
             WidgetForm.Mini -> Column(root.padding(INSET_MINI)) {
                 Glyph(Icons.Rounded.StickyNote2, 14.dp, tint = yellow)
                 Spacer(Modifier.height(2.dp))
-                NoteField(note, onNoteChange, Type.caps, title = false, single = false, placeholder = "Note", modifier = Modifier.weight(1f))
+                // A Mini has room for a word or two a line: each of the note's lines keeps to a line
+                // of its own and fades out at the edge, rather than break in the middle of a word.
+                Box(Modifier.weight(1f).fillMaxWidth().clipToBounds().fadeEnd(12.dp)) {
+                    NoteField(
+                        note, onNoteChange, Type.caps, title = false, single = false, placeholder = "Note",
+                        modifier = Modifier.wrapContentWidth(Alignment.Start, unbounded = true).width(UNBROKEN),
+                    )
+                }
             }
 
             WidgetForm.Strip -> Row(root.padding(horizontal = INSET_STRIP), verticalAlignment = Alignment.CenterVertically) {
@@ -188,6 +197,9 @@ private fun Modifier.fadeEnd(length: Dp) = graphicsLayer(compositingStrategy = C
         blendMode = BlendMode.DstIn,
     )
 }
+
+/** As wide as a Mini's lines are laid out, so that they never wrap there. */
+private val UNBROKEN = 480.dp
 
 /**
  * A note on one line: its lines run on with a space for each break, the first, its title, semibold and

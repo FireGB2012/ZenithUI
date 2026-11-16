@@ -129,7 +129,6 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import com.gabriel.zenithui.ui.home.widgets.CalendarWidget
 import com.gabriel.zenithui.ui.home.widgets.ClockWidget
 import com.gabriel.zenithui.ui.home.widgets.CountdownWidget
-import com.gabriel.zenithui.ui.home.widgets.LocalPaleGlass
 import com.gabriel.zenithui.ui.home.widgets.MusicWidget
 import com.gabriel.zenithui.ui.home.widgets.NotesWidget
 import com.gabriel.zenithui.ui.home.widgets.PhotoWidget
@@ -367,7 +366,6 @@ private fun WordsOnCard(fill: WidgetFill, content: @Composable () -> Unit) {
 private fun WordsOnWallpaper(content: @Composable () -> Unit) {
     if (LocalOnWallpaper.current) {
         CompositionLocalProvider(
-            LocalPaleGlass provides !LocalPalette.current.dark,
             LocalPalette provides LocalPalette.current.copy(dark = true),
             LocalTextStyle provides LocalTextStyle.current.merge(
                 TextStyle(shadow = labelShadow(onWallpaper = true, legacyShadow = false, density = LocalDensity.current.density))

@@ -270,9 +270,10 @@ version of.
 
 **Words that can be read.** A widget is read at a glance, over a wallpaper, so its second line (the
 date, "On battery", "25 days left") is set stronger than the muted grey a page uses, nothing in a
-widget is smaller than 11sp at its ordinary size, and on pale glass (Light) small coloured words are
-in the ink, as an iPhone's clear widgets have them, the colour staying in the marks beside them
-(`wordHue`). The names under the Quick Toggles are the size of
+widget is smaller than 11sp at its ordinary size, and on the wallpaper (through glass or in "No
+glass") small coloured words are in the ink, as an iPhone's clear widgets have them, the colour
+staying in the marks beside them (`wordHue`): the picture behind can be any colour, and only the ink
+reads on all of them. The names under the Quick Toggles are the size of
 the label under an app; one too long for its cell ("Do Not Disturb" in a two by two) goes onto a
 second line, and every name takes the same number of lines so the buttons stay level
 (`ToggleNames.fit`). Their symbols fill a little over half of their button, as Android's own quick

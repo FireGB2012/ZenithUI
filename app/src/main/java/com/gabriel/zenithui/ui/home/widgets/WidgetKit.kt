@@ -43,7 +43,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -84,6 +83,7 @@ import com.gabriel.zenithui.ui.home.contrast
 import com.gabriel.zenithui.ui.home.quiet
 import com.gabriel.zenithui.ui.home.rememberFilled
 import com.gabriel.zenithui.ui.home.tight
+import com.gabriel.zenithui.ui.theme.LocalOnWallpaper
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.glassInk
 
@@ -158,20 +158,15 @@ internal fun hue(hue: Hue): Color {
 }
 
 /**
- * Whether the widget's glass is pale: on the wallpaper in Light, where the pane is a light grey under
- * white words. Given by the widget's glass; false anywhere else.
- */
-internal val LocalPaleGlass = staticCompositionLocalOf { false }
-
-/**
- * A hue as small words wear it: a heading, a weekday, "Now". On pale glass a colour has about as much
- * light in it as the pane behind and cannot be read in small letters, so there they are in the words'
- * ink, as an iPhone's clear widgets have them, and the colour stays in the symbols and marks beside
- * them. Anywhere else, [colour] itself.
+ * A hue as small words wear it: a heading, a weekday, a count. On the wallpaper, through its glass or
+ * straight on it in a "No glass" widget, the picture can be any colour, this one among them, and only
+ * the words' ink reads in small letters whatever it is, so there they are in that ink, as an iPhone's
+ * clear widgets have them, and the colour stays in the symbols and marks beside them. On a card, or a
+ * widget shown in a sheet, [colour] itself.
  */
 @Composable
 internal fun wordHue(colour: Color): Color =
-    if (LocalPaleGlass.current && LocalWidgetFill.current == null && !LocalBare.current) ink() else colour
+    if (LocalOnWallpaper.current && LocalWidgetFill.current == null) ink() else colour
 
 /** How far a colour must stand out from a card to be used on it: what WCAG asks of a symbol. */
 private const val STANDS_OUT = 2.6f

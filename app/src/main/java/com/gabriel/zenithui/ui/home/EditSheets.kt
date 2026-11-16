@@ -67,6 +67,7 @@ import com.gabriel.zenithui.ui.common.wordsChange
 import com.gabriel.zenithui.ui.settings.ToggleRow
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.LocalZenithFont
+import com.gabriel.zenithui.ui.theme.corners
 import com.gabriel.zenithui.ui.theme.inkOnTint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -159,9 +160,9 @@ private fun NameField(value: String, placeholder: String, onChange: (String) -> 
         Modifier
             .fillMaxWidth()
             .height(44.dp)
-            .clip(RoundedCornerShape(14.dp))
+            .clip(corners(14.dp))
             .background(palette.onGlass.copy(alpha = 0.08f))
-            .border(1.5.dp, ring, RoundedCornerShape(14.dp))
+            .border(1.5.dp, ring, corners(14.dp))
             .padding(horizontal = 12.dp),
         contentAlignment = Alignment.CenterStart,
     ) {
@@ -286,7 +287,7 @@ private fun PackIcons(packageName: String, appKey: String, current: String, shap
         Modifier
             .fillMaxWidth()
             .height(42.dp)
-            .clip(RoundedCornerShape(14.dp))
+            .clip(corners(14.dp))
             .background(palette.onGlass.copy(alpha = 0.08f))
             .padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -329,8 +330,8 @@ private fun PackIcons(packageName: String, appKey: String, current: String, shap
                     Modifier
                         .size(64.dp)
                         .pressBounce(0.9f)
-                        .clip(RoundedCornerShape(18.dp))
-                        .border(2.dp, ring, RoundedCornerShape(18.dp))
+                        .clip(corners(18.dp))
+                        .border(2.dp, ring, corners(18.dp))
                         .clickable { onPick(source) },
                     contentAlignment = Alignment.Center,
                 ) {

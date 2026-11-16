@@ -79,6 +79,7 @@ import com.gabriel.zenithui.ui.common.rememberTick
 import com.gabriel.zenithui.ui.common.unfoldIn
 import com.gabriel.zenithui.ui.common.unfoldOut
 import com.gabriel.zenithui.ui.theme.LocalPalette
+import com.gabriel.zenithui.ui.theme.corners
 import com.gabriel.zenithui.ui.theme.inkOnTint
 import kotlinx.coroutines.delay
 
@@ -311,7 +312,7 @@ private fun IslandPreview(island: IslandSettings) {
                 Modifier
                     .fillMaxWidth()
                     .height(tall * scale)
-                    .clip(RoundedCornerShape(30.dp)),
+                    .clip(corners(30.dp)),
             ) {
                 Box(
                     Modifier.layout { measurable, _ ->
@@ -329,7 +330,7 @@ private fun IslandPreview(island: IslandSettings) {
                     Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(palette.backdrop.first(), palette.backdrop.last()))))
                     Column(Modifier.padding(start = 16.dp, end = 16.dp, top = geometry.statusBar + 14.dp)) {
                         listOf(0.9f, 0.6f, 0.75f).forEach { share ->
-                            Box(Modifier.fillMaxWidth(share).height(16.dp).clip(RoundedCornerShape(8.dp)).background(palette.onGlass.copy(alpha = 0.10f)))
+                            Box(Modifier.fillMaxWidth(share).height(16.dp).clip(corners(8.dp)).background(palette.onGlass.copy(alpha = 0.10f)))
                             Spacer(Modifier.height(12.dp))
                         }
                     }
@@ -347,7 +348,7 @@ private fun IslandPreview(island: IslandSettings) {
                         Spacer(Modifier.width(4.dp))
                         Icon(Icons.Rounded.Wifi, contentDescription = null, tint = bar, modifier = Modifier.size(14.dp))
                         Spacer(Modifier.width(5.dp))
-                        Box(Modifier.size(width = 20.dp, height = 10.dp).clip(RoundedCornerShape(3.dp)).background(bar.copy(alpha = 0.9f)))
+                        Box(Modifier.size(width = 20.dp, height = 10.dp).clip(corners(3.dp)).background(bar.copy(alpha = 0.9f)))
                     }
                     Box(
                         Modifier.fillMaxWidth().offset(x = geometry.centreX - geometry.width / 2, y = geometry.top),

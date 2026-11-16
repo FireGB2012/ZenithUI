@@ -38,6 +38,7 @@ import com.gabriel.zenithui.ui.common.GlassButton
 import com.gabriel.zenithui.ui.common.appearIn
 import com.gabriel.zenithui.ui.common.staggerDelay
 import com.gabriel.zenithui.ui.theme.LocalPalette
+import com.gabriel.zenithui.ui.theme.corners
 import com.gabriel.zenithui.ui.theme.glass
 
 /**
@@ -136,7 +137,7 @@ private fun NotchPicture(which: NotchAccess, modifier: Modifier = Modifier) {
         modifier
             .fillMaxWidth()
             .height(84.dp)
-            .glass(RoundedCornerShape(26.dp), strength = 0.9f),
+            .glass(corners(26.dp), strength = 0.9f),
         contentAlignment = Alignment.TopCenter,
     ) {
         Row(
@@ -169,7 +170,7 @@ private fun NotchPicture(which: NotchAccess, modifier: Modifier = Modifier) {
                 }
                 NotchAccess.NOTIFICATIONS -> {
                     Box(
-                        Modifier.size(20.dp).clip(RoundedCornerShape(6.dp)).background(Color(0xFFFF5E8A).copy(alpha = 0.35f)),
+                        Modifier.size(20.dp).clip(corners(6.dp)).background(Color(0xFFFF5E8A).copy(alpha = 0.35f)),
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(Icons.Rounded.MusicNote, contentDescription = null, tint = Color(0xFFFF5E8A), modifier = Modifier.size(13.dp))

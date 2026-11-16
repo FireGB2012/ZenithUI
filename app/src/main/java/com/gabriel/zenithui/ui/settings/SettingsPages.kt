@@ -61,6 +61,10 @@ import com.gabriel.zenithui.data.NotificationDots
 import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.runtime.DisposableEffect
 import com.gabriel.zenithui.data.PlusStatus
+import com.gabriel.zenithui.data.ThemeTone
+import com.gabriel.zenithui.data.Themes
+import com.gabriel.zenithui.ui.theme.ZenithFonts
+import com.gabriel.zenithui.ui.theme.isGlass
 import com.gabriel.zenithui.data.WallStyle
 import com.gabriel.zenithui.data.WidgetLooks
 import com.gabriel.zenithui.data.ZenithSettings
@@ -135,7 +139,14 @@ internal fun ThemeOptions(settings: ZenithSettings, plus: PlusStatus, preview: S
     val design = WallStyle.byName(settings.wallpaperStyle)
 
     MiniPhone(settings, preview)
-    // Zenith has one look, so there is no colour to choose: only light or dark.
+    val trying by Themes.trying.collectAsState()
+    val active = Themes.active(settings.theme, trying)
+    // The theme first: everything else on the page is about how it is drawn.
+    Group(rise = 1) {
+        Spot("theme") {
+            ThemeChoice(settings) { id -> change { it.copy(theme = id) } }
+        }
+    }
     Group(rise = 1) {
         Spot("appearance") {
             Column(Modifier.padding(14.dp)) {
@@ -148,9 +159,10 @@ internal fun ThemeOptions(settings: ZenithSettings, plus: PlusStatus, preview: S
                 )
                 Spacer(Modifier.height(8.dp))
                 Note(
-                    when (settings.appearance) {
-                        "auto" -> "Follows the phone: light by day and dark at night, if the phone is set that way."
-                        "light" -> "Light pages and dark words, whatever the phone is set to. The home screen's glass stays the same."
+                    when {
+                        active.tone == ThemeTone.DARK -> "${active.name} is always dark: this is kept for the other themes."
+                        settings.appearance == "auto" -> "Follows the phone: light by day and dark at night, if the phone is set that way."
+                        settings.appearance == "light" -> "Light pages and dark words, whatever the phone is set to. The home screen's glass stays the same."
                         else -> "Dark pages and white words, whatever the phone is set to. The home screen's glass stays the same."
                     }
                 )
@@ -162,7 +174,7 @@ internal fun ThemeOptions(settings: ZenithSettings, plus: PlusStatus, preview: S
             Column(Modifier.padding(start = 14.dp, end = 14.dp, top = 14.dp, bottom = 10.dp)) {
                 Caption("Font")
                 Spacer(Modifier.height(10.dp))
-                FontChoice(settings.font) { id -> change { it.copy(font = id) } }
+                FontChoice(settings.font, active.font) { id -> change { it.copy(font = id) } }
             }
         }
         GroupDivider(inset = 16.dp)
@@ -170,7 +182,7 @@ internal fun ThemeOptions(settings: ZenithSettings, plus: PlusStatus, preview: S
             Column(Modifier.padding(14.dp)) {
                 Caption("Numbers")
                 Spacer(Modifier.height(10.dp))
-                NumberFontChoice(settings.numberFont, settings.font) { id -> change { it.copy(numberFont = id) } }
+                NumberFontChoice(settings.numberFont, ZenithFonts.forTheme(settings.font, active.font).id) { id -> change { it.copy(numberFont = id) } }
                 Spacer(Modifier.height(8.dp))
                 Note("The clocks, the battery, the countdown and the weather.")
             }
@@ -198,6 +210,8 @@ internal fun ThemeOptions(settings: ZenithSettings, plus: PlusStatus, preview: S
             ) { value -> change { it.copy(wallpaperFollow = value) } }
         }
     }
+    // The glass is Liquid Glass's: in another theme there is none to set.
+    AnimatedVisibility(visible = active.isGlass, enter = unfoldIn(LocalMotionLevel.current.reduced), exit = unfoldOut(LocalMotionLevel.current.reduced)) {
     Group(rise = 4) {
         Spot("glass") {
             Column(Modifier.padding(14.dp)) {
@@ -247,6 +261,7 @@ internal fun ThemeOptions(settings: ZenithSettings, plus: PlusStatus, preview: S
                 onClick = actions.glassStudio,
             )
         }
+    }
     }
 }
 

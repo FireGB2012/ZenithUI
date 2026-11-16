@@ -64,6 +64,7 @@ import com.gabriel.zenithui.ui.settings.PillSlider
 import com.gabriel.zenithui.ui.settings.ToggleRow
 import com.gabriel.zenithui.ui.theme.GlassMaterial
 import com.gabriel.zenithui.ui.theme.LocalPalette
+import com.gabriel.zenithui.ui.theme.corners
 import com.gabriel.zenithui.ui.theme.glass
 import com.gabriel.zenithui.ui.theme.lightFrom
 import kotlin.math.atan2
@@ -84,7 +85,7 @@ fun GlassStudioSheet(visible: Boolean, tuning: GlassTuning, onChange: (GlassTuni
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp).appearIn(delayMillis = staggerDelay(0), riseFrom = 14f),
         ) {
-            Box(Modifier.size(64.dp).glass(RoundedCornerShape(20.dp), material = GlassMaterial.Clear))
+            Box(Modifier.size(64.dp).glass(corners(20.dp), material = GlassMaterial.Clear))
             Box(Modifier.size(width = 120.dp, height = 46.dp).glass(RoundedCornerShape(50)))
             Box(Modifier.size(56.dp).glass(CircleShape, material = GlassMaterial.Clear))
         }

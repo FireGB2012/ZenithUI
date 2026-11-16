@@ -1,16 +1,24 @@
 package com.gabriel.zenithui.ui.theme
 
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.toArgb
+import com.gabriel.zenithui.data.Theme
+import com.gabriel.zenithui.data.ThemeMaterial
+import com.gabriel.zenithui.data.Themes
 import com.gabriel.zenithui.data.WallColors
 import com.gabriel.zenithui.data.ZenithSettings
 
 /**
- * The colours something is drawn in. Zenith itself has one look, [NeutralLook], in Light or in
- * Dark, and a widget or folder may wear a colour of its own inside it. The other palettes, in
- * [Palettes], are only the colour sets Zenith's painted wallpapers are made from.
+ * The colours something is drawn in: the theme's (see `Themes`), made for Light or Dark by
+ * ZenithTheme, and a widget or folder may wear a colour of its own inside it. The other palettes,
+ * in [Palettes], are only the colour sets Zenith's painted wallpapers are made from.
+ *
+ * Everything after [ownColour] is the theme's: a palette made without them (a wallpaper's colour
+ * set) gets Liquid Glass's, as every palette had before there were themes.
  */
 @Immutable
 data class ZenithPalette(
@@ -24,21 +32,36 @@ data class ZenithPalette(
     val dark: Boolean = true,
     /** How much of a widget's own colour this carries, 0 to 1; only InOwnColour sets it. */
     val ownColour: Float = 0f,
+    /** Words, and the icons beside them. */
+    val ink: Color = inkFor(dark),
+    /** A switch that is on: in Liquid Glass iOS's green, as an iPhone's switches are, rather than the blue of actions. */
+    val switchOn: Color = if (dark) Color(0xFF30D158) else Color(0xFF34C759),
+    /** What cannot be undone, and notification dots: in Liquid Glass iOS's red, deeper in Light so it holds on white. */
+    val destructive: Color = if (dark) Color(0xFFFF453A) else Color(0xFFFF3B30),
+    /** The face of a panel that is not glass: a group of rows in Settings, a card. */
+    val surface: Color = ink.copy(alpha = 0.07f),
+    /** A panel's outline. */
+    val edge: Color = ink.copy(alpha = if (dark) 0.15f else 0.14f),
+    /** What a panel's shadow, or in Neon its glow, is drawn in. */
+    val shadow: Color = Color.Black.copy(alpha = if (dark) 0.4f else 0.2f),
+    /** Words on the accent. */
+    val onAccent: Color = Color.White,
+    /** Names on the wallpaper, under the icons. */
+    val wallInk: Color = Color.White,
+    /** What dims the screen behind a sheet. */
+    val scrim: Color = Color.Black.copy(alpha = 0.35f),
+    /** The theme these colours are from; Liquid Glass for a colour set that is no theme's. */
+    val theme: Theme = Themes.LiquidGlass,
 ) {
-    val onGlass: Color get() = if (dark) Color.White else Color(0xFF10131A)
+    val onGlass: Color get() = ink
 
     /**
      * Second lines, small print, the names of options not chosen. It was 62% of the ink, which on
      * a pale backdrop came out barely above what small print needs; testers found the subtitles
-     * in Settings hard to pick out from the dark. At 74% it holds six to one on every backdrop.
+     * in Settings hard to pick out from the dark. At 74% it holds six to one on every backdrop, and
+     * every theme is tested to hold it (`ThemesTest`).
      */
-    val onGlassMuted: Color get() = onGlass.copy(alpha = 0.74f)
-
-    /** A switch that is on: iOS's green, as an iPhone's switches are, rather than the blue of actions. */
-    val switchOn: Color get() = if (dark) Color(0xFF30D158) else Color(0xFF34C759)
-
-    /** What cannot be undone, and notification dots: iOS's red, deeper in Light so it holds on white. */
-    val destructive: Color get() = if (dark) Color(0xFFFF453A) else Color(0xFFFF3B30)
+    val onGlassMuted: Color get() = ink.copy(alpha = ink.alpha * 0.74f)
 
     /**
      * Decoration: a widget's own colour where it has one, else the words' ink. A heading or a gauge
@@ -49,34 +72,87 @@ data class ZenithPalette(
 }
 
 /**
- * Zenith's one look: iOS 26's own colours, in Light or in Dark, made by ZenithTheme from
- * Appearance. Words in the ink; actions in iOS blue, with white words on it, the same blue at both
- * ends so nothing is a two-colour gradient; pages from black to iOS's dark grey, or from its pale
- * grey to white; and a grey that is no colour at all for the glass's veil.
+ * The theme's dim behind something laid over the screen, as deep as [amount] would be in Liquid
+ * Glass: its own colour, warm brown in Retro, and as much deeper or lighter as the theme's is.
+ */
+fun ZenithPalette.dim(amount: Float): Color = scrim.copy(alpha = (scrim.alpha * amount / LIQUID_SCRIM).coerceIn(0f, 1f))
+
+/** How deep Liquid Glass's dim behind a sheet is, which every other is measured against. */
+private const val LIQUID_SCRIM = 0.35f
+
+/** The ink a palette made without one has: Liquid Glass's. */
+private fun inkFor(dark: Boolean): Color = if (dark) Color.White else Color(0xFF10131A)
+
+/** [theme]'s colours in Light or Dark, as everything reads them. */
+fun Theme.palette(dark: Boolean): ZenithPalette {
+    val c = colours(dark)
+    return ZenithPalette(
+        id = id,
+        name = name,
+        tagline = tagline,
+        accent = Color(c.accent),
+        accentAlt = Color(c.accentAlt),
+        backdrop = c.backdrop.map { Color(it) },
+        glassTint = Color(c.glassTint),
+        dark = dark,
+        ink = Color(c.ink),
+        switchOn = Color(c.switchOn),
+        destructive = Color(c.destructive),
+        surface = Color(c.surface),
+        edge = Color(c.edge),
+        shadow = Color(c.shadow),
+        onAccent = Color(c.onAccent),
+        wallInk = Color(c.wallInk),
+        scrim = Color(c.scrim),
+        theme = this,
+    )
+}
+
+/**
+ * This palette as Dark draws it, for glass that is made as Dark makes it whatever the mode: Liquid
+ * Glass standing on the wallpaper, which is the same clear glass in Light and in Dark, with white
+ * words. Its colours stay its own; only the words and what goes with them change. A theme whose
+ * panels are solid keeps its own tone, since its words are made to be read on its own faces.
+ */
+fun ZenithPalette.inDark(): ZenithPalette {
+    if (dark || theme.material != ThemeMaterial.GLASS) return this
+    val night = theme.palette(dark = true)
+    return copy(
+        dark = true,
+        ink = night.ink,
+        switchOn = night.switchOn,
+        destructive = night.destructive,
+        surface = night.surface,
+        edge = night.edge,
+        shadow = night.shadow,
+    )
+}
+
+/**
+ * The words on a pane laid on the wallpaper (a question, the menu an icon holds, the edit bar):
+ * white in Liquid Glass, whose glass there is the same in Light and in Dark, and the theme's own ink
+ * where its panes are solid, so they read on its faces in Light as well.
+ */
+@Composable
+@ReadOnlyComposable
+fun wallPaneInk(): Color = LocalPalette.current.inDark().ink
+
+/** Red, for what takes something away, on a pane laid on the wallpaper: see [wallPaneInk]. */
+@Composable
+@ReadOnlyComposable
+fun wallPaneDanger(): Color = LocalPalette.current.inDark().destructive
+
+/**
+ * Liquid Glass's own colours, in Light or in Dark: iOS 26's. Words in the ink; actions in iOS blue,
+ * with white words on it, the same blue at both ends so nothing is a two-colour gradient; pages from
+ * black to iOS's dark grey, or from its pale grey to white; and a grey that is no colour at all for
+ * the glass's veil. Made from `Themes.LiquidGlass`, so the two are always the same.
  */
 object NeutralLook {
 
-    val Dark = ZenithPalette(
-        id = "neutral",
-        name = "Dark",
-        tagline = "",
-        accent = Color(0xFF0A84FF),
-        accentAlt = Color(0xFF0A84FF),
-        backdrop = listOf(Color(0xFF000000), Color(0xFF0E0E10), Color(0xFF1C1C1E)),
-        glassTint = Color(0xFF8E8E93),
-        dark = true,
-    )
+    val Dark = Themes.LiquidGlass.palette(dark = true)
 
-    val Light = ZenithPalette(
-        id = "neutral",
-        name = "Light",
-        tagline = "",
-        accent = Color(0xFF007AFF),
-        accentAlt = Color(0xFF007AFF),
-        backdrop = listOf(Color(0xFFF2F2F7), Color(0xFFF8F8FB), Color.White),
-        glassTint = Color(0xFF8E8E93),
-        dark = false,
-    )
+    val Light = Themes.LiquidGlass.palette(dark = false)
 
     fun of(dark: Boolean): ZenithPalette = if (dark) Dark else Light
 }
@@ -104,7 +180,8 @@ fun ZenithPalette.toned(dark: Boolean): ZenithPalette {
             lerp(Color.White, accent, 0.05f),
         )
     }
-    return copy(dark = dark, backdrop = backdrop)
+    // A colour set, not a theme: the words and the rest are Liquid Glass's in the new tone.
+    return ZenithPalette(id, name, tagline, accent, accentAlt, backdrop, glassTint, dark, ownColour)
 }
 
 /**

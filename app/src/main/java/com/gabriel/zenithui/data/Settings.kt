@@ -20,6 +20,11 @@ data class ZenithSettings(
     val paletteId: String = "midnight",
     /** auto | light | dark */
     val appearance: String = "dark",
+    /**
+     * Your theme, by its id (see [Themes]): what Zenith is drawn in, and starts in. Another may be
+     * tried for a while ([Themes.trying]); this is the one that comes back when Zenith starts.
+     */
+    val theme: String = Themes.DEFAULT,
     val glass: Float = 0.8f,
     /** How much body the glass panels have: clear | frosted | solid. See [GlassBody]. */
     val glassBody: String = "clear",
@@ -241,6 +246,7 @@ data class ZenithSettings(
         put("userName", userName)
         put("paletteId", paletteId)
         put("appearance", appearance)
+        put("theme", theme)
         put("glass", glass.toDouble())
         // Saved as "glassPanels". For a day it was saved as "glassBody" with Frosted as what
         // everybody got; nobody chose that, so those copies are not read and the glass goes back
@@ -351,6 +357,7 @@ data class ZenithSettings(
                 userName = o.optString("userName", d.userName),
                 paletteId = o.optString("paletteId", d.paletteId),
                 appearance = o.optString("appearance", d.appearance),
+                theme = o.optString("theme", d.theme).ifEmpty { d.theme },
                 glass = o.optDouble("glass", d.glass.toDouble()).toFloat(),
                 glassBody = o.optString("glassPanels", d.glassBody),
                 // Layouts saved before densities existed are matched to the nearest preset.

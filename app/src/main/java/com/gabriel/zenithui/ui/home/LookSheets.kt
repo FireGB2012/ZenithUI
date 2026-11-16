@@ -70,6 +70,7 @@ import com.gabriel.zenithui.ui.common.unfoldIn
 import com.gabriel.zenithui.ui.common.unfoldOut
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.LocalZenithFont
+import com.gabriel.zenithui.ui.theme.corners
 import com.gabriel.zenithui.ui.theme.inkOnTint
 import kotlinx.coroutines.launch
 
@@ -83,9 +84,9 @@ private fun LineField(value: String, placeholder: String, onChange: (String) -> 
         Modifier
             .fillMaxWidth()
             .height(46.dp)
-            .clip(RoundedCornerShape(14.dp))
+            .clip(corners(14.dp))
             .background(palette.onGlass.copy(alpha = 0.08f))
-            .border(1.5.dp, ring, RoundedCornerShape(14.dp))
+            .border(1.5.dp, ring, corners(14.dp))
             .padding(horizontal = 14.dp),
         contentAlignment = Alignment.CenterStart,
     ) {
@@ -180,7 +181,7 @@ fun LookMenuSheet(
                 }
             }
             AnimatedVisibility(visible = problem != null, enter = unfoldIn(reduced), exit = unfoldOut(reduced)) {
-                Text(problem.orEmpty(), color = Color(0xFFFF6B6B), fontSize = 13.sp, modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp))
+                Text(problem.orEmpty(), color = LocalPalette.current.destructive, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp))
             }
         }
         MenuRow(
@@ -210,7 +211,7 @@ private fun SharedCode(code: String, old: Boolean) {
         Modifier
             .fillMaxWidth()
             .padding(vertical = 6.dp)
-            .clip(RoundedCornerShape(20.dp))
+            .clip(corners(20.dp))
             .background(palette.onGlass.copy(alpha = 0.08f))
             .padding(start = 16.dp, end = 8.dp, top = 10.dp, bottom = 10.dp),
     ) {
@@ -323,7 +324,7 @@ private fun TimeStepper(label: String, minute: Int, onChange: (Int) -> Unit, mod
     val reduced = LocalMotionLevel.current.reduced
     Column(
         modifier
-            .clip(RoundedCornerShape(20.dp))
+            .clip(corners(20.dp))
             .background(palette.onGlass.copy(alpha = 0.06f))
             .padding(10.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -365,7 +366,7 @@ fun LookCodeSheet(visible: Boolean, initial: String, open: suspend (String) -> S
         Spacer(Modifier.height(12.dp))
         LineField(code, "LOOK-ABC234", { code = it.take(16) }, words = false)
         AnimatedVisibility(visible = problem != null) {
-            Text(problem.orEmpty(), color = Color(0xFFFF6B6B), fontSize = 13.sp, modifier = Modifier.padding(horizontal = 6.dp, vertical = 8.dp))
+            Text(problem.orEmpty(), color = palette.destructive, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 6.dp, vertical = 8.dp))
         }
         Spacer(Modifier.height(16.dp))
         GlassButton(

@@ -66,6 +66,7 @@ import com.gabriel.zenithui.ui.common.unfoldOut
 import com.gabriel.zenithui.ui.onboarding.Segmented
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.LocalZenithFont
+import com.gabriel.zenithui.ui.theme.corners
 import com.gabriel.zenithui.ui.theme.inkOnTint
 import kotlinx.coroutines.delay
 import java.time.Instant
@@ -84,9 +85,9 @@ private fun SheetField(value: String, placeholder: String, onChange: (String) ->
         Modifier
             .fillMaxWidth()
             .height(44.dp)
-            .clip(RoundedCornerShape(14.dp))
+            .clip(corners(14.dp))
             .background(palette.onGlass.copy(alpha = 0.08f))
-            .border(1.5.dp, ring, RoundedCornerShape(14.dp))
+            .border(1.5.dp, ring, corners(14.dp))
             .padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -184,7 +185,7 @@ fun WorldCitiesSheet(visible: Boolean, chosen: List<String>, onChange: (List<Str
                     Row(
                         Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(14.dp))
+                            .clip(corners(14.dp))
                             .clickable {
                                 onChange(chosen + zone)
                                 query = ""
@@ -344,7 +345,7 @@ fun WeatherPlaceSheet(
                         Modifier
                             .fillMaxWidth()
                             .appearIn(fromScale = 1f, riseFrom = 12f, gentle = true)
-                            .clip(RoundedCornerShape(14.dp))
+                            .clip(corners(14.dp))
                             .clickable { onPick(found, units) }
                             .padding(horizontal = 8.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,

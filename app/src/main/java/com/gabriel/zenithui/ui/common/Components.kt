@@ -151,7 +151,7 @@ fun IconLabel(text: String, modifier: Modifier = Modifier, textAlign: TextAlign?
     val density = LocalDensity.current.density
     Text(
         text = text,
-        color = labelInk(style.onWallpaper, palette.onGlass),
+        color = labelInk(style.onWallpaper, palette.onGlass, palette.wallInk),
         fontSize = style.size,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
@@ -163,11 +163,12 @@ fun IconLabel(text: String, modifier: Modifier = Modifier, textAlign: TextAlign?
 }
 
 /**
- * The ink a name is written in. On the wallpaper it is white whatever the palette: a light
- * palette's dark ink could not be read over a dark wallpaper. Anywhere else, the drawer and the
- * folder panel, it is the palette's own ink, [onGlass], which their surfaces are made for.
+ * The ink a name is written in. On the wallpaper it is white whatever the palette, or the theme's
+ * own light ink for names there ([wall]: Retro's is cream): a light palette's dark ink could not be
+ * read over a dark wallpaper. Anywhere else, the drawer and the folder panel, it is the palette's
+ * own ink, [onGlass], which their surfaces are made for.
  */
-internal fun labelInk(onWallpaper: Boolean, onGlass: Color): Color = if (onWallpaper) Color.White else onGlass
+internal fun labelInk(onWallpaper: Boolean, onGlass: Color, wall: Color = Color.White): Color = if (onWallpaper) wall else onGlass
 
 /**
  * The shadow under a name. On the wallpaper it is always there: a soft one, a dp below the words

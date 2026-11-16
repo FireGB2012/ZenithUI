@@ -46,6 +46,7 @@ import com.gabriel.zenithui.ui.theme.GlassMaterial
 import com.gabriel.zenithui.ui.theme.GlassMotion
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.ZenithShapes
+import com.gabriel.zenithui.ui.theme.corners
 import com.gabriel.zenithui.ui.theme.glass
 import com.gabriel.zenithui.ui.theme.inkOnTint
 import kotlinx.coroutines.delay
@@ -180,7 +181,7 @@ fun QuietButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier
         modifier = modifier
             .fillMaxWidth()
             .pressBounce(0.97f)
-            .clip(RoundedCornerShape(18.dp))
+            .clip(corners(18.dp))
             .clickable(onClick = onClick)
             .padding(vertical = 14.dp),
     )

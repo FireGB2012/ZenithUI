@@ -115,6 +115,14 @@ class SettingsCatalogTest {
     }
 
     @Test
+    fun `the themes are found by name, and so is your favourite`() {
+        listOf("theme", "liquid glass", "clean", "neon", "retro", "favourite", "favorite").forEach {
+            assertEquals(it, "theme", found(it).first())
+        }
+        assertEquals(SettingsPage.Theme, SettingsCatalog.entries.first { it.id == "theme" }.page)
+    }
+
+    @Test
     fun `the Notch's size and position are found by what people would call them`() {
         assertEquals("islandFit", found("notch size").first())
         assertEquals("islandFit", found("notch position").first())

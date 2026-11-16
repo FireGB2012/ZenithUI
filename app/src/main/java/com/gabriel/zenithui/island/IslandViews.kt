@@ -23,6 +23,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -59,6 +60,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -109,9 +111,12 @@ import com.gabriel.zenithui.data.NotchFit
 import com.gabriel.zenithui.data.NotchStatus
 import com.gabriel.zenithui.data.NotificationDots
 import com.gabriel.zenithui.data.Playing
+import com.gabriel.zenithui.data.ThemeMaterial
 import com.gabriel.zenithui.ui.common.LocalMotionLevel
 import com.gabriel.zenithui.ui.common.Motion
 import com.gabriel.zenithui.ui.common.pressBounce
+import com.gabriel.zenithui.ui.theme.LocalPalette
+import com.gabriel.zenithui.ui.theme.LocalTheme
 import kotlinx.coroutines.delay
 
 /**
@@ -240,6 +245,25 @@ class IslandActions(
 private val INK = Color.White
 private val QUIET = Color.White.copy(alpha = 0.6f)
 private val ISLAND = Color.Black
+
+/**
+ * The Notch's edge in the theme in use. In Liquid Glass and Clean it is black round the camera and
+ * nothing more, the camera's own colour; Neon outlines it in its glowing accent, and Retro in its
+ * warm one, thick, so it is drawn in the theme as everything else is. Null for none.
+ */
+private class NotchEdge(val colour: Color, val width: Dp)
+
+@Composable
+@ReadOnlyComposable
+private fun notchEdge(): NotchEdge? {
+    val theme = LocalTheme.current
+    val palette = LocalPalette.current
+    return when (theme.material) {
+        ThemeMaterial.NEON -> NotchEdge(palette.accent.copy(alpha = 0.9f), 1.2.dp)
+        ThemeMaterial.RETRO -> NotchEdge(palette.accent, 1.5.dp)
+        else -> null
+    }
+}
 val ISLAND_GREEN = Color(0xFF30D158)
 val ISLAND_ORANGE = Color(0xFFFF9F0A)
 val ISLAND_RED = Color(0xFFFF453A)
@@ -307,6 +331,7 @@ fun IslandCompact(
 ) {
     val reduced = LocalMotionLevel.current.reduced
     val density = LocalDensity.current
+    val edge = notchEdge()
     val measurer = rememberTextMeasurer()
     val style = sideText()
     fun wide(text: String): Dp = with(density) { measurer.measure(text, style, maxLines = 1).size.width.toDp() }
@@ -379,7 +404,8 @@ fun IslandCompact(
                             scaleY = squeeze
                         }
                         .clip(RoundedCornerShape(50))
-                        .background(ISLAND),
+                        .background(ISLAND)
+                        .then(edge?.let { Modifier.border(it.width, it.colour, RoundedCornerShape(50)) } ?: Modifier),
                 ) {
                     if (!expanded) {
                         AnimatedContent(
@@ -414,7 +440,8 @@ fun IslandCompact(
                                 }
                                 .size(geometry.height)
                                 .clip(CircleShape)
-                                .background(ISLAND),
+                                .background(ISLAND)
+                                .then(edge?.let { Modifier.border(it.width, it.colour, CircleShape) } ?: Modifier),
                             contentAlignment = Alignment.Center,
                         ) {
                             when (state.secondary) {
@@ -514,6 +541,7 @@ fun IslandCard(
     modifier: Modifier = Modifier,
 ) {
     val reduced = LocalMotionLevel.current.reduced
+    val edge = notchEdge()
     val progress = remember { Animatable(0f) }
     val closed by rememberUpdatedState(onClosed)
     LaunchedEffect(open) {
@@ -582,7 +610,9 @@ fun IslandCard(
             }
             val shape = silhouette(geometry, now, corner, this)
             drawPath(shape, ISLAND)
-            drawPath(shape, Color.White.copy(alpha = 0.09f * p.coerceIn(0f, 1f)), style = Stroke(1.dp.toPx()))
+            // A hairline marks it on a dark app; in Neon and Retro it is the theme's edge, in the accent.
+            val rim = edge?.colour ?: Color.White.copy(alpha = 0.09f)
+            drawPath(shape, rim.copy(alpha = rim.alpha * p.coerceIn(0f, 1f)), style = Stroke((edge?.width ?: 1.dp).toPx()))
         }
         // What is in the card, at its full size, seen only inside the card as it grows.
         CompositionLocalProvider(LocalTextStyle provides ISLAND_TEXT) {

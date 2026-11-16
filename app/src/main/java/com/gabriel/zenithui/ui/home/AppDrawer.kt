@@ -103,6 +103,7 @@ import com.gabriel.zenithui.data.AppShortcut
 import com.gabriel.zenithui.data.DrawerTab
 import com.gabriel.zenithui.data.SettingsLinks
 import com.gabriel.zenithui.ui.theme.LocalZenithFont
+import com.gabriel.zenithui.ui.theme.corners
 import kotlinx.coroutines.launch
 import com.gabriel.zenithui.ui.common.popIn
 import com.gabriel.zenithui.ui.common.popOut
@@ -752,7 +753,7 @@ private fun LibraryCard(
             Modifier
                 .fillMaxWidth()
                 .aspectRatio(1f)
-                .glass(RoundedCornerShape(26.dp), strength = 0.9f, material = GlassMaterial.Clear)
+                .glass(corners(26.dp), strength = 0.9f, material = GlassMaterial.Clear)
                 .padding(12.dp),
         ) {
             val gap = 10.dp
@@ -818,7 +819,7 @@ private fun MiniStack(
         Modifier
             .size(size)
             .pressBounce(0.92f)
-            .clip(RoundedCornerShape(16.dp))
+            .clip(corners(16.dp))
             .background(palette.onGlass.copy(alpha = 0.08f))
             .clickable(onClick = onClick)
             .padding(inset),

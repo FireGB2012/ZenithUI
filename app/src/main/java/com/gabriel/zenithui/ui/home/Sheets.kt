@@ -123,6 +123,7 @@ import com.gabriel.zenithui.ui.common.unfoldOut
 import com.gabriel.zenithui.ui.onboarding.Segmented
 import com.gabriel.zenithui.ui.onboarding.TipList
 import com.gabriel.zenithui.ui.theme.LocalPalette
+import com.gabriel.zenithui.ui.theme.corners
 import com.gabriel.zenithui.ui.theme.glass
 import kotlinx.coroutines.launch
 import kotlin.math.abs
@@ -161,6 +162,7 @@ fun ZenithSheet(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val palette = LocalPalette.current
+    val scrim = palette.scrim
     val reduced = LocalMotionLevel.current.reduced
     val maxHeight = LocalConfiguration.current.screenHeightDp.dp * maxHeightFraction
     val scope = rememberCoroutineScope()
@@ -264,7 +266,7 @@ fun ZenithSheet(
                     .fillMaxSize()
                     // It clears as the sheet is pulled away, so nothing is left dimmed behind a
                     // sheet that has already gone.
-                    .drawBehind { drawRect(Color.Black, alpha = 0.35f * (1f - (down() / height).coerceIn(0f, 1f))) }
+                    .drawBehind { drawRect(scrim, alpha = scrim.alpha * (1f - (down() / height).coerceIn(0f, 1f))) }
                     // Still catches the tap when the sheet may not be put away, so nothing behind it gets it.
                     .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) { if (dismissible) onDismiss() },
             )
@@ -287,7 +289,7 @@ fun ZenithSheet(
                     .offset { IntOffset(0, down().roundToInt()) }
                     .padding(10.dp)
                     // The regular material provides a readable body without a second opaque fill.
-                    .glass(RoundedCornerShape(34.dp), strength = 1.2f, solid = 0.65f)
+                    .glass(corners(34.dp), strength = 1.2f, solid = 0.65f)
                     .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) { }
                     .nestedScroll(pullThrough)
                     .draggable(
@@ -339,7 +341,7 @@ fun MenuRow(
             .fillMaxWidth()
             .appearIn(delayMillis = staggerDelay(index), riseFrom = 22f)
             .pressBounce(0.97f)
-            .clip(RoundedCornerShape(18.dp))
+            .clip(corners(18.dp))
             .clickable(onClick = onClick)
             .padding(horizontal = 8.dp, vertical = 13.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -347,7 +349,7 @@ fun MenuRow(
         Box(
             Modifier
                 .size(36.dp)
-                .clip(RoundedCornerShape(12.dp))
+                .clip(corners(12.dp))
                 .background(tint.copy(alpha = 0.10f)),
             contentAlignment = Alignment.Center,
         ) {
@@ -388,7 +390,7 @@ fun ShortcutRows(
             Modifier
                 .fillMaxWidth()
                 .padding(bottom = 8.dp)
-                .clip(RoundedCornerShape(22.dp))
+                .clip(corners(22.dp))
                 .background(palette.onGlass.copy(alpha = 0.06f))
                 .padding(vertical = 4.dp),
         ) {

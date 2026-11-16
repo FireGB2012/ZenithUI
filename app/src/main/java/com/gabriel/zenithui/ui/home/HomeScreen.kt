@@ -200,8 +200,8 @@ import com.gabriel.zenithui.ui.settings.AccountActions
  */
 private val PAGE_FLIP_EDGE = 16.dp
 
-/** How out of focus the home screen is behind the open drawer. */
-private val DRAWER_FROST = 20.dp
+/** How much of the theme's page frosts over the home screen behind the drawer, in a theme that blurs nothing. */
+private const val DRAWER_VEIL = 0.45f
 
 /** Coming home longer than this after opening an app does not shrink it back into its icon. */
 private const val CLOSE_WINDOW_MS = 30 * 60 * 1000L
@@ -539,13 +539,16 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
     // Open and still: what the drawer asks for only once it is there, so asking costs the swipe nothing.
     val drawerSettled by remember { derivedStateOf { !dragging && !drawer.isRunning && drawer.value > 0.999f } }
     // The home screen's blur behind the drawer: a copy of it blurred once and faded in over it, not a
-    // blur grown frame by frame (see DrawerFrost). Android 12 and later; before that nothing blurs,
-    // and the home screen only dims behind the drawer, as it always did there.
-    val canFrost = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S
+    // blur grown frame by frame (see DrawerFrost), as far as the theme blurs what is behind. Android 12
+    // and later; before that the home screen only dims behind the drawer, as it always did there. A
+    // theme that blurs nothing (Clean, Retro) lays a veil of its page over it instead, on any phone.
+    val theme = com.gabriel.zenithui.ui.theme.LocalTheme.current
+    val blurBehind = theme.blurBehind.dp
+    val canFrost = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S && blurBehind > 0.dp
     val homeLayer = androidx.compose.ui.graphics.rememberGraphicsLayer()
     val frost = remember { derivedStateOf { DrawerFrost.amount(drawerNow()) } }
     val frosting by remember { derivedStateOf { frost.value > 0f } }
-    val frostPx = with(LocalDensity.current) { DRAWER_FROST.toPx() }
+    val frostPx = with(LocalDensity.current) { blurBehind.coerceAtLeast(1.dp).toPx() }
     val frostEffect = remember(frostPx) {
         androidx.compose.ui.graphics.BlurEffect(frostPx, frostPx, androidx.compose.ui.graphics.TileMode.Clamp)
     }
@@ -1850,7 +1853,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         }
     }
 
-    val homeBlur by animateDpAsState(
+    val designedBlur = animateDpAsState(
         // The liquid glass opening frosts the home screen behind the growing glass.
         targetValue = when {
             // (Behind the drawer the home screen frosts over by a blurred copy fading in instead:
@@ -1871,6 +1874,10 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         animationSpec = tween(110),
         label = "homeBlur",
     )
+    // As far as the theme blurs what is behind: Liquid Glass's is the blur as it is drawn, and Clean
+    // and Retro have none, only the dim.
+    val blurShare = theme.blurBehind / com.gabriel.zenithui.data.Themes.LiquidGlass.blurBehind
+    val homeBlur = designedBlur.value * blurShare
     val homePressed by viewModel.homePressed.collectAsState()
     val environmentTick by viewModel.environmentTick.collectAsState()
     val wallpaperIncoming by viewModel.wallpaperIncoming.collectAsState()
@@ -2750,6 +2757,12 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 overlays = {},
             )
             }
+            }
+            // A theme with no blur: a veil of its page, faded in as the copy would be, so what is
+            // behind the drawer is covered over, not bare.
+            if (blurBehind <= 0.dp && frosting) {
+                val veil = palette.backdrop.first()
+                Box(Modifier.matchParentSize().drawBehind { drawRect(veil, alpha = DRAWER_VEIL * frost.value) })
             }
             // The blurred copy: worked out once as it starts to come in, then only faded, which costs
             // the swipe nothing. Once the drawer is open it is the home screen's blur, and follows it.

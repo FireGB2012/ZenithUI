@@ -2,7 +2,7 @@ package com.gabriel.zenithui.ui.settings
 
 /** The groups on the first page of Settings. Zenith Plus opens a sheet of its own, not a page. */
 enum class SettingsPage(val title: String, val opensSheet: Boolean = false) {
-    // Theme in the code, as it always was, though there are no themes on the page now.
+    // Theme in the code, as it always was: the theme is chosen at the top of the page.
     Theme("Wallpaper & appearance"),
     Home("Home screen"),
     Motion("Motion & feel"),
@@ -41,7 +41,8 @@ data class SettingsEntry(
 object SettingsCatalog {
 
     val entries: List<SettingsEntry> = listOf(
-        SettingsEntry("appearance", SettingsPage.Theme, "Light or dark", "auto night day mode appearance theme"),
+        SettingsEntry("theme", SettingsPage.Theme, "Theme", "theme themes liquid glass clean neon retro style look favourite favorite star yours"),
+        SettingsEntry("appearance", SettingsPage.Theme, "Light or dark", "auto night day mode appearance"),
         SettingsEntry("font", SettingsPage.Theme, "Font", "typeface text letters inter serif mono condensed hand casual"),
         SettingsEntry("numberFont", SettingsPage.Theme, "Numbers", "clock digits font thin typeface time"),
         SettingsEntry("wallpaper", SettingsPage.Theme, "Wallpaper", "background picture photo design"),

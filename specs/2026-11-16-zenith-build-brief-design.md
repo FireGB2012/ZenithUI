@@ -100,3 +100,98 @@ never read as one. Whatever is read back is kept within the limits (`NotchFit.of
 *(My call)* The limits: wide enough to cover a camera that sits off centre or a pill a little
 short of the lens, never so far that it reads as something you drag about, which the brief rules
 out. Up is shorter than down, because up runs into the top of the screen first.
+
+## 3. Liquid Glass, the default
+
+Zenith's glass already was Liquid Glass (the 15 Nov spec, and "How the glass works" in the README):
+translucent panes, a true blur from the wallpaper kept four times over at four softnesses, soft
+shadows, a hairline of light on the edge, rounded corners, the phone's own sans and iOS blue as the
+one accent. So this part makes it a theme, the first of four and the one everybody starts in
+(`Themes.LiquidGlass`, id `glass`), and keeps it exactly as it was: its colours are the neutral
+look's, token for token; every shape is drawn as it is given; the glass engine is untouched.
+
+The blur, phone by phone:
+
+- **Android 13 and up**: the AGSL lens over the softened copies of the wallpaper, and the home screen
+  behind a sheet or the drawer blurred with `RenderEffect`.
+- **Android 12**: the frosted copy in the panes, and the same `RenderEffect` blur behind.
+- **Android 10 and 11**: no live blur; panes show the frosted copy too, and the home screen behind
+  a sheet or the drawer only dims, as it always has there.
+
+*(My call)* "Subtle blur": the blur behind sheets and the drawer stays at 20 dp, as it was tuned
+against iOS; it is the theme's (`Theme.blurBehind`), so another theme can have less or none.
+
+## 4. Themes
+
+**A theme is data** (`data/Themes.kt`): its name and line, what its panels are made of
+(`ThemeMaterial`: glass, flat, neon or retro), whether it follows Light and Dark (`ThemeTone`), its
+colours in each (`ThemeColours`: the page, a panel's face, the words, the accent and a second one,
+the words on the accent, the edge, the shadow or glow, a switch that is on, red for what takes
+something away, the glass's veil, the words on the wallpaper, the dim behind a sheet), and its
+shape and light: the blur behind a sheet, how much of the wallpaper its panels show, how much of each
+corner it keeps and the most it keeps, cut corners or round, pills kept or not, the edge's width, the
+shadow's softness and fall, the glow, the font. It is written to JSON and read back whole
+(`Theme.toJson`, `Theme.fromJson`, version 1), every number kept within limits and every colour
+parsed, so a theme from anywhere (Zenith Connect, later) never throws.
+
+**The four:**
+
+- **Liquid Glass**: clear glass over your wallpaper, lit at the rim. Follows Light and Dark.
+- **Clean**: flat and light, nothing in the way. White cards with a hairline edge and a short soft
+  shadow on pale grey, near-black words, one blue; in Dark, graphite. Inter. Nothing blurs.
+- **Neon**: dark, with edges that glow. Smoked glass over a night of deep violet, cyan edges with a
+  glow of their own, magenta as the second colour. Condensed type. Always dark.
+- **Retro**: warm colours, chunky blocks, a pixel's edge. Cream and brown with burnt orange, thick
+  outlines, hard shadows cut like paper, corners cut off straight. Mono type. Follows Light and Dark.
+
+**Everything reads it.** `ZenithTheme` provides the theme (`LocalTheme`) and the palette made from it
+for Light or Dark (`Theme.palette`). Every pane in Zenith is asked for as `Modifier.glass`, and that
+now draws the theme's material (`themedPanel` for the three that are not glass), so the home screen,
+the dock, the Search pill, widgets, folders, menus, questions, the edit bar, the drawer, sheets,
+Settings and setup all change with it. Corners go through the theme (`corners(r)`, `Theme.shape`);
+the dim behind a sheet is the theme's (`ZenithPalette.dim`); words on a pane on the wallpaper are
+white on Liquid Glass and the theme's own ink on its solid faces (`wallPaneInk`); Settings' groups,
+its tiles and full pages are the theme's (`themeSurface`, `themeTile`, `themePage`); the Notch takes
+its edge. `ThemesTest` holds every theme to its contrast, in Light and Dark: words on a panel and on
+the page at 7:1 or more, muted words at 4.5:1, words on the accent at 3:1.
+
+**Choosing.** Settings → Wallpaper & appearance → Theme: four cards, each drawn in its own theme (its
+page, a panel of its material, its accent, its font). A tap tries one at once: the whole screen
+cross-fades into it (`ThemeCrossfade`: the last frame is kept as a picture and faded out over the
+new theme in 380 ms, once, whatever is on screen; at once with movement reduced). The star makes it
+yours: saved as `theme` in the settings, and Zenith starts in it. One you are only trying lasts until
+Zenith next starts (`Themes.trying`, in memory and shared with the Notch's service), so there is
+always a way back.
+
+**A new theme** is one more `Theme` in `Themes.all`: nothing else changes, and the tests check its
+contrast with the others.
+
+*(My call)* **The brief brings themes back.** The 10 Nov spec took out the colour themes; these are
+whole designs rather than colour sets, and the brief is the newer word. Liquid Glass keeps the 10 Nov
+look to the pixel.
+
+*(My call)* **Neon is always dark**; a neon sign in daylight is only tubes. Light and Dark still
+apply to the other three, and the appearance page says so while Neon is on.
+
+*(My call)* **A tap tries, the star keeps.** The brief asks for a quick switch and a favourite that
+comes back on restart; trying until restart gives both without a confirm.
+
+*(My call)* **Font: "Theme" is the theme's font.** The font setting's first choice was System; it is
+now Theme, and is the phone's sans in Liquid Glass, Inter in Clean, condensed in Neon and mono in
+Retro. A font chosen by name wins in every theme.
+
+*(My call)* **Only a theme cross-fades.** Light and Dark change at once, as before.
+
+*(My call)* Clean and Retro are flat, so nothing is blurred behind their sheets and drawer: a veil of
+the page's colour comes in instead. Neon blurs a little less than glass (14 dp).
+
+*(My call)* The glass settings (Glass panels, Tilt shine) show only with Liquid Glass, the only theme
+made of glass; what they are set to is kept. In the other three nothing follows the phone's tilt, the
+light on the panes or the home screen's float, since there is no glass to catch it.
+
+*(My call)* **The Notch stays black**: it is the camera's cutout. Neon gives it a glowing edge in its
+accent and Retro a solid one.
+
+*(My call)* Corners: Clean keeps 72% of each, Neon 85%, Retro half and at most 10 dp, cut off
+straight; pills stay pills except in Retro. What is content keeps its own colours whatever the
+theme: the wallpaper, photos, widget colours, the quick toggles' tones, app icons.

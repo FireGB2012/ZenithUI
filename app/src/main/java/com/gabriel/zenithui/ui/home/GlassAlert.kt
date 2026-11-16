@@ -21,7 +21,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -48,7 +47,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.gabriel.zenithui.ui.common.LocalMotionLevel
 import com.gabriel.zenithui.ui.common.Motion
+import com.gabriel.zenithui.ui.theme.LocalPalette
+import com.gabriel.zenithui.ui.theme.LocalTheme
+import com.gabriel.zenithui.ui.theme.corners
+import com.gabriel.zenithui.ui.theme.dim
 import com.gabriel.zenithui.ui.theme.glass
+import com.gabriel.zenithui.ui.theme.isGlass
+import com.gabriel.zenithui.ui.theme.wallPaneDanger
+import com.gabriel.zenithui.ui.theme.wallPaneInk
 
 /** One answer to an alert. The red one takes something away. */
 data class AlertButton(val label: String, val danger: Boolean = false, val onClick: () -> Unit)
@@ -66,6 +72,11 @@ data class HomeAlert(val title: String, val message: String, val buttons: List<A
 @Composable
 internal fun GlassAlert(alert: HomeAlert?, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
     val reduced = LocalMotionLevel.current.reduced
+    val palette = LocalPalette.current
+    val ink = wallPaneInk()
+    val danger = wallPaneDanger()
+    // A shadow under the words lifts white off clear glass; on a theme's solid face it only smudges.
+    val lifted = LocalTheme.current.isGlass
     // What it last asked stays while it goes, so it is not seen to empty out.
     val last = remember { arrayOfNulls<HomeAlert>(1) }
     if (alert != null) last[0] = alert
@@ -100,7 +111,7 @@ internal fun GlassAlert(alert: HomeAlert?, onDismiss: () -> Unit, modifier: Modi
         modifier
             .fillMaxSize()
             // The screen behind dims a little, and takes no touches while it is asked.
-            .drawBehind { drawRect(Color.Black.copy(alpha = 0.24f * shown.value)) }
+            .drawBehind { drawRect(palette.dim(0.24f * shown.value)) }
             .pointerInput(Unit) { awaitEachGesture { awaitFirstDown(requireUnconsumed = false).consume() } }
             .systemBarsPadding()
             .imePadding(),
@@ -117,13 +128,13 @@ internal fun GlassAlert(alert: HomeAlert?, onDismiss: () -> Unit, modifier: Modi
                     scaleY = grown.value
                 }
                 .bodyWithoutWallpaper(34.dp)
-                .glass(RoundedCornerShape(34.dp), strength = 1.2f, solid = 0.68f, tracking = { grown.value })
+                .glass(corners(34.dp), strength = 1.2f, solid = 0.68f, tracking = { grown.value })
                 .semantics { paneTitle = asked.title }
                 .padding(start = 16.dp, end = 16.dp, top = 22.dp, bottom = 14.dp),
         ) {
             Text(
                 asked.title,
-                color = Color.White,
+                color = ink,
                 fontSize = 17.sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = (-0.2).sp,
@@ -132,7 +143,7 @@ internal fun GlassAlert(alert: HomeAlert?, onDismiss: () -> Unit, modifier: Modi
             Spacer(Modifier.height(6.dp))
             Text(
                 asked.message,
-                color = Color.White.copy(alpha = 0.72f),
+                color = ink.copy(alpha = 0.72f),
                 fontSize = 14.5.sp,
                 lineHeight = 20.sp,
                 modifier = Modifier.padding(horizontal = 6.dp),
@@ -146,8 +157,8 @@ internal fun GlassAlert(alert: HomeAlert?, onDismiss: () -> Unit, modifier: Modi
                         .padding(top = 8.dp)
                         .fillMaxWidth()
                         .heightIn(min = 46.dp)
-                        .clip(RoundedCornerShape(23.dp))
-                        .background(Color.White.copy(alpha = if (pressed) 0.2f else 0.11f))
+                        .clip(corners(23.dp))
+                        .background(ink.copy(alpha = if (pressed) 0.2f else 0.11f))
                         .clickable(interactionSource = source, indication = null, role = Role.Button, enabled = alert != null) {
                             onDismiss()
                             button.onClick()
@@ -157,12 +168,12 @@ internal fun GlassAlert(alert: HomeAlert?, onDismiss: () -> Unit, modifier: Modi
                 ) {
                     Text(
                         button.label,
-                        color = if (button.danger) Color(0xFFFF453A) else Color.White,
+                        color = if (button.danger) danger else ink,
                         style = TextStyle(
                             fontSize = 16.sp,
                             fontWeight = FontWeight.SemiBold,
                             textAlign = TextAlign.Center,
-                            shadow = if (button.danger) null else Shadow(Color.Black.copy(alpha = 0.3f), Offset(0f, 1f), 2f),
+                            shadow = if (button.danger || !lifted) null else Shadow(Color.Black.copy(alpha = 0.3f), Offset(0f, 1f), 2f),
                         ),
                     )
                 }

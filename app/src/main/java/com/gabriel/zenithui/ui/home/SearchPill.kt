@@ -43,8 +43,11 @@ import com.gabriel.zenithui.ui.common.symbolShadowColour
 import com.gabriel.zenithui.ui.theme.GlassMaterial
 import com.gabriel.zenithui.ui.theme.GlassMotion
 import com.gabriel.zenithui.ui.theme.LocalOnWallpaper
+import com.gabriel.zenithui.ui.theme.LocalTheme
 import com.gabriel.zenithui.ui.theme.ZenithShapes
 import com.gabriel.zenithui.ui.theme.glass
+import com.gabriel.zenithui.ui.theme.isGlass
+import com.gabriel.zenithui.ui.theme.wallPaneInk
 import kotlin.math.ceil
 
 /**
@@ -72,7 +75,10 @@ fun SearchPill(
     val density = LocalDensity.current.density
     // The shadow the names on the wallpaper have, darker with Name shadow on: the word, the
     // magnifier beside it, and the names are all white on the same pictures.
-    val shadow = labelShadow(onWallpaper = true, legacyShadow = LocalLabelStyle.current.shadow, density = density)
+    // On a theme's solid pill, the theme's ink, which needs no shadow to read.
+    val glassy = LocalTheme.current.isGlass
+    val shadow = if (glassy) labelShadow(onWallpaper = true, legacyShadow = LocalLabelStyle.current.shadow, density = density) else null
+    val ink = wallPaneInk()
     // How many dots there are, with a fraction while a page is being added or taken away, so its dot
     // grows out of the end of the row or is drawn back into it. Read only while drawing.
     val reduced = LocalMotionLevel.current.reduced
@@ -97,7 +103,7 @@ fun SearchPill(
                 .clickable(role = Role.Button, onClick = onOpen)
                 .drawBehind {
                     val shown = dots().coerceIn(0f, 1f)
-                    if (shown > 0.001f) pageDots(dotCount.value, position(), shown)
+                    if (shown > 0.001f) pageDots(dotCount.value, position(), shown, ink)
                 }
                 .padding(horizontal = 16.dp),
             contentAlignment = Alignment.Center,
@@ -129,14 +135,14 @@ fun SearchPill(
                                 },
                         )
                     }
-                    Icon(Icons.Rounded.Search, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                    Icon(Icons.Rounded.Search, contentDescription = null, tint = ink, modifier = Modifier.size(16.dp))
                 }
                 Spacer(Modifier.width(6.dp))
                 // White in Light and in Dark, with the names' shadow, so the word reads on a pale
                 // wallpaper through glass that only mists it.
                 Text(
                     text = "Search",
-                    color = Color.White,
+                    color = ink,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
@@ -155,7 +161,7 @@ fun SearchPill(
  * from half their size, and the row is made smaller rather than cut off where it is wider than the
  * pill.
  */
-private fun DrawScope.pageDots(count: Float, position: Float, shown: Float) {
+private fun DrawScope.pageDots(count: Float, position: Float, shown: Float, ink: Color) {
     val dots = ceil(count - 0.001f).toInt()
     if (dots < 1) return
     val dot = DOT.toPx()
@@ -180,7 +186,7 @@ private fun DrawScope.pageDots(count: Float, position: Float, shown: Float) {
             val width = (dot + stretch * share) * there
             val tall = dot * there
             drawRoundRect(
-                color = Color.White,
+                color = ink,
                 topLeft = Offset(x, (size.height - tall) / 2f),
                 size = Size(width, tall),
                 cornerRadius = CornerRadius(tall / 2f),

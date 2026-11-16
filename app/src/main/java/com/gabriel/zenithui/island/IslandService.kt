@@ -227,7 +227,7 @@ class IslandService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             val store = remember { SettingsStore.get(this@IslandService) }
             val settings by store.settings.collectAsState()
             // Theirs, but no tilt sensor: the island has no glass to light.
-            ZenithTheme(settings.copy(glassShine = false)) {
+            ZenithTheme(settings.copy(glassShine = false), crossfade = false) {
                 CompositionLocalProvider(LocalMotionLevel provides MotionLevel.of(settings.motion, systemAnimations())) {
                     content()
                 }

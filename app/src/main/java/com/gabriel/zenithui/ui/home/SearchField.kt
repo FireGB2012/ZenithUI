@@ -73,7 +73,9 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.drawscope.translate
@@ -146,6 +148,13 @@ import com.gabriel.zenithui.ui.theme.shadowPaints
 import com.gabriel.zenithui.ui.theme.sharedLens
 import com.gabriel.zenithui.ui.theme.tuned
 import com.gabriel.zenithui.ui.theme.wallUnder
+import com.gabriel.zenithui.ui.theme.LocalTheme
+import com.gabriel.zenithui.ui.theme.dim
+import com.gabriel.zenithui.ui.theme.inDark
+import com.gabriel.zenithui.ui.theme.isGlass
+import com.gabriel.zenithui.ui.theme.panelFace
+import com.gabriel.zenithui.ui.theme.shape
+import com.gabriel.zenithui.ui.theme.wallPaneInk
 import kotlin.math.min
 import kotlin.math.roundToInt
 
@@ -257,21 +266,30 @@ fun SearchField(
     // The lens every pane on the home screen shares: the pill's own glass, stretched.
     val lens = sharedLens(levels)
     val paint = remember { FieldPaint() }
-    val shadow = labelShadow(onWallpaper = true, legacyShadow = LocalLabelStyle.current.shadow, density = density.density)
+    // A theme whose panes are solid draws the field in its own face and edge, words in its ink with
+    // no shadow under them; Liquid Glass draws its glass, words white with the names' shadow.
+    val theme = LocalTheme.current
+    val themed = !theme.isGlass
+    val ink = wallPaneInk()
+    val palette = LocalPalette.current
+    val fieldShape = theme.shape(ZenithShapes.pill)
+    val fieldFace = panelFace(theme, palette, Color.Unspecified, tinted = false, solid = 0.5f)
+    val fieldEdge = palette.edge
+    val shadow = if (themed) null else labelShadow(onWallpaper = true, legacyShadow = LocalLabelStyle.current.shadow, density = density.density)
     // The pill's own magnifier and word, set as the pill sets them, painted in the middle of the glass
     // as it leaves the pill and fading as it stretches, and coming back as it shrinks: without them
     // the words would blink out the moment the pill was tapped, and in again as it reappeared.
     val measurer = rememberTextMeasurer()
     val pillWordsStyle = LocalTextStyle.current
         .merge(TextStyle(shadow = shadow))
-        .merge(TextStyle(color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold))
+        .merge(TextStyle(color = ink, fontSize = 14.sp, fontWeight = FontWeight.SemiBold))
     val pillWords = remember(measurer, pillWordsStyle) { measurer.measure("Search", pillWordsStyle, maxLines = 1) }
     val magnifier = rememberVectorPainter(Icons.Rounded.Search)
 
     // Its words stand on the wallpaper, as the pill's do: white, with the names' shadow, in Light and in Dark.
     OnWallpaper {
         CompositionLocalProvider(
-            LocalPalette provides LocalPalette.current.copy(dark = true),
+            LocalPalette provides LocalPalette.current.inDark(),
             LocalTextStyle provides LocalTextStyle.current.merge(TextStyle(shadow = shadow)),
         ) {
             Box(
@@ -286,39 +304,43 @@ fun SearchField(
                     // the glass without anything being composed again.
                     val p = progress.value
                     val shown = p.coerceIn(0f, 1f)
-                    if (shown > 0f) drawRect(Color.Black.copy(alpha = SEARCH_DIM * shown))
+                    if (shown > 0f) drawRect(palette.dim(SEARCH_DIM * shown))
                     // Until the field has been placed the glass is still the pill.
                     val field = fieldAt.takeUnless { it.isEmpty } ?: from
                     val at = if (stretch) pillToField(p.coerceIn(-OVERSHOOT, 1f + OVERSHOOT), from, field) else field
-                    val look = glassLook(
-                        material = GlassMaterial.Clear,
-                        strength = strength,
-                        // A little body as it opens, under the words typed into it.
-                        solid = FIELD_BODY * shown,
-                        opacity = if (stretch) 1f else shown,
-                        dark = true,
-                        tint = WALLPAPER_VEIL,
-                        depth = body,
-                        onWallpaper = true,
-                    ).tuned(tuning).copy(wallTint = WALL_TINT)
-                    drawFieldGlass(
-                        at = at,
-                        origin = origin,
-                        look = look,
-                        paint = paint,
-                        lens = lens,
-                        softened = backdrop,
-                        levels = levels,
-                        screen = screen,
-                        wallpaperOffset = wallpaperOffset.value,
-                        savedWall = savedWall,
-                        lean = tilt.value,
-                        tuning = tuning,
-                        dim = wallpaperDim.value,
-                    )
+                    if (themed) {
+                        drawFieldFace(at, origin, fieldShape, fieldFace, fieldEdge, theme.edgeWidth.dp.toPx(), if (stretch) 1f else shown)
+                    } else {
+                        val look = glassLook(
+                            material = GlassMaterial.Clear,
+                            strength = strength,
+                            // A little body as it opens, under the words typed into it.
+                            solid = FIELD_BODY * shown,
+                            opacity = if (stretch) 1f else shown,
+                            dark = true,
+                            tint = WALLPAPER_VEIL,
+                            depth = body,
+                            onWallpaper = true,
+                        ).tuned(tuning).copy(wallTint = WALL_TINT)
+                        drawFieldGlass(
+                            at = at,
+                            origin = origin,
+                            look = look,
+                            paint = paint,
+                            lens = lens,
+                            softened = backdrop,
+                            levels = levels,
+                            screen = screen,
+                            wallpaperOffset = wallpaperOffset.value,
+                            savedWall = savedWall,
+                            lean = tilt.value,
+                            tuning = tuning,
+                            dim = wallpaperDim.value,
+                        )
+                    }
                     if (stretch) {
                         val words = (1f - p / PILL_WORDS_GONE).coerceIn(0f, 1f)
-                        if (words > 0.004f) drawPillWords(at.center - origin, words, pillWords, magnifier, shadow)
+                        if (words > 0.004f) drawPillWords(at.center - origin, words, pillWords, magnifier, shadow, ink)
                     }
                 }
 
@@ -370,7 +392,7 @@ fun SearchField(
                                 .padding(start = 16.dp, end = 10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            ShadowedSymbol(Icons.Rounded.Search, 18.dp, shadow)
+                            ShadowedSymbol(Icons.Rounded.Search, 18.dp, shadow, ink)
                             Spacer(Modifier.width(10.dp))
                             BasicTextField(
                                 value = query,
@@ -380,7 +402,7 @@ fun SearchField(
                                 maxLines = 1,
                                 textStyle = TextStyle(
                                     fontFamily = LocalZenithFont.current,
-                                    color = Color.White,
+                                    color = ink,
                                     fontSize = 17.sp,
                                     shadow = shadow,
                                 ),
@@ -436,11 +458,11 @@ fun SearchField(
                                         .size(28.dp)
                                         .pressBounce(0.85f)
                                         .clip(CircleShape)
-                                        .background(Color.White.copy(alpha = 0.18f))
+                                        .background(ink.copy(alpha = 0.18f))
                                         .clickable(enabled = open, role = Role.Button) { query = "" },
                                     contentAlignment = Alignment.Center,
                                 ) {
-                                    Icon(Icons.Rounded.Close, contentDescription = "Clear", tint = Color.White, modifier = Modifier.size(14.dp))
+                                    Icon(Icons.Rounded.Close, contentDescription = "Clear", tint = ink, modifier = Modifier.size(14.dp))
                                 }
                             }
                         }
@@ -534,7 +556,7 @@ private fun SearchResults(
                     .padding(horizontal = 18.dp, vertical = 13.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(Icons.Rounded.TravelExplore, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                Icon(Icons.Rounded.TravelExplore, contentDescription = null, tint = LocalPalette.current.onGlass, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(10.dp))
                 Text(
                     text = "Search the web for “$words”",
@@ -554,7 +576,7 @@ private fun SearchResults(
  * in the shadow's colour, as far down as the shadow falls, since a symbol cannot carry a text shadow.
  */
 @Composable
-private fun ShadowedSymbol(symbol: ImageVector, size: Dp, shadow: Shadow?) {
+private fun ShadowedSymbol(symbol: ImageVector, size: Dp, shadow: Shadow?, ink: Color) {
     Box {
         if (shadow != null) {
             Icon(
@@ -569,7 +591,7 @@ private fun ShadowedSymbol(symbol: ImageVector, size: Dp, shadow: Shadow?) {
                     },
             )
         }
-        Icon(symbol, contentDescription = null, tint = Color.White, modifier = Modifier.size(size))
+        Icon(symbol, contentDescription = null, tint = ink, modifier = Modifier.size(size))
     }
 }
 
@@ -611,6 +633,20 @@ private class FieldPaint {
             shadowsAt = look.opacity
         }
         return shadows
+    }
+}
+
+/**
+ * The field in a theme whose panes are solid: its face and edge in the theme's corners, at [at] (in
+ * the window's pixels) as the glass would be, from the pill's place to the field's.
+ */
+private fun DrawScope.drawFieldFace(at: Rect, origin: Offset, shape: Shape, face: Color, edge: Color, edgeWidth: Float, alpha: Float) {
+    if (at.width < 1f || at.height < 1f || alpha <= 0f) return
+    val outline = shape.createOutline(at.size, layoutDirection, this)
+    translate(at.left - origin.x, at.top - origin.y) {
+        drawOutline(outline, face, alpha = alpha)
+        // The stroke straddles the outline: half of it is inside, as a panel's is.
+        if (edgeWidth > 0f && edge.alpha > 0f) drawOutline(outline, edge, alpha = alpha, style = Stroke(edgeWidth))
     }
 }
 
@@ -686,7 +722,7 @@ private fun DrawScope.drawFieldGlass(
  * shadow, so the magnifier's is a copy of it underneath, as the pill's is; the word's shadow fades
  * with it, which the shadow its style carries would not.
  */
-private fun DrawScope.drawPillWords(centre: Offset, alpha: Float, words: TextLayoutResult, magnifier: VectorPainter, shadow: Shadow?) {
+private fun DrawScope.drawPillWords(centre: Offset, alpha: Float, words: TextLayoutResult, magnifier: VectorPainter, shadow: Shadow?, ink: Color) {
     val icon = PILL_ICON.toPx()
     val gap = PILL_GAP.toPx()
     val left = centre.x - (icon + gap + words.size.width) / 2f
@@ -697,7 +733,7 @@ private fun DrawScope.drawPillWords(centre: Offset, alpha: Float, words: TextLay
         }
     }
     translate(left, iconTop) {
-        with(magnifier) { draw(Size(icon, icon), alpha = alpha, colorFilter = ColorFilter.tint(Color.White)) }
+        with(magnifier) { draw(Size(icon, icon), alpha = alpha, colorFilter = ColorFilter.tint(ink)) }
     }
     drawText(
         textLayoutResult = words,

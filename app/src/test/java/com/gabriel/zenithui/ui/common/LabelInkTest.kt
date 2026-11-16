@@ -21,6 +21,14 @@ class LabelInkTest {
     }
 
     @Test
+    fun `a theme may warm the names on the wallpaper, and they stay light`() {
+        // Retro's cream, in place of white: still light, so still read over a dark wallpaper.
+        val cream = Color(0xFFFFF6E0)
+        inks.forEach { assertEquals(cream, labelInk(onWallpaper = true, onGlass = it, wall = cream)) }
+        inks.forEach { assertEquals(it, labelInk(onWallpaper = false, onGlass = it, wall = cream)) }
+    }
+
+    @Test
     fun `names on the wallpaper have a soft shadow, and a darker, closer one with Name shadow on`() {
         for (density in densities) {
             assertEquals(

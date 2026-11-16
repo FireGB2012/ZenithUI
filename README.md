@@ -324,9 +324,9 @@ the next than its rows are from each other. A group pushes in from the side; bac
 Search finds any option by its name or by other words for it ("dark", "vibrate", "battery"), opens
 its page and pulses the row. The Wallpaper & appearance and Home screen pages start with a small
 live copy of your own home screen, drawn by the same code as the real one, so a change is seen as it
-is made. Wallpaper & appearance holds light or dark (Auto, Light or Dark: pages and words change, and
-the home screen's glass stays the same), the font, the wallpaper, the glass and Tilt shine; there is
-no colour to choose.
+is made. Wallpaper & appearance holds the theme (see Themes, below), light or dark (Auto, Light or
+Dark: pages and words change, and the home screen's glass stays the same), the font, the wallpaper,
+and with Liquid Glass the glass and Tilt shine; there is no colour to choose on its own.
 
 **Aura** is one of those pages (`ui/settings/AuraPage.kt`): the balance; the streak as a ladder of
 seven days, each with what it pays; your code to copy or share, and the box for somebody else's.
@@ -421,8 +421,8 @@ Look shows them, and let go of when nothing does.
 
 ## Fonts and the Glass studio
 
-**Font** (Wallpaper & appearance): System, Inter, Condensed, Serif, Mono, Typewriter, Casual, Hand or
-Small caps, for everything; **Numbers** sets the clocks, the battery, the countdown and the weather
+**Font** (Wallpaper & appearance): Theme (the theme's own: the phone's sans in Liquid Glass), Inter,
+Condensed, Serif, Mono, Typewriter, Casual, Hand or Small caps, for everything; **Numbers** sets the clocks, the battery, the countdown and the weather
 in the same font, in Thin, or in any other (`ui/theme/Fonts.kt`). Inter and JetBrains Mono are
 carried in the app, unchanged, under the SIL Open Font Licence (About & help → Fonts shows it in
 full); the rest are the phone's own fonts asked for by name, and a phone without one shows its
@@ -647,6 +647,34 @@ app's window and keeps the touches inside it (on the Galaxy A55 a tap on the isl
 the status bar), so the island also takes taps on a strip just under it; and Android's own
 Settings hides every app's window over it. It reads only what the phone's notifications and music
 already show, keeps nothing and sends nothing.
+
+## Themes
+
+Zenith is drawn in one of four themes, each a whole design and not only colours (`data/Themes.kt`):
+
+- **Liquid Glass**, everybody's to start with: clear glass over the wallpaper, lit at the rim (see How
+  the glass works).
+- **Clean**: flat and light. White cards with a hairline edge and a short soft shadow, one blue, Inter;
+  graphite in Dark. Nothing blurs.
+- **Neon**: dark, with edges that glow. Smoked glass, cyan edges with a glow round them, magenta as the
+  second colour, condensed type. Always dark.
+- **Retro**: warm and chunky. Cream and brown with burnt orange, thick outlines, hard shadows, corners
+  cut off straight, mono type.
+
+Settings → Wallpaper & appearance → **Theme** shows the four as cards, each drawn in its own theme. A
+tap tries one at once, the whole screen cross-fading into it (`ThemeCrossfade`); the **star** makes it
+yours, the theme Zenith starts in. One only being tried lasts until Zenith next starts. The font's first
+choice, **Theme**, is the theme's own font; a font chosen by name wins in any theme.
+
+A theme is plain data: its material (glass, flat, neon or retro), whether it follows Light and Dark,
+its colours for each, its corners, edge, shadow, glow, blur and font, and it is written to JSON and
+read back whole (`Theme.toJson`, `Theme.fromJson`), so themes can be shared later. Everything reads it:
+`ZenithTheme` provides it (`LocalTheme`) with a palette made from it (`Theme.palette`), and every
+pane is asked for as `Modifier.glass`, which draws the theme's material (`themedPanel` for the three
+that are not glass). Corners go through `corners(r)` and `Theme.shape`; words on a pane over the
+wallpaper through `wallPaneInk`; Settings' groups, tiles and pages through `themeSurface`,
+`themeTile` and `themePage`. Adding a theme is adding a `Theme` to `Themes.all`; `ThemesTest` holds
+each one to its contrast in Light and Dark.
 
 ## How the glass works
 

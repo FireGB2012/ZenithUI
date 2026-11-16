@@ -151,7 +151,10 @@ import com.gabriel.zenithui.data.Tune
 import com.gabriel.zenithui.data.WallStyle
 import com.gabriel.zenithui.data.WidgetCell
 import com.gabriel.zenithui.data.findActivity
+import com.gabriel.zenithui.ui.common.HomeCover
 import com.gabriel.zenithui.ui.common.LaunchOrigin
+import com.gabriel.zenithui.ui.common.LocalHomeCover
+import com.gabriel.zenithui.ui.common.homeScaleUnderPage
 import com.gabriel.zenithui.ui.common.Motion
 import com.gabriel.zenithui.ui.common.appearIn
 import com.gabriel.zenithui.ui.common.pressBounce
@@ -453,8 +456,9 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
     // The widget the gallery is choosing another to stack onto, while it is.
     var stackOnto by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(widgetsOpen) { if (!widgetsOpen) stackOnto = null }
-    // The home screen fades out from under either of them.
-    val pageShown = animateFloatAsState(if (settingsOpen || widgetsOpen) 1f else 0f, tween(280), label = "pageShown")
+    // The home screen fades out and sinks back under either of them, exactly as far as it is covered:
+    // as they come up, and as they are pulled away again by a finger.
+    val homeCover = remember { HomeCover() }
     val glassLevels by viewModel.glassLevels.collectAsState()
 
     var drawerHeightPx by remember { mutableFloatStateOf(0f) }
@@ -1906,7 +1910,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
     // The wallpaper a little darker, when Customise has been asked for that: a veil over it, under
     // everything that stands on it, and the same darkening on the copy of it the glass shows.
     val dimmed = animateFloatAsState(if (settings.dimWallpaper) WALLPAPER_DIM else 0f, tween(300), label = "dimWallpaper")
-    CompositionLocalProvider(LocalWidgetWorld provides widgetWorld, LocalWallpaperDim provides dimmed) {
+    CompositionLocalProvider(LocalWidgetWorld provides widgetWorld, LocalWallpaperDim provides dimmed, LocalHomeCover provides homeCover) {
     Box(
         Modifier
             .fillMaxSize()
@@ -2006,7 +2010,11 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     val t = liveTuning
                     // Under 1 it sinks back behind the app; over 1 it rushes towards you instead.
                     val zoom = 1f + (t[Tune.HomeScale] - 1f) * depth
-                    val scale = (1f - 0.06f * drawerProgress) * zoom
+                    // Under Settings or the widget gallery it sinks back a little, as it does under
+                    // the drawer, and comes forward again as the page is pulled away.
+                    val covered = homeCover.amount()
+                    val sink = if (motion.reduced) 1f else homeScaleUnderPage(covered)
+                    val scale = (1f - 0.06f * drawerProgress) * zoom * sink
                     scaleX = scale
                     scaleY = scale
                     // It zooms about the icon the app came from, as far as asked, so the eye is
@@ -2019,7 +2027,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     )
                     val sunk = depth.coerceIn(0f, 1f)
                     // Settings is glass over the wallpaper; the home screen is not seen through it.
-                    alpha = (1f - 0.55f * drawerProgress) * (1f - t[Tune.HomeDim] * sunk) * (1f - pageShown.value)
+                    alpha = (1f - 0.55f * drawerProgress) * (1f - t[Tune.HomeDim] * sunk) * (1f - covered)
                     // Pulled down for the swipe-down gesture: after the finger, but less and less.
                     if (!motion.reduced) translationY = band(pulled(), PULL_REACH.toPx())
                 }

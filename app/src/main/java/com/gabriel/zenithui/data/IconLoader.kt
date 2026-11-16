@@ -116,6 +116,12 @@ class IconLoader(context: Context, private val repo: AppRepository) {
     fun hasChosen(key: String): Boolean = chosen.containsKey(key)
 
     /**
+     * The outline every icon's picture is cut to, one of [IconShapes.ids]: what the light on an icon
+     * follows, whatever shape its caller draws a plate in. A change bumps [version].
+     */
+    val iconShape: String get() = shape
+
+    /**
      * Keeps the photo at [uri] as an icon: the middle of it, square, at the size icons are drawn at
      * their largest. Returns what it is kept as, for [IconSource.photo], or null if it cannot be read.
      */

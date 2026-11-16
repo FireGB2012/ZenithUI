@@ -317,7 +317,7 @@ fun IslandCompact(
     val width by animateDpAsState(targetW, if (reduced) tween(Motion.REDUCED_MS) else islandSpring(230f, 0.76f), label = "islandWidth")
     val height by animateDpAsState(targetH, if (reduced) tween(Motion.REDUCED_MS) else islandSpring(300f, 0.86f), label = "islandHeight")
     var pressed by remember { mutableStateOf(false) }
-    val squeeze by animateFloatAsState(if (pressed) 0.94f else 1f, spring(dampingRatio = 0.5f, stiffness = 700f), label = "islandPress")
+    val squeeze by animateFloatAsState(if (pressed) 0.94f else 1f, com.gabriel.zenithui.ui.common.Motion.press(), label = "islandPress")
     val bubble by animateFloatAsState(
         if (state.secondary != null && !expanded) 1f else 0f,
         if (reduced) tween(Motion.REDUCED_MS) else islandSpring(260f, 0.66f),

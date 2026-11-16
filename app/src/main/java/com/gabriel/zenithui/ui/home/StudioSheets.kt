@@ -51,6 +51,7 @@ import com.gabriel.zenithui.R
 import com.gabriel.zenithui.data.GlassTuning
 import com.gabriel.zenithui.ui.common.GlassButton
 import com.gabriel.zenithui.ui.common.LocalMotionLevel
+import com.gabriel.zenithui.ui.common.Motion
 import com.gabriel.zenithui.ui.common.SectionLabel
 import com.gabriel.zenithui.ui.common.appearIn
 import com.gabriel.zenithui.ui.common.pressBounce
@@ -213,7 +214,7 @@ private fun Swatch(label: String, colours: List<Color>?, selected: Boolean, onCl
     val tick = rememberTick()
     val ring by animateColorAsState(if (selected) palette.onGlass else Color.Transparent, tween(220), label = "swatchRing")
     val inner by animateDpAsState(if (selected) 34.dp else 40.dp, spring(dampingRatio = 0.7f, stiffness = 420f), label = "swatchInner")
-    val mark by animateFloatAsState(if (selected) 1f else 0f, spring(dampingRatio = 0.55f, stiffness = 500f), label = "swatchTick")
+    val mark by animateFloatAsState(if (selected) 1f else 0f, Motion.snappy(), label = "swatchTick")
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier

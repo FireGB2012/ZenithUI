@@ -243,7 +243,7 @@ the view model's own time, so it carries on whatever setup does):
   opacity in a corner of the card (`GraphicsWarmUp`): Liquid Glass's lens over the wallpaper's copies,
   or the theme's own panel, and the blur at the theme's strength. A phone compiles each kind of
   drawing the first time it is asked to; this way it is setup that waits, not the first sheet.
-- **Save**: what setup chose, on disk rather than on its way there (`SettingsStore.flush`).
+- **Save**: what setup chose, on disk rather than on its way there (`ConfigRepository.save`).
 
 The card shows the job in hand in words, a glass channel that the accent fills, the percentage and
 the time left. Both numbers come from the work (`Optimizing`, tested in `OptimizingTest`): each job's
@@ -281,3 +281,46 @@ light. Neon's phone preview glows in its accent.
 
 *(My call)* "hello" is lower case, like the rest of the words it cycles through, and as the iPhone
 writes it.
+
+## 6. One config, behind a repository
+
+The brief: keep all settings, themes and layouts in one serializable config model, and saving and
+loading behind a repository interface with a local implementation, so a server-backed one can be
+added later without rewrites. No networking yet.
+
+**The model** is `ZenithConfig`: `settings` (`ZenithSettings`, which holds the theme you chose,
+light or dark, the font and everything else), `layout`, `looks` and `themes` (themes of your own).
+`toJson(savedAt)` and `parse(text)` write it and read it back exactly; `parse` never throws, a
+config must say it is one and have settings, every other part is optional, and an entry that cannot
+be read is passed over rather than losing the rest. `over(here)` is how a backup is put back: its
+settings and layout replace these, its Looks and themes join the ones here (the one in both is its
+own), at most twelve Looks. Tested in `ZenithConfigTest`.
+
+**The repository** is `ConfigRepository`: the four parts as `StateFlow`s, `config()` for all of it
+at once, `update`, `setLayout`, `mutateLayout`, `setLooks`, `replace` (a whole config in one step),
+`restore` (settings and layout together), `reset` and `suspend save()`. Every change is seen at once
+and kept afterwards, so nothing on screen waits on storage; only `save` waits. `LocalConfigRepository`
+is the one in use, over a small `ConfigStorage` (Zenith's preferences on the phone, memory in
+`LocalConfigRepositoryTest`). The view model, the shortcut screen and the Notch's service all get
+it from `ConfigRepository.get`, the one line a server-backed version would change.
+
+*(My call)* **A config's JSON is a backup's.** Same `format` ("zenith-ui-backup") and version 1,
+with `themes` added as an optional part. One format instead of two: every backup ever made reads as
+a config, and the server (which only checks the format and keeps the body as sent) already stores
+configs, so `server/zenith_server.py` did not change.
+
+*(My call)* **Kept in parts, under the old names.** The model is one; on the phone it is still kept
+as `settings`, `layout` and `looks` in the `zenith` preferences, plus `themes`. One JSON blob would
+mean writing the layout and every Look again each time a setting changes (every app opened changes
+one), and moving every phone's data. With the old names nothing moves and no phone starts again.
+
+*(My call)* **Only what changed is written.** `replace` compares each part and writes only the ones
+that differ, in one step; putting back a layout, as undoing a page does, leaves the Looks alone.
+
+*(My call)* **A room for themes of your own, empty for now.** Nothing makes one yet; the config has
+a place for them (by an id of their own, never a built-in theme's) so the format need not change
+when Zenith can make or receive one. A backup carries them, and putting one back joins them to the
+phone's as Looks are.
+
+*(My call)* **`SettingsStore` is gone**, not wrapped: `LocalConfigRepository` is what it was, behind
+the interface, so there is one way in rather than two.

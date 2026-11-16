@@ -44,13 +44,13 @@ import androidx.savedstate.SavedStateRegistry
 import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
+import com.gabriel.zenithui.data.ConfigRepository
 import com.gabriel.zenithui.data.IslandKind
 import com.gabriel.zenithui.data.IslandMoment
 import com.gabriel.zenithui.data.IslandRules
 import com.gabriel.zenithui.data.NotificationDots
 import com.gabriel.zenithui.data.NowPlaying
 import com.gabriel.zenithui.data.Playing
-import com.gabriel.zenithui.data.SettingsStore
 import com.gabriel.zenithui.data.WallpaperPalette
 import com.gabriel.zenithui.data.ZenithSettings
 import com.gabriel.zenithui.ui.common.LocalMotionLevel
@@ -215,7 +215,7 @@ class IslandService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         scope.launch { follow() }
         // Made a little wider or nudged in Settings: it moves as the slider does, over every app.
         scope.launch {
-            SettingsStore.get(this@IslandService).settings.map { it.island.fit }.distinctUntilChanged().drop(1).collect { measure() }
+            ConfigRepository.get(this@IslandService).settings.map { it.island.fit }.distinctUntilChanged().drop(1).collect { measure() }
         }
     }
 
@@ -224,7 +224,7 @@ class IslandService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         setViewTreeSavedStateRegistryOwner(this@IslandService)
         setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
         setContent {
-            val store = remember { SettingsStore.get(this@IslandService) }
+            val store = remember { ConfigRepository.get(this@IslandService) }
             val settings by store.settings.collectAsState()
             // Theirs, but no tilt sensor: the island has no glass to light.
             ZenithTheme(settings.copy(glassShine = false), crossfade = false) {
@@ -239,7 +239,7 @@ class IslandService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     private suspend fun follow() {
         val resting = combine(charging, ringerMode, quiet) { plugged, mode, dnd -> Resting(plugged, IslandRules.status(mode, dnd)) }
         val flags = combine(fullScreen, sideways, expanded, level, resting) { full, turned, open, percent, rest -> Flags(full, turned, open, percent, rest) }
-        combine(SettingsStore.get(this).settings, NowPlaying.now, moments, NotificationDots.live, flags) { settings, music, list, live, f ->
+        combine(ConfigRepository.get(this).settings, NowPlaying.now, moments, NotificationDots.live, flags) { settings, music, list, live, f ->
             Inputs(settings, music, list, live, f)
         }.collectLatest { inputs ->
             while (true) {
@@ -435,7 +435,7 @@ class IslandService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             holeY = ((hole?.exactCenterY() ?: 0f) / density).dp,
             statusBar = (bar / density).dp,
             width = (width / density).dp,
-            fit = SettingsStore.get(this).settings.value.island.fit,
+            fit = ConfigRepository.get(this).settings.value.island.fit,
         )
         geometry.value = shape
         pillParams.x = ((shape.centreX.value - shape.width.value / 2f) * density).toInt()

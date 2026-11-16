@@ -58,12 +58,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
+import com.gabriel.zenithui.data.ConfigRepository
 import com.gabriel.zenithui.data.HomeGeometry
 import com.gabriel.zenithui.data.HostedSizes
 import com.gabriel.zenithui.data.HostedWidgetCell
 import com.gabriel.zenithui.data.LayoutBuilder
 import com.gabriel.zenithui.data.ROW_UNITS
-import com.gabriel.zenithui.data.SettingsStore
 import com.gabriel.zenithui.data.ShortcutCell
 import com.gabriel.zenithui.data.ZenithWidgetHost
 import com.gabriel.zenithui.ui.common.GlassButton
@@ -142,7 +142,7 @@ class PinItemActivity : ComponentActivity() {
             else -> return finish()
         }
 
-        val store = SettingsStore.get(this)
+        val store = ConfigRepository.get(this)
         setContent {
             val settings by store.settings.collectAsState()
             ZenithTheme(settings = settings) {
@@ -164,7 +164,7 @@ class PinItemActivity : ComponentActivity() {
 
     /** The first free spot for something this size, or null and a word that there is none. */
     private fun freeSlot(spanX: Int, spanY: Int): Triple<Int, Int, Int>? {
-        val store = SettingsStore.get(this)
+        val store = ConfigRepository.get(this)
         val now = store.settings.value
         val slot = LayoutBuilder.firstFreeSlot(store.layout.value, now.columns, now.rows, spanX, spanY)
         if (slot == null) Toast.makeText(this, "Every page is full", Toast.LENGTH_SHORT).show()
@@ -176,7 +176,7 @@ class PinItemActivity : ComponentActivity() {
         val slot = freeSlot(1, ROW_UNITS) ?: return false
         // Accepting is what pins it: only then is it Zenith's to show.
         if (runCatching { request?.accept() }.getOrNull() != true) return false
-        SettingsStore.get(this).mutateLayout { items ->
+        ConfigRepository.get(this).mutateLayout { items ->
             items + ShortcutCell(LayoutBuilder.newId(), slot.first, slot.second, slot.third, packageName, id, label)
         }
         return true
@@ -208,7 +208,7 @@ class PinItemActivity : ComponentActivity() {
     }
 
     private fun placeWidget(id: Int, info: AppWidgetProviderInfo): Boolean {
-        val store = SettingsStore.get(this)
+        val store = ConfigRepository.get(this)
         val now = store.settings.value
         // Near enough the page's own cells: the screen shared out among its columns and rows, and
         // the icons cells that size hold. There is no page here to measure.

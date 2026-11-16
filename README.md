@@ -822,6 +822,23 @@ the PC, and is skipped without it). What the two say to each other, and what was
 [`specs/2026-10-04-zenith-server-design.md`](specs/2026-10-04-zenith-server-design.md); turning it
 on is in [RELEASING.md](RELEASING.md).
 
+## Where it is all kept
+
+Everything that makes Zenith yours is one config, `ZenithConfig` (`data/ZenithConfig.kt`): your
+settings (the theme you chose, light or dark and the font among them), the layout, the Looks you
+saved and themes of your own (none can be made yet; that is where one will be kept). It is plain
+JSON, and the same JSON as a backup, so a backup is a config written down, one from before reads as
+one, and the server, which keeps a backup as it is sent, already keeps a config.
+
+Nothing saves or loads it except through `ConfigRepository` (`data/ConfigRepository.kt`): the
+settings, layout, Looks and themes as flows, a change seen at once and kept afterwards, a whole
+config put in at once (`replace`), `reset`, and `save`, which waits until everything is kept. The
+one in use is `LocalConfigRepository`: each part in Zenith's preferences under the name it has
+always had (`settings`, `layout`, `looks`, and now `themes`), written only when it changes, and a
+part that cannot be read starts again on its own. `ConfigRepository.get` is the one place that
+chooses it, so a version kept on your own server can be put there later without anything else
+changing. There is no networking in it yet.
+
 ## Building
 
 ```bash
@@ -831,7 +848,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 Compose BOM 2024.12.01, minSdk 29, application ID `com.gabriel.zenith_Launcher`, no third-party libraries:
 only Google's own (Play Billing, and Credential Manager with `googleid` for Continue with Google).
-Settings and layout are stored as JSON in `SharedPreferences` (`SettingsStore`).
+Everything Zenith remembers is one config, kept on the phone: see [Where it is all kept](#where-it-is-all-kept).
 
 For signed release builds and the Play Store checklist see [RELEASING.md](RELEASING.md); store
 copy, graphics and the privacy policy live in [`play/`](play/).

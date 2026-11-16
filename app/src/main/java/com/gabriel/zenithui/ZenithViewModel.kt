@@ -10,6 +10,7 @@ import com.gabriel.zenithui.data.AppEdits
 import com.gabriel.zenithui.data.AppInfo
 import com.gabriel.zenithui.data.AppRepository
 import com.gabriel.zenithui.data.AppShortcut
+import com.gabriel.zenithui.data.ConfigRepository
 import com.gabriel.zenithui.data.IconSource
 import com.gabriel.zenithui.data.HostedWidgetCell
 import com.gabriel.zenithui.data.StackCell
@@ -47,7 +48,6 @@ import com.gabriel.zenithui.data.PriceAmounts
 import com.gabriel.zenithui.data.SubscriptionPlan
 import com.gabriel.zenithui.data.ROW_UNITS
 import com.gabriel.zenithui.data.Reshape
-import com.gabriel.zenithui.data.SettingsStore
 import com.gabriel.zenithui.data.WidgetCell
 import com.gabriel.zenithui.data.Widgets
 import com.gabriel.zenithui.data.WallStyle
@@ -81,7 +81,8 @@ import kotlinx.coroutines.sync.withLock
 
 class ZenithViewModel(application: Application) : AndroidViewModel(application) {
 
-    val store = SettingsStore.get(application)
+    /** Where everything Zenith remembers is kept: on this phone, for now. See [ConfigRepository]. */
+    val store: ConfigRepository = ConfigRepository.get(application)
     val repository = AppRepository(application)
     val icons = IconLoader(application, repository)
     private val wallpaperSource = WallpaperSource(application)
@@ -494,7 +495,7 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
 
     fun setHiddenPin(pin: String) = store.update { it.copy(hiddenPin = pin.filter { c -> c.isDigit() }.take(6)) }
 
-    fun backupText(): String = Backup.encode(settings.value, layout.value, store.looks.value)
+    fun backupText(): String = Backup.encode(store.config())
 
     /**
      * Puts a backup back. The trial and the purchase are deliberately taken from the phone you
@@ -503,30 +504,28 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
      * the one on this phone stays.
      */
     fun restoreBackup(text: String, fromAccount: Boolean = false): Boolean {
-        val (restored, items) = Backup.decode(text) ?: return false
+        val backup = Backup.decode(text) ?: return false
         forgetUndo()
         val current = settings.value
-        // The backup's Looks join the ones saved here; one in both is the backup's.
-        val incoming = Backup.looks(text)
-        if (incoming.isNotEmpty()) {
-            val ids = incoming.map { it.id }.toSet()
-            store.setLooks((incoming + store.looks.value.filterNot { it.id in ids }).take(com.gabriel.zenithui.data.Looks.MOST))
-        }
-        store.restore(
-            settings = restored.copy(
-                plusTrialStart = current.plusTrialStart,
-                plusPurchased = current.plusPurchased,
-                hiddenPin = if (fromAccount) current.hiddenPin else restored.hiddenPin,
-                // A photo chosen as an icon on another phone is not on this one: that app has its own again.
-                appEdits = restored.appEdits
-                    .mapValues { (_, edit) ->
-                        val lost = IconSource.parse(edit.icon) is IconSource.Photo && !icons.hasPhoto(edit.icon)
-                        if (lost) edit.copy(icon = "") else edit
-                    }
-                    .filterValues { !it.isEmpty },
-                onboarded = true,
+        val restored = backup.settings
+        // The backup's Looks and themes join the ones saved here; one in both is the backup's.
+        val back = backup.over(store.config())
+        store.replace(
+            back.copy(
+                settings = restored.copy(
+                    plusTrialStart = current.plusTrialStart,
+                    plusPurchased = current.plusPurchased,
+                    hiddenPin = if (fromAccount) current.hiddenPin else restored.hiddenPin,
+                    // A photo chosen as an icon on another phone is not on this one: that app has its own again.
+                    appEdits = restored.appEdits
+                        .mapValues { (_, edit) ->
+                            val lost = IconSource.parse(edit.icon) is IconSource.Photo && !icons.hasPhoto(edit.icon)
+                            if (lost) edit.copy(icon = "") else edit
+                        }
+                        .filterValues { !it.isEmpty },
+                    onboarded = true,
+                ),
             ),
-            items = items,
         )
         upgradeLayout()
         tidyWidgetIds()
@@ -651,7 +650,7 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
      */
     suspend fun backUpToAccount(): String? = seenThrough {
         val signed = accounts.signed.value ?: return@seenThrough SIGN_IN_FIRST
-        when (val reply = server.saveBackup(signed.token, Backup.encode(AccountRules.forAccount(settings.value), layout.value, store.looks.value))) {
+        when (val reply = server.saveBackup(signed.token, Backup.encode(store.config().copy(settings = AccountRules.forAccount(settings.value))))) {
             is Reply.Ok -> {
                 accounts.update(signed.account.copy(backupAt = reply.value))
                 null
@@ -1206,9 +1205,7 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
         }
 
         // What setup chose, on disk rather than on its way there.
-        optimizeStep(OptimizeJob.SAVE) {
-            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { store.flush() }
-        }
+        optimizeStep(OptimizeJob.SAVE) { store.save() }
     }
 
     /**

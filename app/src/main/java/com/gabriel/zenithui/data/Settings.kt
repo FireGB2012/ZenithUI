@@ -1,10 +1,6 @@
 package com.gabriel.zenithui.data
 
-import android.content.Context
 import androidx.compose.runtime.Immutable
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -473,95 +469,5 @@ data class ZenithSettings(
                 layoutVersion = o.optInt("layoutVersion", d.layoutVersion),
             )
         }
-    }
-}
-
-/**
- * Tiny SharedPreferences-backed store. Everything the launcher remembers lives here. There is one
- * for the whole app ([get]), so a screen of its own — the one that takes a shortcut another app
- * asks to put on the home screen — changes the same layout the home screen is showing.
- */
-class SettingsStore private constructor(context: Context) {
-
-    private val prefs = context.applicationContext.getSharedPreferences("zenith", Context.MODE_PRIVATE)
-
-    private val _settings = MutableStateFlow(readSettings())
-    val settings: StateFlow<ZenithSettings> = _settings.asStateFlow()
-
-    private val _layout = MutableStateFlow(readLayout())
-    val layout: StateFlow<List<HomeItem>> = _layout.asStateFlow()
-
-    private val _looks = MutableStateFlow(Looks.fromJsonList(prefs.getString(KEY_LOOKS, null)))
-
-    /** The Looks saved on this phone, newest first. Kept apart from the settings, so a Look never holds Looks. */
-    val looks: StateFlow<List<Look>> = _looks.asStateFlow()
-
-    fun setLooks(looks: List<Look>) {
-        _looks.value = looks
-        prefs.edit().putString(KEY_LOOKS, Looks.toJsonList(looks)).apply()
-    }
-
-    fun update(transform: (ZenithSettings) -> ZenithSettings) {
-        val next = transform(_settings.value)
-        _settings.value = next
-        prefs.edit().putString(KEY_SETTINGS, next.toJson().toString()).apply()
-    }
-
-    fun setLayout(items: List<HomeItem>) {
-        _layout.value = items
-        val arr = JSONArray()
-        items.forEach { arr.put(it.toJson()) }
-        prefs.edit().putString(KEY_LAYOUT, arr.toString()).apply()
-    }
-
-    fun mutateLayout(transform: (List<HomeItem>) -> List<HomeItem>) = setLayout(transform(_layout.value))
-
-    /**
-     * Waits until everything written so far is on disk rather than on its way there: setup's last
-     * step, so what it chose is there however soon Zenith is stopped. Off the main thread.
-     */
-    fun flush(): Boolean = prefs.edit().commit()
-
-    /** Puts a whole backup back in one step, so nothing is half restored. */
-    fun restore(settings: ZenithSettings, items: List<HomeItem>) {
-        _settings.value = settings
-        _layout.value = items
-        val arr = JSONArray()
-        items.forEach { arr.put(it.toJson()) }
-        prefs.edit()
-            .putString(KEY_SETTINGS, settings.toJson().toString())
-            .putString(KEY_LAYOUT, arr.toString())
-            .apply()
-    }
-
-    fun reset() {
-        prefs.edit().clear().apply()
-        _settings.value = ZenithSettings()
-        _layout.value = emptyList()
-        _looks.value = emptyList()
-    }
-
-    private fun readSettings(): ZenithSettings = runCatching {
-        prefs.getString(KEY_SETTINGS, null)?.let { ZenithSettings.fromJson(JSONObject(it)) }
-    }.getOrNull() ?: ZenithSettings()
-
-    private fun readLayout(): List<HomeItem> = runCatching {
-        val raw = prefs.getString(KEY_LAYOUT, null) ?: return@runCatching emptyList()
-        val arr = JSONArray(raw)
-        // Read back exactly as saved. Sizes and positions are put right by the view model, which
-        // can see the grid and everything else on the page; enlarging one widget here, blind to its
-        // neighbours, is what let widgets grow over the icons around them.
-        (0 until arr.length()).mapNotNull { homeItemFromJson(arr.getJSONObject(it)) }
-    }.getOrNull() ?: emptyList()
-
-    companion object {
-        private const val KEY_SETTINGS = "settings"
-        private const val KEY_LAYOUT = "layout"
-        private const val KEY_LOOKS = "looks"
-
-        @Volatile private var instance: SettingsStore? = null
-
-        fun get(context: Context): SettingsStore =
-            instance ?: synchronized(this) { instance ?: SettingsStore(context).also { instance = it } }
     }
 }

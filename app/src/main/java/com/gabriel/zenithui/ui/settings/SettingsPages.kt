@@ -642,9 +642,9 @@ internal fun MotionOptions(settings: ZenithSettings, actions: SettingsActions, o
                         settings.closeAnimation == CloseRules.PLAIN ->
                             "Android closes the app its own way, then its icon lands back in its place."
                         pictures ->
-                            "Where Android allows it, the app itself shrinks back into its icon. Elsewhere a picture of it does, with App pictures on, or else the card it opened on."
+                            "Where Android allows it, the app itself shrinks back into its icon. Elsewhere, once Android's own close is over, a picture of it does, with App pictures on, or else the card it opened on."
                         else ->
-                            "Where Android allows it, the app itself shrinks back into its icon. Elsewhere the card it opened on does, in its colour and with its logo."
+                            "Where Android allows it, the app itself shrinks back into its icon. Elsewhere, once Android's own close is over, the card it opened on does, in its colour and with its logo."
                     }
                 )
             }

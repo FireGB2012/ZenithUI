@@ -56,7 +56,10 @@ accessibility service, or a stand-in it draws itself.
 - Without the helper, Zenith knows which app is closing only from having opened it in the last 30
   minutes. An app opened some other way (a notification, recents) closes Android's way only. An app
   that opened another one closes into the icon of the first.
-- On One UI, Android's own close still plays first and Zenith's follows it, as Void's does.
+- On One UI, Android's own close still plays first and Zenith's follows it, as Void's does. Set off
+  at focus it started too soon, behind the falling app: since
+  `2026-11-16-waiting-for-androids-close-design.md` the home screen waits, empty, until Android says
+  its close is over.
 
 ## Checked
 

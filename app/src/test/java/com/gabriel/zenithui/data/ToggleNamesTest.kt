@@ -6,43 +6,39 @@ import org.junit.Test
 
 class ToggleNamesTest {
 
+    private fun name(full: Float, short: Float = full) = ToggleNames.Widths(full, short)
+
     @Test
-    fun `names that fit their cell are set full size on one line`() {
-        assertEquals(ToggleNames(1f, 1), ToggleNames.fit(widestName = 57f, widestWord = 57f, cell = 74f, roomForTwo = true))
-        assertEquals(ToggleNames(1f, 1), ToggleNames.fit(widestName = 74f, widestWord = 40f, cell = 74f, roomForTwo = false))
+    fun `names that fit their tiles are set in full, at full size`() {
+        val names = ToggleNames.fit(listOf(name(40f), name(60f, 30f)), room = 82f)
+        assertEquals(listOf(false, false), names.short)
+        assertEquals(1f, names.scale, 0f)
     }
 
     @Test
-    fun `a name too long for its cell goes onto a second line when there is room`() {
-        // "Do Not Disturb" in a two by two: wider than the cell, but no word of it is.
-        assertEquals(ToggleNames(1f, 2), ToggleNames.fit(widestName = 88f, widestWord = 45f, cell = 74f, roomForTwo = true))
+    fun `a name too long for its tile takes its short form, and only that one`() {
+        // "Do Not Disturb" in a wide tile becomes "Focus"; "Wi-Fi" beside it stays as it is.
+        val names = ToggleNames.fit(listOf(name(36f), name(101f, 40f)), room = 82f)
+        assertEquals(listOf(false, true), names.short)
+        assertEquals(1f, names.scale, 0f)
     }
 
     @Test
-    fun `a single word wider than the cell shrinks every name until it fits`() {
-        val names = ToggleNames.fit(widestName = 90f, widestWord = 80f, cell = 72f, roomForTwo = true)
-        assertEquals(2, names.lines)
-        assertEquals(0.9f, names.scale, 0.0001f)
+    fun `every tile shares one size, which the tightest name sets`() {
+        val names = ToggleNames.fit(listOf(name(30f), name(70f, 70f)), room = 66.5f)
+        assertEquals(66.5f / 70f, names.scale, 0.0001f)
     }
 
     @Test
-    fun `with no room for a second line the names shrink to stay on one`() {
-        val names = ToggleNames.fit(widestName = 80f, widestWord = 45f, cell = 72f, roomForTwo = false)
-        assertEquals(1, names.lines)
-        assertEquals(0.9f, names.scale, 0.0001f)
+    fun `names are never set smaller than twelve of fourteen`() {
+        val names = ToggleNames.fit(listOf(name(200f, 150f)), room = 60f)
+        assertEquals(ToggleNames.SMALLEST, names.scale, 0.0001f)
+        assertTrue(ToggleNames.SMALLEST * 14f >= 12f - 0.0001f)
     }
 
     @Test
-    fun `names are never set smaller than ten of twelve`() {
-        val oneLine = ToggleNames.fit(widestName = 200f, widestWord = 60f, cell = 60f, roomForTwo = false)
-        assertEquals(ToggleNames.SMALLEST, oneLine.scale, 0.0001f)
-        val twoLines = ToggleNames.fit(widestName = 200f, widestWord = 150f, cell = 60f, roomForTwo = true)
-        assertEquals(ToggleNames.SMALLEST, twoLines.scale, 0.0001f)
-        assertTrue(ToggleNames.SMALLEST * 12f >= 10f - 0.0001f)
-    }
-
-    @Test
-    fun `a cell with no width leaves the names alone`() {
-        assertEquals(ToggleNames(1f, 1), ToggleNames.fit(widestName = 80f, widestWord = 40f, cell = 0f, roomForTwo = true))
+    fun `no tiles, or no room, leaves the names alone`() {
+        assertEquals(ToggleNames(emptyList(), 1f), ToggleNames.fit(emptyList(), room = 80f))
+        assertEquals(ToggleNames(listOf(false), 1f), ToggleNames.fit(listOf(name(90f, 40f)), room = 0f))
     }
 }

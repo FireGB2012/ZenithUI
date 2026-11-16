@@ -25,38 +25,36 @@ class WidgetFormTest {
     }
 
     @Test
-    fun `four toggles in a two by two are round buttons with their names`() {
+    fun `four toggles in a two by two are round buttons, two by two`() {
         val grid = ToggleGrid.of(170f, 190f, chosen = 4)
         assertEquals(4, grid.shown)
         assertEquals(2, grid.columns)
         assertEquals(2, grid.rows)
-        assertEquals(ToggleGrid.Style.Named, grid.style)
+        assertTrue(grid.slots.all { it.kind == ToggleGrid.Kind.Button })
     }
 
     @Test
-    fun `wide cells become tiles, with a second line only when they are tall enough`() {
+    fun `wide toggles are tiles with their names, and big cells are cards`() {
         val wide = ToggleGrid.of(350f, 190f, chosen = 4)
-        assertEquals(ToggleGrid.Style.Tiles, wide.style)
-        assertFalse(wide.detail)
+        assertTrue(wide.slots.all { it.kind == ToggleGrid.Kind.Tile })
         val large = ToggleGrid.of(350f, 330f, chosen = 4)
-        assertEquals(ToggleGrid.Style.Tiles, large.style)
-        assertTrue(large.detail)
+        assertTrue(large.slots.all { it.kind == ToggleGrid.Kind.Card })
     }
 
     @Test
-    fun `one column of wide cells is a list`() {
+    fun `one column of wide cells is a list of tiles`() {
         val tall = ToggleGrid.of(170f, 330f, chosen = 4)
         assertEquals(1, tall.columns)
-        assertEquals(ToggleGrid.Style.List, tall.style)
+        assertTrue(tall.slots.all { it.kind == ToggleGrid.Kind.Tile })
     }
 
     @Test
     fun `a widget too small for everything chosen shows as many as can still be pressed`() {
         val strip = ToggleGrid.of(170f, 90f, chosen = 12)
-        assertEquals(8, strip.shown)
-        assertEquals(4, strip.columns)
-        assertTrue(minOf(strip.cellWidth, strip.cellHeight) >= ToggleGrid.MIN_CELL)
-        assertEquals(ToggleGrid.Style.Buttons, strip.style)
+        assertEquals(3, strip.shown)
+        assertEquals(9, strip.more)
+        assertEquals(ToggleGrid.Kind.More, strip.slots.last().kind)
+        assertTrue(strip.button >= ToggleGrid.MIN_STRIP_BUTTON)
         // Never none at all, however small.
         assertEquals(1, ToggleGrid.of(40f, 40f, chosen = 4).shown)
     }
@@ -72,9 +70,11 @@ class WidgetFormTest {
 
     @Test
     fun `the toggles say how they are set out, and when some are left out`() {
-        assertEquals("Round buttons, each with its name under it.", WidgetLayouts.note("toggles", 170f, 190f, toggles = 4))
+        assertEquals("Round buttons, the symbols alone, as Control Center has them.", WidgetLayouts.note("toggles", 170f, 190f, toggles = 4))
+        assertEquals("Tiles, each with its name and whether it is on.", WidgetLayouts.note("toggles", 350f, 190f, toggles = 4))
+        assertEquals("The first two as tiles with their names, the rest as round buttons.", WidgetLayouts.note("toggles", 350f, 190f, toggles = 6))
         assertEquals(
-            "Round buttons, the icons alone. Room for 8 of your 12.",
+            "Round buttons, the symbols alone, as Control Center has them. Room for 3 of your 12; the last button opens the rest.",
             WidgetLayouts.note("toggles", 170f, 90f, toggles = 12),
         )
     }

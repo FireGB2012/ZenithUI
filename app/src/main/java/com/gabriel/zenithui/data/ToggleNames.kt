@@ -1,31 +1,34 @@
 package com.gabriel.zenithui.data
 
 /**
- * How the names under a row of round Quick Toggles are set: at what share of their full size, and
- * on how many lines. Every name in the widget is set the same way, so the buttons above them stay
- * in a line.
+ * How the names on a Quick Toggles widget's tiles are set: which of them take their short form
+ * ("Focus" for Do Not Disturb, "Airplane" for Airplane mode), and at what share of their full size.
+ * Every tile in a widget is set at the same size, so a row of them reads as one.
  */
-data class ToggleNames(val scale: Float, val lines: Int) {
+data class ToggleNames(
+    /** For each tile in turn, whether its name is the short one. */
+    val short: List<Boolean>,
+    val scale: Float,
+) {
+    /** A name's width at full size, in full and in its short form. */
+    data class Widths(val full: Float, val short: Float)
 
     companion object {
-        /** A name is never set smaller than this share of its full size: 10sp of 12sp. */
-        const val SMALLEST = 10f / 12f
+        /** A name is never set smaller than this share of its full size: 12sp of 14sp. */
+        const val SMALLEST = 12f / 14f
 
         /**
-         * Names are set as large as the label under an app, which is larger than they used to be,
-         * so a long one ("Do Not Disturb" in a two by two) no longer fits its cell on one line.
-         * When the cell is tall enough to keep a button you can press above two lines
-         * ([roomForTwo]) it goes onto a second; a single word wider than the cell shrinks the lot
-         * until it fits. With no room for two lines the names shrink to stay on one, and past
-         * [SMALLEST] the longest is cut short, as it always was.
-         *
-         * [widestName] and [widestWord] are widths at full size and [cell] the room across, all in
-         * the same unit.
+         * Each name in full where it fits [room], the space beside a tile's symbol, and in its short
+         * form where it does not. If even that is too wide, every name shrinks together until it
+         * fits, but never past [SMALLEST]; past that, the longest is cut short. [names] and [room]
+         * are in the same unit.
          */
-        fun fit(widestName: Float, widestWord: Float, cell: Float, roomForTwo: Boolean): ToggleNames {
-            if (cell <= 0f || widestName <= cell) return ToggleNames(1f, 1)
-            if (roomForTwo) return ToggleNames((cell / widestWord.coerceAtLeast(1f)).coerceIn(SMALLEST, 1f), 2)
-            return ToggleNames((cell / widestName).coerceIn(SMALLEST, 1f), 1)
+        fun fit(names: List<Widths>, room: Float): ToggleNames {
+            if (room <= 0f) return ToggleNames(names.map { false }, 1f)
+            val short = names.map { it.full > room }
+            val widest = names.indices.maxOfOrNull { if (short[it]) names[it].short else names[it].full } ?: 0f
+            val scale = if (widest <= room) 1f else (room / widest).coerceIn(SMALLEST, 1f)
+            return ToggleNames(short, scale)
         }
     }
 }

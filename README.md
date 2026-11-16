@@ -216,7 +216,7 @@ anywhere else.
 | Power | 2×2 | Battery ring from `ACTION_BATTERY_CHANGED`, with charge state |
 | Calendar | 2×2 | The iPhone's: the weekday in red over the date, large, and today's events from the next one on, each a bar in its calendar's colour; Medium lists three beside the date and Large the rest of the day. Until Zenith may read the calendar, "Show your events" stands where they would be and asks. The date turns over at midnight. Its other sizes keep their earlier layouts |
 | Quick Note | 2×2 | Scratchpad persisted with your settings |
-| Quick Toggles | 2×2 | Small tile, 2×2 buttons: working torch (Camera2) plus Wi-Fi / Bluetooth / DND |
+| Quick Toggles | 2×2 | Set out as Control Center is: big round buttons, tiles with names and On / Off where there is room, and a +N button for the rest. Each lights up in its own colour while it is on, read live from Android (`ToggleStates`); the torch works (Camera2), the rest open their panel |
 | Now playing | 4×2 | The album's picture, the song, play / pause / skip and how far in, from Android's media sessions (`NowPlaying`, through the dots' notification access); the picture crosses over as the song changes |
 | World clock | 2×2 | Up to four cities, chosen from every time zone, each with its time, a sun or a moon and how far it is from yours ("+9 h, tomorrow"), clock faces in the bigger sizes |
 | Countdown | 2×2 | The days to a date you name, as rolling digits in a ring that fills as the day comes; "today" on the day, and the days since after |
@@ -268,11 +268,11 @@ version of.
 **Words that can be read.** A widget is read at a glance, over a wallpaper, so its second line (the
 date, "On battery", "25 days left") is set stronger than the muted grey a page uses, nothing in a
 widget is smaller than 11sp at its ordinary size, and the accent is taken part of the way towards
-the pane's own ink when it is used for letters. The names under the Quick Toggles are the size of
-the label under an app; one too long for its cell ("Do Not Disturb" in a two by two) goes onto a
-second line, and every name takes the same number of lines so the buttons stay level
-(`ToggleNames.fit`). Their symbols fill a little over half of their button, as Android's own quick
-settings do. Everywhere else, second lines and small print (the subtitles in Settings, the words
+the pane's own ink when it is used for letters. The Quick Toggles carry names only on their tiles,
+beside the symbol, as Control Center does; a name too long for its tile takes its short form
+("Focus" for Do Not Disturb), and if even that will not fit, every name in the widget shrinks
+together, never under 12sp (`ToggleNames.fit`). A round button carries its symbol alone. Everywhere
+else, second lines and small print (the subtitles in Settings, the words
 under a choice) are 74% of the ink, which stands six to one or better against the page
 backdrops, light and dark (`PaletteToneTest`).
 
@@ -468,7 +468,7 @@ far out of an opening folder each app is) and `AnimationTuning` (the numbers it 
   come out one after another as it opens.
 - **Widgets** animate their own changes: rolling digits, a ring that springs to its value and
   glints while charging, every other gauge filling the same way as it appears, today's dot drawing
-  itself in, toggles that change shape.
+  itself in, toggles that fill with their own colour from the middle as they come on.
 - **The drawer and sheets.** The drawer is put together just after the home screen arrives, out of
   sight, so the first swipe up is as smooth as the tenth. Rows rise in each time it opens, its
   title and count turn over as you search, and a wallpaper's preview grows out of the thumbnail

@@ -69,7 +69,7 @@ import com.gabriel.zenithui.ui.theme.inkOnTint
  *
  * - Mini: how many are left.
  * - Strip: the next thing, with its tick, and how many more.
- * - Square: the heading and the first few.
+ * - Square: the heading, with how many are left, and as many of them as fit.
  * - Wide: the heading and the list in two columns.
  * - Tall: the heading, the list, and a line to add one at the foot.
  * - Big: the same, with a way to clear what is done.
@@ -125,7 +125,9 @@ internal fun TodoWidget(form: WidgetForm, width: Dp, height: Dp) {
                 if (todos.isEmpty() || left == 0) {
                     Nothing(Modifier.weight(1f))
                 } else {
-                    List(indexed.filter { !it.second.done }, Modifier.weight(1f)) { i -> change(Todos.toggle(todos, i)) }
+                    // The heading already says how many are left, so the room goes to the things
+                    // themselves rather than to a line saying how many more.
+                    List(indexed.filter { !it.second.done }, Modifier.weight(1f), more = false) { i -> change(Todos.toggle(todos, i)) }
                 }
             }
 
@@ -172,14 +174,17 @@ internal fun TodoWidget(form: WidgetForm, width: Dp, height: Dp) {
     }
 }
 
-/** The list's items, as many as there is room for, with how many more under them when some are left out. */
+/**
+ * The list's items, as many as there is room for, with how many more under them when some are left
+ * out, if [more].
+ */
 @Composable
-private fun List(items: List<Pair<Int, TodoItem>>, modifier: Modifier, onTick: (Int) -> Unit) {
+private fun List(items: List<Pair<Int, TodoItem>>, modifier: Modifier, more: Boolean = true, onTick: (Int) -> Unit) {
     AsManyAsFit(
         items,
         modifier,
         gap = 2.dp,
-        more = { more -> Words("$more more", Type.meta, weight = FontWeight.Medium, color = soft(), modifier = Modifier.padding(start = 30.dp)) },
+        more = if (!more) null else { left -> Words("$left more", Type.meta, weight = FontWeight.Medium, color = soft(), modifier = Modifier.padding(start = 30.dp)) },
     ) { (index, item) -> Item(item, Modifier.fillMaxWidth()) { onTick(index) } }
 }
 

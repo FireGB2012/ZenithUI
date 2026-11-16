@@ -169,6 +169,13 @@ class MainActivity : ComponentActivity() {
         focused = hasFocus
     }
 
+    // Android's word that the transition bringing Zenith into view is over. Coming home from an
+    // app, that is when the phone's own close of the app has finished (see AndroidClose).
+    override fun onEnterAnimationComplete() {
+        super.onEnterAnimationComplete()
+        com.gabriel.zenithui.data.AndroidClose.saysDone()
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         // Going home from an app with gestures, Android may ask where its icon is, so it can spring

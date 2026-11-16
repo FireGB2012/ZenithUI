@@ -8,11 +8,11 @@ import kotlin.math.roundToInt
 enum class TuneGroup(val title: String, val note: String) {
     Open("Opening an app", "The card that grows out of the icon until it fills the screen."),
     Home("Home screen behind", "What the rest of the home screen does while the app opens, and undoes as you come back."),
-    Close("Closing an app", "The home screen coming forward again, and the app's icon landing in its place."),
+    Close("Closing an app", "Android's own close of the app first, then the home screen coming forward again, and the app's icon landing in its place."),
 }
 
 /** How a number is written out beside its slider. */
-enum class TuneUnit { Plain, Ratio, Percent, Dp, Times }
+enum class TuneUnit { Plain, Ratio, Percent, Dp, Times, Ms }
 
 /**
  * Every number the opening and closing of an app runs on. Each has a range it is kept inside, the
@@ -53,6 +53,11 @@ enum class Tune(
     HomeBlur("homeBlur", TuneGroup.Home, "Blur", 0f, 32f, 1f, TuneUnit.Dp, 8f, "How far out of focus the home screen goes."),
     IconPush("iconPush", TuneGroup.Home, "Icons pushed aside", 0f, 60f, 1f, TuneUnit.Dp, 10f, "How far the icons nearest the one you tapped move out of its way."),
 
+    CloseWait(
+        "closeWait", TuneGroup.Close, "Wait for Android's close", 0f, 1500f, 10f, TuneUnit.Ms, 0f,
+        "How long the home screen stays empty, the wallpaper only, while Android plays its own close of the app, " +
+            "before the icons come in and the app goes into its icon. Auto waits until Android says its close is over.",
+    ),
     ReturnStiffness("returnStiffness", TuneGroup.Close, "Return stiffness", 40f, 1200f, 5f, TuneUnit.Plain, 300f, "How fast the home screen comes forward again."),
     ReturnDamping("returnDamping", TuneGroup.Close, "Return damping", 0.3f, 1.2f, 0.01f, TuneUnit.Ratio, 0.7f, "Under 1.00 it comes a little too far forward and settles."),
     CloseCard(
@@ -85,6 +90,7 @@ enum class Tune(
         }
         TuneUnit.Dp -> "${value.roundToInt()} dp"
         TuneUnit.Times -> "${twoPlaces(value)}×"
+        TuneUnit.Ms -> if (this == CloseWait && value < AndroidClose.WAIT_AUTO) "Auto" else "${value.roundToInt()} ms"
     }
 
     companion object {

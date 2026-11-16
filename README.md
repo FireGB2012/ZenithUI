@@ -463,8 +463,12 @@ far out of an opening folder each app is) and `AnimationTuning` (the numbers it 
   picture of the app shrinks into the icon once Android's own close is done, the picture giving way
   to the icon's colour and logo as it gets small. With neither (One UI, buttons, or the copy of
   Zenith that installs by tapping it), the card the app opened on, in its colour and with its logo,
-  shrinks back into the icon from 72% of the screen. Each starts once Zenith can be seen (its
-  window's focus, or 450 ms after it resumed): on One UI Android plays its own close first. The
+  shrinks back into the icon from 72% of the screen. Without the handshake Android plays its own
+  close of the app first, over Zenith, so the home screen waits for it, empty, until Android says
+  it is over (`AndroidClose`, `specs/2026-11-16-waiting-for-androids-close-design.md`; before
+  Android 14 the usual length for that make of phone), and then the icons fly in as the app goes
+  into its icon. Advanced animation settings → *Wait for Android's close* sets it by hand. With the
+  handshake it starts once Zenith can be seen (its window's focus, or 450 ms after it resumed). The
   home screen comes forward again on a spring that carries it a little too far, the app's icon
   lands in its place with a bounce, and the icons round it are knocked back and swing home. The
   icon is the one it was opened from, or that app's icon on the page on show or in the dock, or the
@@ -800,8 +804,10 @@ before.
 - Opening and closing apps into their icons has not been tried on a phone yet. The gesture
   handshake only happens with gesture navigation on phones whose recents are AOSP's (not One UI,
   not with buttons); App pictures needs Android 11 and a Zenith from Play or put on with a
-  computer. Without the handshake Android's own close still plays before Zenith's, and an app that
-  had to start again shows its splash screen after the picture for a moment. Without App pictures
+  computer. Without the handshake Android's own close still plays before Zenith's, with the home
+  screen empty until it is over: how long is Android's word from Android 14 on, and a guess for
+  the make of phone before that. An app that had to start again shows its splash screen after the
+  picture for a moment. Without App pictures
   the card is the app's colour and logo, not the app, and Zenith only knows which app is closing
   from having opened it.
 

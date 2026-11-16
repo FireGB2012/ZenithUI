@@ -128,6 +128,7 @@ import com.gabriel.zenithui.data.Gestures
 import com.gabriel.zenithui.data.HostedWidgetCell
 import com.gabriel.zenithui.data.StackCell
 import com.gabriel.zenithui.data.LockService
+import com.gabriel.zenithui.data.AndroidClose
 import com.gabriel.zenithui.data.AppPictures
 import com.gabriel.zenithui.data.CloseRoute
 import com.gabriel.zenithui.data.CloseRules
@@ -693,6 +694,16 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
     /** The close [comeForward] has worked out, waiting for Zenith to be seen, and which time it is. */
     val forward = remember { arrayOfNulls<() -> Unit>(1) }
     val forwardTurn = remember { IntArray(1) }
+    /**
+     * Set while the home screen waits, empty, for Android's own close of the app to be over, so
+     * that nothing of Zenith's plays hidden behind it (see AndroidClose): the arrival and the
+     * close both hold until then.
+     */
+    val waitingForAndroid = remember { BooleanArray(1) }
+    val waitJob = remember { arrayOfNulls<kotlinx.coroutines.Job>(1) }
+    /** When Zenith was last covered, and whether by an app with the screen on, which Android then closes. */
+    val coveredAt = remember { LongArray(1) }
+    val coveredByApp = remember { BooleanArray(1) }
     /** Where a closing card set off from, and whether it has no icon to go into and fades instead. */
     var closingFrom by remember { androidx.compose.runtime.mutableFloatStateOf(1f) }
     var closingVanishes by remember { mutableStateOf(false) }
@@ -707,7 +718,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
     val power = remember(context) { context.getSystemService(android.os.PowerManager::class.java) }
 
     fun arrive() {
-        if (!arrivalPending[0]) return
+        if (!arrivalPending[0] || waitingForAndroid[0]) return
         arrivalPending[0] = false
         scope.launch {
             arrivalClock.snapTo(0f)
@@ -969,11 +980,20 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         }
     }
 
-    /** Sets off the close [comeForward] worked out, once, if it has not gone yet. */
+    /** Sets off the close [comeForward] worked out, once, if it has not gone yet and nothing holds it. */
     fun setOff() {
+        if (waitingForAndroid[0]) return
         val go = forward[0] ?: return
         forward[0] = null
         go()
+    }
+
+    /** Android's own close is over, or is not waited for any more: the home screen arrives, and the app goes into its icon. */
+    fun endWait() {
+        if (!waitingForAndroid[0]) return
+        waitingForAndroid[0] = false
+        arrive()
+        setOff()
     }
 
     /**
@@ -982,11 +1002,13 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
      * window sprung into it, a picture of the app shrinking into it, the card it opened on, or the
      * icon landing on its own.
      *
-     * Worked out as Zenith resumes, and set off once it can be seen: at once with its window in
-     * front, otherwise as the window gets focus or [CloseRules.SIGHT_WAIT_MS] later, whichever comes
-     * first. On One UI Android plays its own close before it shows a launcher that is not built in,
-     * and anything set off on resuming was over before then. Until it goes the home screen stays
-     * sunk back and the icon out of sight, so the first frame seen is the start of the close.
+     * Worked out as Zenith resumes. Back from an app with nothing of Android's coming into the icon,
+     * Android plays its own close of the app first, over Zenith, which is already in front under it:
+     * the home screen waits for that, empty, and only then do the icons come in and the app go into
+     * its icon (see AndroidClose). Otherwise it is set off once Zenith can be seen: at once with its
+     * window in front, or as the window gets focus or [CloseRules.SIGHT_WAIT_MS] later, whichever
+     * comes first. Until it goes the home screen stays sunk back and the icon out of sight, so the
+     * first frame seen is the start of the close.
      */
     fun comeForward() {
         if (!away[0]) return
@@ -1027,7 +1049,27 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 CloseRoute.Card, CloseRoute.Picture -> closeIntoIcon(closed)
             }
         }
-        if (hostView.hasWindowFocus()) {
+        // Android's own window going into the icon is Android's, and the icons are wanted in their
+        // places for it to land in, so that is not waited for; nor is anything with movement reduced.
+        val fromApp = coveredByApp[0]
+        coveredByApp[0] = false
+        val plan = if (fromApp && closed?.answer == null && !liveMotion.reduced) {
+            AndroidClose.planHere(context, liveTuning[Tune.CloseWait])
+        } else {
+            null
+        }
+        if (plan != null) {
+            // Empty from the first frame: everything is wound right back, and comes in from there.
+            waitingForAndroid[0] = true
+            arrivalDepth.floatValue = FlyIn.FULL
+            val startedAt = android.os.SystemClock.uptimeMillis()
+            val since = coveredAt[0]
+            waitJob[0]?.cancel()
+            waitJob[0] = scope.launch {
+                AndroidClose.awaitSetOff(plan, startedAt, since)
+                if (forwardTurn[0] == turn) endWait()
+            }
+        } else if (hostView.hasWindowFocus()) {
             setOff()
         } else {
             scope.launch {
@@ -1102,7 +1144,9 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
      * rather than starting again. An app opened any other way simply opens.
      */
     fun launchApp(key: String) {
-        // A close still waiting for Zenith to be seen goes now, so the opening takes over from it.
+        // A close still waiting for Zenith to be seen, or for Android's own close, goes now, so the
+        // opening takes over from it.
+        endWait()
         setOff()
         val current = card
         if (current != null && current.key == key) {
@@ -1159,6 +1203,15 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     away[0] = true
                     closingWorkedOut[0] = false
                     closing[0] = null
+                    // Covered with the screen on is an app coming over Zenith, which Android closes
+                    // its own way when it goes; with the screen off the next thing is an unlock.
+                    coveredAt[0] = android.os.SystemClock.uptimeMillis()
+                    coveredByApp[0] = power?.isInteractive != false
+                    // Covered again while waiting for the last close to be over: that wait is dropped
+                    // with the close it held, below.
+                    waitJob[0]?.cancel()
+                    waitJob[0] = null
+                    waitingForAndroid[0] = false
                     // Covered again before the last close was seen: it is dropped, its icon shown and
                     // the home screen let go of, at rest, so nothing is left waiting for it.
                     if (forward[0] != null) {

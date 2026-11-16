@@ -340,11 +340,20 @@ rows under them sit in a group of their own, a line between each.
 
 ## Wallpapers
 
-Zenith paints its own wallpapers on the phone (`WallpaperArt`, `WallDesigns`): thirty-three designs
-on four shelves — Soft, Lines, Shapes and Scenes — seven of them for Zenith Plus. Every design comes
-in a choice of colour sets (the six that were once Zenith's themes, any bought with aura, colours of
-your own made before the themes went, and colours taken from your wallpaper) and has a light picture
-and a dark one, each made so labels and the status bar stay readable over it. Tap one and both pictures are shown side by side, each with
+Zenith paints its own wallpapers on the phone (`WallpaperArt`, `WallDesigns`, `WallDepth`):
+forty-one designs on five shelves — Depth, Soft, Lines, Shapes and Scenes — nine of them for Zenith
+Plus. Every design comes in a choice of colour sets (thirteen free ones round the colour wheel, six
+of them once Zenith's themes, any bought with aura, colours of your own made before the themes went,
+and colours taken from your wallpaper) and has a light picture and a dark one, each made so labels
+and the status bar stay readable over it.
+
+**Depth**, the first shelf, is eight designs with a body to them, as the wallpapers that come with
+an iPhone or a Galaxy have: Iris, Layers, Satin, Marbles, Liquid and Twist, and for Plus, Loop and
+Eclipse. They are lit as things in the world are, light added as light, their colours run between
+the set's two accents round the colour wheel the short way in OKLab (`DepthKit`), so a gradient stays
+vivid where the same two colours mixed as RGB go grey. They are worked out a pixel at a time on all
+the phone's cores; the ribbon in Twist is drawn as a mesh. See
+`specs/2026-11-16-depth-wallpapers-design.md`. Tap one and both pictures are shown side by side, each with
 your own home screen on it, drawn by the code that draws the real one in the ink it takes in that
 light. Its glass is frosted there, as over any wallpaper Zenith cannot see: the real glass will
 bend the new wallpaper, which is not behind it yet.

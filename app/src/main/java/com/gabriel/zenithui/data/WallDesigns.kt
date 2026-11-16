@@ -27,6 +27,8 @@ internal object WallDesigns {
 
     fun paint(style: WallStyle, easel: Easel) = with(easel) {
         when (style) {
+            WallStyle.Iris, WallStyle.Layers, WallStyle.Satin, WallStyle.Marbles,
+            WallStyle.Liquid, WallStyle.Twist, WallStyle.Loop, WallStyle.Eclipse -> WallDepth.paint(style, this)
             WallStyle.Glow -> glow()
             WallStyle.Calm -> calm()
             WallStyle.Mesh -> mesh()

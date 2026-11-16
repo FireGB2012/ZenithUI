@@ -62,6 +62,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -210,6 +213,10 @@ class IslandService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         }
         scope.launch { expanded.collect { open -> if (open) openCard() } }
         scope.launch { follow() }
+        // Made a little wider or nudged in Settings: it moves as the slider does, over every app.
+        scope.launch {
+            SettingsStore.get(this@IslandService).settings.map { it.island.fit }.distinctUntilChanged().drop(1).collect { measure() }
+        }
     }
 
     private fun compose(content: @Composable () -> Unit) = ComposeView(this).apply {
@@ -428,6 +435,7 @@ class IslandService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             holeY = ((hole?.exactCenterY() ?: 0f) / density).dp,
             statusBar = (bar / density).dp,
             width = (width / density).dp,
+            fit = SettingsStore.get(this).settings.value.island.fit,
         )
         geometry.value = shape
         pillParams.x = ((shape.centreX.value - shape.width.value / 2f) * density).toInt()

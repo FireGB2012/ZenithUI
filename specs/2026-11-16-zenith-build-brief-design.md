@@ -78,3 +78,25 @@ the switch existed keeps that, and the switch turns it off.
 
 *(My call)* Searching Settings for "battery" still finds Keep Zenith loaded first; the pill at rest is
 found by "notch", "status", "percent" and "rest".
+
+## 2. Making the Notch fit
+
+Settings → Zenith Notch → Size and position: four sliders and a way back.
+
+- **Width** 80% to 140% and **Height** 85% to 135% of the size it is made for this camera, so it
+  grows from its middle and stays on the camera. A wider Notch also grows wider when it opens, up
+  to the same limit as ever: 24 dp short of the screen's width.
+- **Left and right** up to 12 dp either way, **Up and down** 6 dp up or 8 dp down: about 30 pixels
+  on most phones, the brief's "a few dozen". It never leaves the top of the screen or its sides.
+- **Reset to default** opens out under the sliders while anything has changed, and puts it back.
+- **Live preview**: the top of this phone at the top of the page, with the pill showing while a
+  slider moves even if it is off at rest; and the Notch over every app moves with it, since the
+  service measures again as the fit changes.
+
+The fit is saved with the Notch's settings in whole percent and whole dp, under keys of its own
+(`fitWidth`, `fitHeight`, `fitX`, `fitY`); an early island's `width` meant something else and is
+never read as one. Whatever is read back is kept within the limits (`NotchFit.of`).
+
+*(My call)* The limits: wide enough to cover a camera that sits off centre or a pill a little
+short of the lens, never so far that it reads as something you drag about, which the brief rules
+out. Up is shorter than down, because up runs into the top of the screen first.

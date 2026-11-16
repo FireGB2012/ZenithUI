@@ -120,4 +120,32 @@ class IslandTest {
         assertTrue(IslandSettings.fromJson(JSONObject("""{"on":true}""")).always)
         assertFalse(IslandSettings.fromJson(IslandSettings(always = false).toJson()).always)
     }
+
+    @Test
+    fun `the Notch's fit is kept within a little of its own size and a few dp of the camera`() {
+        assertEquals(NotchFit(), NotchFit.of(1f, 1f, 0f, 0f))
+        assertTrue(NotchFit().isDefault)
+        // Whatever is asked, it stays within its limits: no Notch half the screen wide, none dragged away.
+        val most = NotchFit.of(width = 9f, height = 9f, x = 500f, y = 500f)
+        assertEquals(NotchFit.WIDTH.endInclusive, most.width, 0f)
+        assertEquals(NotchFit.HEIGHT.endInclusive, most.height, 0f)
+        assertEquals(NotchFit.X.endInclusive, most.x, 0f)
+        assertEquals(NotchFit.Y.endInclusive, most.y, 0f)
+        val least = NotchFit.of(width = 0f, height = 0f, x = -500f, y = -500f)
+        assertEquals(NotchFit.WIDTH.start, least.width, 0f)
+        assertEquals(NotchFit.Y.start, least.y, 0f)
+        assertTrue(NotchFit.X.endInclusive <= 16f && NotchFit.Y.endInclusive <= 16f)
+        // In whole percent and whole dp, as a slider's every position lands.
+        assertEquals(NotchFit(width = 1.13f, x = 3f), NotchFit.of(1.1312f, 1f, 2.6f, 0.2f))
+        // Not a number is the default, not the smallest it can be.
+        assertEquals(NotchFit(), NotchFit.of(Float.NaN, Float.NaN, Float.NaN, Float.NaN))
+    }
+
+    @Test
+    fun `a fit is saved with the rest, and an early island's width is never read as one`() {
+        val fitted = IslandSettings(on = true, fit = NotchFit(width = 1.2f, height = 0.9f, x = -4f, y = 2f))
+        assertEquals(fitted, IslandSettings.fromJson(fitted.toJson()))
+        assertEquals(NotchFit(), IslandSettings.fromJson(JSONObject("""{"width":1.3}""")).fit)
+        assertEquals(NotchFit.X.start, IslandSettings.fromJson(JSONObject("""{"fitX":-99}""")).fit.x, 0f)
+    }
 }

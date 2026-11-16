@@ -594,8 +594,8 @@ the switch is off.
 camera, stretched: black round the camera hole, drawn over every app. At rest it is a small pill
 round the camera with the battery, its percentage in it as an iPhone draws it (green on the
 charger, red at 20% and under), and a status icon or two on the other side: a moon for Do Not
-Disturb, a struck-through bell for silent, vibrate (`IslandRules.status`). **The pill at rest**
-off, at rest it is exactly the camera and nothing more. When something happens it grows out of the
+Disturb, a struck-through bell for silent, vibrate (`IslandRules.status`). With **The pill at
+rest** off, at rest it is exactly the camera and nothing more. When something happens it grows out of the
 camera on a spring, with what it shows in its two rounded ends, either side of the lens, and
 nothing over it:
 
@@ -620,9 +620,16 @@ hair, the icons sit in the middle of its rounded ends, and it grows to at most 4
 width, which keeps it clear of the clock and the status icons. Its words are in the phone's own
 sans, like the status bar beside it, whatever font the home screen is in.
 
+**Size and position** makes it fit a camera it does not sit quite right on: 80% to 140% of its
+width and 85% to 135% of its height, and nudged up to 12 dp left or right and 6 dp up or 8 dp down
+(`NotchFit`; about 30 pixels on most phones). It is never dragged about and never leaves the top
+of the screen. While a slider moves, the preview shows the pill even if it is off at rest, and the
+Notch over every app moves with it; **Reset to default** is there while anything has changed.
+
 Its page has a live preview, the top of this very phone at its own size with the same island on
 it, and buttons to try music, a call, a notification, silent, the charger and Do Not Disturb; then
-what it shows, the pill at rest, and keeping out of the way in full screen and sideways. It needs
+what it shows, the pill at rest, its size and position, and keeping out of the way in full screen
+and sideways. It needs
 Android's "Display over other apps", and notification access for music, calls and notifications.
 Each is explained in a sheet before Android's page opens (`NotchAccessSheet`): what it is for, what
 Zenith does not do with it, and the steps on Android's page, which only names the permission.

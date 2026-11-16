@@ -106,6 +106,7 @@ object SettingsCatalog {
         SettingsEntry("island", SettingsPage.Island, "Zenith Notch", "notch dynamic island pill camera over apps overlay plus"),
         SettingsEntry("islandShows", SettingsPage.Island, "What it shows", "notch island music calls timers charger notifications ringer silent"),
         SettingsEntry("islandAlways", SettingsPage.Island, "The pill at rest", "notch island pill camera rest idle always percent status do not disturb silent"),
+        SettingsEntry("islandFit", SettingsPage.Island, "Size and position", "notch island size width height position move left right up down nudge offset bigger smaller reset camera"),
         SettingsEntry("islandWhen", SettingsPage.Island, "Out of the way", "notch island full screen video game sideways landscape hide"),
         SettingsEntry("lookSave", SettingsPage.Looks, "Save this look", "look looks setup profile preset theme save switch"),
         SettingsEntry("lookSchedule", SettingsPage.Looks, "Schedule", "look time night work automatic switch"),

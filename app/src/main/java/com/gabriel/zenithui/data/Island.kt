@@ -30,6 +30,8 @@ data class IslandSettings(
     val hideFullScreen: Boolean = true,
     /** Out of the way while the phone is on its side. */
     val hideSideways: Boolean = true,
+    /** A little wider or taller, or nudged from the camera: see [NotchFit]. */
+    val fit: NotchFit = NotchFit(),
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         val d = IslandSettings()
@@ -42,6 +44,11 @@ data class IslandSettings(
         if (always != d.always) put("always", always)
         if (hideFullScreen != d.hideFullScreen) put("fullScreen", hideFullScreen)
         if (hideSideways != d.hideSideways) put("sideways", hideSideways)
+        // New keys of their own: an early island's "width" meant something else, and is never read.
+        if (fit.width != d.fit.width) put("fitWidth", fit.width.toDouble())
+        if (fit.height != d.fit.height) put("fitHeight", fit.height.toDouble())
+        if (fit.x != d.fit.x) put("fitX", fit.x.toDouble())
+        if (fit.y != d.fit.y) put("fitY", fit.y.toDouble())
     }
 
     companion object {
@@ -60,6 +67,12 @@ data class IslandSettings(
                 always = o.optBoolean("always", if (o.has("idle")) o.optString("idle") == "pill" else d.always),
                 hideFullScreen = o.optBoolean("fullScreen", d.hideFullScreen),
                 hideSideways = o.optBoolean("sideways", d.hideSideways),
+                fit = NotchFit.of(
+                    width = o.optDouble("fitWidth", 1.0).toFloat(),
+                    height = o.optDouble("fitHeight", 1.0).toFloat(),
+                    x = o.optDouble("fitX", 0.0).toFloat(),
+                    y = o.optDouble("fitY", 0.0).toFloat(),
+                ),
             )
         }
     }
@@ -103,6 +116,47 @@ data class IslandMoment(
     val text: String = "",
     val level: Int = 0,
 )
+
+/**
+ * The Notch made to fit (Settings → Zenith Notch → Size and position): a little wider or narrower,
+ * taller or shorter than it is made for this phone's camera, and nudged a few dp from where the
+ * camera is. Never more than that: it stays at the top, round the camera, and is never dragged about.
+ * [width] and [height] are shares of its own size; [x] (right is more) and [y] (down is more) are dp.
+ */
+@Immutable
+data class NotchFit(
+    val width: Float = 1f,
+    val height: Float = 1f,
+    val x: Float = 0f,
+    val y: Float = 0f,
+) {
+    /** Exactly as it is made for the camera: what Reset puts it back to. */
+    val isDefault: Boolean get() = this == NotchFit()
+
+    companion object {
+        val WIDTH = 0.8f..1.4f
+        val HEIGHT = 0.85f..1.35f
+
+        /** A few dozen pixels either way, and no more: about 30 on most phones. */
+        val X = -12f..12f
+        val Y = -6f..8f
+
+        /**
+         * A fit kept within its limits, in whole percent and whole dp, whatever it was asked for: a
+         * slider's every position, or a number from a backup or a phone that allowed more.
+         */
+        fun of(width: Float, height: Float, x: Float, y: Float): NotchFit = NotchFit(
+            width = whole(width, 100f, 1f).coerceIn(WIDTH),
+            height = whole(height, 100f, 1f).coerceIn(HEIGHT),
+            x = whole(x, 1f, 0f).coerceIn(X),
+            y = whole(y, 1f, 0f).coerceIn(Y),
+        )
+
+        /** [value] to the nearest 1/[steps]; [otherwise] for something that is not a number. */
+        private fun whole(value: Float, steps: Float, otherwise: Float): Float =
+            if (value.isNaN()) otherwise else kotlin.math.round(value * steps) / steps
+    }
+}
 
 /** One of the two permissions the Notch needs from Android, each explained before Android's page opens. */
 enum class NotchAccess {

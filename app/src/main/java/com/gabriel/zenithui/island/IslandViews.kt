@@ -105,6 +105,7 @@ import com.gabriel.zenithui.data.BatteryLook
 import com.gabriel.zenithui.data.IslandKind
 import com.gabriel.zenithui.data.IslandMoment
 import com.gabriel.zenithui.data.IslandRules
+import com.gabriel.zenithui.data.NotchFit
 import com.gabriel.zenithui.data.NotchStatus
 import com.gabriel.zenithui.data.NotificationDots
 import com.gabriel.zenithui.data.Playing
@@ -115,7 +116,8 @@ import kotlinx.coroutines.delay
 
 /**
  * Where this phone's camera is, and everything the island is sized from: in dp, from the top left
- * of the screen. The island is the camera stretched, so all of it follows from the camera.
+ * of the screen. The island is the camera stretched, so all of it follows from the camera, and then
+ * from how it was made to fit ([fit]): a little wider or taller, and nudged a few dp at most.
  */
 @Immutable
 data class IslandGeometry(
@@ -125,14 +127,19 @@ data class IslandGeometry(
     val holeY: Dp,
     val statusBar: Dp,
     val width: Dp,
+    val fit: NotchFit = NotchFit(),
 ) {
-    /** The island's height: the camera and a hair round it, so the two read as one thing. */
-    val height: Dp get() = if (hole > 0.dp) (hole + 3.dp).coerceIn(22.dp, 34.dp) else 26.dp
+    /** The island's height: the camera and a hair round it, so the two read as one thing; then as tall as asked. */
+    val height: Dp get() = ((if (hole > 0.dp) (hole + 3.dp).coerceIn(22.dp, 34.dp) else 26.dp) * fit.height).coerceIn(18.dp, 46.dp)
 
-    /** Its top: centred on the camera, or in the middle of the status bar on a phone with none. */
-    val top: Dp get() = if (hole > 0.dp) holeY - height / 2 else ((statusBar - height) / 2).coerceAtLeast(2.dp)
+    /**
+     * Its top: centred on the camera, or in the middle of the status bar on a phone with none; then
+     * nudged as asked, but never off the top of the screen.
+     */
+    val top: Dp get() = ((if (hole > 0.dp) holeY - height / 2 else ((statusBar - height) / 2).coerceAtLeast(2.dp)) + fit.y.dp).coerceAtLeast(0.dp)
 
-    val centreX: Dp get() = if (hole > 0.dp) holeX else width / 2
+    /** Its middle: the camera's, nudged as asked, and never so far that it leaves the screen. */
+    val centreX: Dp get() = ((if (hole > 0.dp) holeX else width / 2) + fit.x.dp).coerceIn(height, (width - height).coerceAtLeast(height))
 
     /** Kept clear in the middle, for the camera: it, and a little either side of it. */
     val gap: Dp get() = if (hole > 0.dp) hole + 10.dp else 8.dp
@@ -158,7 +165,7 @@ data class IslandGeometry(
      * The widest the island grows round the camera: a little under half the screen, which leaves
      * the clock on one side and the status icons on the other clear of it, as they sit above it.
      */
-    val widest: Dp get() = max(width * 0.46f, root + height * 2)
+    val widest: Dp get() = (max(width * 0.46f, root + height * 2) * fit.width).coerceAtMost((width - 24.dp).coerceAtLeast(root))
 
     /** The most room words have in one of the island's ends; a longer name is cut short. */
     val words: Dp get() = (widest - gap) / 2 - end - 7.dp
@@ -317,12 +324,16 @@ fun IslandCompact(
         else -> 0.dp to 0.dp
     }
     val side = min(geometry.end + max(lead, trail) + 7.dp, (geometry.widest - geometry.gap) / 2)
+    val natural = when (kind) {
+        // At rest, as small as the battery and the status icons let it be.
+        IslandKind.IDLE -> max(geometry.gap + side * 2, max(geometry.root + geometry.height * 0.6f, geometry.height * 2.6f))
+        else -> geometry.gap + side * 2
+    }
     val targetW = when {
         expanded -> geometry.root
         kind == null -> geometry.rest
-        // At rest, as small as the battery and the status icons let it be.
-        kind == IslandKind.IDLE -> max(geometry.gap + side * 2, max(geometry.root + geometry.height * 0.6f, geometry.height * 2.6f))
-        else -> geometry.gap + side * 2
+        // As wide as it was made to fit, but never so narrow that what is in its ends is cut.
+        else -> min(max(natural * geometry.fit.width, geometry.gap + (geometry.end + max(lead, trail)) * 2), geometry.widest)
     }
     val targetH = if (kind == null && !expanded) geometry.rest else geometry.height
     val width by animateDpAsState(targetW, if (reduced) tween(Motion.REDUCED_MS) else islandSpring(230f, 0.76f), label = "islandWidth")

@@ -24,8 +24,9 @@ import kotlin.random.Random
  */
 data class WallColors(val accent: Int, val accentAlt: Int, val deep: Int, val mid: Int, val base: Int, val dark: Boolean = true)
 
-/** The shelves the designs are sorted onto in the picker. */
+/** The shelves the designs are sorted onto in the picker. Depth, the newest, is first. */
 enum class WallGroup(val label: String) {
+    Depth("Depth"),
     Soft("Soft"),
     Lines("Lines"),
     Shapes("Shapes"),
@@ -39,6 +40,14 @@ enum class WallGroup(val label: String) {
  * is the order in the picker.
  */
 enum class WallStyle(val label: String, val group: WallGroup, val plus: Boolean = false) {
+    Iris("Iris", WallGroup.Depth),
+    Layers("Layers", WallGroup.Depth),
+    Satin("Satin", WallGroup.Depth),
+    Marbles("Marbles", WallGroup.Depth),
+    Liquid("Liquid", WallGroup.Depth),
+    Twist("Twist", WallGroup.Depth),
+    Loop("Loop", WallGroup.Depth, plus = true),
+    Eclipse("Eclipse", WallGroup.Depth, plus = true),
     Glow("Glow", WallGroup.Soft),
     Calm("Calm", WallGroup.Soft),
     Mesh("Mesh", WallGroup.Soft),

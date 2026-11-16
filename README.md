@@ -212,21 +212,24 @@ anywhere else.
 
 | Widget | Size | What it does |
 | --- | --- | --- |
-| Zenith Clock | 2×2 | Small tile: time, short date and a greeting that uses your name |
-| Power | 2×2 | Battery ring from `ACTION_BATTERY_CHANGED`, with charge state |
-| Calendar | 2×2 | The iPhone's: the weekday in red over the date, large, and today's events from the next one on, each a bar in its calendar's colour; Medium lists three beside the date and Large the rest of the day. Until Zenith may read the calendar, "Show your events" stands where they would be and asks. The date turns over at midnight. Its other sizes keep their earlier layouts |
-| Quick Note | 2×2 | Scratchpad persisted with your settings |
+| Zenith Clock | 2×2 | A real clock face, paper by day and dark by night, with an orange second hand; the bigger sizes add the time in figures, the date, a greeting that uses your name and your next alarm |
+| Power | 2×2 | The charge as a ring from `ACTION_BATTERY_CHANGED`: green, yellow in battery saver, red when low, a light running round it while it charges; the bigger sizes add how long to full, where the power comes from, the temperature, the health and the voltage |
+| Calendar | 2×2 | The iPhone's: the weekday in red over the date, large, and today's events from the next one on, each a card with a bar in its calendar's colour and when it is ("5:30 PM · In 18 min", red while it is under way); Wide adds the week, Tall and Large the month. Until Zenith may read the calendar, "Show your events" stands where they would be and asks. The date turns over at midnight |
+| Quick Note | 2×2 | A note written on the widget itself, its first line set as its title, persisted with your settings |
 | Quick Toggles | 2×2 | Small tile, 2×2 buttons: working torch (Camera2) plus Wi-Fi / Bluetooth / DND |
-| Now playing | 4×2 | The album's picture, the song, play / pause / skip and how far in, from Android's media sessions (`NowPlaying`, through the dots' notification access); the picture crosses over as the song changes |
-| World clock | 2×2 | Up to four cities, chosen from every time zone, each with its time, a sun or a moon and how far it is from yours ("+9 h, tomorrow"), clock faces in the bigger sizes |
-| Countdown | 2×2 | The days to a date you name, as rolling digits in a ring that fills as the day comes; "today" on the day, and the days since after |
-| Photo frame | 2×2 | Up to twelve of your photos, picked with Android's own picker and kept small in Zenith's files; a different one each time you come home, crossing over, and the next at a tap |
-| To-do | 2×2 | A short list: what is left first, a tick that fills and draws itself, the ticked ones sliding below the rest, a line to add one |
-| Aura | 2×2 | Your streak in rolling digits under a flame, the week behind it as dots that fill one after another, and your aura |
-| Weather | 2×2 | The iPhone's: the place, a big temperature, the sky's symbol and words, and the high and low; Medium adds the next hours and Large the next five days. For a place you choose (`WeatherRepository`, Open-Meteo). Its other sizes keep their earlier layouts |
+| Now playing | 4×2 | The album's picture on a soft shadow of its own colour, the song, three bars moving while it plays, how far in and how long is left, and back / play / next, from Android's media sessions (`NowPlaying`, through the dots' notification access); the picture crosses over as the song changes |
+| World clock | 2×2 | Up to four cities, chosen from every time zone, each a clock face, paper where it is day there and dark where it is night, with its time and how far it is from yours ("+9 h, tomorrow") |
+| Countdown | 2×2 | The days to a date you name, in rolling digits, and the whole wait as a field of dots, those gone lit: a dot a day, a week or a month, as many as the room holds; "today" on the day, and the days since after |
+| Photo frame | 2×2 | Up to twelve of your photos, picked with Android's own picker and kept small in Zenith's files, edge to edge; a different one each time you come home, crossing over, and the next at a tap |
+| To-do | 2×2 | A short list in blue: what is left first and how many, a tick that fills and draws itself, the ticked ones sliding below the rest, a line to add one |
+| Aura | 2×2 | Your streak under a drawn flame, this week ticked off day by day, and your aura |
+| Weather | 2×2 | The iPhone's: the place, a big temperature, a drawn sky and its words, and today's low to high on a bar coloured by the temperature; Wide and Large chart the next hours, Tall lists them, and Large adds the days ahead. For a place you choose (`WeatherRepository`, Open-Meteo) |
 
-Each of them comes in both widget looks, Colour and Glass, has a No glass version and a design for
-every shape of space, and says in the gallery what each size shows. What they need is set from their own menu: cities,
+They are one family, drawn from scratch to one design (`ui/home/widgets/WidgetKit.kt`: one grid,
+one type scale, one hue each, symbols drawn rather than borrowed; the why is in
+`specs/2026-11-16-widgets-redesign-design.md`). Each of them comes in both widget looks, Colour and
+Glass, has a No glass version and a design for every shape of space, fitted down to a smaller cell
+rather than cut, and says in the gallery what each size shows. What they need is set from their own menu: cities,
 a date, photos, a place. **Weather is the one thing in Zenith that sends anything without an
 account:** nothing until a place is searched for; then what was typed, to Open-Meteo's place
 search, and from then on the chosen place's latitude and longitude, to its forecast, at most every
@@ -248,7 +251,7 @@ different design — with a switch between Glass and No glass and one button tha
 the middle. Under the row the sizes are named, each over the room it takes on the page: a little
 grid as wide as your page, its cells filled in (`SizeShape`), so Wide is plainly the width of the
 page and Tall a row more. A tap on a name brings that size to the middle, and under it a line says
-what that size shows ("Hours over minutes, like a Lock Screen"). The lines come from
+what that size shows ("A clock face with its hours round it, and the day on it"). The lines come from
 `WidgetLayouts`, which reads the same rules the widgets lay themselves out by (`WidgetForm`, and
 `ToggleGrid` for the toggles), so they cannot say a size shows what it does not. The row of sizes
 in a widget's menu shows the same little grid on each of them.
@@ -259,16 +262,18 @@ below; Colour or Glass for every widget at once is the widget look. The gallery 
 4 November one, until the widget picker's turn in the rebuild.
 
 **No glass** — the other side of that switch: the same widgets with no pane round
-them, like the clock on an iPhone's Lock Screen: the big numbers, rings and icons are made of glass
-themselves and sit straight on the wallpaper, with small glass icons added (a sun or moon on the
-clock, a battery on Power, a calendar, a pencil). Their words are white with a soft shadow. They are
+them, like the clock on an iPhone's Lock Screen: the same layouts, with the big numbers, rings,
+dials and symbols made of glass themselves, straight on the wallpaper. Their words are white with a
+soft shadow. They are
 stored as `bare_<type>` (`bare_clock`, …) and otherwise behave exactly like the widget they are a
 version of.
 
 **Words that can be read.** A widget is read at a glance, over a wallpaper, so its second line (the
 date, "On battery", "25 days left") is set stronger than the muted grey a page uses, nothing in a
-widget is smaller than 11sp at its ordinary size, and the accent is taken part of the way towards
-the pane's own ink when it is used for letters. The names under the Quick Toggles are the size of
+widget is smaller than 11sp at its ordinary size, and on the wallpaper (through glass or in "No
+glass") small coloured words are in the ink, as an iPhone's clear widgets have them, the colour
+staying in the marks beside them (`wordHue`): the picture behind can be any colour, and only the ink
+reads on all of them. The names under the Quick Toggles are the size of
 the label under an app; one too long for its cell ("Do Not Disturb" in a two by two) goes onto a
 second line, and every name takes the same number of lines so the buttons stay level
 (`ToggleNames.fit`). Their symbols fill a little over half of their button, as Android's own quick

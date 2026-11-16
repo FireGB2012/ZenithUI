@@ -1974,10 +1974,10 @@ private fun BoxScope.ResizeCorner(
             appear.animateTo(0f, spring(dampingRatio = 1f, stiffness = 520f))
             gone()
         } else {
-            appear.animateTo(1f, spring(dampingRatio = 0.5f, stiffness = 300f))
+            appear.animateTo(1f, Motion.open())
         }
     }
-    val lift by animateFloatAsState(if (held) 1.15f else 1f, spring(dampingRatio = 0.5f, stiffness = 500f), label = "cornerLift")
+    val lift by animateFloatAsState(if (held) 1.15f else 1f, Motion.press(), label = "cornerLift")
     // Pulled, the corner gives way to the outline, whose own corner is under the finger; let go, it
     // grows back where the finger left it and glides onto the thing's corner.
     val arc by animateFloatAsState(if (pulling) 0f else 1f, tween(if (pulling) 120 else 220), label = "cornerArc")

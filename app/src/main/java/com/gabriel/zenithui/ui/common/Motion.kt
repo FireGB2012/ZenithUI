@@ -56,30 +56,49 @@ import kotlinx.coroutines.launch
 /**
  * One motion vocabulary for the whole launcher. Springs, not curves — nothing should look like it
  * is following a timeline.
+ *
+ * Liquid, the way Apple's springs are: everything moves with a response of a fifth to half a second
+ * and comes to rest with one small bounce at most, never a wobble. Apple's bounciest spring is
+ * damped at 0.7, which goes a twentieth past its rest and stops; only a press, a finger's own
+ * squeeze, is let go a little looser, as the home screen's jelly icons are. (Damped at 0.36 to 0.48,
+ * as these were, a spring goes 18% to 30% past and swings back and forth three or four times, which
+ * is what made things read as jelly rather than liquid.)
  */
 object Motion {
-    /** Small state flips: quick to start, with a visible settle. */
-    fun <T> snappy() = spring<T>(dampingRatio = 0.48f, stiffness = 260f)
+    /** Small state flips: quick to start, and they settle with hardly a bounce. */
+    fun <T> snappy() = spring<T>(dampingRatio = 0.78f, stiffness = 320f)
 
     /** Anything where an overshoot would expose an edge: sheets, the drawer. Slow, no bounce. */
     fun <T> smooth() = spring<T>(dampingRatio = 0.92f, stiffness = 190f)
 
-    /** The luxurious one: slow, and it rocks into place. */
-    fun <T> bouncy() = spring<T>(dampingRatio = 0.40f, stiffness = 200f)
+    /** The luxurious one: slower, and it rocks into place once. */
+    fun <T> bouncy() = spring<T>(dampingRatio = 0.7f, stiffness = 230f)
 
-    /** Icons gliding to a new cell, with a little overshoot as they land. */
-    val cell = spring<IntOffset>(dampingRatio = 0.66f, stiffness = 420f)
+    /** Icons gliding to a new cell, landing softly. */
+    val cell = spring<IntOffset>(dampingRatio = 0.8f, stiffness = 400f)
 
     // By what is happening, so two things that are the same kind of event move the same way.
 
-    /** Something squeezed under a finger and let go. */
-    fun <T> press() = spring<T>(dampingRatio = 0.36f, stiffness = 420f)
+    /** Something squeezed under a finger and let go: back with one small bounce. */
+    fun <T> press() = spring<T>(dampingRatio = 0.62f, stiffness = 520f)
 
     /** Something picked up: it comes off the page quickly and rocks once. */
-    fun <T> lift() = spring<T>(dampingRatio = 0.38f, stiffness = 260f)
+    fun <T> lift() = spring<T>(dampingRatio = 0.7f, stiffness = 340f)
 
     /** Something put down: firm, with one small bounce. */
-    fun <T> drop() = spring<T>(dampingRatio = 0.62f, stiffness = 380f)
+    fun <T> drop() = spring<T>(dampingRatio = 0.7f, stiffness = 420f)
+
+    /** Content rising into its place, as the drawer's rows do each time it opens. */
+    fun <T> rise() = spring<T>(dampingRatio = 0.8f, stiffness = 220f)
+
+    /** Whole blocks of a page rising in, where even a small bounce would be too much. */
+    fun <T> riseGently() = spring<T>(dampingRatio = 0.86f, stiffness = 240f)
+
+    /** A number rolling over to the next: [rollOver]. */
+    val roll = spring(dampingRatio = 0.78f, stiffness = 320f, visibilityThreshold = IntOffset(1, 1))
+
+    /** A bar arriving from an edge of the screen, a touch past its place and back: [edgeIn]. */
+    val edge = spring(dampingRatio = 0.72f, stiffness = 320f, visibilityThreshold = IntOffset(1, 1))
 
     /** Something growing out of what was tapped: a folder, a preview. */
     fun <T> open() = spring<T>(dampingRatio = 0.78f, stiffness = 300f)
@@ -138,7 +157,7 @@ fun edgeIn(reduced: Boolean, fromFoot: Boolean = false): EnterTransition =
     if (reduced) {
         fadeIn(tween(Motion.REDUCED_MS))
     } else {
-        slideInVertically(EDGE) { if (fromFoot) it else -it } + fadeIn(tween(180))
+        slideInVertically(Motion.edge) { if (fromFoot) it else -it } + fadeIn(tween(180))
     }
 
 /** The same bar going back to the edge it came from, quicker than it came. */
@@ -148,8 +167,6 @@ fun edgeOut(reduced: Boolean, toFoot: Boolean = false): ExitTransition =
     } else {
         slideOutVertically(tween(220, easing = FastOutLinearInEasing)) { if (toFoot) it else -it } + fadeOut(tween(180))
     }
-
-private val EDGE = spring(dampingRatio = 0.72f, stiffness = 320f, visibilityThreshold = IntOffset(1, 1))
 
 /**
  * A number, or a short line, giving way to the next: the new one comes up from under it as the old
@@ -162,7 +179,7 @@ fun rollOver(reduced: Boolean, down: Boolean = false): ContentTransform {
         targetContentEnter = if (reduced) {
             fadeIn(tween(Motion.REDUCED_MS))
         } else {
-            slideInVertically(ROLL) { way * it / 2 } + fadeIn(tween(220))
+            slideInVertically(Motion.roll) { way * it / 2 } + fadeIn(tween(220))
         },
         initialContentExit = if (reduced) {
             fadeOut(tween(Motion.REDUCED_MS))
@@ -173,8 +190,6 @@ fun rollOver(reduced: Boolean, down: Boolean = false): ContentTransform {
         sizeTransform = SizeTransform(clip = false),
     )
 }
-
-private val ROLL = spring(dampingRatio = 0.48f, stiffness = 260f, visibilityThreshold = IntOffset(1, 1))
 
 /**
  * Words changing where they stand: the old ones go, and the new come in a moment behind them. What
@@ -230,7 +245,7 @@ fun Modifier.pressBounce(pressedScale: Float = 0.88f, enabled: Boolean = true): 
     var pressed by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(
         targetValue = if (!pressed) 1f else if (style == "ripple") 1f - (1f - pressedScale) * 0.25f else pressedScale,
-        animationSpec = spring(dampingRatio = 0.36f, stiffness = 420f),
+        animationSpec = Motion.press(),
         label = "press",
     )
     val ripple = if (style == "ripple") remember { Animatable(1f) } else null
@@ -311,10 +326,7 @@ fun Modifier.appearIn(
             progress.animateTo(1f, tween(Motion.REDUCED_MS))
         } else {
             if (delayMillis > 0) delay(delayMillis.toLong())
-            progress.animateTo(
-                1f,
-                if (gentle) spring(dampingRatio = 0.86f, stiffness = 240f) else spring(dampingRatio = 0.55f, stiffness = 170f),
-            )
+            progress.animateTo(1f, if (gentle) Motion.riseGently() else Motion.rise())
         }
     }
     return this.graphicsLayer {

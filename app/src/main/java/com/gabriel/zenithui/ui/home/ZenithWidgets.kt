@@ -410,6 +410,7 @@ private fun WordsOnCard(fill: WidgetFill, content: @Composable () -> Unit) {
 private fun WordsOnWallpaper(content: @Composable () -> Unit) {
     if (LocalOnWallpaper.current) {
         CompositionLocalProvider(
+            com.gabriel.zenithui.ui.home.widgets.LocalPaleGlass provides !LocalPalette.current.dark,
             LocalPalette provides LocalPalette.current.copy(dark = true),
             LocalTextStyle provides LocalTextStyle.current.merge(
                 TextStyle(shadow = labelShadow(onWallpaper = true, legacyShadow = false, density = LocalDensity.current.density))
@@ -434,18 +435,18 @@ private fun WidgetBody(
     toggles: List<String>,
 ) {
     when (kind) {
-        "clock" -> ClockWidget(form, userName, width, height)
-        "battery" -> BatteryWidget(form, width, height)
-        "calendar" -> CalendarWidget(form, width, height)
-        "notes" -> NotesWidget(form, note, onNoteChange)
+        "clock" -> com.gabriel.zenithui.ui.home.widgets.ClockWidget(form, width, height, userName)
+        "battery" -> com.gabriel.zenithui.ui.home.widgets.PowerWidget(form, width, height)
+        "calendar" -> com.gabriel.zenithui.ui.home.widgets.CalendarWidget(form, width, height)
+        "notes" -> com.gabriel.zenithui.ui.home.widgets.NotesWidget(form, width, height, note, onNoteChange)
         "toggles" -> TogglesWidget(form, toggles, width, height)
-        "media" -> MediaWidget(form, width, height)
-        "world" -> WorldClockWidget(form, width, height)
-        "countdown" -> CountdownWidget(form, width, height)
-        "photo" -> PhotoFrameWidget(form, width, height)
-        "todo" -> TodoWidget(form, width, height)
-        "aura" -> AuraWidget(form, width, height)
-        "weather" -> WeatherWidget(form, width, height)
+        "media" -> com.gabriel.zenithui.ui.home.widgets.MusicWidget(form, width, height)
+        "world" -> com.gabriel.zenithui.ui.home.widgets.WorldWidget(form, width, height)
+        "countdown" -> com.gabriel.zenithui.ui.home.widgets.CountdownWidget(form, width, height)
+        "photo" -> com.gabriel.zenithui.ui.home.widgets.PhotoWidget(form, width, height)
+        "todo" -> com.gabriel.zenithui.ui.home.widgets.TodoWidget(form, width, height)
+        "aura" -> com.gabriel.zenithui.ui.home.widgets.StreakWidget(form, width, height)
+        "weather" -> com.gabriel.zenithui.ui.home.widgets.WeatherWidget(form, width, height)
         else -> Box(Modifier.fillMaxSize())
     }
 }

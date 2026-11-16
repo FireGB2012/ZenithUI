@@ -54,6 +54,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.gabriel.zenithui.data.AnimationPreset
 import com.gabriel.zenithui.data.AnimationTuning
+import com.gabriel.zenithui.data.CloseRules
 import com.gabriel.zenithui.data.LaunchMotion
 import com.gabriel.zenithui.data.Tune
 import com.gabriel.zenithui.data.TuneGroup
@@ -89,7 +90,7 @@ internal fun AdvancedMotionOptions(settings: ZenithSettings, actions: SettingsAc
     fun set(next: AnimationTuning) = actions.change { it.copy(animation = next) }
 
     Box(Modifier.fillMaxWidth().riseIn(0), contentAlignment = Alignment.Center) {
-        MotionPreview(tuning)
+        MotionPreview(tuning, closingPlain = settings.closeAnimation == CloseRules.PLAIN)
     }
     if (settings.motion == "reduced") {
         Note("Animations are set to Reduced, so apps open and close plainly whatever is chosen here. Set them to Full to see it.")
@@ -272,7 +273,7 @@ private fun StepButton(icon: ImageVector, says: String, enabled: Boolean, onClic
  * the real screen, only smaller. The blur is left out: it would cost more than a picture is worth.
  */
 @Composable
-private fun MotionPreview(tuning: AnimationTuning) {
+private fun MotionPreview(tuning: AnimationTuning, closingPlain: Boolean) {
     val palette = LocalPalette.current
     val scope = rememberCoroutineScope()
     val live by rememberUpdatedState(tuning)
@@ -316,12 +317,14 @@ private fun MotionPreview(tuning: AnimationTuning) {
                 fly(1f)
             } else {
                 // On the phone Android takes the app's own window away. What Zenith draws is what
-                // follows: the home screen forward, a closing card if one is asked for, the landing.
+                // follows: the home screen forward, the card going back into the icon (closing Plain,
+                // only if one is asked for), the landing.
                 returning = true
                 sink.snapTo(1f)
                 launch { sink.animateTo(0f, t.springOf(Tune.ReturnStiffness, Tune.ReturnDamping)) }
-                val from = t[Tune.CloseCard]
-                if (from > 0.005f) {
+                val asked = t[Tune.CloseCard]
+                val from = if (closingPlain && asked <= CloseRules.CARD_OFF) 0f else CloseRules.cardStart(asked)
+                if (from > CloseRules.CARD_OFF) {
                     rest(from)
                     val flight = launch { fly(0f) }
                     snapshotFlow { grow.value }.first { it <= 0.03f }

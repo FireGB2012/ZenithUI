@@ -55,7 +55,11 @@ enum class Tune(
 
     ReturnStiffness("returnStiffness", TuneGroup.Close, "Return stiffness", 40f, 1200f, 5f, TuneUnit.Plain, 300f, "How fast the home screen comes forward again."),
     ReturnDamping("returnDamping", TuneGroup.Close, "Return damping", 0.3f, 1.2f, 0.01f, TuneUnit.Ratio, 0.7f, "Under 1.00 it comes a little too far forward and settles."),
-    CloseCard("closeCard", TuneGroup.Close, "Closing card", 0f, 1f, 0.01f, TuneUnit.Percent, 0f, "A card that shrinks back into the icon. Its size to start from; 0% is no card."),
+    CloseCard(
+        "closeCard", TuneGroup.Close, "Closing card", 0f, 1f, 0.01f, TuneUnit.Percent, 0f,
+        "The card in the app's colour that shrinks back into its icon when there is no picture of the app: its size to start from. " +
+            "Auto is ${(CloseRules.CARD_START * 100f).roundToInt()}% closing Into its icon, and no card closing Plain.",
+    ),
     ClosePicture("closePicture", TuneGroup.Close, "Picture starts at", 0.3f, 1f, 0.01f, TuneUnit.Percent, 0.92f, "With the app picture helper on, how big the picture of the app is as it starts back into its icon."),
     LandScale("landScale", TuneGroup.Close, "Icon lands from", 1f, 2f, 0.01f, TuneUnit.Times, 1.22f, "How large the app's icon is as it arrives back in its place."),
     LandStiffness("landStiffness", TuneGroup.Close, "Landing stiffness", 40f, 1200f, 5f, TuneUnit.Plain, 380f, "How fast the icon comes down to size."),
@@ -74,7 +78,7 @@ enum class Tune(
         TuneUnit.Plain -> "${value.roundToInt()}"
         TuneUnit.Ratio -> twoPlaces(value)
         TuneUnit.Percent -> when {
-            this == CloseCard && value < 0.005f -> "Off"
+            this == CloseCard && value < CloseRules.CARD_OFF -> "Auto"
             // The home screen's zoom moves half a percent at a time.
             step < 0.01f -> "${oneNoZero(value * 100f)}%"
             else -> "${(value * 100f).roundToInt()}%"

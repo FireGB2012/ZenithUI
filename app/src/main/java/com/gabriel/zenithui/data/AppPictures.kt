@@ -10,6 +10,13 @@ import kotlin.math.roundToInt
  * long. Plain numbers and sums, so they can be tested without a phone.
  */
 object PictureRules {
+    /**
+     * Whether the helper is offered at all: from Android 11, where an accessibility service can take
+     * a screenshot, and only in a copy of Zenith that has it ([declared]). The copy that installs
+     * by tapping it goes without, since Play Protect refuses a sideloaded app with one.
+     */
+    fun offered(sdk: Int, declared: Boolean): Boolean = sdk >= 30 && declared
+
     /** How long an app's screen has to have been in front before its picture is taken. */
     const val SETTLE_MS = 700L
 

@@ -455,20 +455,26 @@ far out of an opening folder each app is) and `AnimationTuning` (the numbers it 
   Behind it the home screen sinks back about the icon that was tapped, dims and goes out of focus,
   and the icons nearest make way. Tap the card, or press home, and it turns round where it is.
 - **Closing an app.** The app goes back into its icon whichever way the phone allows
-  (`CloseRules.route`; the design is `specs/2026-11-16-app-open-close-animations-design.md`).
-  With gesture navigation on a Pixel-type phone, Android asks the home app where the icon is
+  (`CloseRules.route`; the design is `specs/2026-11-16-app-open-close-animations-design.md`, and
+  `specs/2026-11-16-closing-on-every-phone-design.md` for phones like a Galaxy). With gesture
+  navigation on a Pixel-type phone, Android asks the home app where the icon is
   (`GestureHandshake`, Launcher3's `GestureNavContract`) and springs the app's own window into it;
   the icon swells a little as it arrives. Elsewhere, with **App pictures** on, a card holding a
   picture of the app shrinks into the icon once Android's own close is done, the picture giving way
-  to the icon's colour and logo as it gets small. Otherwise the home screen comes forward again on
-  a spring that carries it a little too far, the app's icon lands in its place with a bounce, and
-  the icons round it are knocked back and swing home; a card in the icon's colour can be switched
-  on as well. The icon is the one it was opened from, or that app's icon on the page on show or in
-  the dock, or the folder holding it (`IconPlaces`, which keeps where each sits at rest); with none,
-  the picture shrinks into the middle of the screen and fades. Settings → Motion & feel → **Closing
-  apps** has *Into its icon* and *Plain*, which is how it was.
-- **App pictures** (`PictureService`, Android 11 and later, off until switched on in Accessibility).
-  An accessibility service that does nothing else: 0.7 s after an app's screen comes to the front,
+  to the icon's colour and logo as it gets small. With neither (One UI, buttons, or the copy of
+  Zenith that installs by tapping it), the card the app opened on, in its colour and with its logo,
+  shrinks back into the icon from 72% of the screen. Each starts once Zenith can be seen (its
+  window's focus, or 450 ms after it resumed): on One UI Android plays its own close first. The
+  home screen comes forward again on a spring that carries it a little too far, the app's icon
+  lands in its place with a bounce, and the icons round it are knocked back and swing home. The
+  icon is the one it was opened from, or that app's icon on the page on show or in the dock, or the
+  folder holding it (`IconPlaces`, which keeps where each sits at rest); with none, the card shrinks
+  into the middle of the screen and fades. Settings → Motion & feel → **Closing apps** has *Into
+  its icon* and *Plain*: Android's own close, then the landing, which is how it was.
+- **App pictures** (`PictureService`, Android 11 and later, off until switched on in Accessibility;
+  only in a copy of Zenith that has it, so not the one that installs by tapping it, since Play
+  Protect refuses a sideloaded app with an accessibility service). An accessibility service that
+  does nothing else: 0.7 s after an app's screen comes to the front,
   and every 3 s after while it stays there, it takes a screenshot, shrinks it to at most 1280 px
   and keeps it in memory (`AppPictures`) for the last four apps, five minutes at most. A picture
   only counts once the app has stayed in front 2 s after it, since a swipe home moves the app before
@@ -793,9 +799,11 @@ before.
 
 - Opening and closing apps into their icons has not been tried on a phone yet. The gesture
   handshake only happens with gesture navigation on phones whose recents are AOSP's (not One UI,
-  not with buttons); App pictures needs Android 11. Without the handshake Android's own close still
-  plays before the picture's, and an app that had to start again shows its splash screen after the
-  picture for a moment.
+  not with buttons); App pictures needs Android 11 and a Zenith from Play or put on with a
+  computer. Without the handshake Android's own close still plays before Zenith's, and an app that
+  had to start again shows its splash screen after the picture for a moment. Without App pictures
+  the card is the app's colour and logo, not the app, and Zenith only knows which app is closing
+  from having opened it.
 
 - Reading the wallpaper for the glass backdrop requires Zenith to be the default home app. Entering
   the launcher raises the system "Set Zenith UI as your default home app?" dialog (`RoleManager`,

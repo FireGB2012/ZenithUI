@@ -170,7 +170,9 @@ class AnimationTuningTest {
         assertEquals("28 dp", Tune.OpenCorner.show(28f))
         assertEquals("-12 dp", Tune.OpenArc.show(-12f))
         assertEquals("1.22×", Tune.LandScale.show(1.22f))
-        assertEquals("Off", Tune.CloseCard.show(0f))
+        // Its own size closing Into its icon, and no card closing Plain.
+        assertEquals("Auto", Tune.CloseCard.show(0f))
+        assertEquals("Auto", Tune.CloseCard.show(0.004f))
         assertEquals("60%", Tune.CloseCard.show(0.6f))
         assertEquals("92%", Tune.ClosePicture.show(0.92f))
     }

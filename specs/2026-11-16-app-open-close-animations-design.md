@@ -46,6 +46,8 @@ Tried in this order, each the moment it can be (`CloseRules.route`):
   opens on, the other way. As it gets small the picture gives way to the icon's own colour and
   logo, over the same stretch it came in over on the way out, and then the icon lands.
 - **The colour card**, as before: off unless *Closing card* is turned up. It now fades in too.
+  (Later the same day it became the close for every phone with neither of the others, on by
+  default: `2026-11-16-closing-on-every-phone-design.md`.)
 - **The landing alone**, as before.
 
 Where it goes: the icon it was opened from; failing that, that app's icon on the page on show or

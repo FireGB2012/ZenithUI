@@ -582,6 +582,9 @@ private fun rememberNotificationAccess(): Boolean {
 @Composable
 internal fun MotionOptions(settings: ZenithSettings, actions: SettingsActions, onAdvanced: () -> Unit) {
     val change = actions.change
+    val context = LocalContext.current
+    // The copy of Zenith that installs by tapping it has no picture helper to offer.
+    val pictures = remember(context) { PictureService.available(context) }
     Group(rise = 0) {
         Spot("animations") {
             Column(Modifier.padding(14.dp)) {
@@ -635,15 +638,18 @@ internal fun MotionOptions(settings: ZenithSettings, actions: SettingsActions, o
                 )
                 Spacer(Modifier.height(8.dp))
                 Note(
-                    if (settings.closeAnimation == CloseRules.PLAIN) {
-                        "Android closes the app its own way, then its icon lands back in its place."
-                    } else {
-                        "Where Android allows it, the app itself shrinks back into its icon. Elsewhere a picture of it does, with App pictures on."
+                    when {
+                        settings.closeAnimation == CloseRules.PLAIN ->
+                            "Android closes the app its own way, then its icon lands back in its place."
+                        pictures ->
+                            "Where Android allows it, the app itself shrinks back into its icon. Elsewhere a picture of it does, with App pictures on, or else the card it opened on."
+                        else ->
+                            "Where Android allows it, the app itself shrinks back into its icon. Elsewhere the card it opened on does, in its colour and with its logo."
                     }
                 )
             }
         }
-        if (PictureService.supported) {
+        if (pictures) {
             GroupDivider(inset = 16.dp)
             Spot("appPictures") {
                 val picturesOn by PictureService.on.collectAsState()

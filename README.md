@@ -445,7 +445,8 @@ colours and a glass one takes the wallpaper's. The widget eases into a colour an
 
 Everything that moves is a spring, and anything that can be worked out without a screen is a plain
 function with a test: `MotionLevel` (how much moves), `PageEffects` (where a page is drawn part way
-through a swipe), `FlyIn` (when each item arrives), `LaunchMotion` (where an opening app's card is),
+through a swipe), `FlyIn` (when each item arrives), `LiquidArrival` (the wave the home screen comes
+home on, and how far each thing on it has risen), `LaunchMotion` (where an opening app's card is),
 `SheetPull` (where a sheet sits under a finger, and whether letting go puts it away), `Unpack` (how
 far out of an opening folder each app is) and `AnimationTuning` (the numbers it all runs on).
 
@@ -466,8 +467,8 @@ far out of an opening folder each app is) and `AnimationTuning` (the numbers it 
   shrinks back into the icon from 72% of the screen. Without the handshake Android plays its own
   close of the app first, over Zenith, so the home screen waits for it, empty, until Android says
   it is over (`AndroidClose`, `specs/2026-11-16-waiting-for-androids-close-design.md`; before
-  Android 14 the usual length for that make of phone), and then the icons fly in as the app goes
-  into its icon. Advanced animation settings → *Wait for Android's close* sets it by hand. With the
+  Android 14 the usual length for that make of phone), and then the home screen comes home, on a
+  wave out from the icon, as the app goes into it. Advanced animation settings → *Wait for Android's close* sets it by hand. With the
   handshake it starts once Zenith can be seen (its window's focus, or 450 ms after it resumed). The
   home screen comes forward again on a spring that carries it a little too far, the app's icon
   lands in its place with a bounce, and the icons round it are knocked back and swing home. The
@@ -489,16 +490,27 @@ far out of an opening folder each app is) and `AnimationTuning` (the numbers it 
 - **Advanced animation settings** (Settings → Motion & feel). Every one of those numbers can be
   changed: stiffness and damping for each spring, the arc of the path, how far the card has grown
   when the app starts, corners, logo and shadow, the home screen's zoom, dimming, blur and how far
-  icons are pushed, and the return, the landing and the ripple. Each has a slider and a minus and a
+  icons are pushed, the return, the landing and the ripple, and coming home like liquid: how long
+  its wave takes to cross the screen, the spring each thing rises on, how small it rises from, how
+  far it is drawn in, and how bright the wave's light is. Each has a slider and a minus and a
   plus that move it one step, a dp or a hundredth at a time. Six styles to start from — Zenith,
   Fluid, Bouncy, Dynamic, Sweet and Classic, the last being how it was before any of this — one
   slider for the speed of everything, and a small screen at the top of the page that plays whatever
   is set. Only what is changed is saved (`AnimationTuning`), and with animations reduced none of it
   swings, bounces, curves or zooms.
 
-- **Arriving.** On a cold start and after an unlock the home screen flies in: every item starts
-  out from the middle and comes in to its place, the middle of the page first, inside 600 ms.
-  Coming back from an app it is the same movement over a fifth of the distance.
+- **Arriving, like liquid** (`LiquidArrival`, `specs/2026-11-16-liquid-coming-home-design.md`). On
+  a cold start, after an unlock and coming back from an app, a wave runs out across the screen from
+  the icon the app went back into, or from the middle, and everything rises as it reaches it: from
+  a little small, faint and nearer where the wave started, up into its place on a spring that
+  carries it a hair past and settles it. A ring of light runs with the wave on the screen's one
+  `GlassRing`, softer on the wallpaper than a tap's, so every pane of glass lights up rim and face,
+  and every icon gleams, as it rises. It is one wave on the one arrival clock: each thing works out
+  once when it is reached and asks the clock how far it has risen while drawing, so nothing is
+  composed as it plays. At Zenith's own numbers the whole screen is home in about 0.6 s, and still
+  in about 1 s. With Coming home set to Middle it is the fly-in it always was: everything out from
+  the middle and in to its place, the middle of the page first, inside 600 ms. Coming back from an
+  app with Android's window going into the icon itself, either is a fifth as deep, a settle.
 - **Pages.** Four ways to turn one — Depth, Slide, Cube, Stack — and, while one turns, page dots in
   the Search pill, the current one long.
 - **Carrying.** The copy under the finger lifts and casts a shadow; everything else on the page
@@ -547,8 +559,10 @@ the switch is off.
   on a turntable), Wheel (round a great wheel under the screen), Flip (a card turned over where it
   stands) and Fold (folding in at the crease). Each is a tile in Motion & feel with two little
   pages caught part way through it, drawn by the same transform, and plays through once when tapped.
-- **Coming home**: from the middle (as before), from below, or in a cascade a column at a time
-  (`FlyIn.start`). **Opening the drawer**: Rise, Grow, or Glass, clearing where it is.
+- **Coming home**: Liquid (the default, see Arriving above), from the middle (as it was before),
+  from below, or in a cascade a column at a time (`FlyIn.start`). Phones that had from the middle
+  before there was liquid have liquid now; from the middle chosen since is kept (it is written
+  `centre`, and the old `middle` is read as liquid). **Opening the drawer**: Rise, Grow, or Glass, clearing where it is.
   **Pressing**: Bounce, Squish (soft, and it wobbles back), or Ripple, a ring of light from the
   finger that falls only on what was pressed; on the home screen icons are jelly whatever it is set
   to. All of it gives way to plain fades with movement reduced.

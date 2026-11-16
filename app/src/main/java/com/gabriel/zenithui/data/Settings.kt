@@ -131,8 +131,11 @@ data class ZenithSettings(
     val animation: AnimationTuning = AnimationTuning(),
     /** How one page gives way to the next: depth | slide | cube | stack. */
     val pageEffect: String = "depth",
-    /** How the home screen arrives: "middle", "below" or "cascade" (see `FlyIn`). */
-    val arrival: String = "middle",
+    /**
+     * How the home screen arrives: "liquid", "centre" (from the middle), "below" or "cascade" (see
+     * `FlyIn` and `LiquidArrival`).
+     */
+    val arrival: String = "liquid",
     /** How the drawer comes up: "rise", "grow" or "glass". */
     val drawerArrival: String = "rise",
     /** What a press does: "bounce", "squish" or "ripple". */
@@ -407,7 +410,9 @@ data class ZenithSettings(
                 motion = o.optString("motion", d.motion),
                 animation = AnimationTuning.fromJson(o.optJSONObject("animation")),
                 pageEffect = o.optString("pageEffect", d.pageEffect),
-                arrival = o.optString("arrival", d.arrival),
+                // "middle" is the arrival every phone had before it could be liquid, and liquid is
+                // what they have now. From the middle, chosen since, is written "centre".
+                arrival = o.optString("arrival", d.arrival).let { if (it == "middle") d.arrival else it },
                 drawerArrival = o.optString("drawerArrival", d.drawerArrival),
                 press = o.optString("press", d.press),
                 haptics = o.optBoolean("haptics", d.haptics),

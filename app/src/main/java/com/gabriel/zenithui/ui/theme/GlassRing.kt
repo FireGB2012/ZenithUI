@@ -36,16 +36,25 @@ import kotlin.math.max
 // drawn on the wallpaper, and the gleam it puts on what is not glass, are at the end.
 //
 // Edit mode sends the same ring as a wave: a quicker one that wakes everything on the home screen as
-// it reaches it, and a slower, fainter one that settles it all again ([RingStyle]).
+// it reaches it, and a slower, fainter one that settles it all again ([RingStyle]). Coming home like
+// liquid sends one too, with the wave everything surfaces on (see `LiquidArrival`).
 
 /**
  * A ring as it is at one moment: where it started, [centre]; how far it has run, [radius]; how wide
  * its band of light is, [width]; and how bright it is, [strength], from 1 under the finger down to
  * 0 as it runs out. All in pixels: on the screen as the ring keeps it, and in a pane's own pixels as
- * a pane draws it.
+ * a pane draws it. [band] and [line] are how much of its band and of the fine line along it the
+ * wallpaper shows, beside a tap's ring (see [RingStyle]).
  */
 @Immutable
-data class RingNow(val centre: Offset, val radius: Float, val width: Float, val strength: Float)
+data class RingNow(
+    val centre: Offset,
+    val radius: Float,
+    val width: Float,
+    val strength: Float,
+    val band: Float = 1f,
+    val line: Float = 1f,
+)
 
 /**
  * How much of [ring]'s light falls on something [distancePx] from where the ring started: all of its
@@ -66,9 +75,11 @@ private fun ringProgress(elapsedMs: Float, durationMs: Float): Float =
 /**
  * How a ring runs: how long it takes ([durationMs]); how far out it is at each moment ([spreadAt],
  * from how far through its run it is to how much of its reach it has crossed, both 0 to 1); and how
- * bright it is then ([strengthAt]), at most [peak]. [TAP] is a tap on the wallpaper's ring; [WAKE]
- * the quicker wave that wakes the home screen as editing starts; [CALM] the slower, fainter one that
- * settles it as editing ends.
+ * bright it is then ([strengthAt]), at most [peak]. [band] and [line] are how much of a tap's band
+ * of light and fine line the wallpaper shows under it: the panes and icons light up as a tap's ring
+ * makes them whatever these are. [TAP] is a tap on the wallpaper's ring; [WAKE] the quicker wave
+ * that wakes the home screen as editing starts; [CALM] the slower, fainter one that settles it as
+ * editing ends; [arrive] the light of the wave the home screen comes home on.
  */
 @Immutable
 class RingStyle(
@@ -76,6 +87,8 @@ class RingStyle(
     private val spread: (Float) -> Float,
     private val fade: (Float) -> Float,
     val peak: Float = 1f,
+    val band: Float = 1f,
+    val line: Float = 1f,
 ) {
     fun spreadAt(progress: Float): Float = spread(progress.coerceIn(0f, 1f))
 
@@ -103,7 +116,23 @@ class RingStyle(
         val TAP = RingStyle(RING_MS, spread = { 1f - (1f - it) * (1f - it) * (1f - it) }, fade = { 1f - it })
         val WAKE = RingStyle(WAKE_RING_MS, spread = WAVE_CURVE::transform, fade = ::waveFade)
         val CALM = RingStyle(CALM_RING_MS, spread = WAVE_CURVE::transform, fade = ::waveFade, peak = CALM_PEAK)
+
+        /**
+         * The light of the wave the home screen comes home on, over [durationMs] and as bright as
+         * [peak]. It slows as it spreads, but less than edit mode's waves do, so it is seen to
+         * travel across the screen rather than burst out over most of it at once; and on the
+         * wallpaper it is only a soft band, fainter than a tap's, with hardly a line, so it reads as
+         * light passing through the glass rather than a ring drawn on the screen.
+         */
+        fun arrive(durationMs: Float, peak: Float): RingStyle =
+            RingStyle(durationMs, spread = ::arriveSpread, fade = ::waveFade, peak = peak, band = ARRIVE_BAND, line = ARRIVE_LINE)
     }
+}
+
+/** How far out the light of coming home is [progress] through its run: `1 - (1 - progress)^1.5`. */
+private fun arriveSpread(progress: Float): Float {
+    val left = 1f - progress
+    return 1f - left * kotlin.math.sqrt(left)
 }
 
 /** A wave's light: most of it until a little past halfway, then fading to nothing as it runs out. */
@@ -163,11 +192,18 @@ class GlassRing(var screen: Size = Size.Zero, var density: Float = 1f) {
         startedAt = nowNanos
         pending = false
         this.style = style
-        // By the time it ends its band has passed the farthest corner, not just reached it.
-        reach = ringReach(at, screen) + 2f * ringWidth(style.durationMs, density, style.durationMs)
+        reach = reachFrom(at, style)
         started = true
         wake.trySend(Unit)
     }
+
+    /**
+     * How far a ring of [style] from [at] runs before it ends, in pixels: by then its band has passed
+     * the corner of [screen] farthest from it, not just reached it. For what has to keep pace with a
+     * ring, as the home screen coming home does with its light.
+     */
+    fun reachFrom(at: Offset, style: RingStyle): Float =
+        ringReach(at, screen) + 2f * ringWidth(style.durationMs, density, style.durationMs)
 
     /**
      * Sends a ring of [style] out from [at], timed from the next frame drawn: for a ring sent where
@@ -186,7 +222,10 @@ class GlassRing(var screen: Size = Size.Zero, var density: Float = 1f) {
         val run = style.durationMs
         if (elapsed >= run) return null
         val progress = elapsed / run
-        return RingNow(centre, reach * style.spreadAt(progress), ringWidth(elapsed, density, run), style.strengthAt(progress))
+        return RingNow(
+            centre, reach * style.spreadAt(progress), ringWidth(elapsed, density, run), style.strengthAt(progress),
+            band = style.band, line = style.line,
+        )
     }
 
     /**
@@ -273,16 +312,17 @@ private fun DrawScope.drawRingOfLight(ring: RingNow, centre: Offset) {
     // The band falls away either side of the ring as the light it puts on a pane does (paneLight),
     // taken at whole widths for the gradient to blend between. While the ring has hardly left the
     // finger, what would lie nearer than the middle is the middle.
+    val band = RING_BAND * ring.band
     val stops = ArrayList<Pair<Float, Color>>(8)
-    stops += 0f to Color.White.copy(alpha = RING_BAND * paneLight(0f, ring))
+    stops += 0f to Color.White.copy(alpha = band * paneLight(0f, ring))
     for (step in -3..3) {
         val out = ring.radius + step * ring.width
-        if (out > 0f) stops += (out / reach) to Color.White.copy(alpha = RING_BAND * ring.strength * exp(-(step * step).toFloat()))
+        if (out > 0f) stops += (out / reach) to Color.White.copy(alpha = band * ring.strength * exp(-(step * step).toFloat()))
     }
     drawCircle(Brush.radialGradient(*stops.toTypedArray(), center = centre, radius = reach), radius = reach, center = centre)
-    if (ring.radius > 1f) {
+    if (ring.radius > 1f && ring.line > 0f) {
         drawCircle(
-            color = Color.White.copy(alpha = RING_LINE * ring.strength),
+            color = Color.White.copy(alpha = RING_LINE * ring.line * ring.strength),
             radius = ring.radius,
             center = centre,
             style = Stroke(RING_LINE_DP.dp.toPx()),
@@ -341,6 +381,10 @@ private const val WAVE_HOLD = 0.55f
 
 /** How bright the settling wave is beside the waking one. */
 private const val CALM_PEAK = 0.6f
+
+/** How much of a tap's band and line the wallpaper shows under the light of coming home. */
+private const val ARRIVE_BAND = 0.6f
+private const val ARRIVE_LINE = 0.2f
 
 /** How wide a ring's band of light is as it leaves the finger, and how much wider it gets, in dp. */
 private const val RING_WIDTH_DP = 20f

@@ -66,6 +66,9 @@ import com.gabriel.zenithui.ui.common.pressBounce
 import com.gabriel.zenithui.ui.common.rememberTick
 import com.gabriel.zenithui.ui.common.unfoldIn
 import com.gabriel.zenithui.ui.common.unfoldOut
+import com.gabriel.zenithui.ui.home.FlyIn
+import com.gabriel.zenithui.ui.home.LiquidArrival
+import com.gabriel.zenithui.ui.home.LiquidWave
 import com.gabriel.zenithui.ui.home.springOf
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.inkOnTint
@@ -82,6 +85,7 @@ private fun TuneGroup.spot(): String = when (this) {
     TuneGroup.Open -> "motionOpen"
     TuneGroup.Home -> "motionHome"
     TuneGroup.Close -> "motionClose"
+    TuneGroup.Arrive -> "motionArrive"
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -92,7 +96,7 @@ internal fun AdvancedMotionOptions(settings: ZenithSettings, actions: SettingsAc
     fun set(next: AnimationTuning) = actions.change { it.copy(animation = next) }
 
     Box(Modifier.fillMaxWidth().riseIn(0), contentAlignment = Alignment.Center) {
-        MotionPreview(tuning, closingPlain = settings.closeAnimation == CloseRules.PLAIN)
+        MotionPreview(tuning, closingPlain = settings.closeAnimation == CloseRules.PLAIN, liquid = settings.arrival == LiquidArrival.STYLE)
     }
     if (settings.motion == "reduced") {
         Note("Animations are set to Reduced, so apps open and close plainly whatever is chosen here. Set them to Full to see it.")
@@ -288,9 +292,11 @@ private fun StepButton(icon: ImageVector, says: String, enabled: Boolean, onClic
  * sums and the same springs as the real one ([LaunchMotion], [AnimationTuning]). Tap it to open,
  * tap again to close. Distances are scaled to its size, so what is seen here is what happens on
  * the real screen, only smaller. The blur is left out: it would cost more than a picture is worth.
+ * Coming home [liquid], the icons rise on the wave out from the app's icon as it closes
+ * ([LiquidArrival]), with a band of its light running out with it.
  */
 @Composable
-private fun MotionPreview(tuning: AnimationTuning, closingPlain: Boolean) {
+private fun MotionPreview(tuning: AnimationTuning, closingPlain: Boolean, liquid: Boolean) {
     val palette = LocalPalette.current
     val scope = rememberCoroutineScope()
     val live by rememberUpdatedState(tuning)
@@ -308,6 +314,10 @@ private fun MotionPreview(tuning: AnimationTuning, closingPlain: Boolean) {
     /** The icon landing, 0 as it arrives to 1 settled. */
     val land = remember { Animatable(1f) }
     val wave = remember { Animatable(0f) }
+    /** The arrival clock coming home like liquid, at rest past its end. */
+    val arrive = remember { Animatable(FlyIn.AT_REST) }
+    /** The liquid wave as this little screen has it, worked out again only when the numbers or the size change. */
+    val liquidWave = remember { arrayOfNulls<Pair<Any, LiquidWave>>(1) }
     var open by remember { mutableStateOf(false) }
     /** Coming home: the home screen follows [sink], not the card. */
     var returning by remember { mutableStateOf(false) }
@@ -331,14 +341,25 @@ private fun MotionPreview(tuning: AnimationTuning, closingPlain: Boolean) {
             if (open) {
                 returning = false
                 land.snapTo(1f)
+                arrive.snapTo(FlyIn.AT_REST)
                 fly(1f)
             } else {
                 // On the phone Android takes the app's own window away. What Zenith draws is what
                 // follows: the home screen forward, the card going back into the icon (closing Plain,
-                // only if one is asked for), the landing.
+                // only if one is asked for), the landing. Coming home like liquid, everything else
+                // rises on the wave out from the icon meanwhile.
                 returning = true
                 sink.snapTo(1f)
                 launch { sink.animateTo(0f, t.springOf(Tune.ReturnStiffness, Tune.ReturnDamping)) }
+                if (liquid) {
+                    // How long it runs does not hang on where it starts or how far it has to go.
+                    val total = LiquidArrival.wave(Offset.Zero, t, 1f) { 1f }.totalMs
+                    launch {
+                        arrive.snapTo(0f)
+                        arrive.animateTo(total, tween(Math.round(total), easing = androidx.compose.animation.core.LinearEasing))
+                        arrive.snapTo(FlyIn.AT_REST)
+                    }
+                }
                 val asked = t[Tune.CloseCard]
                 val from = if (closingPlain && asked <= CloseRules.CARD_OFF) 0f else CloseRules.cardStart(asked)
                 if (from > CloseRules.CARD_OFF) {
@@ -398,16 +419,64 @@ private fun MotionPreview(tuning: AnimationTuning, closingPlain: Boolean) {
             val pushed = (if (returning) 0f else t[Tune.IconPush] * grow.value.coerceIn(0f, 1f)) + wave.value
             val reach = 150f * dp
 
+            // Coming home like liquid: the wave out from the app's icon, reaching past the farthest
+            // corner as the real one does, its band of light included.
+            val clock = arrive.value
+            val flowing = if (liquid && returning && clock < FlyIn.AT_REST) {
+                val key = Triple(t, size, dp)
+                liquidWave[0]?.takeIf { it.first == key }?.second ?: run {
+                    val corner = kotlin.math.hypot(maxOf(target.x, size.width - target.x), maxOf(target.y, size.height - target.y))
+                    LiquidArrival.wave(target, t, dp) { corner + 2f * PREVIEW_BAND_DP * dp }.also { liquidWave[0] = key to it }
+                }
+            } else {
+                null
+            }
+
             fun drawIcon(centre: Offset, colour: Color, scale: Float = 1f, alpha: Float = 1f) {
-                val (dx, dy) = LaunchMotion.push(centre.x - target.x, centre.y - target.y, pushed * dp, reach)
-                val at = pivot + (centre + Offset(dx, dy) - pivot) * zoom
-                val side = icon * zoom * scale
+                var grown = scale
+                var shown = alpha
+                var moved = centre
+                if (flowing != null && clock < flowing.totalMs) {
+                    val away = centre - target
+                    val distance = away.getDistance()
+                    val out = flowing.out(clock, flowing.delayMs(distance))
+                    grown *= flowing.scaleAt(out)
+                    shown *= LiquidArrival.alphaAt(out)
+                    if (distance > 0.5f) moved -= away / distance * flowing.pullAt(distance) * out
+                }
+                val (dx, dy) = LaunchMotion.push(moved.x - target.x, moved.y - target.y, pushed * dp, reach)
+                val at = pivot + (moved + Offset(dx, dy) - pivot) * zoom
+                val side = icon * zoom * grown
                 drawRoundRect(
-                    color = colour.copy(alpha = colour.alpha * alpha * dim),
+                    color = colour.copy(alpha = colour.alpha * shown * dim),
                     topLeft = Offset(at.x - side / 2f, at.y - side / 2f),
                     size = Size(side, side),
                     cornerRadius = CornerRadius(side * 0.26f),
                 )
+            }
+
+            // The band of light running out with the wave, as soft on the wallpaper as on the phone.
+            if (flowing != null && clock < flowing.runMs) {
+                val progress = clock / flowing.runMs
+                val strength = flowing.light.strengthAt(progress)
+                val front = flowing.front(clock)
+                val band = (PREVIEW_BAND_DP * (0.55f + 0.45f * progress)) * dp
+                val outer = front + 2f * band
+                if (strength > 0.005f && outer > 1f) {
+                    val inner = ((front - 2f * band) / outer).coerceIn(0f, 1f)
+                    val middle = (front / outer).coerceIn(inner, 1f)
+                    drawCircle(
+                        Brush.radialGradient(
+                            inner to Color.Transparent,
+                            middle to Color.White.copy(alpha = PREVIEW_LIGHT * strength),
+                            1f to Color.Transparent,
+                            center = target,
+                            radius = outer,
+                        ),
+                        radius = outer,
+                        center = target,
+                    )
+                }
             }
 
             val plain = palette.onGlass.copy(alpha = 0.22f)
@@ -455,3 +524,7 @@ private fun MotionPreview(tuning: AnimationTuning, closingPlain: Boolean) {
         Note(if (open) "Tap to close the app" else "Tap to open an app with these settings")
     }
 }
+
+/** How wide the light of a liquid wave is in the preview, in the real screen's dp, and how bright on its wallpaper. */
+private const val PREVIEW_BAND_DP = 36f
+private const val PREVIEW_LIGHT = 0.22f

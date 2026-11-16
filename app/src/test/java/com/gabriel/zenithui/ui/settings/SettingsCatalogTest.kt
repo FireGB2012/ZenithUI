@@ -111,6 +111,9 @@ class SettingsCatalogTest {
         assertEquals("motionClose", found("landing").first())
         assertEquals("motionHome", found("zoom").first())
         assertTrue("motionOpen" in found("stiffness") && "motionClose" in found("damping"))
+        // Coming home's own numbers, found after the choice of how it comes.
+        assertEquals(listOf("arrival", "motionArrive"), found("coming home"))
+        assertTrue("motionArrive" in found("wave") && "arrival" in found("liquid"))
         SettingsCatalog.on(SettingsPage.AdvancedMotion).forEach { assertTrue(it.id, it.id.startsWith("motion")) }
     }
 

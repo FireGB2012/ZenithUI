@@ -694,13 +694,14 @@ internal fun MotionOptions(settings: ZenithSettings, actions: SettingsActions, o
                 Caption("Coming home")
                 Spacer(Modifier.height(10.dp))
                 Segmented(
-                    options = listOf("middle" to "Middle", "below" to "Below", "cascade" to "Cascade"),
+                    options = listOf("liquid" to "Liquid", "centre" to "Middle", "below" to "Below", "cascade" to "Cascade"),
                     selected = settings.arrival,
                     onSelect = { value -> change { it.copy(arrival = value) } },
                 )
                 Spacer(Modifier.height(8.dp))
                 Note(
                     when (settings.arrival) {
+                        "liquid" -> "Everything rises into place like liquid, on a wave out from the app you closed, or the middle as you unlock, catching its light. Tune it in Advanced animation settings."
                         "below" -> "Everything rises into place, the foot of the page first."
                         "cascade" -> "Everything drops in, a column at a time from the left."
                         else -> "Everything comes in from round the middle, the middle first."

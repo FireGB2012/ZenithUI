@@ -198,4 +198,26 @@ class AnimationTuningTest {
         assertEquals(0.3f, AnimationTuning().with(Tune.ClosePicture, 0.1f)[Tune.ClosePicture], 0f)
         assertEquals(1f, AnimationTuning().with(Tune.ClosePicture, 1.4f)[Tune.ClosePicture], 0f)
     }
+
+    @Test
+    fun `coming home like liquid has numbers of its own, after closing an app`() {
+        assertEquals(TuneGroup.Arrive, TuneGroup.entries.last())
+        assertEquals(
+            listOf(Tune.ArriveWave, Tune.ArriveStiffness, Tune.ArriveDamping, Tune.ArriveFrom, Tune.ArrivePull, Tune.ArriveLight),
+            Tune.entries.filter { it.group == TuneGroup.Arrive },
+        )
+        // Zenith's own rises a hair past its place; Fluid's never does, and Bouncy's more.
+        assertTrue(AnimationTuning()[Tune.ArriveDamping] < 1f)
+        assertEquals(1f, AnimationTuning.of(AnimationPreset.Fluid)[Tune.ArriveDamping], 0f)
+        assertTrue(AnimationTuning.of(AnimationPreset.Bouncy)[Tune.ArriveDamping] < AnimationTuning()[Tune.ArriveDamping])
+        // Classic is how opening and closing were, and coming home is not part of that.
+        Tune.entries.filter { it.group == TuneGroup.Arrive }.forEach {
+            assertEquals(it.id, it.own, AnimationTuning.of(AnimationPreset.Classic)[it], 0f)
+        }
+        assertEquals("520 ms", Tune.ArriveWave.show(520f))
+        assertEquals("80%", Tune.ArriveFrom.show(0.8f))
+        assertEquals("24 dp", Tune.ArrivePull.show(24f))
+        assertEquals("60%", Tune.ArriveLight.show(0.6f))
+    }
 }
+

@@ -74,7 +74,24 @@ class FlyInTest {
         assertEquals(300f * FlyIn.SPREAD, start.x, 0f)
         assertEquals(-400f * FlyIn.SPREAD, start.y, 0f)
         assertEquals(start, FlyIn.start("anything else", 300f, -400f, 1000f, 2000f))
-        assertEquals("middle", FlyIn.styles.first())
+        // Chosen now, it is written "centre": "middle" is what phones had before there was liquid.
+        assertEquals(start, FlyIn.start("centre", 300f, -400f, 1000f, 2000f))
+    }
+
+    @Test
+    fun `liquid comes first, and the clock at rest is past the end of every style`() {
+        assertEquals(listOf(LiquidArrival.STYLE, "centre", "below", "cascade"), FlyIn.styles)
+        assertTrue(FlyIn.AT_REST > FlyIn.TOTAL_MS)
+        val slowest = LiquidArrival.wave(
+            androidx.compose.ui.geometry.Offset.Zero,
+            com.gabriel.zenithui.data.AnimationTuning()
+                .with(com.gabriel.zenithui.data.Tune.ArriveWave, 1500f)
+                .with(com.gabriel.zenithui.data.Tune.ArriveStiffness, 40f)
+                .with(com.gabriel.zenithui.data.Tune.ArriveDamping, 0.3f)
+                .paced(com.gabriel.zenithui.data.AnimationTuning.MIN_SPEED),
+            3f,
+        ) { 3000f }
+        assertTrue("${slowest.totalMs}", FlyIn.AT_REST > slowest.totalMs)
     }
 
     @Test
@@ -94,8 +111,8 @@ class FlyInTest {
         assertEquals(0, left.delayMs)
         assertTrue(right.delayMs > left.delayMs)
         assertTrue("over its place", left.y < 0f)
-        // Every style is over inside the arrival's own time.
-        for (style in FlyIn.styles) {
+        // Every style this times is over inside the arrival's own time.
+        for (style in FlyIn.styles - LiquidArrival.STYLE) {
             val last = FlyIn.start(style, 500f, -1000f, 1000f, 2000f)
             assertEquals(1f, FlyIn.progress(FlyIn.TOTAL_MS.toFloat(), last.delayMs), 0f)
         }

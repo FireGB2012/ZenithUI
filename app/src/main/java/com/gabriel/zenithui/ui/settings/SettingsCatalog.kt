@@ -75,7 +75,7 @@ object SettingsCatalog {
         SettingsEntry("closeAnimation", SettingsPage.Motion, "Closing apps", "close shrink into icon plain window"),
         SettingsEntry("appPictures", SettingsPage.Motion, "App pictures", "screenshot accessibility helper picture real open close"),
         SettingsEntry("pageEffect", SettingsPage.Motion, "Page swipe", "depth slide cube stack carousel wheel flip fold transition effect turn"),
-        SettingsEntry("arrival", SettingsPage.Motion, "Coming home", "arrive fly in unlock cascade below middle"),
+        SettingsEntry("arrival", SettingsPage.Motion, "Coming home", "arrive fly in unlock cascade below middle liquid wave ripple splash"),
         SettingsEntry("drawerArrival", SettingsPage.Motion, "Opening the drawer", "app drawer rise grow glass swipe up"),
         SettingsEntry("press", SettingsPage.Motion, "Pressing", "press tap touch bounce squish ripple feedback"),
         SettingsEntry("haptics", SettingsPage.Motion, "Haptics", "vibrate vibration tick feedback buzz"),
@@ -86,6 +86,7 @@ object SettingsCatalog {
         SettingsEntry("motionOpen", SettingsPage.AdvancedMotion, "Opening an app", "launch card arc curve stiffness damping corner logo shadow spring"),
         SettingsEntry("motionHome", SettingsPage.AdvancedMotion, "Home screen behind", "zoom dim dimming blur push pushed sink"),
         SettingsEntry("motionClose", SettingsPage.AdvancedMotion, "Closing an app", "return landing lands bounce ripple card spring stiffness damping"),
+        SettingsEntry("motionArrive", SettingsPage.AdvancedMotion, "Liquid coming home", "arrive arrival unlock wave rise rising surface light glass spring stiffness damping"),
 
         SettingsEntry("gesture_swipeDown", SettingsPage.Gestures, "Swipe down", "notifications shade pull down gesture"),
         SettingsEntry("gesture_twoDown", SettingsPage.Gestures, "Two-finger swipe down", "quick settings fingers gesture"),

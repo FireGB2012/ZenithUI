@@ -708,24 +708,54 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
     var closingFrom by remember { androidx.compose.runtime.mutableFloatStateOf(1f) }
     var closingVanishes by remember { mutableStateOf(false) }
 
-    // Arriving. One clock for the whole home screen: at 0 everything is out from the middle, at
-    // FlyIn.TOTAL_MS it is all in its place. It is wound back while nobody can see — at a cold
-    // start, or when Zenith is stopped — and let run once the home screen is on show again.
+    // Arriving. One clock for the whole home screen: at 0 everything is out, and by the end of the
+    // arrival (FlyIn.TOTAL_MS, or a liquid wave's own end) it is all in its place, where the clock is
+    // left past the end of every style (FlyIn.AT_REST). It is wound back while nobody can see — at a
+    // cold start, or when Zenith is stopped — and let run once the home screen is on show again.
     val flyOnStart = remember { !entrance && !motion.reduced }
-    val arrivalClock = remember { Animatable(if (flyOnStart) 0f else FlyIn.TOTAL_MS.toFloat()) }
+    val arrivalClock = remember { Animatable(if (flyOnStart) 0f else FlyIn.AT_REST) }
     val arrivalDepth = remember { mutableFloatStateOf(FlyIn.FULL) }
     val arrivalPending = remember { BooleanArray(1).also { it[0] = flyOnStart } }
+    /**
+     * Coming home like liquid (Motion & feel → Coming home → Liquid): the wave everything rises on
+     * this time, read by everything on the home screen while drawing. Null for any other style.
+     */
+    val arrivalWave = remember { mutableStateOf<LiquidWave?>(null) }
+    /**
+     * Where the next liquid wave starts, on the screen: the icon the app being closed goes back
+     * into, worked out as Zenith comes forward. With none, as after an unlock, the middle.
+     */
+    val arrivalFrom = remember { arrayOfNulls<Offset>(1) }
     val power = remember(context) { context.getSystemService(android.os.PowerManager::class.java) }
+
+    /**
+     * The wave to come home on, when Coming home is Liquid, from [arrivalFrom] or the middle of the
+     * screen, on the numbers in Advanced animation settings. Its light runs on the one ring of light,
+     * so the screen is measured for it as the ring itself is.
+     */
+    fun liquidWave(): LiquidWave? {
+        if (settings.arrival != LiquidArrival.STYLE) return null
+        val width = drawerWidthPx.takeIf { it > 0f } ?: hostView.width.toFloat()
+        val height = drawerHeightPx.takeIf { it > 0f } ?: hostView.height.toFloat()
+        glassRing.screen = androidx.compose.ui.geometry.Size(width, height)
+        glassRing.density = ringDensity
+        val at = arrivalFrom[0] ?: Offset(width / 2f, height / 2f)
+        return LiquidArrival.wave(at, liveTuning, pxPerDp) { glassRing.reachFrom(at, it) }
+    }
 
     fun arrive() {
         if (!arrivalPending[0] || waitingForAndroid[0]) return
         arrivalPending[0] = false
+        val wave = liquidWave()
+        arrivalWave.value = wave
+        // The light runs with the wave, lighting every pane of glass as it rises, unless it is off.
+        if (wave != null && wave.light.peak > 0f) sendWave(wave.centre, wave.light)
+        val total = wave?.totalMs ?: FlyIn.TOTAL_MS.toFloat()
         scope.launch {
             arrivalClock.snapTo(0f)
-            arrivalClock.animateTo(
-                FlyIn.TOTAL_MS.toFloat(),
-                tween(FlyIn.TOTAL_MS, easing = androidx.compose.animation.core.LinearEasing),
-            )
+            arrivalClock.animateTo(total, tween(total.roundToInt(), easing = androidx.compose.animation.core.LinearEasing))
+            // Arrived: past the end of every style, so a change of style finds nothing part way in.
+            arrivalClock.snapTo(FlyIn.AT_REST)
         }
     }
     LaunchedEffect(Unit) {
@@ -742,6 +772,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             pagerState.scrollToPage(0)
             if (!liveMotion.reduced) {
                 arrivalDepth.floatValue = FlyIn.FULL
+                arrivalFrom[0] = null
                 arrivalPending[0] = true
                 arrive()
             }
@@ -774,7 +805,8 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
     androidx.compose.runtime.DisposableEffect(Unit) {
         val atRest = {
             restingNow && card == null && !holdSunk && !homeSink.isRunning && abs(homeSink.value) < 0.002f &&
-                arrivalClock.value >= FlyIn.TOTAL_MS - 0.5f && !AppLanding.busy && !HomeRipple.swinging &&
+                arrivalClock.value >= (arrivalWave.value?.totalMs ?: FlyIn.TOTAL_MS.toFloat()) - 0.5f &&
+                !AppLanding.busy && !HomeRipple.swinging &&
                 !pagerState.isScrollInProgress && abs(pagerState.currentPageOffsetFraction) < 0.002f
         }
         IconPlaces.atRest = atRest
@@ -1018,10 +1050,12 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         returningKey[0] = null
         returningCard[0] = null
         launchedAt[0] = 0L
-        // Everything zooms, and ripples, about the icon the app goes back into.
+        // Everything zooms, and ripples, about the icon the app goes back into, and coming home
+        // like liquid its wave starts there.
         val spot = closed?.spot
         val about = spot?.bounds?.center ?: closed?.opened?.from?.center
         if (about != null) HomeRipple.origin = about
+        arrivalFrom[0] = about
         // A card or a picture on its way into the icon: the icon is out of sight from the first frame.
         closed?.takeIf { it.route == CloseRoute.Card || it.route == CloseRoute.Picture }?.landKey?.let(AppLanding::hold)
         val turn = ++forwardTurn[0]
@@ -1227,6 +1261,8 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     // thing seen is an unlock: the full fly-in. Stopped behind an app: a settle.
                     if (!liveMotion.reduced) {
                         arrivalDepth.floatValue = if (power?.isInteractive == false) FlyIn.FULL else FlyIn.SETTLE
+                        // From the middle, unless an app is closed on the way home (see comeForward).
+                        arrivalFrom[0] = null
                         arrivalPending[0] = true
                         scope.launch { arrivalClock.snapTo(0f) }
                     }
@@ -2512,6 +2548,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                                     pageOffset = if (turn.parallax) offset else 0f,
                                     arrivalClock = { arrivalClock.value },
                                     arrivalDepth = { arrivalDepth.floatValue },
+                                    arrivalWave = { arrivalWave.value },
                                     jiggleClock = { jiggleClock.floatValue },
                                     jiggleStrength = { jiggleStrength.value },
                                     modifier = Modifier
@@ -2582,7 +2619,10 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                                 // the clock that moves it and keeps the wallpaper in place behind it.
                                 tracking = { arrivalClock.value },
                                 modifier = Modifier
-                                    .arriving({ arrivalClock.value }, { arrivalDepth.floatValue }, distance = 0.85f, from = 40.dp, style = settings.arrival)
+                                    .arriving(
+                                        { arrivalClock.value }, { arrivalDepth.floatValue }, distance = 0.85f, from = 40.dp,
+                                        style = settings.arrival, wave = { arrivalWave.value },
+                                    )
                                     // Where it is, for the field to stretch out of and shrink back into.
                                     .onGloballyPositioned { pillPlaced[0] = it }
                                     // Not drawn while the field's glass is out of it, standing in its
@@ -2675,7 +2715,10 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                             // It spans the screen and stands its slab in from the edges itself, its apps
                             // still under the page's columns.
                             modifier = room
-                                .arriving({ arrivalClock.value }, { arrivalDepth.floatValue }, distance = 1f, from = 56.dp, style = settings.arrival)
+                                .arriving(
+                                    { arrivalClock.value }, { arrivalDepth.floatValue }, distance = 1f, from = 56.dp,
+                                    style = settings.arrival, wave = { arrivalWave.value },
+                                )
                                 .navigationBarsPadding()
                                 .padding(bottom = 10.dp),
                             // It arrives moved on a layer, so its glass reads the clock that moves it and

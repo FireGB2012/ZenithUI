@@ -65,6 +65,7 @@ import com.gabriel.zenithui.ui.theme.GlassMaterial
 import com.gabriel.zenithui.ui.theme.GlassMotion
 import com.gabriel.zenithui.ui.theme.glass
 import com.gabriel.zenithui.ui.theme.glassOnGlass
+import com.gabriel.zenithui.ui.theme.iconDepth
 import com.gabriel.zenithui.ui.theme.inkOnTint
 
 val LocalIconLoader = staticCompositionLocalOf<IconLoader> { error("IconLoader not provided") }
@@ -86,7 +87,12 @@ fun WideAppIcon(key: String, label: String, modifier: Modifier = Modifier) {
         val image = bitmap
         val tall = maxHeight
         if (image != null) {
-            Image(bitmap = image, contentDescription = label, modifier = Modifier.fillMaxSize())
+            // Lit as every icon drawn as its app draws it is: see iconDepth.
+            Image(
+                bitmap = image,
+                contentDescription = label,
+                modifier = Modifier.fillMaxSize().iconDepth(WideIconShape, minOf(maxWidth, maxHeight)),
+            )
         } else {
             Box(
                 Modifier
@@ -100,6 +106,9 @@ fun WideAppIcon(key: String, label: String, modifier: Modifier = Modifier) {
         }
     }
 }
+
+/** A super icon's outline: [IconLoader] cuts its picture with corners a quarter of its short side. */
+private val WideIconShape = RoundedCornerShape(percent = 26)
 
 /** How icons are drawn everywhere: one of [IconStyles]. */
 val LocalIconStyle = staticCompositionLocalOf { IconStyles.ORIGINAL }
@@ -204,7 +213,7 @@ fun AppIcon(
         if (styled) {
             StyledIcon(key = key, label = label, px = px, shape = shape, style = style, onGlass = onGlass, version = version)
         } else {
-            PlainIcon(key = key, label = label, size = size, px = px, shape = shape, version = version)
+            PlainIcon(key = key, label = label, size = size, px = px, shape = shape, version = version, onGlass = onGlass)
         }
         if (badge) IconBadge(count = LocalBadges.current.forKey(key), iconSize = size)
     }
@@ -326,9 +335,17 @@ fun BoxScope.IconBadge(count: Int, iconSize: Dp) {
     }
 }
 
+/**
+ * An icon as its app draws it, with the depth of an iPhone's icons ([iconDepth]): light on its rim
+ * that moves as the phone tips, a little light on the top of its face, and on the wallpaper a soft
+ * shadow, unless it is [onGlass]. The app's own picture is drawn as it is; the light goes over it.
+ */
 @Composable
-private fun PlainIcon(key: String, label: String, size: Dp, px: Int, shape: Shape, version: Int) {
+private fun PlainIcon(key: String, label: String, size: Dp, px: Int, shape: Shape, version: Int, onGlass: Boolean = false) {
     val loader = LocalIconLoader.current
+    // The outline the picture was cut to, which is what the light follows: a caller's [shape] is only
+    // the plate shown while the picture loads, and is not always the same.
+    val cut = remember(version) { ZenithShapes.forIconShape(loader.iconShape) }
     // Starts from the icon already to hand, so returning home or scrolling never flashes a blank.
     val ready = remember(key, px, version) { loader.peek(key, px) }
     val bitmap by produceState(initialValue = ready, key, px, version) {
@@ -354,7 +371,8 @@ private fun PlainIcon(key: String, label: String, size: Dp, px: Int, shape: Shap
                         val s = 0.92f + 0.08f * appear
                         scaleX = s
                         scaleY = s
-                    },
+                    }
+                    .iconDepth(cut, size, shadow = !onGlass),
             )
         } else {
             // While the icon loads, a plain plate with the app's initial, as a super icon's is.

@@ -40,8 +40,12 @@ settings are still kept, for old backups and Looks.)
   or an unfolded phone, it is Balanced. Compact, Balanced, Roomy and Custom are still there, with the
   numbers they always had.
 - **Icons** are cut to an iPhone's rounded square, its corners continuous (the **iPhone** shape),
-  about 64% of a cell's width. Their names are white with a soft shadow on the home screen, in light
-  and in dark, as on an iPhone; the drawer and folders keep their own ink.
+  72% of a cell's width (56 to 78 dp), a little bigger than an iPhone's, and 80% with **Larger
+  icons, with no names** (Customise), which take the room their names had. Each app's logo stands
+  off its tile as on iOS 26 (`LogoLift`): a soft shadow straight down under it, its face lit from
+  above, and a hairline of light on its edge. Their names are white with a soft shadow on the home
+  screen, in light and in dark, as on an iPhone; the drawer and folders keep their own ink. See
+  `specs/2026-11-16-3d-logos-and-bigger-icons-design.md`.
 - **Widgets** are square: Small (2×2), Medium (4×2) and Large (4×4), with one corner radius, each with
   its name under it like an icon's (another app's widget shows its app's name). On the iPhone grid a
   widget reaches a few dp past its icons at the sides (`HomeGeometry.widgetReach`), so a 2×2 is
@@ -86,7 +90,7 @@ Zenith's own, on top of the iPhone's layout:
    from the finger across the screen: every pane of glass lights up, rim and face, as the ring passes
    over it, and the icons and colour widgets catch a faint gleam (`GlassRing`).
 5. **Jelly icons.** Press an app, a folder or a dock icon and it squishes and lights up from under the
-   finger, then springs back with a wobble (`JellyIcon`). On the home screen icons always do this;
+   finger, then springs back with one small bounce (`JellyIcon`). On the home screen icons always do this;
    the Pressing setting applies everywhere else.
 
 With movement reduced nothing floats, there is no ring, the search field fades in rather than
@@ -106,16 +110,15 @@ stretching, and a press is a small one with no wobble.
 - **Folders** — drop one app onto another to create a folder; drop onto a folder to add to it.
   Tap a folder for a bottom sheet with an editable name; long-press an app inside to take it out.
 - **Remove** — drag to the "Remove" target at the top.
-- **Resize and move** — long-press any app or widget → **Resize and move**, then pull the pointer
-  on its bottom-right corner. The outline follows your finger and the item snaps to whole cells and whole rows as you
-  pass them, with a size badge; it can be any size up to the whole page (a widget stops at the
-  smallest its design allows). An app bigger than 1×1 becomes a super icon, its icon stretched to fill the space. A
-  size with no room turns the outline red. Tap anywhere to finish.
-  While it is up, a bar at the foot of the screen does the same in taps (`ui/home/ResizeBar.kt`):
-  a widget's named sizes — Small, Medium, Wide, Tall, Large — one tap each, and four arrows that
-  move the item a cell at a time. A named size is taken where the widget stands, or at the closest
-  opening on its page when there is no room there; an arrow never pushes anything aside, and a tap
-  with no room shakes the bar instead. The rules are `Reshape.resized` and `Reshape.nudged`.
+- **Resize** — in edit mode every widget has a corner to pull: a short arc of white round its
+  bottom-right corner. Pull it and it follows your finger, while the widget snaps to whole cells
+  and rows as you pass them, a thin outline shows the size asked for and a capsule of glass says it
+  ("4 × 2"); it can be any size up to the whole page (a widget stops at the smallest its design
+  allows). A size with no room turns the outline red rather than pushing anything aside. A whole
+  pull is one change for Undo. An app gets the same corner from **Resize** in its menu, which starts
+  edit mode; bigger than 1×1 it becomes a super icon, its icon stretched to fill the space. One of
+  Zenith's widgets also has its named sizes in its menu (Small, Medium, Wide, Tall, Large), each
+  taken where it stands or at the closest opening on its page (`Reshape.resized`).
 - **App drawer** — a sheet that tracks your finger: drag up anywhere on the page and it follows,
   release and a fling (or the halfway point) decides whether it opens or falls back. Close it by
   dragging down anywhere — the handle, the header, the search row, or the app grid once it is
@@ -163,9 +166,13 @@ stretching, and a press is a small one with no wobble.
   first notification and shrinks away with the last.
 - **Icon style** — **Original**, **Tinted** (each app's one-colour symbol in the words' colour on a
   plain dark or white tile, as Android 13 does) or **Glass** (the symbol on a tile of clear glass, the
-  way iOS draws clear icons). The symbol is the adaptive icon's monochrome layer where the app has
-  one, its foreground where that is a logo on its own, and otherwise what stands out of the icon
-  from its own tile (`IconLoader.loadGlyph`). An icon you chose yourself stays as you chose it.
+  way iOS draws clear icons). In the drawer, an open folder and a folder's tiny icons, where it
+  already lies in glass, a Glass tile is glass lying in glass (`glassOnGlass`): a light frost, the
+  same hairline of light on its edge as every pane, moving with the tilt, a soft shadow straight
+  down, and in Light a soft grey band round its rim. The symbol is the adaptive icon's monochrome
+  layer where the app has one, its foreground where that is a logo on its own, and otherwise what
+  stands out of the icon from its own tile (`IconLoader.loadGlyph`). An icon you chose yourself
+  stays as you chose it.
 - **Shapes and names** — nine icon shapes (iPhone, Squircle, Circle, Rounded, Square, Pebble,
   Teardrop, Hexagon, Clover), one path each in `IconShapes` for the pictures and the tiles alike;
   names in three sizes inside the same strip, so nothing on the page moves, and **Name shadow**, a
@@ -196,7 +203,8 @@ lights up, with a tick, once it will; a tap on the wallpaper, or a double tap, s
 across the screen (the fourth twist). The
 home button counts as the gesture only when Zenith was already in front with nothing open on it,
 as Android's own launcher tells the two apart; on the way back from an app it folds everything
-back to page one, as before.
+back, and goes back to page one unless the app is closing into an icon on the page on show, which
+it stays on so the app can be seen going into it.
 
 Locking needs the **lock helper** (`LockService`), an accessibility service that does nothing else:
 it asks for no events and cannot see the screen. A sheet says so before Android's page opens. The
@@ -209,21 +217,24 @@ anywhere else.
 
 | Widget | Size | What it does |
 | --- | --- | --- |
-| Zenith Clock | 2×2 | Small tile: time, short date and a greeting that uses your name |
-| Power | 2×2 | Battery ring from `ACTION_BATTERY_CHANGED`, with charge state |
-| Calendar | 2×2 | The iPhone's: the weekday in red over the date, large, and today's events from the next one on, each a bar in its calendar's colour; Medium lists three beside the date and Large the rest of the day. Until Zenith may read the calendar, "Show your events" stands where they would be and asks. The date turns over at midnight. Its other sizes keep their earlier layouts |
-| Quick Note | 2×2 | Scratchpad persisted with your settings |
-| Quick Toggles | 2×2 | Small tile, 2×2 buttons: working torch (Camera2) plus Wi-Fi / Bluetooth / DND |
-| Now playing | 4×2 | The album's picture, the song, play / pause / skip and how far in, from Android's media sessions (`NowPlaying`, through the dots' notification access); the picture crosses over as the song changes |
-| World clock | 2×2 | Up to four cities, chosen from every time zone, each with its time, a sun or a moon and how far it is from yours ("+9 h, tomorrow"), clock faces in the bigger sizes |
-| Countdown | 2×2 | The days to a date you name, as rolling digits in a ring that fills as the day comes; "today" on the day, and the days since after |
-| Photo frame | 2×2 | Up to twelve of your photos, picked with Android's own picker and kept small in Zenith's files; a different one each time you come home, crossing over, and the next at a tap |
-| To-do | 2×2 | A short list: what is left first, a tick that fills and draws itself, the ticked ones sliding below the rest, a line to add one |
-| Aura | 2×2 | Your streak in rolling digits under a flame, the week behind it as dots that fill one after another, and your aura |
-| Weather | 2×2 | The iPhone's: the place, a big temperature, the sky's symbol and words, and the high and low; Medium adds the next hours and Large the next five days. For a place you choose (`WeatherRepository`, Open-Meteo). Its other sizes keep their earlier layouts |
+| Zenith Clock | 2×2 | A real clock face, paper by day and dark by night, with an orange second hand; the bigger sizes add the time in figures, the date, a greeting that uses your name and your next alarm |
+| Power | 2×2 | The charge as a ring from `ACTION_BATTERY_CHANGED`: green, yellow in battery saver, red when low, a light running round it while it charges; the bigger sizes add how long to full, where the power comes from, the temperature, the health and the voltage |
+| Calendar | 2×2 | The iPhone's: the weekday in red over the date, large, and today's events from the next one on, each a card with a bar in its calendar's colour and when it is ("5:30 PM · In 18 min", red while it is under way); Wide adds the week, Tall and Large the month. Until Zenith may read the calendar, "Show your events" stands where they would be and asks. The date turns over at midnight |
+| Quick Note | 2×2 | A note written on the widget itself, its first line set as its title, persisted with your settings |
+| Quick Toggles | 2×2 | Set out as Control Center is: big round buttons, tiles with names and On / Off where there is room, and a +N button for the rest. Each lights up in its own colour while it is on, read live from Android (`ToggleStates`); the torch works (Camera2), the rest open their panel |
+| Now playing | 4×2 | The album's picture on a soft shadow of its own colour, the song, three bars moving while it plays, how far in and how long is left, and back / play / next, from Android's media sessions (`NowPlaying`, through the dots' notification access); the picture crosses over as the song changes |
+| World clock | 2×2 | Up to four cities, chosen from every time zone, each a clock face, paper where it is day there and dark where it is night, with its time and how far it is from yours ("+9 h, tomorrow") |
+| Countdown | 2×2 | The days to a date you name, in rolling digits, and the whole wait as a field of dots, those gone lit: a dot a day, a week or a month, as many as the room holds; "today" on the day, and the days since after |
+| Photo frame | 2×2 | Up to twelve of your photos, picked with Android's own picker and kept small in Zenith's files, edge to edge; a different one each time you come home, crossing over, and the next at a tap |
+| To-do | 2×2 | A short list in blue: what is left first and how many, a tick that fills and draws itself, the ticked ones sliding below the rest, a line to add one |
+| Aura | 2×2 | Your streak under a drawn flame, this week ticked off day by day, and your aura |
+| Weather | 2×2 | The iPhone's: the place, a big temperature, a drawn sky and its words, and today's low to high on a bar coloured by the temperature; Wide and Large chart the next hours, Tall lists them, and Large adds the days ahead. For a place you choose (`WeatherRepository`, Open-Meteo) |
 
-Each of them comes in both widget looks, Colour and Glass, has a No glass version and a design for
-every shape of space, and says in the gallery what each size shows. What they need is set from their own menu: cities,
+They are one family, drawn from scratch to one design (`ui/home/widgets/WidgetKit.kt`: one grid,
+one type scale, one hue each, symbols drawn rather than borrowed; the why is in
+`specs/2026-11-16-widgets-redesign-design.md`). Each of them comes in both widget looks, Colour and
+Glass, has a No glass version and a design for every shape of space, fitted down to a smaller cell
+rather than cut, and says in the gallery what each size shows. What they need is set from their own menu: cities,
 a date, photos, a place. **Weather is the one thing in Zenith that sends anything without an
 account:** nothing until a place is searched for; then what was typed, to Open-Meteo's place
 search, and from then on the chosen place's latitude and longitude, to its forecast, at most every
@@ -245,10 +256,10 @@ different design — with a switch between Glass and No glass and one button tha
 the middle. Under the row the sizes are named, each over the room it takes on the page: a little
 grid as wide as your page, its cells filled in (`SizeShape`), so Wide is plainly the width of the
 page and Tall a row more. A tap on a name brings that size to the middle, and under it a line says
-what that size shows ("Hours over minutes, like a Lock Screen"). The lines come from
+what that size shows ("A clock face with its hours round it, and the day on it"). The lines come from
 `WidgetLayouts`, which reads the same rules the widgets lay themselves out by (`WidgetForm`, and
-`ToggleGrid` for the toggles), so they cannot say a size shows what it does not. The bar that
-comes up for **Resize and move** shows the same little grid on each of its sizes.
+`ToggleGrid` for the toggles), so they cannot say a size shows what it does not. The row of sizes
+in a widget's menu shows the same little grid on each of them.
 
 The switch between Glass and No glass carries a symbol on each side, a pane and a pane struck
 through, and what the side chosen means is said right under it. It is about the No glass versions
@@ -256,20 +267,22 @@ below; Colour or Glass for every widget at once is the widget look. The gallery 
 4 November one, until the widget picker's turn in the rebuild.
 
 **No glass** — the other side of that switch: the same widgets with no pane round
-them, like the clock on an iPhone's Lock Screen: the big numbers, rings and icons are made of glass
-themselves and sit straight on the wallpaper, with small glass icons added (a sun or moon on the
-clock, a battery on Power, a calendar, a pencil). Their words are white with a soft shadow. They are
+them, like the clock on an iPhone's Lock Screen: the same layouts, with the big numbers, rings,
+dials and symbols made of glass themselves, straight on the wallpaper. Their words are white with a
+soft shadow. They are
 stored as `bare_<type>` (`bare_clock`, …) and otherwise behave exactly like the widget they are a
 version of.
 
 **Words that can be read.** A widget is read at a glance, over a wallpaper, so its second line (the
 date, "On battery", "25 days left") is set stronger than the muted grey a page uses, nothing in a
-widget is smaller than 11sp at its ordinary size, and the accent is taken part of the way towards
-the pane's own ink when it is used for letters. The names under the Quick Toggles are the size of
-the label under an app; one too long for its cell ("Do Not Disturb" in a two by two) goes onto a
-second line, and every name takes the same number of lines so the buttons stay level
-(`ToggleNames.fit`). Their symbols fill a little over half of their button, as Android's own quick
-settings do. Everywhere else, second lines and small print (the subtitles in Settings, the words
+widget is smaller than 11sp at its ordinary size, and on the wallpaper (through glass or in "No
+glass") small coloured words are in the ink, as an iPhone's clear widgets have them, the colour
+staying in the marks beside them (`wordHue`): the picture behind can be any colour, and only the ink
+reads on all of them. The Quick Toggles carry names only on their tiles,
+beside the symbol, as Control Center does; a name too long for its tile takes its short form
+("Focus" for Do Not Disturb), and if even that will not fit, every name in the widget shrinks
+together, never under 12sp (`ToggleNames.fit`). A round button carries its symbol alone. Everywhere
+else, second lines and small print (the subtitles in Settings, the words
 under a choice) are 74% of the ink, which stands six to one or better against the page
 backdrops, light and dark (`PaletteToneTest`).
 
@@ -337,11 +350,20 @@ rows under them sit in a group of their own, a line between each.
 
 ## Wallpapers
 
-Zenith paints its own wallpapers on the phone (`WallpaperArt`, `WallDesigns`): thirty-three designs
-on four shelves — Soft, Lines, Shapes and Scenes — seven of them for Zenith Plus. Every design comes
-in a choice of colour sets (the six that were once Zenith's themes, any bought with aura, colours of
-your own made before the themes went, and colours taken from your wallpaper) and has a light picture
-and a dark one, each made so labels and the status bar stay readable over it. Tap one and both pictures are shown side by side, each with
+Zenith paints its own wallpapers on the phone (`WallpaperArt`, `WallDesigns`, `WallDepth`):
+forty-one designs on five shelves — Depth, Soft, Lines, Shapes and Scenes — nine of them for Zenith
+Plus. Every design comes in a choice of colour sets (thirteen free ones round the colour wheel, six
+of them once Zenith's themes, any bought with aura, colours of your own made before the themes went,
+and colours taken from your wallpaper) and has a light picture and a dark one, each made so labels
+and the status bar stay readable over it.
+
+**Depth**, the first shelf, is eight designs with a body to them, as the wallpapers that come with
+an iPhone or a Galaxy have: Iris, Layers, Satin, Marbles, Liquid and Twist, and for Plus, Loop and
+Eclipse. They are lit as things in the world are, light added as light, their colours run between
+the set's two accents round the colour wheel the short way in OKLab (`DepthKit`), so a gradient stays
+vivid where the same two colours mixed as RGB go grey. They are worked out a pixel at a time on all
+the phone's cores; the ribbon in Twist is drawn as a mesh. See
+`specs/2026-11-16-depth-wallpapers-design.md`. Tap one and both pictures are shown side by side, each with
 your own home screen on it, drawn by the code that draws the real one in the ink it takes in that
 light. Its glass is frosted there, as over any wallpaper Zenith cannot see: the real glass will
 bend the new wallpaper, which is not behind it yet.
@@ -432,11 +454,38 @@ far out of an opening folder each app is) and `AnimationTuning` (the numbers it 
   it takes a slight curve rather than a straight line, with a soft shadow under it on the way.
   Behind it the home screen sinks back about the icon that was tapped, dims and goes out of focus,
   and the icons nearest make way. Tap the card, or press home, and it turns round where it is.
-- **Closing an app.** Android does not let a launcher that is not built into the phone move another
-  app's window, so Zenith draws the half it may: the home screen comes forward again on a spring
-  that carries it a little too far, the app's icon lands in its place with a bounce, and the icons
-  round it are knocked back and swing home. A card that shrinks back into the icon can be switched
-  on as well.
+- **Closing an app.** The app goes back into its icon whichever way the phone allows
+  (`CloseRules.route`; the design is `specs/2026-11-16-app-open-close-animations-design.md`, and
+  `specs/2026-11-16-closing-on-every-phone-design.md` for phones like a Galaxy). With gesture
+  navigation on a Pixel-type phone, Android asks the home app where the icon is
+  (`GestureHandshake`, Launcher3's `GestureNavContract`) and springs the app's own window into it;
+  the icon swells a little as it arrives. Elsewhere, with **App pictures** on, a card holding a
+  picture of the app shrinks into the icon once Android's own close is done, the picture giving way
+  to the icon's colour and logo as it gets small. With neither (One UI, buttons, or the copy of
+  Zenith that installs by tapping it), the card the app opened on, in its colour and with its logo,
+  shrinks back into the icon from 72% of the screen. Without the handshake Android plays its own
+  close of the app first, over Zenith, so the home screen waits for it, empty, until Android says
+  it is over (`AndroidClose`, `specs/2026-11-16-waiting-for-androids-close-design.md`; before
+  Android 14 the usual length for that make of phone), and then the icons fly in as the app goes
+  into its icon. Advanced animation settings → *Wait for Android's close* sets it by hand. With the
+  handshake it starts once Zenith can be seen (its window's focus, or 450 ms after it resumed). The
+  home screen comes forward again on a spring that carries it a little too far, the app's icon
+  lands in its place with a bounce, and the icons round it are knocked back and swing home. The
+  icon is the one it was opened from, or that app's icon on the page on show or in the dock, or the
+  folder holding it (`IconPlaces`, which keeps where each sits at rest); with none, the card shrinks
+  into the middle of the screen and fades. Settings → Motion & feel → **Closing apps** has *Into
+  its icon* and *Plain*: Android's own close, then the landing, which is how it was.
+- **App pictures** (`PictureService`, Android 11 and later, off until switched on in Accessibility;
+  only in a copy of Zenith that has it, so not the one that installs by tapping it, since Play
+  Protect refuses a sideloaded app with an accessibility service). An accessibility service that
+  does nothing else: 0.7 s after an app's screen comes to the front,
+  and every 3 s after while it stays there, it takes a screenshot, shrinks it to at most 1280 px
+  and keeps it in memory (`AppPictures`) for the last four apps, five minutes at most. A picture
+  only counts once the app has stayed in front 2 s after it, since a swipe home moves the app before
+  Android says so. It asks for one kind of event and cannot read the screen; never Zenith, System
+  UI, the lock screen or a black picture from an app that hides itself; all are dropped when the
+  screen goes off. Opening an app with a picture from the last five minutes, the picture fades in
+  over the card as it grows, so the app comes out of its icon as itself.
 - **Advanced animation settings** (Settings → Motion & feel). Every one of those numbers can be
   changed: stiffness and damping for each spring, the arc of the path, how far the card has grown
   when the app starts, corners, logo and shadow, the home screen's zoom, dimming, blur and how far
@@ -465,7 +514,7 @@ far out of an opening folder each app is) and `AnimationTuning` (the numbers it 
   come out one after another as it opens.
 - **Widgets** animate their own changes: rolling digits, a ring that springs to its value and
   glints while charging, every other gauge filling the same way as it appears, today's dot drawing
-  itself in, toggles that change shape.
+  itself in, toggles that fill with their own colour from the middle as they come on.
 - **The drawer and sheets.** The drawer is put together just after the home screen arrives, out of
   sight, so the first swipe up is as smooth as the tenth. Rows rise in each time it opens, its
   title and count turn over as you search, and a wallpaper's preview grows out of the thumbnail
@@ -504,10 +553,11 @@ the switch is off.
   finger that falls only on what was pressed; on the home screen icons are jelly whatever it is set
   to. All of it gives way to plain fades with movement reduced.
 - **Glass under a finger** (`GlassPress`). Glass buttons move like glass, each its own way, and
-  not by the Pressing setting: the plain ones in sheets swell and light up from the fingertip
-  (Flex); the one button that moves you on, in the accent's tinted glass, squishes and wobbles
-  back (Jelly); clear glass over the wallpaper or the dark (the round search button, the bedside
-  clock's button) and the Quick Toggles swell and lean towards the finger (Lean). The pill of a
+  not by the Pressing setting: glass buttons, plain and in the accent's tinted glass, swell and
+  light up from the fingertip, as iOS's do (Flex); clear glass over the wallpaper or the dark (the
+  round search button, the bedside clock's button) and the Quick Toggles swell and lean towards the
+  finger (Lean). Every press springs back as Apple's glass does, one small bounce past its rest and
+  still, never a wobble. The pill of a
   row of options can be picked up: it turns into a lens of clear glass that swells, follows the
   finger along the row, stretching the faster it goes, ticks as each option comes under it, and
   settles on the nearest, which is then the one picked. Only how they are drawn changes, and the
@@ -588,24 +638,23 @@ white one. A pressed pane bends the light a little more as the finger's light co
 13+ an AGSL shader (`LiquidGlassShader`), one lens shared by every pane over the same copy of the
 wallpaper, draws each pane, and does these things to the wallpaper round it:
 
-- **It bends it.** The flat middle shows the wallpaper exactly where it is; the rounded rim bends
-  and magnifies it inward like the edge of a thick lens, with a faint colour split on clear glass.
-  A bigger pane is a thicker slab and bends more.
+- **It bends it.** The flat middle shows the wallpaper exactly where it is; a band round the rim
+  bends and magnifies it inward like the edge of a thick convex lens, gently where the band starts
+  and hardest at the outline, where it turns over, with a faint colour split on clear glass. A
+  bigger pane is thicker glass, with a wider band, and bends more.
 - **It softens it**, with a true blur. `GlassLevels` keeps the wallpaper four times over — as it
   is, misted, frosted, and with little left but its colours, each made from the one before at half
   its size when the wallpaper changes — and a pane shows a blend of the two either side of how soft
   it is (`GlassLook.frost`), so any softness costs two lookups and nothing is blurred while
   drawing. What is dark behind the glass comes through a little brighter, in its own colour.
-- **It reflects it.** The steep outer part of the rim is a mirror as much as a window and holds the
-  wallpaper just outside the pane, turned over at the edge (`GlassLook.mirror`). The light the
-  glass catches is the colour of the wallpaper round it (`GlassLook.glow`): a crisp line all the
-  way round the rim, brightest where it faces the light and bright again opposite, with a soft glow
-  just inside it. Light, bend and reflection all move as the phone tilts.
-- **It is a thing, not a picture of one** (`GlassLook.relief`). A pane is a slab with a rounded
-  shoulder and a polished edge, and the same light shows its shape: the shoulder turned to the lamp
-  is lit and the one turned from it is in the slab's own shade, light falls away gently across the
-  face, and where the polished edge mirrors the lamp there is a glint, with a fainter one opposite.
-  A bigger pane is a thicker slab. Turning **Glass** down in Settings flattens it.
+- **It catches the light on its edge, and nowhere else.** A hairline of light hugs the outline,
+  brightest on the corner facing the light (up and to the left, as on iOS) and again on the corner
+  opposite, faint between, with a little sheen just inside it; the bent band is a touch brighter
+  than the face, as glass seen edge-on is. The face itself is flat: no shading, no glints, no glow
+  round the edge. The light is a little of the wallpaper's colour round the pane
+  (`GlassLook.glow`), and it moves as the phone tilts.
+- **It makes colour richer, not greyer** (`GlassLook.vibrance`): what is seen through the glass is a
+  little more saturated, as Apple's vibrancy makes it.
 - **It takes the wallpaper's colour.** On the home screen each pane's veil is tinted with the
   wallpaper's own colour where the pane sits, read from the copy the lens already samples, with a
   soft glow of that colour just outside it (`GlassTint`, the second twist). The fallbacks take one
@@ -625,9 +674,9 @@ A readable veil thickens only over parts of the wallpaper that would fight the t
 everybody has unless they ask for more. **Frosted** is for a wallpaper as dark as the pane itself,
 or in the light as pale, where clear glass is mostly its rim: a little frost lifts the pane a step
 away, there and nowhere else (`glassLift`). **Solid** adds a fuller veil on
-top of that (`GlassBody`). Every pane casts a shadow in two parts, away from the light: a wide
-faint one that says how far off the wallpaper it floats and a close dark one under its edge that
-says it is solid, both deeper for a thicker slab (`shadowPaints`). Panes you press
+top of that (`GlassBody`). Every pane casts a soft shadow straight down, as Apple's glass does: a
+wide faint one that says how far off the wallpaper it floats and a hairline one under its edge,
+deeper for thicker glass (`shadowPaints`). Panes you press
 (`interactive = true`: the dock, folders, widgets, search) light up from within, the glow starting
 under your finger.
 
@@ -638,7 +687,8 @@ app's external cache (`glass-*.png`), for Clear, Frosted and Solid and for both 
 `Modifier.glassInk()` makes whatever a composable draws out of glass, for the "No glass" widgets:
 its own outline becomes the rim, so the wallpaper bends at the edges of each numeral and icon,
 which throw back what is beside them, and the highlight runs along them in the wallpaper's colour.
-Each stroke is a rounded bar of glass, shaded and glinting by the same light as the panes.
+Each stroke is a flat bar of glass with a hairline of light on its edge, lit by the same light as
+the panes.
 What is drawn white is clear glass; a colour becomes tinted glass.
 With Glass panels on Frosted or Solid the glass also gathers more light over a dark wallpaper, so
 a glass clock stands out from it.
@@ -650,8 +700,7 @@ noted when the copy is made; see `WallpaperTrust`). The wallpaper's colours are 
 Samsung phones never announce them to the app that set the wallpaper. Android 14+ shows a
 still wallpaper zoomed by a tenth to leave room for parallax, and the shader matches that. With no
 usable copy (a live wallpaper, or one set in another app) panes fall back to frosted glass with a
-rim of the same kind and the slab's form drawn in plain shading, rather than showing a picture that
-is not really behind them. Android 12
+rim of the same kind, rather than showing a picture that is not really behind them. Android 12
 uses the frosted copy, and "No glass" widgets draw their numbers and icons plain white below
 Android 13. Nothing is captured or blurred per frame.
 
@@ -751,6 +800,16 @@ Finish a piece of work by committing and pushing it. Work left on one PC has bee
 before.
 
 ## Known limits
+
+- Opening and closing apps into their icons has not been tried on a phone yet. The gesture
+  handshake only happens with gesture navigation on phones whose recents are AOSP's (not One UI,
+  not with buttons); App pictures needs Android 11 and a Zenith from Play or put on with a
+  computer. Without the handshake Android's own close still plays before Zenith's, with the home
+  screen empty until it is over: how long is Android's word from Android 14 on, and a guess for
+  the make of phone before that. An app that had to start again shows its splash screen after the
+  picture for a moment. Without App pictures
+  the card is the app's colour and logo, not the app, and Zenith only knows which app is closing
+  from having opened it.
 
 - Reading the wallpaper for the glass backdrop requires Zenith to be the default home app. Entering
   the launcher raises the system "Set Zenith UI as your default home app?" dialog (`RoleManager`,

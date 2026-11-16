@@ -5,6 +5,7 @@ import com.gabriel.zenithui.ui.common.WideAppIcon
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutLinearInEasing
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.VectorConverter
 import androidx.compose.animation.core.animateFloatAsState
@@ -45,6 +46,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.key
 import androidx.compose.runtime.getValue
@@ -68,18 +70,17 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.Paint
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
-import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.layer.drawLayer
+import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.PointerInputScope
@@ -90,6 +91,12 @@ import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
@@ -110,6 +117,7 @@ import com.gabriel.zenithui.data.HomeGeometry
 import com.gabriel.zenithui.data.HomeItem
 import com.gabriel.zenithui.data.PxRect
 import com.gabriel.zenithui.data.ROW_UNITS
+import com.gabriel.zenithui.data.Reshape
 import com.gabriel.zenithui.data.HostedWidgetCell
 import com.gabriel.zenithui.data.ShortcutCell
 import com.gabriel.zenithui.data.StackCell
@@ -128,6 +136,8 @@ import com.gabriel.zenithui.ui.common.LocalLabelStyle
 import com.gabriel.zenithui.ui.common.LocalMotionLevel
 import com.gabriel.zenithui.ui.common.Motion
 import com.gabriel.zenithui.ui.common.appearIn
+import com.gabriel.zenithui.ui.common.LocalHomePlaces
+import com.gabriel.zenithui.ui.common.homePlace
 import com.gabriel.zenithui.ui.common.launchOrigin
 import com.gabriel.zenithui.ui.common.labelShadow
 import com.gabriel.zenithui.ui.common.pressBounce
@@ -400,6 +410,27 @@ private const val COPY_ALPHA_OVER_BIN = 0.32f
 private fun carriedScale(item: HomeItem): Float =
     if (item.isWidgetLike || (item is AppCell && !item.isPlainIcon)) 1.02f else 1.14f
 
+/** How far inside an item's corner its bead's lens looks. */
+private val LENS_BIAS = 3.dp
+
+/** How far into blowing back together something is formed, and its bead can well up. */
+private const val BACK_FORMED = 0.7f
+
+/** The middle of [frame], for a layer [size] big to grow and turn round. */
+private fun originOf(frame: PxRect, size: Size): TransformOrigin =
+    if (size.width <= 0f || size.height <= 0f) {
+        TransformOrigin.Center
+    } else {
+        TransformOrigin((frame.left + frame.right) / 2f / size.width, (frame.top + frame.bottom) / 2f / size.height)
+    }
+
+/** Where what [item] shows stands in its cell: its icon, its super icon or its widget's pane. */
+private fun frameOf(item: HomeItem, geometry: HomeGeometry): PxRect = when {
+    item.isWidgetLike -> geometry.widgetFrame(item.spanX, item.spanY)
+    item is AppCell && !item.isPlainIcon -> geometry.superIconFrame(item.spanX, (item.spanY / ROW_UNITS).coerceAtLeast(1))
+    else -> geometry.iconFrame
+}
+
 /**
  * What has just left a page: thrown away, put in the dock, made into a folder, taken off from its
  * own menu. Each is kept just long enough to be seen going, where it stood. Without this an item
@@ -431,6 +462,44 @@ private class Departures(first: List<HomeItem>) {
     }
 }
 
+/**
+ * Apps just taken off the dock by their minus, each popping where it was last seen while the others
+ * close up. Only one whose pop was asked for ([Bubbles]) and that was seen in its place pops; any
+ * other app that leaves the dock simply goes, as it always has.
+ */
+@Stable
+private class DockPops(first: List<String>) {
+    /** An app popping: its key, where it was across the dock and how far off its line, and its spray. */
+    class Pop(val key: String, val left: Float, val down: Float, val droplets: Int)
+
+    private var before = first
+    private val going = ArrayList<Pop>()
+
+    /** Goes up when one has finished popping, so the dock is composed again without it. */
+    private var finished by mutableIntStateOf(0)
+
+    /** Told the dock's apps [now], and where each was last [seenAt], says which are popping. */
+    fun after(now: List<String>, seenAt: Map<String, FloatArray>, bubbles: Bubbles?): List<Pop> {
+        finished
+        if (now != before) {
+            for (key in before) {
+                if (key in now || going.any { it.key == key }) continue
+                val seen = seenAt[key] ?: continue
+                val pop = bubbles?.takePop(dockBubble(key)) ?: continue
+                going += Pop(key, seen[0], seen[1], pop.droplets)
+            }
+            // Put back before it had finished popping: it is simply there again.
+            going.removeAll { it.key in now }
+            before = now
+        }
+        return if (going.isEmpty()) emptyList() else going.toList()
+    }
+
+    fun gone(pop: Pop) {
+        if (going.remove(pop)) finished++
+    }
+}
+
 @Composable
 fun HomePage(
     page: Int,
@@ -444,6 +513,8 @@ fun HomePage(
     onResize: (HomeItem, Int, Int) -> Boolean,
     /** Tapping the item being resized puts it down, just like tapping anywhere else. */
     onResizeDone: () -> Unit = {},
+    /** A pull on something's corner has begun (true) or ended (false): all of it is one change. */
+    onResizePull: (HomeItem, Boolean) -> Unit = { _, _ -> },
     /** Another icon has just joined the one being carried. */
     onGathered: () -> Unit = {},
     onOpenApp: (String) -> Unit,
@@ -461,6 +532,8 @@ fun HomePage(
     onBead: (HomeItem) -> Unit = {},
     /** The minuses show. Not while Customise is up: the home screen is being looked at, not arranged. */
     beads: Boolean = true,
+    /** What has just been taken off pops like a bubble, and what Undo has just put back blows back together. */
+    bubbles: Bubbles? = null,
     onSearch: () -> Unit,
     onNoteChange: (String) -> Unit,
     onAmbient: () -> Unit,
@@ -724,29 +797,72 @@ fun HomePage(
                     ring.snapTo(1f)
                 }
             }
-            val ringFrame = when {
-                item.isWidgetLike -> geometry.widgetFrame(item.spanX, item.spanY)
-                item is AppCell && !item.isPlainIcon -> geometry.superIconFrame(item.spanX, (item.spanY / ROW_UNITS).coerceAtLeast(1))
-                else -> geometry.iconFrame
-            }
+            val ringFrame = frameOf(item, geometry)
             val ringRound = item is FolderCell || item is ShortcutCell || (item is AppCell && item.isPlainIcon)
+            // Brought back by Undo, it blows back together where it stood: its droplets fly in, and
+            // it forms again with a wobble. Its bead wells up once it has.
+            val returning = remember { !reduced && bubbles?.takeReturn(item.id) == true }
+            val back = remember { Animatable(if (returning) 0f else 1f) }
+            if (returning) {
+                LaunchedEffect(Unit) { back.animateTo(1f, tween(BeadMotion.BACK_MS, easing = LinearEasing)) }
+            }
+            val formed by remember { derivedStateOf { back.value >= BACK_FORMED } }
+            // Woken by the wave of light as it reaches it, and settled by the calm one.
+            val wake = rememberEditWake(editing) {
+                Offset(cellRoot.x + (ringFrame.left + ringFrame.right) / 2f, cellRoot.y + (ringFrame.top + ringFrame.bottom) / 2f)
+            }
             // The gestures below outlive recompositions: they ask for the frame as it is now.
             val liveFrame by rememberUpdatedState(ringFrame)
             val opens = item.launchKey
             val makingWay = carriedCovered && item.id == dragged?.id
             val wayAlpha by animateFloatAsState(if (makingWay) 0f else 1f, tween(140), label = "makingWay")
+            // While its bead is out, what the item draws is kept in a layer too, for the bead to show
+            // its corner magnified.
+            val lens = rememberGraphicsLayer()
+            val lensing = (editing || wake.awake) && beads && item !is FolderCell
+            val cornered = wake.awake && beads && !carried && Reshape.hasCorner(item, chosen = resizing)
+            var lingering by remember { mutableStateOf(false) }
+            LaunchedEffect(cornered) { if (cornered) lingering = true }
+            // Held still while its corner is pulled, so the corner stays under the finger.
+            var pullingCorner by remember { mutableStateOf(false) }
+            val still by animateFloatAsState(if (pullingCorner) 0f else 1f, tween(180), label = "still")
 
             Box(
                 Modifier
-                    // The item being resized draws, and takes touches, above its neighbours: its
-                    // outline and pointer reach past its own edges.
-                    .zIndex(if (resizing || held) 1f else 0f)
+                    // Something with its corner out draws, and takes touches, above its neighbours:
+                    // the corner reaches past its own edges. Pulled, its outline and its size are
+                    // drawn over everything else, the other widgets with their corners out too.
+                    .zIndex(
+                        when {
+                            pullingCorner -> 2f
+                            cornered || resizing || held -> 1f
+                            else -> 0f
+                        }
+                    )
                     .offset { cellOffset.value }
                     .requiredSize(cellWidthDp * item.spanX, cellHeightDp * item.spanY)
                     .onGloballyPositioned { cellRoot = it.positionInRoot() }
                     .then(
-                        // One that arrives by being let go here already has its landing.
-                        if ((animateEntrance || item.id !in firstIds) && !arrivedByDrop) {
+                        // Over what is forming, and not grown or shrunk with it.
+                        if (returning) {
+                            Modifier.drawWithContent {
+                                drawContent()
+                                val float = TiltRest.parallaxShift(parallax.value, ITEM_FLOAT_DP, density.density)
+                                translate(float.x, float.y) {
+                                    drawBurst(
+                                        burstCentre(ringFrame), burstSpan(ringFrame), back.value * BeadMotion.BACK_MS,
+                                        BeadMotion.BACK_DROPLETS, inward = true,
+                                    )
+                                }
+                            }
+                        } else {
+                            Modifier
+                        }
+                    )
+                    .then(
+                        // One that arrives by being let go here already has its landing, and one
+                        // Undo brings back its bubble.
+                        if ((animateEntrance || item.id !in firstIds) && !arrivedByDrop && !returning) {
                             Modifier.appearIn(delayMillis = staggerDelay(index))
                         } else {
                             Modifier
@@ -795,7 +911,7 @@ fun HomePage(
                         val float = TiltRest.parallaxShift(parallax.value, ITEM_FLOAT_DP, density.density)
                         translationX += float.x
                         translationY += float.y
-                        val shake = jiggleStrength()
+                        val shake = jiggleStrength() * wake.level.value * still
                         if (shake > 0f && !carried) {
                             // About four swings a second, each thing a little off the pace of the
                             // ones beside it, with a hair of a bob on another beat.
@@ -804,6 +920,22 @@ fun HomePage(
                                 sin((clock * (WIGGLE_HZ + WIGGLE_HZ_SPREAD * jigglePhase) + jigglePhase) * TWO_PI)
                             translationY += WIGGLE_BOB.toPx() * shake *
                                 sin((clock * (BOB_HZ + WIGGLE_HZ_SPREAD * jigglePhase) + 2f * jigglePhase) * TWO_PI)
+                        }
+                        // Waking, a small rock with a soft squash; gentler for anything bigger than an icon.
+                        val jolt = wake.jolt.value
+                        if (jolt < 1f) {
+                            val big = jiggleAngle == WIGGLE_WIDE
+                            scaleX *= BeadMotion.joltX(jolt, big)
+                            scaleY *= BeadMotion.joltY(jolt, big)
+                        }
+                        // Forming again, round the middle of what it shows rather than of its cell.
+                        val forming = back.value
+                        if (forming < 1f) {
+                            val grown = BeadMotion.backScale(forming)
+                            scaleX *= grown
+                            scaleY *= grown
+                            alpha *= BeadMotion.backAlpha(forming)
+                            transformOrigin = originOf(ringFrame, size)
                         }
                     }
                     .drawBehind {
@@ -853,6 +985,16 @@ fun HomePage(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
+                        .then(
+                            if (lensing) {
+                                Modifier.drawWithContent {
+                                    lens.record { this@drawWithContent.drawContent() }
+                                    drawLayer(lens)
+                                }
+                            } else {
+                                Modifier
+                            }
+                        )
                         .onGloballyPositioned {
                             contentRoot = it.positionInRoot()
                             contentAt[0] = it
@@ -860,7 +1002,7 @@ fun HomePage(
                         .then(if (opens != null) Modifier.launchOrigin(opens) else Modifier)
                         .pointerInput(item.id, cellWidthPx, cellHeightPx, settings.columns, resizing, settings.lockLayout, editing) {
                             // While its size is being pulled, the item stays put: a finger resting
-                            // on the pointer must never turn into a long press that carries it off.
+                            // on its corner must never turn into a long press that carries it off.
                             if (resizing) return@pointerInput
                             // A hold brings the thing's menu up beside it while the finger is still
                             // down. From there the finger either chooses from the menu, lifts and
@@ -992,45 +1134,53 @@ fun HomePage(
                         },
                     contentAlignment = Alignment.Center,
                 ) {
-                    HomeItemContent(
-                        item = item,
-                        settings = settings,
-                        appsByKey = appsByKey,
-                        geometry = geometry,
-                        onSearch = onSearch,
-                        onNoteChange = onNoteChange,
-                        onAmbient = onAmbient,
-                        onRestoreWidget = onRestoreWidget,
-                    )
+                    // The page's own icons, where a closing app can go back to (see IconPlaces).
+                    CompositionLocalProvider(LocalHomePlaces provides true) {
+                        HomeItemContent(
+                            item = item,
+                            settings = settings,
+                            appsByKey = appsByKey,
+                            geometry = geometry,
+                            onSearch = onSearch,
+                            onNoteChange = onNoteChange,
+                            onAmbient = onAmbient,
+                            onRestoreWidget = onRestoreWidget,
+                        )
+                    }
                 }
 
                 // The minus on its corner while the home screen is edited. A folder has none: it is
                 // emptied, or removed from its menu. On top of the item, so a tap on it is its own.
+                val name = when (item) {
+                    is AppCell -> appsByKey[item.key]?.label ?: "app"
+                    is ShortcutCell -> item.label
+                    is WidgetCell -> Widgets.shortName(item.type)
+                    else -> "widget"
+                }
                 if (item !is FolderCell) {
                     val reach = with(density) { (BEAD_TOUCH / 2).toPx() }
                     MinusBead(
-                        shown = editing && beads && !carried && !resizing,
-                        name = when (item) {
-                            is AppCell -> appsByKey[item.key]?.label ?: "app"
-                            is ShortcutCell -> item.label
-                            is WidgetCell -> Widgets.shortName(item.type)
-                            else -> "widget"
-                        },
+                        shown = wake.awake && beads && !carried && !resizing && formed,
+                        name = name,
                         onClick = { onBead(liveItem) },
+                        lens = lens,
+                        // A hair inside the very corner, which is rounded away to nothing: the bead
+                        // shows the item's edge curving through it, a quarter bigger.
+                        corner = Offset(ringFrame.left.toFloat(), ringFrame.top.toFloat()) + with(density) { Offset(LENS_BIAS.toPx(), LENS_BIAS.toPx()) },
                         modifier = Modifier
                             .align(Alignment.TopStart)
                             .offset { IntOffset((ringFrame.left - reach).roundToInt(), (ringFrame.top - reach).roundToInt()) },
                     )
                 }
 
-                // As a sibling on top, so a finger on the pointer is never also a press on the item.
-                // It stays a moment after resizing is done, to be seen letting go of the item.
-                val framed = resizing && (item.isWidgetLike || item is AppCell)
-                var lingering by remember { mutableStateOf(false) }
-                LaunchedEffect(framed) { if (framed) lingering = true }
-                if (framed || lingering) {
-                    ResizeFrame(
+                // The corner to pull: on every widget while the home screen is edited, and on an app
+                // chosen to be resized, coming with its bead as the wave wakes it. As a sibling on
+                // top, so a finger on the corner is never also a press on the thing. It stays a
+                // moment after it is no longer wanted, to be seen drawing back into its corner.
+                if (cornered || lingering) {
+                    ResizeCorner(
                         item = item,
+                        name = name,
                         cellWidthPx = cellWidthPx,
                         cellHeightPx = cellHeightPx,
                         geometry = geometry,
@@ -1038,8 +1188,12 @@ fun HomePage(
                         columns = settings.columns,
                         unitRows = settings.rows * ROW_UNITS,
                         onResize = onResize,
-                        onDone = onResizeDone,
-                        leaving = !framed,
+                        onPull = { pulledItem, starting ->
+                            pullingCorner = starting
+                            onResizePull(pulledItem, starting)
+                        },
+                        onDone = if (resizing) onResizeDone else null,
+                        leaving = !cornered,
                         onGone = { lingering = false },
                     )
                 }
@@ -1047,14 +1201,25 @@ fun HomePage(
             }
         }
 
-        // What has just been taken off the page shrinks away where it stood.
+        // What has just been taken off the page is seen to go where it stood: taken off by its minus
+        // or its menu, it pops like a soap bubble; gone into the dock, a folder or another page, it
+        // shrinks away.
         departures.after(items).forEach { item ->
             key("gone", item.id) {
+                val pop = remember { if (reduced) null else bubbles?.takePop(item.id) }
                 val out = remember { Animatable(0f) }
                 LaunchedEffect(Unit) {
-                    out.animateTo(1f, if (reduced) tween(Motion.REDUCED_MS) else tween(220, easing = FastOutLinearInEasing))
+                    out.animateTo(
+                        1f,
+                        when {
+                            reduced -> tween(Motion.REDUCED_MS)
+                            pop != null -> tween(BURST_MS, easing = LinearEasing)
+                            else -> tween(220, easing = FastOutLinearInEasing)
+                        },
+                    )
                     departures.gone(item)
                 }
+                val frame = frameOf(item, geometry)
                 Box(
                     Modifier
                         .offset {
@@ -1064,19 +1229,54 @@ fun HomePage(
                             )
                         }
                         .requiredSize(cellWidthDp * item.spanX, cellHeightDp * item.spanY)
+                        .then(
+                            // The bubble's ring and droplets, over where it stood and not shrunk with it.
+                            if (pop != null) {
+                                Modifier.drawWithContent {
+                                    drawContent()
+                                    val float = TiltRest.parallaxShift(parallax.value, ITEM_FLOAT_DP, density.density)
+                                    translate(float.x, float.y) {
+                                        drawBurst(
+                                            burstCentre(frame), burstSpan(frame), out.value * BURST_MS - BeadMotion.RING_DELAY_MS,
+                                            pop.droplets, inward = false,
+                                        )
+                                    }
+                                }
+                            } else {
+                                Modifier
+                            }
+                        )
                         .graphicsLayer {
                             val gone = out.value
-                            alpha = 1f - gone
-                            if (!reduced) {
-                                val shrunk = 1f - 0.35f * gone
-                                scaleX = shrunk
-                                scaleY = shrunk
+                            if (pop != null) {
+                                // A quick swell round the middle of what it shows, and gone.
+                                val t = gone * BURST_MS / BeadMotion.POP_MS
+                                val swell = BeadMotion.popScale(t)
+                                scaleX = swell
+                                scaleY = swell
+                                alpha = BeadMotion.popAlpha(t)
+                                transformOrigin = originOf(frame, size)
+                            } else {
+                                alpha = 1f - gone
+                                if (!reduced) {
+                                    val shrunk = 1f - 0.35f * gone
+                                    scaleX = shrunk
+                                    scaleY = shrunk
+                                }
                             }
                             // Floating still, as it was while it stood here.
                             val float = TiltRest.parallaxShift(parallax.value, ITEM_FLOAT_DP, density.density)
                             translationX = float.x
                             translationY = float.y
-                        },
+                        }
+                        .then(
+                            // Brighter as it swells, as a bubble catches the light just as it bursts.
+                            if (pop != null) {
+                                Modifier.brightened { BeadMotion.popGlow(out.value * BURST_MS / BeadMotion.POP_MS) }
+                            } else {
+                                Modifier
+                            }
+                        ),
                     contentAlignment = Alignment.Center,
                 ) {
                     HomeItemContent(
@@ -1451,6 +1651,7 @@ private fun SuperAppTile(key: String, label: String, frame: PxRect, showLabel: B
                 .padding(start = with(density) { frame.left.toDp() })
                 .size(with(density) { frame.width.toDp() }, with(density) { frame.height.toDp() })
                 .launchOrigin(key)
+                .homePlace(key)
                 // Jelly, as every icon on a page is, whatever Pressing says. Its picture is never
                 // glass, so a ring of light from the wallpaper puts a gleam on it as it passes.
                 .jellyIcon(SuperIconShape)
@@ -1530,6 +1731,7 @@ fun AppTile(
             modifier = Modifier
                 .then(if (frame != null) Modifier.padding(start = with(density) { frame.left.toDp() }) else Modifier)
                 .launchOrigin(key)
+                .then(if (frame != null) Modifier.homePlace(key) else Modifier)
                 // On a home page an icon is jelly, whatever Pressing says, and gleams as a ring of light
                 // from the wallpaper passes; in the drawer and a folder's panel it keeps Pressing.
                 .then(if (frame != null) Modifier.jellyIcon(shape).iconGleam(shape) else Modifier.pressBounce()),
@@ -1574,6 +1776,7 @@ fun ShortcutTile(
                 .then(if (frame != null) Modifier.padding(start = with(density) { frame.left.toDp() }) else Modifier)
                 .size(iconSize)
                 .launchOrigin(item.key)
+                .then(if (frame != null) Modifier.homePlace(item.key) else Modifier)
                 // Jelly on a home page, as an app's icon is.
                 .then(if (frame != null) Modifier.jellyIcon(shape).iconGleam(shape) else Modifier.pressBounce()),
         ) {
@@ -1628,6 +1831,8 @@ fun FolderTile(
             Modifier
                 .then(if (frame != null) Modifier.padding(start = with(density) { frame.left.toDp() }) else Modifier)
                 .size(iconSize)
+                // An app opened from inside it goes back into it, if it has no icon of its own on show.
+                .then(if (frame != null) Modifier.homePlace(folder.keys, folder = true) else Modifier)
                 // Jelly on a home page, as an app's icon is. A folder is glass, which lights up of
                 // itself as a ring of light from the wallpaper passes, so it takes no gleam.
                 .then(if (frame != null) Modifier.jellyIcon(shape) else Modifier.pressBounce()),
@@ -1658,18 +1863,22 @@ fun FolderTile(
 }
 
 /**
- * Resizing, as simple as pulling a corner. A thin outline hugs the item and a pointer sits on its
- * bottom-right corner; pull the pointer and the outline follows your finger exactly, while the item
- * underneath snaps to whole cells as you pass them, with a light tick, and a badge by the pointer
- * says the size. Let go and the outline settles onto the size the item took. A size with no room
- * turns the outline red rather than pushing anything out of the way.
+ * The corner to pull, on a widget while the home screen is edited and on an app chosen to be
+ * resized: a short arc of white hugging its bottom right corner, fading out towards its two ends.
+ * Pull it and the corner follows your finger exactly, while the thing under it snaps to whole cells
+ * as you pass them, with a light tick; a thin outline shows the size you are asking for, red where
+ * there is no room rather than pushing anything out of the way, and the size is said in glass just
+ * above your finger. Let go and the corner glides back onto the size the thing took. A whole pull
+ * is one change for Undo ([onPull]), however many sizes it passed through on the way.
  *
  * Apps and widgets can both be pulled out to any size, up to the whole page; a widget only stops at
  * the smallest its design allows. Apps grow in whole rows.
  */
 @Composable
-private fun BoxScope.ResizeFrame(
+private fun BoxScope.ResizeCorner(
     item: HomeItem,
+    /** What it is called, for a screen reader to say whose corner this is. */
+    name: String,
     cellWidthPx: Float,
     cellHeightPx: Float,
     geometry: HomeGeometry,
@@ -1678,21 +1887,28 @@ private fun BoxScope.ResizeFrame(
     columns: Int,
     unitRows: Int,
     onResize: (HomeItem, Int, Int) -> Boolean,
-    /** A tap on the pointer, rather than a pull, finishes resizing like a tap anywhere else. */
-    onDone: () -> Unit,
-    /** Resizing is over: the outline fades and the pointer draws back into its corner, and then [onGone]. */
+    /** A pull has begun (true) or ended (false): everything between is one change. */
+    onPull: (HomeItem, Boolean) -> Unit,
+    /**
+     * For an app chosen to be resized: a tap on it finishes, as a tap anywhere else does. Null for
+     * a widget in edit mode, which goes on being picked up and carried as anything else is.
+     */
+    onDone: (() -> Unit)?,
+    /** It is no longer wanted: the corner draws back into the corner it is on, and then [onGone]. */
     leaving: Boolean = false,
     onGone: () -> Unit = {},
 ) {
     val haptics = LocalHapticFeedback.current
+    val palette = LocalPalette.current
     val scope = rememberCoroutineScope()
     val finish by rememberUpdatedState(onDone)
+    val pulled by rememberUpdatedState(onPull)
     val gone by rememberUpdatedState(onGone)
     // The spans are read live: the gesture below outlives every size it passes through.
     val live by rememberUpdatedState(item)
     val isApp = item is AppCell
     // A widget on the iPhone grid stands a little wider than the icons above it
-    // (HomeGeometry.widgetReach), and its outline with it.
+    // (HomeGeometry.widgetReach), and its corner and outline with it.
     val reach = if (isApp) 0f else geometry.widgetReach.toFloat()
     val side = geometry.sideInset.toFloat() - reach
     val sideEnd = geometry.sideInsetEnd.toFloat() - reach
@@ -1712,8 +1928,7 @@ private fun BoxScope.ResizeFrame(
     }
     fun rowsOf(spanY: Int) = (spanY / ROW_UNITS).coerceIn(1, pageRows.coerceAtLeast(1))
 
-    // The outline runs along the lines the item is drawn on, in the item's own pixels. Its right
-    // and bottom edges are the ones you pull.
+    // The thing's edges as it is drawn, in its own pixels. Its right and bottom ones are pulled.
     fun top(spanY: Int) = when {
         isApp -> appTop[rowsOf(spanY)]
         spanY >= ROW_UNITS -> topInset
@@ -1726,16 +1941,17 @@ private fun BoxScope.ResizeFrame(
         else -> spanY * cellHeightPx
     }
 
+    // Where the corner is: on the thing's corner at rest, under the finger while it pulls.
     val right = remember { Animatable(restingRight(item.spanX)) }
     val bottom = remember { Animatable(restingBottom(item.spanY)) }
-    /** A finger is on the pointer. */
+    /** A finger is on the corner. */
     var held by remember { mutableStateOf(false) }
     /** ...and has moved far enough to be pulling it, not tapping it. */
     var pulling by remember { mutableStateOf(false) }
     var blocked by remember { mutableStateOf(false) }
     val settle = spring<Float>(dampingRatio = 0.72f, stiffness = 420f)
     // Whenever nobody is pulling — after you let go, or when the size changes some other way —
-    // the outline glides onto the item.
+    // the corner glides onto the thing's.
     LaunchedEffect(item.spanX, item.spanY, pulling, cellWidthPx, cellHeightPx) {
         if (!pulling) {
             blocked = false
@@ -1744,7 +1960,7 @@ private fun BoxScope.ResizeFrame(
         }
     }
 
-    /** The size the outline is asking for, in cells across and row units down. */
+    /** The size the corner is asking for, in cells across and row units down. */
     fun sizeFor(r: Float, b: Float): Pair<Int, Int> {
         val spanX = ((r + sideEnd) / cellWidthPx).roundToInt().coerceIn(1, columns - live.col)
         val room = ((unitRows - live.row) / ROW_UNITS).coerceIn(1, pageRows.coerceAtLeast(1))
@@ -1768,140 +1984,140 @@ private fun BoxScope.ResizeFrame(
             appear.animateTo(0f, spring(dampingRatio = 1f, stiffness = 520f))
             gone()
         } else {
-            appear.animateTo(1f, spring(dampingRatio = 0.5f, stiffness = 300f))
+            appear.animateTo(1f, Motion.open())
         }
     }
-    val lift by animateFloatAsState(if (held) 1.15f else 1f, spring(dampingRatio = 0.5f, stiffness = 500f), label = "pointerLift")
+    val lift by animateFloatAsState(if (held) 1.15f else 1f, Motion.press(), label = "cornerLift")
+    // Pulled, the corner gives way to the outline, whose own corner is under the finger; let go, it
+    // grows back where the finger left it and glides onto the thing's corner.
+    val arc by animateFloatAsState(if (pulling) 0f else 1f, tween(if (pulling) 120 else 220), label = "cornerArc")
     val outline by animateColorAsState(if (blocked) Color(0xFFFF5A5F) else Color.White, tween(160), label = "outline")
     val grow = 4.dp
 
     /**
-     * Follows the item's own rounding: a widget's card, or for an app a quarter of its short side,
+     * Follows the thing's own rounding: a widget's card, or for an app a quarter of its short side,
      * as its stretched icon is drawn — so it rounds more the bigger the icon is pulled.
      */
     fun Density.radius(): Float =
         if (isApp) 0.26f * minOf(right.value - side, bottom.value - frameTop).coerceAtLeast(0f) else HomeGeometry.WIDGET_CORNER_DP.dp.toPx()
 
-    /** Where the rounded corner of the outline comes closest to the corner of its box. */
-    fun Density.tip(): Offset {
-        val round = radius() + grow.toPx()
-        val inset = round * (1f - 0.7071f) - grow.toPx()
-        return Offset(right.value - inset, bottom.value - inset)
-    }
-
     Box(
         Modifier
             .matchParentSize()
-            // While it is being resized the item is not itself: a tap on it finishes, rather than
-            // typing in a note or flipping a toggle. On its way out it is only a picture.
-            .then(if (leaving) Modifier else Modifier.pointerInput(Unit) { detectTapGestures(onTap = { finish() }) }),
+            // An app being resized is not itself: a tap on it finishes, rather than opening it. On
+            // its way out the corner is only a picture.
+            .then(
+                if (leaving || onDone == null) Modifier else Modifier.pointerInput(Unit) { detectTapGestures(onTap = { finish?.invoke() }) }
+            ),
     ) {
-        // The outline, with a soft white glow round it: it is drawn on the wallpaper.
         Canvas(Modifier.matchParentSize()) {
-            val out = grow.toPx()
-            val frame = Rect(side - out, frameTop - out, right.value + out, bottom.value + out)
-            val radius = CornerRadius(radius() + out)
             val fade = appear.value.coerceIn(0f, 1f)
-            drawRoundRect(
-                color = Color.White.copy(alpha = 0.28f * fade),
-                topLeft = frame.topLeft, size = frame.size, cornerRadius = radius,
-                style = Stroke(width = 7.dp.toPx()),
-            )
-            drawRoundRect(
-                color = outline.copy(alpha = 0.95f * fade),
-                topLeft = frame.topLeft, size = frame.size, cornerRadius = radius,
-                style = Stroke(width = 2.dp.toPx()),
-            )
+            // While it is pulled, the size it asks for, with a soft white glow round it: it is drawn
+            // on the wallpaper.
+            if (pulling) {
+                val out = grow.toPx()
+                val frame = Rect(side - out, frameTop - out, right.value + out, bottom.value + out)
+                val radius = CornerRadius(radius() + out)
+                drawRoundRect(
+                    color = Color.White.copy(alpha = 0.28f * fade),
+                    topLeft = frame.topLeft, size = frame.size, cornerRadius = radius,
+                    style = Stroke(width = 7.dp.toPx()),
+                )
+                drawRoundRect(
+                    color = outline.copy(alpha = 0.95f * fade),
+                    topLeft = frame.topLeft, size = frame.size, cornerRadius = radius,
+                    style = Stroke(width = 2.dp.toPx()),
+                )
+            }
+            drawCorner(Offset(right.value, bottom.value), fade * arc, lift)
         }
 
-        // The pointer: its tip rests on the outline's corner.
-        val pointerSize = 30.dp
-        Canvas(
-            Modifier
-                .offset {
-                    val tip = tip()
-                    val reach = pointerSize.toPx() * POINTER_TIP
-                    IntOffset((tip.x - reach).roundToInt(), (tip.y - reach).roundToInt())
-                }
-                .size(pointerSize)
-                .graphicsLayer {
-                    val scale = appear.value * lift
-                    scaleX = scale
-                    scaleY = scale
-                    // Grows from its tip, so it never slides off the corner.
-                    transformOrigin = TransformOrigin(POINTER_TIP, POINTER_TIP)
-                },
-        ) { drawPointer() }
-
-        // What your finger takes hold of: a generous square over the pointer and the corner.
-        val touch = 56.dp
+        // What your finger takes hold of: a generous square over the corner.
         if (!leaving) Box(
             Modifier
                 .offset {
-                    val tip = tip()
-                    val half = touch.toPx() / 2f
-                    // Centred a little inside the corner, over the body of the pointer.
-                    val centre = tip - Offset(6.dp.toPx(), 6.dp.toPx())
+                    val half = CORNER_TOUCH.toPx() / 2f
+                    // Centred a hair inside the corner, over the arc.
+                    val centre = Offset(right.value, bottom.value) - Offset(CORNER_GRIP.toPx(), CORNER_GRIP.toPx())
                     IntOffset((centre.x - half).roundToInt(), (centre.y - half).roundToInt())
                 }
-                .size(touch)
+                .size(CORNER_TOUCH)
+                // Said as what it is and the size it is now, and resizable a column or a row at a
+                // time without pulling, for anyone who cannot pull it.
+                .semantics {
+                    contentDescription = "Resize $name"
+                    stateDescription = sizeLabel(live)
+                    customActions = Reshape.steps(live, columns, pageRows).map { step ->
+                        CustomAccessibilityAction(step.name) { onResize(live, step.spanX, step.spanY) }
+                    }
+                }
                 .pointerInput(item.id, cellWidthPx, cellHeightPx, columns, unitRows) {
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
-                        // Taken from the start, so the press is neither a tap on the item nor the
-                        // beginning of a drag of the whole page.
+                        // Taken from the start, so the press is neither a tap on the thing, nor the
+                        // start of carrying it, nor a swipe of the whole page.
                         down.consume()
                         held = true
                         val startRight = right.value
                         val startBottom = bottom.value
                         var pull = Offset.Zero
                         var lifted = false
-                        while (true) {
-                            val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
-                            if (!change.pressed) {
-                                lifted = true
-                                break
+                        try {
+                            while (true) {
+                                val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
+                                if (!change.pressed) {
+                                    lifted = true
+                                    break
+                                }
+                                pull += change.positionChange()
+                                change.consume()
+                                // A finger that has not really moved yet is still a tap.
+                                if (!pulling) {
+                                    if (pull.getDistance() < viewConfiguration.touchSlop) continue
+                                    pulling = true
+                                    pulled(live, true)
+                                }
+                                // No further than the page's own right and bottom edges.
+                                val maxSpanX = (columns - live.col).coerceAtLeast(1)
+                                val maxSpanY = (unitRows - live.row).coerceAtLeast(1)
+                                val r = (startRight + pull.x).coerceIn(restingRight(1), restingRight(maxSpanX))
+                                val lowest = restingBottom(if (isApp) ROW_UNITS else minOf(ROW_UNITS, live.spanY))
+                                val b = (startBottom + pull.y).coerceIn(lowest, restingBottom(maxSpanY).coerceAtLeast(lowest))
+                                scope.launch {
+                                    right.snapTo(r)
+                                    bottom.snapTo(b)
+                                }
+                                val (spanX, spanY) = sizeFor(r, b)
+                                blocked = if (spanX == live.spanX && spanY == live.spanY) {
+                                    false
+                                } else if (onResize(live, spanX, spanY)) {
+                                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    false
+                                } else {
+                                    true
+                                }
                             }
-                            pull += change.positionChange()
-                            change.consume()
-                            // A finger that has not really moved yet is still a tap.
-                            if (!pulling) {
-                                if (pull.getDistance() < viewConfiguration.touchSlop) continue
-                                pulling = true
-                            }
-                            // No further than the page's own right and bottom edges.
-                            val maxSpanX = (columns - live.col).coerceAtLeast(1)
-                            val maxSpanY = (unitRows - live.row).coerceAtLeast(1)
-                            val r = (startRight + pull.x).coerceIn(restingRight(1), restingRight(maxSpanX))
-                            val lowest = restingBottom(if (isApp) ROW_UNITS else minOf(ROW_UNITS, live.spanY))
-                            val b = (startBottom + pull.y).coerceIn(lowest, restingBottom(maxSpanY).coerceAtLeast(lowest))
-                            scope.launch {
-                                right.snapTo(r)
-                                bottom.snapTo(b)
-                            }
-                            val (spanX, spanY) = sizeFor(r, b)
-                            blocked = if (spanX == live.spanX && spanY == live.spanY) {
-                                false
-                            } else if (onResize(live, spanX, spanY)) {
-                                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                false
-                            } else {
-                                true
+                        } finally {
+                            // However it ends, even taken away mid-pull, the pull is one finished change.
+                            held = false
+                            if (pulling) {
+                                pulling = false
+                                pulled(live, false)
+                            } else if (lifted) {
+                                finish?.invoke()
                             }
                         }
-                        held = false
-                        if (pulling) pulling = false else if (lifted) finish()
                     }
                 },
         )
 
-        // The size, just above your finger while you pull.
+        // The size, in glass just above your finger while you pull.
         if (pulling) {
             Text(
                 text = sizeLabel(live),
-                color = Color.White,
+                color = palette.onGlass,
                 fontSize = 13.sp,
-                fontWeight = FontWeight.SemiBold,
+                fontWeight = FontWeight.Bold,
                 modifier = Modifier
                     .offset {
                         // High enough to clear your fingertip and the top of an app icon.
@@ -1911,8 +2127,8 @@ private fun BoxScope.ResizeFrame(
                         )
                     }
                     .appearIn(fromScale = 0.8f, riseFrom = 10f)
-                    .background(Color.Black.copy(alpha = 0.62f), RoundedCornerShape(percent = 50))
-                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                    .glass(RoundedCornerShape(percent = 50), solid = 0.4f)
+                    .padding(horizontal = 11.dp, vertical = 5.dp),
             )
         }
     }
@@ -1932,34 +2148,50 @@ private fun sizeLabel(item: HomeItem): String {
 }
 
 /**
- * Where the pointer's tip lands in its square, across and down, once it is turned to aim at the
- * corner: drawn pointing up with its tip 0.46 of the way from the middle, then turned 135°.
+ * The corner to pull, round [tip], the bottom right corner of what it is on: a quarter of a circle
+ * hugging that corner, solid round it and fading out towards its two ends, with a soft shadow under
+ * it so it reads on any wallpaper. [shown] grows it out of the corner and back; [lift] is how much
+ * bigger it stands while a finger is on it.
  */
-private const val POINTER_TIP = 0.5f + 0.46f * 0.7071f
-
-/**
- * The resize pointer: a rounded arrowhead aimed at the bottom-right corner, white with a dark rim
- * and a soft shadow so it reads on any wallpaper.
- */
-private fun DrawScope.drawPointer() {
-    val w = size.width
-    // Drawn pointing straight up in a unit square, then turned to aim down and to the right.
-    val shape = Path().apply {
-        moveTo(0.5f * w, 0.04f * w)
-        lineTo(0.86f * w, 0.9f * w)
-        quadraticTo(0.5f * w, 0.7f * w, 0.14f * w, 0.9f * w)
-        close()
-    }
-    val pivot = Offset(w / 2f, w / 2f)
-    // Its shadow falls straight down, whichever way the pointer faces.
-    translate(top = 1.5.dp.toPx()) {
-        rotate(135f, pivot) { drawPath(shape, Color.Black.copy(alpha = 0.28f)) }
-    }
-    rotate(135f, pivot) {
-        drawPath(shape, Color.White)
-        drawPath(shape, Color.Black.copy(alpha = 0.45f), style = Stroke(width = 1.2.dp.toPx(), join = StrokeJoin.Round))
+private fun DrawScope.drawCorner(tip: Offset, shown: Float, lift: Float) {
+    if (shown <= 0f) return
+    val inset = CORNER_IN.toPx()
+    val centre = tip - Offset(inset, inset)
+    val outer = CORNER_RADIUS.toPx()
+    val stroke = CORNER_STROKE.toPx()
+    val r = outer - stroke / 2f
+    // Fading in along the corner's diagonal, so only the part round the corner is solid.
+    fun along(colour: Color) = Brush.linearGradient(
+        0.38f to Color.Transparent,
+        0.6f to colour,
+        start = centre,
+        end = centre + Offset(outer, outer),
+    )
+    val arcAt = centre - Offset(r, r)
+    val arcSize = Size(2f * r, 2f * r)
+    scale(shown * lift, pivot = tip) {
+        drawArc(
+            along(Color.Black.copy(alpha = 0.3f)), startAngle = 0f, sweepAngle = 90f, useCenter = false,
+            topLeft = arcAt + Offset(0f, 1.dp.toPx()), size = arcSize, style = Stroke(stroke + 1.5.dp.toPx()),
+        )
+        drawArc(
+            along(Color.White.copy(alpha = 0.94f)), startAngle = 0f, sweepAngle = 90f, useCenter = false,
+            topLeft = arcAt, size = arcSize, style = Stroke(stroke),
+        )
     }
 }
+
+/**
+ * The corner: the middle of its circle is this far in from the corner it is on, both ways; it is
+ * this big round, and this thick.
+ */
+private val CORNER_IN = 26.dp
+private val CORNER_RADIUS = 32.dp
+private val CORNER_STROKE = 5.5.dp
+
+/** The square a finger takes hold of the corner by, and how far inside the corner its middle is. */
+private val CORNER_TOUCH = 48.dp
+private val CORNER_GRIP = 5.dp
 
 /** The ghost that follows your finger while dragging. */
 @Composable
@@ -2241,6 +2473,8 @@ fun DockBar(
     editing: Boolean = false,
     onBead: (String) -> Unit = {},
     beads: Boolean = true,
+    /** An app taken off the dock pops like a bubble, and one Undo puts back blows back together. */
+    bubbles: Bubbles? = null,
     jiggleClock: () -> Float = { 0f },
     jiggleStrength: () -> Float = { 0f },
     modifier: Modifier = Modifier,
@@ -2261,6 +2495,10 @@ fun DockBar(
     // in your hand let go — starts from here and settles to where it now belongs, so nothing in
     // the dock is ever in one place and then in another.
     val seenAt = remember { HashMap<String, FloatArray>() }
+    // An app taken off the dock by its minus pops like a bubble where it was last seen, while the
+    // others close up round the gap; so where it was is asked before it is forgotten.
+    val pops = remember { DockPops(keys) }
+    val popping = pops.after(keys, seenAt, if (reduced) null else bubbles)
     seenAt.keys.retainAll(keys.toSet())
     /** How many times each app has been let go, so that being put down is always a fresh start. */
     val drops = remember { HashMap<String, Int>() }
@@ -2460,6 +2698,17 @@ fun DockBar(
                         label = "dockLift",
                     )
                     val fresh = remember { known.add(key) }
+                    // Brought back by Undo, it blows back together in its place rather than rising in.
+                    val returning = remember { !reduced && bubbles?.takeReturn(dockBubble(key)) == true }
+                    val reform = remember { Animatable(if (returning) 0f else 1f) }
+                    if (returning) {
+                        LaunchedEffect(Unit) { reform.animateTo(1f, tween(BeadMotion.BACK_MS, easing = LinearEasing)) }
+                    }
+                    val formed by remember { derivedStateOf { reform.value >= BACK_FORMED } }
+                    // Woken by the wave of light as it reaches it, and settled by the calm one.
+                    val wake = rememberEditWake(editing) { slotOf(index)?.center }
+                    // What the icon draws, for its bead to show its corner magnified.
+                    val lens = rememberGraphicsLayer()
                     val left = lefts?.getOrNull(index)
                     // Out of its place by this much as it starts, and bigger by this much.
                     val astray = remember {
@@ -2475,8 +2724,22 @@ fun DockBar(
                     Box(
                         Modifier
                             .then(
-                                if (fresh) {
+                                if (fresh && !returning) {
                                     Modifier.appearIn(delayMillis = 90 + staggerDelay(index), riseFrom = 26f)
+                                } else {
+                                    Modifier
+                                }
+                            )
+                            .then(
+                                // Its droplets and ring, closing in on where it forms.
+                                if (returning) {
+                                    Modifier.drawWithContent {
+                                        drawContent()
+                                        drawBurst(
+                                            Offset(size.width / 2f, size.height / 2f), size.width, reform.value * BeadMotion.BACK_MS,
+                                            BeadMotion.BACK_DROPLETS, inward = true,
+                                        )
+                                    }
                                 } else {
                                     Modifier
                                 }
@@ -2500,12 +2763,24 @@ fun DockBar(
                                     scaleX *= squash.x
                                     scaleY *= squash.y
                                 }
-                                // Edited, it wiggles as the icons on the page do.
-                                val shake = jiggleStrength()
+                                // Edited, it wiggles as the icons on the page do, and jolts as it wakes.
+                                val shake = jiggleStrength() * wake.level.value
                                 if (shake > 0f && !isCarried) {
                                     val phase = (key.hashCode() and 0xFF) / 255f
                                     rotationZ = WIGGLE_ICON * shake *
                                         sin((jiggleClock() * (WIGGLE_HZ + WIGGLE_HZ_SPREAD * phase) + phase) * TWO_PI)
+                                }
+                                val jolt = wake.jolt.value
+                                if (jolt < 1f) {
+                                    scaleX *= BeadMotion.joltX(jolt, widget = false)
+                                    scaleY *= BeadMotion.joltY(jolt, widget = false)
+                                }
+                                val forming = reform.value
+                                if (forming < 1f) {
+                                    val again = BeadMotion.backScale(forming)
+                                    scaleX *= again
+                                    scaleY *= again
+                                    alpha = BeadMotion.backAlpha(forming)
                                 }
                                 if (left != null) {
                                     val seen = seenAt.getOrPut(key) { FloatArray(3) }
@@ -2624,7 +2899,18 @@ fun DockBar(
                             shape = iconShape,
                             badge = true,
                             modifier = Modifier
+                                .then(
+                                    if ((editing || wake.awake) && beads) {
+                                        Modifier.drawWithContent {
+                                            lens.record { this@drawWithContent.drawContent() }
+                                            drawLayer(lens)
+                                        }
+                                    } else {
+                                        Modifier
+                                    }
+                                )
                                 .launchOrigin(key)
+                                .homePlace(key, dock = true)
                                 // Jelly, as the icons on the page are, whatever Pressing says.
                                 .jellyIcon(iconShape)
                                 .iconGleam(iconShape)
@@ -2637,12 +2923,54 @@ fun DockBar(
                                 },
                         )
                         MinusBead(
-                            shown = editing && beads && !isCarried,
+                            shown = wake.awake && beads && !isCarried && formed,
                             name = appsByKey[key]?.label ?: "app",
                             onClick = { onBead(key) },
+                            lens = lens,
+                            corner = with(density) { Offset(LENS_BIAS.toPx(), LENS_BIAS.toPx()) },
                             modifier = Modifier.align(Alignment.TopStart).offset(x = -BEAD_TOUCH / 2, y = -BEAD_TOUCH / 2),
                         )
                     }
+                    }
+                }
+            }
+            // Over the dock, where each popping app was last seen: a quick swell, and its bubble bursts.
+            popping.forEach { pop ->
+                androidx.compose.runtime.key("popping", pop.key) {
+                    val out = remember { Animatable(0f) }
+                    LaunchedEffect(Unit) {
+                        out.animateTo(1f, tween(BURST_MS, easing = LinearEasing))
+                        pops.gone(pop)
+                    }
+                    val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+                    Box(
+                        Modifier
+                            .align(Alignment.CenterStart)
+                            .offset { IntOffset((if (rtl) wide - iconPx - pop.left else pop.left).roundToInt(), pop.down.roundToInt()) }
+                            .size(iconSize)
+                            .drawWithContent {
+                                drawContent()
+                                drawBurst(
+                                    Offset(size.width / 2f, size.height / 2f), size.width, out.value * BURST_MS - BeadMotion.RING_DELAY_MS,
+                                    pop.droplets, inward = false,
+                                )
+                            }
+                            .graphicsLayer {
+                                val t = out.value * BURST_MS / BeadMotion.POP_MS
+                                val swell = BeadMotion.popScale(t)
+                                scaleX = swell
+                                scaleY = swell
+                                alpha = BeadMotion.popAlpha(t)
+                            }
+                            .brightened { BeadMotion.popGlow(out.value * BURST_MS / BeadMotion.POP_MS) },
+                    ) {
+                        AppIcon(
+                            key = pop.key,
+                            label = appsByKey[pop.key]?.label ?: "",
+                            size = iconSize,
+                            shape = ZenithShapes.forIconShape(settings.iconShape),
+                            badge = false,
+                        )
                     }
                 }
             }

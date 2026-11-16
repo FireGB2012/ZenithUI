@@ -36,6 +36,7 @@ class SettingsJsonTest {
         labelShadow = true,
         glassShine = false,
         openAnimation = "glass",
+        closeAnimation = "plain",
         appsView = "library",
         recentLaunches = listOf("a/b", "c/d"),
         launchCounts = mapOf("a/b" to 7),
@@ -158,6 +159,8 @@ class SettingsJsonTest {
         assertEquals(LabelSizes.MEDIUM, old.labelSize)
         assertFalse(old.labelShadow)
         assertTrue(old.appEdits.isEmpty())
+        // Apps close back into their icons every way the phone allows.
+        assertEquals(CloseRules.INTO_ICON, old.closeAnimation)
     }
 
     @Test

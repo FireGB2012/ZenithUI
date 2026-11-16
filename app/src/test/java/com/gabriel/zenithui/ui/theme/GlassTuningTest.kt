@@ -21,8 +21,12 @@ class GlassTuningTest {
         val look = pane()
         assertSame(look, look.tuned(GlassTuning()))
         for (lean in listOf(Offset.Zero, Offset(0.3f, -0.2f), Offset(-1f, 1f))) {
-            // Zenith's own light, exactly as it was worked out before there was a studio.
-            assertEquals(Offset(-0.45f - 1.6f * lean.x, -1f - 1.2f * lean.y), lightFrom(lean, GlassTuning()))
+            // Zenith's own light: up and to the left on the diagonal, as iOS's is, as far off as it
+            // has always been, and swinging as far as it always has as the phone tips.
+            val light = lightFrom(lean, GlassTuning())
+            val diagonal = -kotlin.math.hypot(0.45f, 1f) / kotlin.math.sqrt(2f)
+            assertEquals(diagonal - 1.6f * lean.x, light.x, 1e-4f)
+            assertEquals(diagonal - 1.2f * lean.y, light.y, 1e-4f)
         }
     }
 
@@ -36,7 +40,7 @@ class GlassTuningTest {
         assertEquals(look.frost + 1f, frosted.frost, 1e-6f)
         val rimless = look.tuned(GlassTuning(rim = 0f))
         assertEquals(0f, rimless.shine, 0f)
-        assertEquals(0f, rimless.mirror, 0f)
+        assertEquals(look.copy(shine = 0f), rimless)
         val rainbow = look.tuned(GlassTuning(rainbow = 3f))
         assertEquals(look.dispersion * 3f, rainbow.dispersion, 1e-6f)
     }

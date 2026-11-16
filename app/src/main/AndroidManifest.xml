@@ -25,6 +25,11 @@
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
         </intent>
+        <!-- The other home apps, so the app picture helper never takes a picture of recents. -->
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.HOME" />
+        </intent>
         <intent>
             <action android:name="org.adw.launcher.THEMES" />
         </intent>
@@ -92,6 +97,24 @@
             <meta-data
                 android:name="android.accessibilityservice"
                 android:resource="@xml/lock_service" />
+        </service>
+
+        <!-- The app picture helper: an accessibility service that takes a picture of the app in
+             front now and then, so a closed app is seen going back into its icon. Off until
+             switched on in Android's settings; reads nothing on the screen, keeps the pictures in
+             memory only and sends nothing. Android 11 and later. -->
+        <service
+            android:name=".data.PictureService"
+            android:enabled="@bool/pictures_supported"
+            android:exported="true"
+            android:label="@string/picture_service"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/picture_service" />
         </service>
 
         <!-- Notification dots, and what is playing for the Now playing widget. Only counts what

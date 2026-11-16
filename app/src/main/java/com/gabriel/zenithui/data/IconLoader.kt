@@ -30,6 +30,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlin.math.cos
+import kotlin.math.roundToInt
 import kotlin.math.sin
 
 /** Builds masked, cached icon bitmaps, honouring the selected icon pack and icon shape. */
@@ -43,8 +44,12 @@ class IconLoader(context: Context, private val repo: AppRepository) {
     }
     private val lock = Mutex()
 
-    /** Rendered icons are also saved here, so a fresh start draws the home screen complete at once. */
-    private val diskDir = java.io.File(appContext.cacheDir, "icons").apply { mkdirs() }
+    /**
+     * Rendered icons are also saved here, so a fresh start draws the home screen complete at once:
+     * a folder for each way Zenith has drawn them ([RENDER_LOOK]), so none drawn the old way is ever
+     * shown again.
+     */
+    private val diskDir = java.io.File(appContext.cacheDir, "icons-$RENDER_LOOK").apply { mkdirs() }
 
     /** Icons rendered by this run, as opposed to copies read back from an earlier one. */
     private val fresh = java.util.Collections.synchronizedSet(HashSet<String>())
@@ -95,6 +100,7 @@ class IconLoader(context: Context, private val repo: AppRepository) {
                     fresh.clear()
                     diskDir.listFiles()?.forEach { it.delete() }
                 }
+                if (!configured) forgetOldLooks()
                 configured = true
             }
         }
@@ -114,6 +120,12 @@ class IconLoader(context: Context, private val repo: AppRepository) {
 
     /** True when [key] has a picture you chose, which is shown as chosen whatever the icon style. */
     fun hasChosen(key: String): Boolean = chosen.containsKey(key)
+
+    /**
+     * The outline every icon's picture is cut to, one of [IconShapes.ids]: what the light on an icon
+     * follows, whatever shape its caller draws a plate in. A change bumps [version].
+     */
+    val iconShape: String get() = shape
 
     /**
      * Keeps the photo at [uri] as an icon: the middle of it, square, at the size icons are drawn at
@@ -215,6 +227,13 @@ class IconLoader(context: Context, private val repo: AppRepository) {
 
     private fun fileFor(cacheKey: String) =
         java.io.File(diskDir, Integer.toHexString(cacheKey.hashCode()) + "-" + cacheKey.length + ".png")
+
+    /** Lets go of icons saved the way an earlier Zenith drew them, which are never read again. */
+    private fun forgetOldLooks() {
+        appContext.cacheDir.listFiles()?.forEach { dir ->
+            if (dir.isDirectory && dir.name.startsWith("icons") && dir.name != diskDir.name) runCatching { dir.deleteRecursively() }
+        }
+    }
 
     /**
      * Icons are asked for the moment the home screen composes, which can be before the app list
@@ -323,7 +342,8 @@ class IconLoader(context: Context, private val repo: AppRepository) {
                 drawn.recycle()
             }
         }
-        val whole = render(drawable, size)
+        // As its app drew it, with no lift: the logo's shadow would stand out of the tile too.
+        val whole = render(drawable, size, lift = false)
         return standOut(whole).also { whole.recycle() }
     }
 
@@ -471,11 +491,15 @@ class IconLoader(context: Context, private val repo: AppRepository) {
                 it.bounds = Rect((width - cover) / 2, (height - cover) / 2, (width + cover) / 2, (height + cover) / 2)
                 it.draw(canvas)
             }
-            // The logo at exactly the size it has on an ordinary icon, in the middle.
+            // The logo at exactly the size it has on an ordinary icon, in the middle, lifted off the
+            // background as it is there.
             val inset = (side * 0.25f).toInt()
-            adaptive.foreground?.let {
-                it.bounds = Rect(left - inset, top - inset, left + side + inset, top + side + inset)
-                it.draw(canvas)
+            adaptive.foreground?.let { foreground ->
+                val logo = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+                foreground.bounds = Rect(left - inset, top - inset, left + side + inset, top + side + inset)
+                foreground.draw(Canvas(logo))
+                drawLifted(canvas, logo, side, left, top)
+                logo.recycle()
             }
             return output
         }
@@ -493,9 +517,10 @@ class IconLoader(context: Context, private val repo: AppRepository) {
     /**
      * Every icon comes out the same size and silhouette. Adaptive icons are masked to the chosen
      * shape; legacy icons are measured, scaled to the same footprint and given a matching tile so
-     * they cannot look bigger or smaller than their neighbours.
+     * they cannot look bigger or smaller than their neighbours. With [lift] a logo that stands on
+     * its own is lifted off its tile, as an iPhone's are ([LogoLift]).
      */
-    private fun render(drawable: Drawable, size: Int): Bitmap {
+    private fun render(drawable: Drawable, size: Int, lift: Boolean = true): Bitmap {
         val shapePath = IconShapes.path(shape, size.toFloat())
 
         val adaptive = drawable as? AdaptiveIconDrawable
@@ -506,7 +531,16 @@ class IconLoader(context: Context, private val repo: AppRepository) {
             val inset = (size * 0.25f).toInt()
             val bounds = Rect(-inset, -inset, size + inset, size + inset)
             adaptive.background?.let { it.bounds = bounds; it.draw(layerCanvas) }
-            adaptive.foreground?.let { it.bounds = bounds; it.draw(layerCanvas) }
+            adaptive.foreground?.let { foreground ->
+                if (lift) {
+                    val logo = layer(foreground, bounds, size)
+                    drawLifted(layerCanvas, logo, size)
+                    logo.recycle()
+                } else {
+                    foreground.bounds = bounds
+                    foreground.draw(layerCanvas)
+                }
+            }
             val output = maskWith(layer, shapePath, size)
             layer.recycle()
             return output
@@ -555,9 +589,58 @@ class IconLoader(context: Context, private val repo: AppRepository) {
             (size + destWidth) / 2f,
             (size + destHeight) / 2f,
         )
-        canvas.drawBitmap(raw, content, dest, Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG))
+        val artwork = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+        if (lift) {
+            // The artwork is the logo here, on a tile of Zenith's own, so it is lifted off it too.
+            val logo = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+            Canvas(logo).drawBitmap(raw, content, dest, artwork)
+            drawLifted(canvas, logo, size)
+            logo.recycle()
+        } else {
+            canvas.drawBitmap(raw, content, dest, artwork)
+        }
         raw.recycle()
         return output
+    }
+
+    /**
+     * Draws [logo], a picture as big as [canvas], lifted off what is drawn there already, as an
+     * iPhone's logos are ([LogoLift]): on a soft shadow falling straight down, its face lit from
+     * above, with a hairline of light on its edges. The logo is measured over the square [side]
+     * across from [left], [top], where an ordinary icon's would be; one that covers the whole of it,
+     * or shows nothing, is drawn as it is.
+     */
+    private fun drawLifted(canvas: Canvas, logo: Bitmap, side: Int, left: Int = 0, top: Int = 0) {
+        val width = logo.width
+        val height = logo.height
+        val pixels = IntArray(width * height)
+        logo.getPixels(pixels, 0, width, 0, 0, width, height)
+        val alpha = FloatArray(pixels.size) { (pixels[it] ushr 24) / 255f }
+        if (!LogoLift.lifts(LogoLift.coverage(alpha, width, left, top, side))) {
+            canvas.drawBitmap(logo, 0f, 0f, null)
+            return
+        }
+        val look = LogoLift.look(side)
+        val face = LogoLift.face(alpha, width, height, look)
+        val edge = LogoLift.light(alpha, width, height, look)
+        val shadow = wash(LogoLift.shadow(alpha, width, height, look), width, height, 0x000000)
+        // Over the logo: the shade at the foot of its face, black, then the light at its top and on
+        // its edge, white.
+        val shade = wash(FloatArray(face.size) { (-face[it]).coerceAtLeast(0f) }, width, height, 0x000000)
+        val light = wash(FloatArray(face.size) { (edge[it] + face[it].coerceAtLeast(0f)).coerceAtMost(1f) }, width, height, 0xFFFFFF)
+        canvas.drawBitmap(shadow, 0f, 0f, null)
+        canvas.drawBitmap(logo, 0f, 0f, null)
+        canvas.drawBitmap(shade, 0f, 0f, null)
+        canvas.drawBitmap(light, 0f, 0f, null)
+        shadow.recycle()
+        shade.recycle()
+        light.recycle()
+    }
+
+    /** One colour, [rgb], laid on as thickly at each pixel as [amount] says, from 0 to 1. */
+    private fun wash(amount: FloatArray, width: Int, height: Int, rgb: Int): Bitmap {
+        val pixels = IntArray(amount.size) { ((amount[it] * 255f).roundToInt().coerceIn(0, 255) shl 24) or rgb }
+        return Bitmap.createBitmap(pixels, width, height, Bitmap.Config.ARGB_8888)
     }
 
     private fun maskWith(source: Bitmap, shapePath: Path, size: Int): Bitmap {
@@ -630,6 +713,12 @@ class IconLoader(context: Context, private val repo: AppRepository) {
     private companion object {
         /** How much of the tile a legacy icon's artwork fills. */
         const val LEGACY_CONTENT_FRACTION = 0.62f
+
+        /**
+         * Which way icons are drawn, for the folder they are saved in: 2 lifts each logo off its
+         * tile ([LogoLift]). A new way of drawing them is a new number.
+         */
+        const val RENDER_LOOK = 2
 
         /** The side a photo chosen as an icon is kept at: the most any icon is drawn at. */
         const val PHOTO_SIDE = 288

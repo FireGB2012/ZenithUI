@@ -31,6 +31,7 @@ import androidx.compose.material.icons.rounded.RestartAlt
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -52,8 +53,10 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.gabriel.zenithui.data.AndroidClose
 import com.gabriel.zenithui.data.AnimationPreset
 import com.gabriel.zenithui.data.AnimationTuning
+import com.gabriel.zenithui.data.CloseRules
 import com.gabriel.zenithui.data.LaunchMotion
 import com.gabriel.zenithui.data.Tune
 import com.gabriel.zenithui.data.TuneGroup
@@ -89,7 +92,7 @@ internal fun AdvancedMotionOptions(settings: ZenithSettings, actions: SettingsAc
     fun set(next: AnimationTuning) = actions.change { it.copy(animation = next) }
 
     Box(Modifier.fillMaxWidth().riseIn(0), contentAlignment = Alignment.Center) {
-        MotionPreview(tuning)
+        MotionPreview(tuning, closingPlain = settings.closeAnimation == CloseRules.PLAIN)
     }
     if (settings.motion == "reduced") {
         Note("Animations are set to Reduced, so apps open and close plainly whatever is chosen here. Set them to Full to see it.")
@@ -124,6 +127,10 @@ internal fun AdvancedMotionOptions(settings: ZenithSettings, actions: SettingsAc
         }
     }
 
+    // What Auto waits for Android's own close on this phone, and how long that last took.
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val autoWait = remember(context) { AndroidClose.planHere(context, 0f) }
+    val lastTook by AndroidClose.lastTook.collectAsState()
     TuneGroup.entries.forEachIndexed { index, group ->
         Group(rise = index + 2) {
             Spot(group.spot()) {
@@ -139,7 +146,7 @@ internal fun AdvancedMotionOptions(settings: ZenithSettings, actions: SettingsAc
                         min = tune.min,
                         max = tune.max,
                         shown = tune.show(tuning[tune]),
-                        note = tune.note,
+                        note = if (tune == Tune.CloseWait) waitNote(autoWait, lastTook) else tune.note,
                         onChange = { set(tuning.with(tune, it)) },
                         onStep = { steps -> set(tuning.nudged(tune, steps)) },
                     )
@@ -210,6 +217,17 @@ private fun StyleChip(label: String, selected: Boolean, onClick: () -> Unit) {
     }
 }
 
+/** The wait for Android's own close, with what Auto comes to on this phone and what the last close took. */
+private fun waitNote(auto: AndroidClose.Plan?, lastTook: Long): String {
+    val here = when {
+        auto == null -> "Android's animations are off on this phone, so Auto does not wait."
+        auto.listens -> "On this phone that is ${auto.atLeastMs} ms at least and ${auto.atMostMs} ms at the most."
+        else -> "On this phone that is ${auto.atLeastMs} ms."
+    }
+    val last = if (lastTook > 0L) " Android's own close last took $lastTook ms." else ""
+    return "${Tune.CloseWait.note} $here$last"
+}
+
 /**
  * One number: a slider for getting near, a minus and a plus for getting it exact, a step at a
  * time, and a line saying what it changes.
@@ -272,7 +290,7 @@ private fun StepButton(icon: ImageVector, says: String, enabled: Boolean, onClic
  * the real screen, only smaller. The blur is left out: it would cost more than a picture is worth.
  */
 @Composable
-private fun MotionPreview(tuning: AnimationTuning) {
+private fun MotionPreview(tuning: AnimationTuning, closingPlain: Boolean) {
     val palette = LocalPalette.current
     val scope = rememberCoroutineScope()
     val live by rememberUpdatedState(tuning)
@@ -316,12 +334,14 @@ private fun MotionPreview(tuning: AnimationTuning) {
                 fly(1f)
             } else {
                 // On the phone Android takes the app's own window away. What Zenith draws is what
-                // follows: the home screen forward, a closing card if one is asked for, the landing.
+                // follows: the home screen forward, the card going back into the icon (closing Plain,
+                // only if one is asked for), the landing.
                 returning = true
                 sink.snapTo(1f)
                 launch { sink.animateTo(0f, t.springOf(Tune.ReturnStiffness, Tune.ReturnDamping)) }
-                val from = t[Tune.CloseCard]
-                if (from > 0.005f) {
+                val asked = t[Tune.CloseCard]
+                val from = if (closingPlain && asked <= CloseRules.CARD_OFF) 0f else CloseRules.cardStart(asked)
+                if (from > CloseRules.CARD_OFF) {
                     rest(from)
                     val flight = launch { fly(0f) }
                     snapshotFlow { grow.value }.first { it <= 0.03f }

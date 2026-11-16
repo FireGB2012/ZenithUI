@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.gabriel.zenithui.data.AnimationTuning
+import com.gabriel.zenithui.data.CloseRules
 import com.gabriel.zenithui.data.LaunchMotion
 import com.gabriel.zenithui.data.Tune
 import com.gabriel.zenithui.ui.theme.GlassMaterial
@@ -52,6 +53,7 @@ import com.gabriel.zenithui.ui.theme.LocalGlassStrength
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.LocalScreenSize
 import com.gabriel.zenithui.ui.theme.LocalTilt
+import com.gabriel.zenithui.ui.theme.LocalWallpaperDim
 import com.gabriel.zenithui.ui.theme.LocalWallpaperOffset
 import com.gabriel.zenithui.ui.theme.WALLPAPER_VEIL
 import com.gabriel.zenithui.ui.theme.tuned
@@ -68,6 +70,12 @@ data class AppExpansion(
     val icon: ImageBitmap?,
     /** A super icon's own stretched picture, so the card leaves it looking exactly like it. */
     val wideIcon: ImageBitmap? = null,
+    /**
+     * A picture of the app itself, from the app picture helper ([com.gabriel.zenithui.data.AppPictures]):
+     * it takes over from the icon's colour and logo as the card grows, and gives way to them again
+     * as it shrinks, so the app is seen coming out of its icon and going back into it.
+     */
+    val picture: ImageBitmap? = null,
 )
 
 /**
@@ -123,6 +131,8 @@ fun AppLaunchCard(
     /** While an app is opening the card catches taps, so tapping it sends the app back. */
     catchTaps: Boolean,
     onTap: () -> Unit,
+    /** How solid the whole card is, read while drawing: a closing card comes in, and one with nowhere to go fades out. */
+    fade: () -> Float = { 1f },
 ) {
     val palette = LocalPalette.current
     val icon = card.icon
@@ -132,6 +142,7 @@ fun AppLaunchCard(
     val levels = LocalGlassLevels.current
     val screen = LocalScreenSize.current
     val wallpaperOffset = LocalWallpaperOffset.current
+    val wallpaperDim = LocalWallpaperDim.current
     val glassStrength = LocalGlassStrength.current.coerceIn(0f, 1.4f)
     val tilt = LocalTilt.current
     val tuning = LocalGlassTuning.current
@@ -141,6 +152,7 @@ fun AppLaunchCard(
     val lens = sharedLens(if (glass) levels else null)
     val outline = remember { android.graphics.Path() }
     val shade = remember { android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG) }
+    val layer = remember { android.graphics.Paint() }
 
     Canvas(
         Modifier
@@ -152,122 +164,160 @@ fun AppLaunchCard(
     ) {
         val p = progress().coerceIn(0f, 1.06f)
         if (p <= 0.002f) return@Canvas
-        val from = card.from
-        val wide = card.wideIcon
-        // An icon's own rounding at the start, the phone's screen corners at the end. A super icon
-        // starts from its own flatter rounding, so the card leaves it without a jump.
-        val startRadius = from.minDimension * if (wide != null) 0.26f else 0.24f
-        // Where it is: the same sums the preview in Settings and the tests use. The springs may
-        // carry its middle a little past either end; no further than looks like a bounce.
-        val frame = LaunchMotion.frame(
-            from.left, from.top, from.right, from.bottom,
-            size.width, size.height,
-            x().coerceIn(-0.2f, 1.2f), y().coerceIn(-0.2f, 1.2f), p,
-            look.arc.toPx(),
-            startRadius, look.corner.toPx(),
-        )
-        val left = frame.left
-        val top = frame.top
-        val right = frame.right
-        val bottom = frame.bottom
-        val radius = frame.radius
-        val cardTopLeft = Offset(left, top)
-        val cardSize = Size(right - left, bottom - top)
-        val corners = CornerRadius(radius, radius)
-        // The card floats over the home screen on its way: a soft shadow, coming in as it leaves
-        // the icon and gone again by the time it fills the screen, where there is nothing left
-        // to cast it on.
-        val shadow = look.shadow * (p * 6f).coerceAtMost(1f) * (1f - p * p).coerceIn(0f, 1f)
-        if (shadow > 0.01f) {
-            outline.rewind()
-            outline.addRoundRect(left, top, right, bottom, radius, radius, android.graphics.Path.Direction.CW)
-            shade.color = android.graphics.Color.BLACK
-            shade.setShadowLayer(
-                (14.dp.toPx() + 26.dp.toPx() * p),
-                0f,
-                (6.dp.toPx() + 10.dp.toPx() * p),
-                Color.Black.copy(alpha = 0.55f * shadow).toArgb(),
-            )
-            drawIntoCanvas {
-                val canvas = it.nativeCanvas
-                canvas.save()
-                // Only the shadow is wanted: the card itself is drawn next.
-                canvas.clipOutPath(outline)
-                canvas.drawPath(outline, shade)
-                canvas.restore()
-            }
+        val solid = fade().coerceIn(0f, 1f)
+        if (solid <= 0.003f) return@Canvas
+        // Faded as one, so the colour under the picture never shows through it on the way.
+        val faded = solid < 0.997f
+        if (faded) {
+            layer.alpha = (solid * 255f).roundToInt()
+            drawContext.canvas.nativeCanvas.saveLayer(0f, 0f, size.width, size.height, layer)
         }
-        if (glass) {
-            val amount = p.coerceIn(0f, 1f)
-            val roundRect = RoundRect(0f, 0f, cardSize.width, cardSize.height, corners)
-            clip.reset()
-            clip.addRoundRect(roundRect)
-            // The same glass as every pane on the home screen, gaining body as it grows so the
-            // app arriving on top of it reads cleanly. It always stands on the wallpaper, so it is
-            // the same clear glass in Light and in Dark.
-            val look = glassLook(
-                material = GlassMaterial.Regular,
-                strength = glassStrength,
-                solid = 0.15f + 0.35f * amount,
-                opacity = 1f,
-                dark = true,
-                tint = WALLPAPER_VEIL,
-                onWallpaper = true,
-            ).tuned(tuning)
-            translate(left, top) {
-                clipPath(clip) {
-                    drawLiquidGlass(
-                        paneSize = cardSize,
-                        outline = Outline.Rounded(roundRect),
-                        lens = lens,
-                        softened = backdrop,
-                        origin = origin + cardTopLeft,
-                        screen = screen,
-                        wallpaperOffset = wallpaperOffset.value,
-                        look = look,
-                        lean = tilt.value,
-                        dark = true,
-                        tuning = tuning,
+        try {
+            drawFrame@ run {
+                val from = card.from
+                val wide = card.wideIcon
+                // An icon's own rounding at the start, the phone's screen corners at the end. A super icon
+                // starts from its own flatter rounding, so the card leaves it without a jump.
+                val startRadius = from.minDimension * if (wide != null) 0.26f else 0.24f
+                // Where it is: the same sums the preview in Settings and the tests use. The springs may
+                // carry its middle a little past either end; no further than looks like a bounce.
+                val frame = LaunchMotion.frame(
+                    from.left, from.top, from.right, from.bottom,
+                    size.width, size.height,
+                    x().coerceIn(-0.2f, 1.2f), y().coerceIn(-0.2f, 1.2f), p,
+                    look.arc.toPx(),
+                    startRadius, look.corner.toPx(),
+                )
+                val left = frame.left
+                val top = frame.top
+                val right = frame.right
+                val bottom = frame.bottom
+                val radius = frame.radius
+                val cardTopLeft = Offset(left, top)
+                val cardSize = Size(right - left, bottom - top)
+                val corners = CornerRadius(radius, radius)
+                // The card floats over the home screen on its way: a soft shadow, coming in as it leaves
+                // the icon and gone again by the time it fills the screen, where there is nothing left
+                // to cast it on.
+                val shadow = look.shadow * (p * 6f).coerceAtMost(1f) * (1f - p * p).coerceIn(0f, 1f)
+                if (shadow > 0.01f) {
+                    outline.rewind()
+                    outline.addRoundRect(left, top, right, bottom, radius, radius, android.graphics.Path.Direction.CW)
+                    shade.color = android.graphics.Color.BLACK
+                    shade.setShadowLayer(
+                        (14.dp.toPx() + 26.dp.toPx() * p),
+                        0f,
+                        (6.dp.toPx() + 10.dp.toPx() * p),
+                        Color.Black.copy(alpha = 0.55f * shadow).toArgb(),
                     )
+                    drawIntoCanvas {
+                        val canvas = it.nativeCanvas
+                        canvas.save()
+                        // Only the shadow is wanted: the card itself is drawn next.
+                        canvas.clipOutPath(outline)
+                        canvas.drawPath(outline, shade)
+                        canvas.restore()
+                    }
+                }
+                if (glass) {
+                    val amount = p.coerceIn(0f, 1f)
+                    val roundRect = RoundRect(0f, 0f, cardSize.width, cardSize.height, corners)
+                    clip.reset()
+                    clip.addRoundRect(roundRect)
+                    // The same glass as every pane on the home screen, gaining body as it grows so the
+                    // app arriving on top of it reads cleanly. It always stands on the wallpaper, so it is
+                    // the same clear glass in Light and in Dark.
+                    val look = glassLook(
+                        material = GlassMaterial.Regular,
+                        strength = glassStrength,
+                        solid = 0.15f + 0.35f * amount,
+                        opacity = 1f,
+                        dark = true,
+                        tint = WALLPAPER_VEIL,
+                        onWallpaper = true,
+                    ).tuned(tuning)
+                    translate(left, top) {
+                        clipPath(clip) {
+                            drawLiquidGlass(
+                                paneSize = cardSize,
+                                outline = Outline.Rounded(roundRect),
+                                lens = lens,
+                                softened = backdrop,
+                                origin = origin + cardTopLeft,
+                                screen = screen,
+                                wallpaperOffset = wallpaperOffset.value,
+                                look = look,
+                                lean = tilt.value,
+                                dark = true,
+                                tuning = tuning,
+                                dim = wallpaperDim.value,
+                            )
+                        }
+                    }
+                } else {
+                    drawRoundRect(color = fill, topLeft = cardTopLeft, size = cardSize, cornerRadius = corners)
+                }
+
+                if (wide != null) {
+                    // A super icon begins as itself: its own stretched picture fills the card at first and
+                    // fades as the card grows, handing over to the logo the app opens on.
+                    val wideAlpha = (1f - p / 0.45f).coerceIn(0f, 1f)
+                    if (wideAlpha > 0f) {
+                        drawImage(
+                            image = wide,
+                            srcOffset = IntOffset.Zero,
+                            srcSize = IntSize(wide.width, wide.height),
+                            dstOffset = IntOffset(left.roundToInt(), top.roundToInt()),
+                            dstSize = IntSize((right - left).roundToInt(), (bottom - top).roundToInt()),
+                            alpha = wideAlpha,
+                        )
+                    }
+                }
+
+                val bitmap = icon
+                if (bitmap != null) {
+                    // The logo grows more slowly than the card, easing towards the size an app's own opening
+                    // screen shows it at, so the hand-over to the app is seamless.
+                    val startSide = if (wide != null) from.minDimension * 0.62f else from.minDimension
+                    val side = mix(startSide, look.logo.toPx(), p.coerceIn(0f, 1f))
+                    val logoAlpha = if (wide != null) ((p - 0.15f) / 0.35f).coerceIn(0f, 1f) else 1f
+                    if (logoAlpha > 0f) {
+                        val centreX = (left + right) / 2f
+                        val centreY = (top + bottom) / 2f
+                        drawImage(
+                            image = bitmap,
+                            srcOffset = IntOffset.Zero,
+                            srcSize = IntSize(bitmap.width, bitmap.height),
+                            dstOffset = IntOffset((centreX - side / 2f).roundToInt(), (centreY - side / 2f).roundToInt()),
+                            dstSize = IntSize(side.roundToInt(), side.roundToInt()),
+                            alpha = logoAlpha,
+                        )
+                    }
+                }
+
+                // The app itself, over its colour and logo: none of it near the icon, all of it by the time
+                // the card nearly fills the screen, filling the card the way it filled the screen.
+                val picture = card.picture
+                val share = if (picture != null) CloseRules.pictureShare(p) else 0f
+                if (picture != null && share > 0.002f) {
+                    val crop = CloseRules.coverCrop(picture.width, picture.height, cardSize.width, cardSize.height)
+                    clip.reset()
+                    clip.addRoundRect(RoundRect(left, top, right, bottom, corners))
+                    clipPath(clip) {
+                        drawImage(
+                            image = picture,
+                            srcOffset = IntOffset(crop.left, crop.top),
+                            srcSize = IntSize(crop.width, crop.height),
+                            dstOffset = IntOffset(left.roundToInt(), top.roundToInt()),
+                            dstSize = IntSize(cardSize.width.roundToInt().coerceAtLeast(1), cardSize.height.roundToInt().coerceAtLeast(1)),
+                            alpha = share,
+                        )
+                    }
                 }
             }
-        } else {
-            drawRoundRect(color = fill, topLeft = cardTopLeft, size = cardSize, cornerRadius = corners)
+        } finally {
+            if (faded) drawContext.canvas.nativeCanvas.restore()
         }
-
-        if (wide != null) {
-            // A super icon begins as itself: its own stretched picture fills the card at first and
-            // fades as the card grows, handing over to the logo the app opens on.
-            val wideAlpha = (1f - p / 0.45f).coerceIn(0f, 1f)
-            if (wideAlpha > 0f) {
-                drawImage(
-                    image = wide,
-                    srcOffset = IntOffset.Zero,
-                    srcSize = IntSize(wide.width, wide.height),
-                    dstOffset = IntOffset(left.roundToInt(), top.roundToInt()),
-                    dstSize = IntSize((right - left).roundToInt(), (bottom - top).roundToInt()),
-                    alpha = wideAlpha,
-                )
-            }
-        }
-
-        val bitmap = icon ?: return@Canvas
-        // The logo grows more slowly than the card, easing towards the size an app's own opening
-        // screen shows it at, so the hand-over to the app is seamless.
-        val startSide = if (wide != null) from.minDimension * 0.62f else from.minDimension
-        val side = mix(startSide, look.logo.toPx(), p.coerceIn(0f, 1f))
-        val logoAlpha = if (wide != null) ((p - 0.15f) / 0.35f).coerceIn(0f, 1f) else 1f
-        if (logoAlpha <= 0f) return@Canvas
-        val centreX = (left + right) / 2f
-        val centreY = (top + bottom) / 2f
-        drawImage(
-            image = bitmap,
-            srcOffset = IntOffset.Zero,
-            srcSize = IntSize(bitmap.width, bitmap.height),
-            dstOffset = IntOffset((centreX - side / 2f).roundToInt(), (centreY - side / 2f).roundToInt()),
-            dstSize = IntSize(side.roundToInt(), side.roundToInt()),
-            alpha = logoAlpha,
-        )
     }
 }
 
@@ -294,6 +344,13 @@ object AppLanding {
     private var fromScale = 1.22f
     private var fade = 0.65f
 
+    /** An icon swelling a little as an app's real window arrives in it (Android's gesture handshake). */
+    private var swelling by mutableStateOf<String?>(null)
+    private val swell = Animatable(0f)
+
+    /** Whether an icon is landing or swelling now: the home screen is not at rest while one is. */
+    val busy: Boolean get() = key != null || swelling != null || held != null
+
     /** Hides [key]'s icon until it lands, or shows whichever was hidden again with null. */
     fun hold(key: String?) {
         held = key
@@ -318,9 +375,31 @@ object AppLanding {
         if (this.key == key) this.key = null
     }
 
+    /**
+     * Gives [key]'s icon a small swell, as far as [by] of its size, and lets it settle on a spring
+     * of [stiffness] and [damping]: an app's own window has just arrived in it. It is sent off at
+     * speed from its own size, never made bigger and let go, so there is no jump.
+     */
+    suspend fun swell(key: String, by: Float, stiffness: Float, damping: Float) {
+        if (by <= 0f) return
+        swelling = key
+        try {
+            swell.snapTo(0f)
+            swell.animateTo(
+                targetValue = 0f,
+                animationSpec = spring(dampingRatio = damping, stiffness = stiffness),
+                initialVelocity = LaunchMotion.knockVelocity(by, stiffness, damping),
+            )
+        } finally {
+            if (swelling == key) swelling = null
+        }
+    }
+
     /** How large [itemKey]'s icon should be drawn right now. Read while drawing. */
-    fun scaleFor(itemKey: String): Float =
-        if (itemKey != key) 1f else fromScale - (fromScale - 1f) * progress.value
+    fun scaleFor(itemKey: String): Float {
+        val landing = if (itemKey != key) 1f else fromScale - (fromScale - 1f) * progress.value
+        return if (itemKey == swelling) landing * (1f + swell.value) else landing
+    }
 
     /** How solid: back to full a little before it has finished settling. */
     fun alphaFor(itemKey: String): Float = when {
@@ -347,6 +426,9 @@ object HomeRipple {
     var push: (() -> Float)? by mutableStateOf(null)
 
     private val wave = Animatable(0f)
+
+    /** Whether icons are swinging back into place now: the home screen is not at rest while they are. */
+    val swinging: Boolean get() = wave.isRunning
 
     /**
      * Knocks the icons round [from] back as far as [px] and lets them swing home, on a spring of

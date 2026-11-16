@@ -65,8 +65,9 @@ class LiquidGlassShaderTest {
                                 light = Offset(-0.45f, -1f),
                                 dark = dark,
                                 touch = touch,
-                                lean = Offset(0.3f, -0.2f),
                                 squircleN = squircleN,
+                                ring = RingNow(Offset(120f, 48f), radius = 90f, width = 30f, strength = 0.7f),
+                                dim = 0.3f,
                             )
                         } finally {
                             node.endRecording()
@@ -121,8 +122,8 @@ class LiquidGlassShaderTest {
             val what = "$material, solid $solid, as soft as ${look.frost}"
             // The same distance either side of the join it is redder on the left and bluer on
             // the right, however thick a veil lies over both. Both places are on the pane's flat
-            // face (its shoulders are 48 px wide), where nothing but the wallpaper colours it:
-            // in a shoulder the light that shapes the slab would be measured too.
+            // face (the lens round its edge is 40 px wide), where nothing but the wallpaper
+            // colours it: in the lens the wallpaper is bent, and the light on the rim is there.
             val left = pane.getPixel(56, 100)
             val right = pane.getPixel(144, 100)
             assertTrue("left of the join is no redder than right of it: $what", red(left) > red(right) + 12)
@@ -155,27 +156,37 @@ class LiquidGlassShaderTest {
     }
 
     @Test
-    fun aSlabIsShapedByTheLightAndASheetIsNot() {
+    fun theGlassIsFlatAndOnlyItsEdgeCatchesTheLight() {
+        // Liquid glass is a flat sheet: no shaded shoulders, no glints on its face. The light is a
+        // hairline on the outline, and 28 px in from it there is nothing left of it.
         val look = glassLook(GlassMaterial.Regular, strength = 1f, solid = 0f, opacity = 1f, dark = true, tint = Color(0xFF7C6CFF))
-        val wallpaper = flat(0xFF404858.toInt())
-        val slab = paint(wallpaper, look, Size(240f, 240f), origin = Offset(120f, 400f))
-        val sheet = paint(wallpaper, look.copy(relief = 0f), Size(240f, 240f), origin = Offset(120f, 400f))
-        val face = bright(slab.getPixel(120, 120))
-        // The pane's shoulders are 56 px wide. The one turned to the lamp is lit, and the ones
-        // turned from it, at the foot and on the right, are in the slab's own shade.
-        val lit = bright(slab.getPixel(120, 28))
-        val foot = bright(slab.getPixel(120, 216))
-        val side = bright(slab.getPixel(222, 120))
-        assertTrue("the lit shoulder ($lit) is no brighter than the face ($face)", lit > face + 60)
-        assertTrue("the far shoulder ($foot) is no darker than the face ($face)", foot < face - 30)
-        assertTrue("the shoulder beside the light ($side) is no darker than the face ($face)", side < face - 20)
-        // Its polished edge mirrors the lamp a few pixels in from the top.
-        val glint = bright(slab.getPixel(120, 10))
-        assertTrue("no glint: $glint on the slab, ${bright(sheet.getPixel(120, 10))} without", glint > bright(sheet.getPixel(120, 10)) + 150)
-        // With no relief the same glass is a flat sheet of light: its shoulders are as its face.
-        assertTrue(kotlin.math.abs(bright(sheet.getPixel(120, 216)) - face) <= 18)
-        assertTrue(kotlin.math.abs(bright(sheet.getPixel(222, 120)) - face) <= 18)
-        assertTrue(kotlin.math.abs(bright(sheet.getPixel(120, 120)) - face) <= 3)
+        val pane = paint(flat(0xFF404858.toInt()), look, Size(240f, 240f), origin = Offset(120f, 400f))
+        val face = bright(pane.getPixel(120, 120))
+        for ((x, y) in listOf(120 to 28, 120 to 211, 211 to 120, 28 to 120)) {
+            val there = bright(pane.getPixel(x, y))
+            assertTrue("($x, $y) is $there and the face $face", kotlin.math.abs(there - face) <= 12)
+        }
+    }
+
+    @Test
+    fun theEdgeBendsWhatIsBehindItAndTheFaceDoesNot() {
+        // Red above the middle of the screen and blue below it. Android zooms a wallpaper about
+        // its middle, so that is where the join stays.
+        val wallpaper = flat(0xFFC02020.toInt())
+        Canvas(wallpaper).drawRect(0f, 520f, 480f, 1040f, Paint().apply { color = 0xFF2030C0.toInt() })
+        val look = glassLook(GlassMaterial.Clear, strength = 1f, solid = 0f, opacity = 1f, dark = true, tint = Color(0xFF7C6CFF))
+        // A pane whose top edge is 12 px above the join, so the join runs through the lens round
+        // its edge.
+        val bent = paint(wallpaper, look, Size(240f, 240f), origin = Offset(120f, 508f))
+        val straight = paint(wallpaper, look.copy(refraction = 0f), Size(240f, 240f), origin = Offset(120f, 508f))
+        // 4 px in from the top, glass that did not bend would show the red that is there. The
+        // edge of a lens draws in what is further inside it, so it shows the blue.
+        val flatEdge = straight.getPixel(120, 4)
+        val bentEdge = bent.getPixel(120, 4)
+        assertTrue("without the lens the edge is not red: ${Integer.toHexString(flatEdge)}", red(flatEdge) > blue(flatEdge) + 60)
+        assertTrue("the lens did not draw the blue in: ${Integer.toHexString(bentEdge)}", blue(bentEdge) > red(bentEdge) + 60)
+        // Past the edge the face is the wallpaper where it is, lens or no lens.
+        assertTrue(kotlin.math.abs(bright(bent.getPixel(120, 120)) - bright(straight.getPixel(120, 120))) <= 3)
     }
 
     @Test

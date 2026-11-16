@@ -72,6 +72,8 @@ object SettingsCatalog {
 
         SettingsEntry("animations", SettingsPage.Motion, "Animations", "reduce reduced full movement"),
         SettingsEntry("openAnimation", SettingsPage.Motion, "Opening apps", "launch colour color glass card"),
+        SettingsEntry("closeAnimation", SettingsPage.Motion, "Closing apps", "close shrink into icon plain window"),
+        SettingsEntry("appPictures", SettingsPage.Motion, "App pictures", "screenshot accessibility helper picture real open close"),
         SettingsEntry("pageEffect", SettingsPage.Motion, "Page swipe", "depth slide cube stack carousel wheel flip fold transition effect turn"),
         SettingsEntry("arrival", SettingsPage.Motion, "Coming home", "arrive fly in unlock cascade below middle"),
         SettingsEntry("drawerArrival", SettingsPage.Motion, "Opening the drawer", "app drawer rise grow glass swipe up"),

@@ -64,6 +64,8 @@ import com.gabriel.zenithui.ui.theme.ZenithShapes
 import com.gabriel.zenithui.ui.theme.GlassMaterial
 import com.gabriel.zenithui.ui.theme.GlassMotion
 import com.gabriel.zenithui.ui.theme.glass
+import com.gabriel.zenithui.ui.theme.glassOnGlass
+import com.gabriel.zenithui.ui.theme.iconDepth
 import com.gabriel.zenithui.ui.theme.inkOnTint
 
 val LocalIconLoader = staticCompositionLocalOf<IconLoader> { error("IconLoader not provided") }
@@ -85,7 +87,12 @@ fun WideAppIcon(key: String, label: String, modifier: Modifier = Modifier) {
         val image = bitmap
         val tall = maxHeight
         if (image != null) {
-            Image(bitmap = image, contentDescription = label, modifier = Modifier.fillMaxSize())
+            // Lit as every icon drawn as its app draws it is: see iconDepth.
+            Image(
+                bitmap = image,
+                contentDescription = label,
+                modifier = Modifier.fillMaxSize().iconDepth(WideIconShape, minOf(maxWidth, maxHeight)),
+            )
         } else {
             Box(
                 Modifier
@@ -99,6 +106,9 @@ fun WideAppIcon(key: String, label: String, modifier: Modifier = Modifier) {
         }
     }
 }
+
+/** A super icon's outline: [IconLoader] cuts its picture with corners a quarter of its short side. */
+private val WideIconShape = RoundedCornerShape(percent = 26)
 
 /** How icons are drawn everywhere: one of [IconStyles]. */
 val LocalIconStyle = staticCompositionLocalOf { IconStyles.ORIGINAL }
@@ -189,7 +199,7 @@ fun AppIcon(
     shape: Shape = ZenithShapes.icon,
     /** Shows the app's notification dot, where dots are on. */
     badge: Boolean = false,
-    /** Already over glass or the drawer, as in a folder: a glass icon gets a pale plate, not a pane of its own. */
+    /** Already over glass or the drawer, as in a folder: a glass icon is glass lying in glass, not a pane of its own. */
     onGlass: Boolean = false,
 ) {
     val loader = LocalIconLoader.current
@@ -203,7 +213,7 @@ fun AppIcon(
         if (styled) {
             StyledIcon(key = key, label = label, px = px, shape = shape, style = style, onGlass = onGlass, version = version)
         } else {
-            PlainIcon(key = key, label = label, size = size, px = px, shape = shape, version = version)
+            PlainIcon(key = key, label = label, size = size, px = px, shape = shape, version = version, onGlass = onGlass)
         }
         if (badge) IconBadge(count = LocalBadges.current.forKey(key), iconSize = size)
     }
@@ -232,8 +242,10 @@ private fun StyledIcon(key: String, label: String, px: Int, shape: Shape, style:
     val glassTileInk = if (onWallpaper) Color.White else palette.onGlass
     val ink = if (glass) glassTileInk else palette.onGlass
     val tile = when {
-        // Glass inside glass would show the wallpaper through a hole in it: a pale plate instead.
-        glass && onGlass -> Modifier.clip(shape).background(glassTileInk.copy(alpha = 0.12f))
+        // Glass inside glass, or in the drawer, would show the wallpaper through a hole in it: it
+        // is glass lying in glass instead, frosted a little, with the same light on its edge.
+        // A folder's tiny tiles are lit by the folder's own glass, not each under the finger.
+        glass && onGlass -> Modifier.glassOnGlass(shape, dark = onWallpaper || palette.dark, interactive = px >= LIT_TILE_PX)
         glass -> Modifier.glass(shape, strength = 1.2f, material = GlassMaterial.Clear, interactive = true)
         palette.dark -> Modifier.clip(shape).background(Color(0xFF1C1C1E))
         else -> Modifier.clip(shape).background(Color.White)
@@ -257,6 +269,9 @@ private fun StyledIcon(key: String, label: String, px: Int, shape: Shape, style:
         }
     }
 }
+
+/** How big, in pixels, an icon's glass tile lying in glass has to be to light up under a finger. */
+private const val LIT_TILE_PX = 96
 
 /**
  * A notification dot: a small bead of glass in iOS's red at the icon's top corner, with the count
@@ -320,9 +335,17 @@ fun BoxScope.IconBadge(count: Int, iconSize: Dp) {
     }
 }
 
+/**
+ * An icon as its app draws it, with the depth of an iPhone's icons ([iconDepth]): light on its rim
+ * that moves as the phone tips, a little light on the top of its face, and on the wallpaper a soft
+ * shadow, unless it is [onGlass]. The app's own picture is drawn as it is; the light goes over it.
+ */
 @Composable
-private fun PlainIcon(key: String, label: String, size: Dp, px: Int, shape: Shape, version: Int) {
+private fun PlainIcon(key: String, label: String, size: Dp, px: Int, shape: Shape, version: Int, onGlass: Boolean = false) {
     val loader = LocalIconLoader.current
+    // The outline the picture was cut to, which is what the light follows: a caller's [shape] is only
+    // the plate shown while the picture loads, and is not always the same.
+    val cut = remember(version) { ZenithShapes.forIconShape(loader.iconShape) }
     // Starts from the icon already to hand, so returning home or scrolling never flashes a blank.
     val ready = remember(key, px, version) { loader.peek(key, px) }
     val bitmap by produceState(initialValue = ready, key, px, version) {
@@ -348,7 +371,8 @@ private fun PlainIcon(key: String, label: String, size: Dp, px: Int, shape: Shap
                         val s = 0.92f + 0.08f * appear
                         scaleX = s
                         scaleY = s
-                    },
+                    }
+                    .iconDepth(cut, size, shadow = !onGlass),
             )
         } else {
             // While the icon loads, a plain plate with the app's initial, as a super icon's is.
@@ -380,7 +404,7 @@ fun GlassButton(
     filled: Boolean = false,
     leading: (@Composable () -> Unit)? = null,
     style: GlassButtonStyle = if (filled) GlassButtonStyle.Tinted else GlassButtonStyle.Regular,
-    motion: GlassMotion = if (style == GlassButtonStyle.Tinted) GlassMotion.Jelly else GlassMotion.Flex,
+    motion: GlassMotion = GlassMotion.Flex,
 ) {
     val palette = LocalPalette.current
     val contentAlpha = if (enabled) 1f else 0.4f

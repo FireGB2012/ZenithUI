@@ -19,8 +19,8 @@ import com.gabriel.zenithui.ui.theme.glassPress
 
 /**
  * How an icon on the home screen answers a finger, the home screen's fifth twist: it squishes and
- * lights up from under the finger, then springs back with a wobble ([GlassMotion.Jelly], on the
- * springs every jelly press has, and a small, steady press with movement reduced). Home icons always
+ * lights up from under the finger, then springs back with one small bounce ([GlassMotion.Jelly], on
+ * the springs every jelly press has, and a small, steady press with movement reduced). Home icons always
  * do this, whatever Pressing is set to; the drawer and a folder's panel keep Pressing.
  *
  * It does not tick as the finger comes down: a finger lands on an icon at the start of most swipes

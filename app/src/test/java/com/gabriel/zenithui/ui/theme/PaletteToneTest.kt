@@ -17,6 +17,19 @@ class PaletteToneTest {
     private val every = Palettes.all + Palettes.aura
 
     @Test
+    fun `thirteen free sets, round the colour wheel from Midnight, each known by its own id`() {
+        assertEquals(13, Palettes.all.size)
+        assertSame(Palettes.Midnight, Palettes.all.first())
+        val ids = (Palettes.all + Palettes.aura).map { it.id }
+        assertEquals(ids.size, ids.toSet().size)
+        // The six there always were keep their ids, so a wallpaper painted in one still finds it,
+        // and each of the seven new ones is found by its own.
+        listOf("midnight", "aurora", "sunset", "frost", "sakura", "graphite", "ocean", "lime", "citrus", "peach", "cherry", "berry", "lavender")
+            .forEach { assertEquals(it, Palettes.byId(it).id) }
+        assertEquals(listOf("Peach", "Lavender"), Palettes.all.filter { !it.dark && it.id != "frost" }.map { it.name })
+    }
+
+    @Test
     fun `toning a palette to its own appearance changes nothing`() {
         every.forEach { assertSame(it, it.toned(it.dark)) }
     }

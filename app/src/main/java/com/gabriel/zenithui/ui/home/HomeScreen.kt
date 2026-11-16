@@ -80,6 +80,7 @@ import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -127,6 +128,14 @@ import com.gabriel.zenithui.data.Gestures
 import com.gabriel.zenithui.data.HostedWidgetCell
 import com.gabriel.zenithui.data.StackCell
 import com.gabriel.zenithui.data.LockService
+import com.gabriel.zenithui.data.AndroidClose
+import com.gabriel.zenithui.data.AppPictures
+import com.gabriel.zenithui.data.CloseRoute
+import com.gabriel.zenithui.data.CloseRules
+import com.gabriel.zenithui.data.GestureHandshake
+import com.gabriel.zenithui.data.PictureRules
+import com.gabriel.zenithui.data.PictureService
+import com.gabriel.zenithui.ui.common.IconPlaces
 import com.gabriel.zenithui.data.SystemPanels
 import com.gabriel.zenithui.data.Torch
 import com.gabriel.zenithui.ui.common.GlassButton
@@ -151,11 +160,12 @@ import com.gabriel.zenithui.data.Tune
 import com.gabriel.zenithui.data.WallStyle
 import com.gabriel.zenithui.data.WidgetCell
 import com.gabriel.zenithui.data.findActivity
+import com.gabriel.zenithui.ui.common.HomeCover
 import com.gabriel.zenithui.ui.common.LaunchOrigin
+import com.gabriel.zenithui.ui.common.LocalHomeCover
+import com.gabriel.zenithui.ui.common.homeScaleUnderPage
 import com.gabriel.zenithui.ui.common.Motion
 import com.gabriel.zenithui.ui.common.appearIn
-import com.gabriel.zenithui.ui.common.edgeIn
-import com.gabriel.zenithui.ui.common.edgeOut
 import com.gabriel.zenithui.ui.common.pressBounce
 import com.gabriel.zenithui.ui.common.wordsChange
 import com.gabriel.zenithui.ui.theme.LocalPalette
@@ -165,6 +175,7 @@ import com.gabriel.zenithui.ui.settings.LookActions
 import com.gabriel.zenithui.ui.settings.SettingsActions
 import com.gabriel.zenithui.ui.settings.SettingsPreview
 import com.gabriel.zenithui.ui.settings.SettingsScreen
+import com.gabriel.zenithui.ui.theme.LocalWallpaperDim
 import com.gabriel.zenithui.ui.theme.LocalWallpaperOffset
 import com.gabriel.zenithui.ui.theme.ZenithShapes
 import com.gabriel.zenithui.ui.theme.glass
@@ -188,9 +199,32 @@ import com.gabriel.zenithui.ui.settings.AccountActions
  */
 private val PAGE_FLIP_EDGE = 16.dp
 
-/** How far the home screen sinks back while an app opens out of it. */
 /** Coming home longer than this after opening an app does not shrink it back into its icon. */
 private const val CLOSE_WINDOW_MS = 30 * 60 * 1000L
+
+/** How long after Zenith comes back from an app the home button still counts as part of coming back. */
+private const val COMING_BACK_MS = 2_000L
+
+/** The app closing as Zenith comes back, and how it goes back into its icon (see [CloseRules.route]). */
+private class Closing(
+    /** The app, as Zenith writes it. */
+    val key: String,
+    val pkg: String,
+    /** The icon it goes into, at rest; null when there is none on show. */
+    val spot: IconPlaces.Spot?,
+    /** Its card as it was opened from Zenith, if it was. */
+    val opened: AppExpansion?,
+    val route: CloseRoute,
+    /** A picture of it from this time it was open, from the app picture helper. */
+    val picture: android.graphics.Bitmap?,
+    /** What Zenith told Android, if Android asked. */
+    val answer: GestureHandshake.Answer?,
+    /** When it was worked out. */
+    val at: Long,
+) {
+    /** The icon that lands: none for a folder, which only knocks the icons round it. */
+    val landKey: String? get() = spot?.takeIf { !it.folder }?.key
+}
 
 /** How long it has to stay there, so carrying an item past an edge does not flip anything. */
 private const val PAGE_FLIP_DELAY = 240L
@@ -204,12 +238,8 @@ private const val REORDER_DELAY = 280L
 /** The space between the edge of the screen and the page, the dock and everything else on it. */
 private val PAGE_MARGIN = 12.dp
 
-/**
- * The room left round a bar of glass that fades as it comes and goes. While it fades it is drawn
- * through a layer of its own, which cuts off whatever reaches past its edges: the shadow the glass
- * casts, and the bin itself when it swells.
- */
-private val BAR_ROOM = 28.dp
+/** How dark the veil over the wallpaper is when Customise's "Dim the wallpaper" is on. */
+private const val WALLPAPER_DIM = 0.3f
 
 /** How long the home screen must be left alone before a scheduled Look goes on. */
 private const val LOOK_DUE_WAIT_MS = 1500L
@@ -228,6 +258,8 @@ private sealed interface HomeSheet {
     data class PickIcon(val key: String) : HomeSheet
     /** What the lock helper is, before Android's page for it opens. */
     data object LockHelper : HomeSheet
+    /** What the app picture helper is, before Android's page for it opens. */
+    data object AppPictures : HomeSheet
     /** What one gesture could do, from Settings → Gestures. */
     data class GestureAction(val gesture: String) : HomeSheet
     /** The World clock's cities. */
@@ -283,6 +315,8 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
 
     val settings by viewModel.settings.collectAsState()
     val layout by viewModel.layout.collectAsState()
+    // What is popping off the home screen and what Undo is blowing back onto it.
+    val bubbles = remember { Bubbles() }
     val looks by viewModel.looks.collectAsState()
     val apps by viewModel.apps.collectAsState()
     val appsByKey = remember(apps) { apps.associateBy { it.key } }
@@ -423,6 +457,8 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
     }
     val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
     val motion = LocalMotionLevel.current
+    // Asked as something happens, by listeners that outlive a change to Motion.
+    val liveMotion by androidx.compose.runtime.rememberUpdatedState(motion)
     var resizingId by remember { mutableStateOf<String?>(null) }
     // The menu beside something held, and a question asked in a card of glass over the home screen.
     val holdMenu = remember { HoldMenuState() }
@@ -455,8 +491,9 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
     // The widget the gallery is choosing another to stack onto, while it is.
     var stackOnto by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(widgetsOpen) { if (!widgetsOpen) stackOnto = null }
-    // The home screen fades out from under either of them.
-    val pageShown = animateFloatAsState(if (settingsOpen || widgetsOpen) 1f else 0f, tween(280), label = "pageShown")
+    // The home screen fades out and sinks back under either of them, exactly as far as it is covered:
+    // as they come up, and as they are pulled away again by a finger.
+    val homeCover = remember { HomeCover() }
     val glassLevels by viewModel.glassLevels.collectAsState()
 
     var drawerHeightPx by remember { mutableFloatStateOf(0f) }
@@ -515,24 +552,70 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         }
     }
 
+    // The one ring of light on the home screen, for every pane of glass and every icon to read while
+    // drawing: a tap on the wallpaper sends it out, and so do edit mode's waves.
+    val glassRing = remember { GlassRing() }
+    LaunchedEffect(glassRing) { glassRing.play() }
+    val ringDensity = LocalDensity.current.density
+
+    // Edit mode starts and ends with a wave of light: a quick one from where it was started wakes
+    // everything as it reaches it, and a calmer one from where it was ended settles it all again.
+    // While the calm one crosses the screen, what it has not reached yet still wiggles.
+    var calming by remember { mutableStateOf(false) }
+    val calmJob = remember { arrayOfNulls<kotlinx.coroutines.Job>(1) }
+    /** A wave of [style] from [at] on the screen, or from the middle of it; none with movement reduced. */
+    fun sendWave(at: Offset?, style: com.gabriel.zenithui.ui.theme.RingStyle) {
+        if (liveMotion.reduced) return
+        glassRing.screen = androidx.compose.ui.geometry.Size(drawerWidthPx, drawerHeightPx)
+        glassRing.density = ringDensity
+        glassRing.startOnNextFrame(at ?: Offset(drawerWidthPx / 2f, drawerHeightPx / 2f), style)
+    }
+
+    /** Edit mode, begun: the wave that wakes everything runs out from [at]. */
+    fun beginEditing(at: Offset?) {
+        calmJob[0]?.cancel()
+        calming = false
+        sendWave(at, com.gabriel.zenithui.ui.theme.RingStyle.WAKE)
+        editing = true
+        viewModel.setEditing(true)
+    }
+
     /**
      * Into edit mode, from a hold on the wallpaper, "Edit Home Screen" in a menu, or something being
-     * picked up. With the layout locked it says so instead, and offers to unlock.
+     * picked up, at [at] on the screen. With the layout locked it says so instead, and offers to unlock.
      */
-    fun startEdit() {
+    fun startEdit(at: Offset? = null) {
         if (settings.lockLayout) {
             toast = HomeToast("The layout is locked", "Unlock") { viewModel.updateSettings { it.copy(lockLayout = false) } }
             return
         }
         holdMenu.close()
         resizingId = null
-        editing = true
+        if (!editing) beginEditing(at)
     }
 
-    fun endEdit() {
+    /**
+     * Out of edit mode, from Done, a tap on the wallpaper, Back or Home: the calm wave runs out from
+     * [at], or the middle of the screen. [quietly] settles everything at once, for leaving the home
+     * screen for something that covers it.
+     */
+    fun endEdit(at: Offset? = null, quietly: Boolean = false) {
+        if (editing) {
+            if (!quietly) sendWave(at, com.gabriel.zenithui.ui.theme.RingStyle.CALM)
+            if (!quietly && !liveMotion.reduced) {
+                calming = true
+                calmJob[0]?.cancel()
+                calmJob[0] = scope.launch {
+                    delay(com.gabriel.zenithui.ui.theme.RingStyle.CALM.durationMs.toLong() + BeadMotion.CALM_MS)
+                    calming = false
+                }
+            }
+        }
         editing = false
         customising = false
         resizingId = null
+        // Undo keeps the last change made, for the usual few seconds, and lets go of the rest.
+        viewModel.setEditing(false)
     }
 
     /** Back into its icon; only then is it gone, so the home screen is never left dimmed behind nothing. */
@@ -601,11 +684,33 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
      * Android shows on the way home — no flash of the full-size screen before it sinks.
      */
     var holdSunk by remember { mutableStateOf(false) }
+    /** Set when an app covers Zenith, and let go of as Zenith comes forward again, so that happens once each time. */
+    val away = remember { BooleanArray(1) }
+    /** Android's question about the app being closed, as Zenith answered it (see [GestureHandshake]). */
+    val handshake = remember { arrayOfNulls<GestureHandshake.Answer>(1) }
+    /** The app closing this time Zenith comes back, worked out once, by whichever needs it first. */
+    val closing = remember { arrayOfNulls<Closing>(1) }
+    val closingWorkedOut = remember { BooleanArray(1) }
+    /** The close [comeForward] has worked out, waiting for Zenith to be seen, and which time it is. */
+    val forward = remember { arrayOfNulls<() -> Unit>(1) }
+    val forwardTurn = remember { IntArray(1) }
+    /**
+     * Set while the home screen waits, empty, for Android's own close of the app to be over, so
+     * that nothing of Zenith's plays hidden behind it (see AndroidClose): the arrival and the
+     * close both hold until then.
+     */
+    val waitingForAndroid = remember { BooleanArray(1) }
+    val waitJob = remember { arrayOfNulls<kotlinx.coroutines.Job>(1) }
+    /** When Zenith was last covered, and whether by an app with the screen on, which Android then closes. */
+    val coveredAt = remember { LongArray(1) }
+    val coveredByApp = remember { BooleanArray(1) }
+    /** Where a closing card set off from, and whether it has no icon to go into and fades instead. */
+    var closingFrom by remember { androidx.compose.runtime.mutableFloatStateOf(1f) }
+    var closingVanishes by remember { mutableStateOf(false) }
 
     // Arriving. One clock for the whole home screen: at 0 everything is out from the middle, at
     // FlyIn.TOTAL_MS it is all in its place. It is wound back while nobody can see — at a cold
     // start, or when Zenith is stopped — and let run once the home screen is on show again.
-    val liveMotion by androidx.compose.runtime.rememberUpdatedState(motion)
     val flyOnStart = remember { !entrance && !motion.reduced }
     val arrivalClock = remember { Animatable(if (flyOnStart) 0f else FlyIn.TOTAL_MS.toFloat()) }
     val arrivalDepth = remember { mutableFloatStateOf(FlyIn.FULL) }
@@ -613,7 +718,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
     val power = remember(context) { context.getSystemService(android.os.PowerManager::class.java) }
 
     fun arrive() {
-        if (!arrivalPending[0]) return
+        if (!arrivalPending[0] || waitingForAndroid[0]) return
         arrivalPending[0] = false
         scope.launch {
             arrivalClock.snapTo(0f)
@@ -662,6 +767,28 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             viewModel.applyDueLook()
         }
     }
+    // Where every icon sits at rest, for an app closing back into one (see IconPlaces). Asked as
+    // each icon moves, so no place is taken down while the home screen is sunk behind an app,
+    // zoomed about a card, flying in, or knocked about by an icon landing.
+    val restingNow by androidx.compose.runtime.rememberUpdatedState(idle)
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        val atRest = {
+            restingNow && card == null && !holdSunk && !homeSink.isRunning && abs(homeSink.value) < 0.002f &&
+                arrivalClock.value >= FlyIn.TOTAL_MS - 0.5f && !AppLanding.busy && !HomeRipple.swinging &&
+                !pagerState.isScrollInProgress && abs(pagerState.currentPageOffsetFraction) < 0.002f
+        }
+        IconPlaces.atRest = atRest
+        onDispose { if (IconPlaces.atRest === atRest) IconPlaces.atRest = { false } }
+    }
+    LaunchedEffect(Unit) {
+        snapshotFlow { IconPlaces.atRest() }.collect { resting ->
+            if (resting) {
+                // A frame on, so every icon has been drawn where it now stays.
+                androidx.compose.runtime.withFrameNanos { }
+                IconPlaces.cameToRest()
+            }
+        }
+    }
     // Answered either way, it is not due any more, and the next time it is (a backup from before
     // the new look, restored) it waits for the home screen to be at rest again.
     val newLookDue = NewLook.due(settings)
@@ -691,8 +818,8 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         cardJob[0] = scope.launch(block = block)
     }
 
-    /** The app's icon arriving back in its place, and the icons round it knocked back by it. */
-    suspend fun landIcon(key: String, at: androidx.compose.ui.geometry.Rect?) = kotlinx.coroutines.coroutineScope {
+    /** The app's icon arriving back in its place, and the icons round it knocked back by it. A folder only knocks. */
+    suspend fun landIcon(key: String?, at: androidx.compose.ui.geometry.Rect?) = kotlinx.coroutines.coroutineScope {
         val t = liveTuning
         val ripple = t[Tune.Ripple] * pxPerDp
         if (at != null && ripple > 0f) {
@@ -701,45 +828,141 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 HomeRipple.knock(at.center, ripple, t.stiffness(Tune.LandStiffness) * 0.6f, t[Tune.LandDamping])
             }
         }
-        AppLanding.land(key, t[Tune.LandScale], t[Tune.LandFade], t.springOf(Tune.LandStiffness, Tune.LandDamping))
+        if (key != null) AppLanding.land(key, t[Tune.LandScale], t[Tune.LandFade], t.springOf(Tune.LandStiffness, Tune.LandDamping))
     }
 
     /**
-     * The half of closing an app that a launcher is allowed to draw: the home screen comes forward
-     * again and the app's icon lands in its place. With a closing card
-     * asked for, a card the app's colour shrinks back into the icon first.
+     * Android has sprung the app's own window into its icon: the icon takes it with a small swell
+     * and the icons round it are knocked back, both sent off at speed from where they stand.
      */
-    fun comeForward() {
-        val key = returningKey[0] ?: return
-        returningKey[0] = null
-        val back = returningCard[0]
-        returningCard[0] = null
-        val recent = launchedAt[0] != 0L &&
-            android.os.SystemClock.uptimeMillis() - launchedAt[0] < CLOSE_WINDOW_MS
-        launchedAt[0] = 0L
+    suspend fun receiveWindow(key: String?, at: androidx.compose.ui.geometry.Rect) = kotlinx.coroutines.coroutineScope {
         val t = liveTuning
-        // Everything zooms, and ripples, about the icon the app was opened from.
-        if (back != null) HomeRipple.origin = back.from.center
-        scope.launch {
-            // Snap to exactly where the hold leaves off before letting go of it, so the hand-over
-            // from holding to animating happens between two frames with nothing visible in it.
-            homeSink.snapTo(1f)
-            holdSunk = false
-            homeSink.animateTo(0f, t.springOf(Tune.ReturnStiffness, Tune.ReturnDamping))
+        val ripple = t[Tune.Ripple] * pxPerDp
+        if (ripple > 0f) {
+            launch { HomeRipple.knock(at.center, ripple, t.stiffness(Tune.LandStiffness) * 0.6f, t[Tune.LandDamping]) }
         }
-        if (!recent) return
-        val from = t[Tune.CloseCard]
-        if (from <= 0.005f || back == null) {
-            scope.launch { landIcon(key, back?.from) }
-            return
+        if (key != null) AppLanding.swell(key, (t[Tune.LandScale] - 1f) * 0.4f, t.stiffness(Tune.LandStiffness), t[Tune.LandDamping])
+    }
+
+    /** Where Zenith's window is on the screen, for telling Android where an icon is. */
+    fun windowOnScreen(): IntArray = IntArray(2).also { hostView.getLocationOnScreen(it) }
+
+    /**
+     * Android asks where the closing app's icon is (see [GestureHandshake]): answered at once,
+     * with the place the icon is in when the home screen is at rest, which is where it will be by
+     * the time the window gets there. Closing Plain, or with movement reduced, it is not answered
+     * and Android closes the app its own way.
+     */
+    fun answerHandshake(ask: GestureHandshake) {
+        val now = android.os.SystemClock.uptimeMillis()
+        handshake[0] = null
+        if (viewModel.settings.value.closeAnimation == CloseRules.PLAIN || liveMotion.reduced) return
+        val opened = returningCard[0]?.takeIf {
+            CloseRules.packageOf(it.key) == ask.packageName && CloseRules.isWork(it.key) == !ask.personal
         }
+        val spot = IconPlaces.find(opened?.key ?: ask.key, ask.packageName, work = !ask.personal, near = opened?.from)
+        // The app as its icon on the home screen has it, which may be another of its screens.
+        val answer = GestureHandshake.Answer(
+            key = spot?.takeIf { !it.folder }?.key ?: opened?.key ?: ask.key,
+            at = now,
+            target = spot?.bounds,
+            folder = spot?.folder == true,
+        )
+        handshake[0] = answer
+        val window = windowOnScreen()
+        ask.answer(spot?.let { GestureHandshake.onScreen(it.bounds, window[0], window[1]) }) { answer.arrived.complete(Unit) }
+    }
+
+    /**
+     * Which app is closing as Zenith comes back, which icon it goes into, and how (see
+     * [CloseRules.route]). The app is the one Android asked about, failing that the one the
+     * picture helper saw in front, failing that the one opened from Zenith. Worked out once each
+     * time, by the first to need it: the home button deciding whether to stay on this page, or
+     * the home screen coming forward.
+     */
+    fun workOutClosing(): Closing? {
+        val now = android.os.SystemClock.uptimeMillis()
+        // Once worked out, it holds while Zenith is coming back, and not for a home press after.
+        if (closingWorkedOut[0]) return closing[0]?.takeIf { away[0] || now - it.at <= COMING_BACK_MS }
+        if (!away[0]) return null
+        closingWorkedOut[0] = true
+        val current = viewModel.settings.value
+        val style = if (liveMotion.reduced) CloseRules.PLAIN else current.closeAnimation
+        val answer = handshake[0]?.takeIf { it.fresh(now) }
+        handshake[0] = null
+        val opened = returningCard[0]
+        val seen = if (answer == null) AppPictures.closingApp(now) else null
+        val key: String
+        val pkg: String
+        when {
+            answer != null -> {
+                key = answer.key
+                pkg = CloseRules.packageOf(answer.key)
+            }
+            // Another app than the one opened from Zenith: one it opened, say, or one opened from a notification.
+            seen != null && (opened == null || CloseRules.packageOf(opened.key) != seen) -> {
+                pkg = seen
+                key = apps.firstOrNull { it.packageName == seen && !it.work }?.key ?: CloseRules.keyOf(seen, "", work = false)
+            }
+            opened != null -> {
+                key = opened.key
+                pkg = CloseRules.packageOf(opened.key)
+            }
+            else -> return null
+        }
+        val work = CloseRules.isWork(key)
+        val back = opened?.takeIf { CloseRules.packageOf(it.key) == pkg && CloseRules.isWork(it.key) == work }
+        val spot = if (answer != null) {
+            answer.target?.let { IconPlaces.Spot(listOf(answer.key), it, folder = answer.folder) }
+        } else {
+            IconPlaces.find(back?.key ?: key, pkg, work, near = back?.from)
+        }
+        // Opened from Zenith a long time ago and never seen closing: maybe not the app closing now.
+        val recent = back == null || (launchedAt[0] != 0L && now - launchedAt[0] < CLOSE_WINDOW_MS)
+        // A picture from this time it was open, so it shows what was on the screen as it closed,
+        // the same way up as the screen is now.
+        val since = AppPictures.visitStart(pkg) ?: Long.MAX_VALUE
+        val picture = if (work || style == CloseRules.PLAIN) {
+            null
+        } else {
+            AppPictures.forClosing(pkg, since, now)?.takeIf {
+                PictureRules.fits(it.width, it.height, hostView.width.toFloat(), hostView.height.toFloat())
+            }
+        }
+        val route = CloseRules.route(style, asked = answer != null, target = spot != null, picture = picture != null, recent = recent, cardFrom = liveTuning[Tune.CloseCard])
+        return Closing(key, pkg, spot, back, route, picture, answer, at = now).also { closing[0] = it }
+    }
+
+    /**
+     * A card shrinking back into the icon the app is closing into, or with none on show into the
+     * middle of the screen, fading as it goes: holding a picture of the app if there is one, and
+     * the icon's own colour and logo otherwise (the Closing card).
+     */
+    fun closeIntoIcon(closed: Closing) {
+        val t = liveTuning
+        val picture = closed.picture?.asImageBitmap()
+        val from = if (closed.route == CloseRoute.Picture) t[Tune.ClosePicture] else CloseRules.cardStart(t[Tune.CloseCard])
+        val spot = closed.spot
+        val side = closed.opened?.from?.minDimension ?: (60f * pxPerDp)
+        val target = spot?.bounds ?: CloseRules.middle(hostView.width.toFloat(), hostView.height.toFloat(), side)
+        val landKey = closed.landKey
         // The icon stays out of sight until the card has shrunk onto it, then lands.
-        AppLanding.hold(key)
-        card = back
-        cardOpening = false
-        closingCard = true
+        if (landKey != null) AppLanding.hold(landKey)
+        val opened = closed.opened
+        // A super icon's own stretched picture, if it is going back into that same super icon.
+        val wide = opened?.wideIcon?.takeIf { spot != null && (spot.bounds.center - opened.from.center).getDistance() < 4f * pxPerDp }
+        val iconKey = landKey ?: closed.key
         steerCard {
             try {
+                // Again, in case a card it took over from let go of it on its way out.
+                if (landKey != null) AppLanding.hold(landKey)
+                val icon = opened?.icon ?: viewModel.icons.peek(iconKey, 192)
+                    ?: runCatching { viewModel.icons.load(iconKey, 192) }.getOrNull()
+                card = AppExpansion(key = closed.key, from = target, icon = icon, wideIcon = wide, picture = picture)
+                cardOpening = false
+                closingCard = true
+                closingFrom = from
+                closingVanishes = spot == null
                 restCard(from)
                 val flight = launch { flyCard(0f) }
                 snapshotFlow { cardProgress.value }.first { it <= 0.03f }
@@ -747,13 +970,121 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 card = null
                 closingCard = false
                 restCard()
-                landIcon(key, back.from)
+                if (spot != null) landIcon(landKey, spot.bounds)
             } finally {
                 // Turned round or cut short: never leave an icon hidden, or a card that cannot be tapped.
                 AppLanding.hold(null)
                 closingCard = false
+                closingVanishes = false
             }
         }
+    }
+
+    /** Sets off the close [comeForward] worked out, once, if it has not gone yet and nothing holds it. */
+    fun setOff() {
+        if (waitingForAndroid[0]) return
+        val go = forward[0] ?: return
+        forward[0] = null
+        go()
+    }
+
+    /** Android's own close is over, or is not waited for any more: the home screen arrives, and the app goes into its icon. */
+    fun endWait() {
+        if (!waitingForAndroid[0]) return
+        waitingForAndroid[0] = false
+        arrive()
+        setOff()
+    }
+
+    /**
+     * Closing an app, once Zenith is on show again: the home screen comes forward, and the app goes
+     * back into its icon whichever way this phone allows (see [workOutClosing]): Android's own
+     * window sprung into it, a picture of the app shrinking into it, the card it opened on, or the
+     * icon landing on its own.
+     *
+     * Worked out as Zenith resumes. Back from an app with nothing of Android's coming into the icon,
+     * Android plays its own close of the app first, over Zenith, which is already in front under it:
+     * the home screen waits for that, empty, and only then do the icons come in and the app go into
+     * its icon (see AndroidClose). Otherwise it is set off once Zenith can be seen: at once with its
+     * window in front, or as the window gets focus or [CloseRules.SIGHT_WAIT_MS] later, whichever
+     * comes first. Until it goes the home screen stays sunk back and the icon out of sight, so the
+     * first frame seen is the start of the close.
+     */
+    fun comeForward() {
+        if (!away[0]) return
+        val closed = workOutClosing()
+        away[0] = false
+        val sunk = returningKey[0] != null
+        returningKey[0] = null
+        returningCard[0] = null
+        launchedAt[0] = 0L
+        // Everything zooms, and ripples, about the icon the app goes back into.
+        val spot = closed?.spot
+        val about = spot?.bounds?.center ?: closed?.opened?.from?.center
+        if (about != null) HomeRipple.origin = about
+        // A card or a picture on its way into the icon: the icon is out of sight from the first frame.
+        closed?.takeIf { it.route == CloseRoute.Card || it.route == CloseRoute.Picture }?.landKey?.let(AppLanding::hold)
+        val turn = ++forwardTurn[0]
+        forward[0] = go@{
+            val t = liveTuning
+            if (sunk) {
+                scope.launch {
+                    // Snap to exactly where the hold leaves off before letting go of it, so the hand-over
+                    // from holding to animating happens between two frames with nothing visible in it.
+                    homeSink.snapTo(1f)
+                    holdSunk = false
+                    homeSink.animateTo(0f, t.springOf(Tune.ReturnStiffness, Tune.ReturnDamping))
+                }
+            }
+            closed ?: return@go
+            when (closed.route) {
+                CloseRoute.None -> Unit
+                CloseRoute.Land -> scope.launch { landIcon(closed.landKey, spot?.bounds) }
+                CloseRoute.Handshake -> scope.launch {
+                    // The window is Android's to move: once it says it has got there, or after a moment
+                    // in case it never does, the icon takes it.
+                    kotlinx.coroutines.withTimeoutOrNull(CloseRules.HANDSHAKE_WAIT_MS) { closed.answer?.arrived?.await() }
+                    if (spot != null) receiveWindow(closed.landKey, spot.bounds)
+                }
+                CloseRoute.Card, CloseRoute.Picture -> closeIntoIcon(closed)
+            }
+        }
+        // Android's own window going into the icon is Android's, and the icons are wanted in their
+        // places for it to land in, so that is not waited for; nor is anything with movement reduced.
+        val fromApp = coveredByApp[0]
+        coveredByApp[0] = false
+        val plan = if (fromApp && closed?.answer == null && !liveMotion.reduced) {
+            AndroidClose.planHere(context, liveTuning[Tune.CloseWait])
+        } else {
+            null
+        }
+        if (plan != null) {
+            // Empty from the first frame: everything is wound right back, and comes in from there.
+            waitingForAndroid[0] = true
+            arrivalDepth.floatValue = FlyIn.FULL
+            val startedAt = android.os.SystemClock.uptimeMillis()
+            val since = coveredAt[0]
+            waitJob[0]?.cancel()
+            waitJob[0] = scope.launch {
+                AndroidClose.awaitSetOff(plan, startedAt, since)
+                if (forwardTurn[0] == turn) endWait()
+            }
+        } else if (hostView.hasWindowFocus()) {
+            setOff()
+        } else {
+            scope.launch {
+                delay(CloseRules.SIGHT_WAIT_MS)
+                if (forwardTurn[0] == turn) setOff()
+            }
+        }
+    }
+
+    // Android's question about where a closing app's icon is comes with the home intent, before the
+    // home screen has seen that intent, and has to be answered at once (see GestureHandshake).
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        val answer: (GestureHandshake) -> Unit = { answerHandshake(it) }
+        GestureHandshake.answerer = answer
+        onDispose { if (GestureHandshake.answerer === answer) GestureHandshake.answerer = null }
     }
 
     /** How far back the home screen is: 0 at rest, 1 behind an app. Read while drawing. */
@@ -813,6 +1144,10 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
      * rather than starting again. An app opened any other way simply opens.
      */
     fun launchApp(key: String) {
+        // A close still waiting for Zenith to be seen, or for Android's own close, goes now, so the
+        // opening takes over from it.
+        endWait()
+        setOff()
         val current = card
         if (current != null && current.key == key) {
             openCard(current)
@@ -839,6 +1174,16 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             } else {
                 null
             }
+            // With the app picture helper on, a picture of the app as it was left, so it is seen
+            // coming out of its icon. Not a shortcut's, which opens somewhere else in it, nor a
+            // work app's, which the helper cannot tell from the personal one.
+            val picture = if (ShortcutKeys.isShortcut(key) || CloseRules.isWork(key)) {
+                null
+            } else {
+                AppPictures.forOpening(CloseRules.packageOf(key))
+                    ?.takeIf { PictureRules.fits(it.width, it.height, hostView.width.toFloat(), hostView.height.toFloat()) }
+                    ?.asImageBitmap()
+            }
             preparingLaunch = false
             // A different app starts from its own icon.
             if (card != null) {
@@ -846,7 +1191,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 restCard()
             }
             launchedAt[0] = 0L
-            openCard(AppExpansion(key = key, from = from, icon = icon, wideIcon = wideIcon))
+            openCard(AppExpansion(key = key, from = from, icon = icon, wideIcon = wideIcon, picture = picture))
         }
     }
 
@@ -854,6 +1199,27 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
             when (event) {
                 androidx.lifecycle.Lifecycle.Event.ON_STOP -> {
+                    // Whatever covers Zenith now is what closes when it comes back: worked out afresh.
+                    away[0] = true
+                    closingWorkedOut[0] = false
+                    closing[0] = null
+                    // Covered with the screen on is an app coming over Zenith, which Android closes
+                    // its own way when it goes; with the screen off the next thing is an unlock.
+                    coveredAt[0] = android.os.SystemClock.uptimeMillis()
+                    coveredByApp[0] = power?.isInteractive != false
+                    // Covered again while waiting for the last close to be over: that wait is dropped
+                    // with the close it held, below.
+                    waitJob[0]?.cancel()
+                    waitJob[0] = null
+                    waitingForAndroid[0] = false
+                    // Covered again before the last close was seen: it is dropped, its icon shown and
+                    // the home screen let go of, at rest, so nothing is left waiting for it.
+                    if (forward[0] != null) {
+                        forward[0] = null
+                        AppLanding.hold(null)
+                        holdSunk = false
+                        scope.launch { homeSink.snapTo(0f) }
+                    }
                     // Search folds back into its pill while nobody can see it, so coming home finds
                     // the home screen and not a field without its keyboard.
                     closeSearch()
@@ -890,8 +1256,9 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     }
                 }
 
-                // Resumed is when Zenith is on its way to the front again. Window focus, below, is
-                // the backstop for the phones that resume before the home screen is shown.
+                // Resumed is when Zenith is on its way to the front again: the close is worked out
+                // now, and set off once Zenith can be seen (see comeForward). Window focus, below,
+                // is when that is on the phones that resume before the home screen is shown.
                 androidx.lifecycle.Lifecycle.Event.ON_RESUME -> {
                     comeForward()
                     // With the window already in front, arrive now; otherwise when it gets there,
@@ -912,12 +1279,13 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
     // The home screen only comes forward once it can actually be seen. Android animates the closing
     // app's window first and shows a launcher that is not built into the phone only when that is
     // done, so anything started on ON_START had already finished, unseen, by the time the home
-    // screen appeared. Window focus arrives as the home screen is shown: that is when One UI's grid
-    // swells back and the app's icon lands.
+    // screen appeared, and resuming is part of the same step as starting. Window focus arrives as
+    // the home screen is shown: that is when One UI's grid swells back and the app goes into its icon.
     androidx.compose.runtime.DisposableEffect(hostView) {
         val listener = android.view.ViewTreeObserver.OnWindowFocusChangeListener { focused ->
             if (focused) {
                 comeForward()
+                setOff()
                 arrive()
             }
         }
@@ -1139,10 +1507,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
     // A tap on the wallpaper sends a ring of light out from under the finger, across the whole
     // screen: every pane of glass lights up as it passes, and the icons catch a gleam. It takes the
     // place of the small ring a double tap used to send, and a double tap sends it too. None with
-    // movement reduced.
-    val glassRing = remember { GlassRing() }
-    LaunchedEffect(glassRing) { glassRing.play() }
-    val ringDensity = LocalDensity.current.density
+    // movement reduced. (The ring itself, which edit mode's waves are too, is made further up.)
     /** A ring from [at], on the screen in pixels. */
     fun ringAt(at: Offset) {
         // Asked as the tap comes, not when the page's tap listener was set up, which outlives a
@@ -1215,7 +1580,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
 
     // Everything else on the page rocks while something is carried. One clock for all of it, and
     // it runs only from the moment something is picked up until the rocking has died away.
-    val jiggleStrength = animateFloatAsState(if ((drag.isDragging || (editing && !customising)) && !motion.reduced) 1f else 0f, tween(200), label = "jiggle")
+    val jiggleStrength = animateFloatAsState(if ((drag.isDragging || ((editing || calming) && !customising)) && !motion.reduced) 1f else 0f, tween(200), label = "jiggle")
     val jiggleClock = remember { mutableFloatStateOf(0f) }
     val jiggling by remember { derivedStateOf { jiggleStrength.value > 0.001f } }
     LaunchedEffect(jiggling) {
@@ -1505,9 +1870,12 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             closeFolder()
             closeDrawer()
             closeSearch()
+            // Coming back from an app that goes back into an icon on show stays on that page, so the
+            // app can be seen going into it. Anything else goes back to the first page.
+            val intoIcon = !again && workOutClosing()?.let { it.spot != null && it.route != CloseRoute.None } == true
             if (again && !busy && action != GestureActions.FIRST_PAGE) {
                 runGesture(action)
-            } else if (pagerState.currentPage != 0) {
+            } else if (pagerState.currentPage != 0 && !intoIcon) {
                 pagerState.animateScrollToPage(0)
             }
         }
@@ -1652,6 +2020,12 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         else -> 0L
     }
 
+    /** Takes [id] off the home screen, popping like a soap bubble where it stood. */
+    fun popOff(id: String) {
+        bubbles.pop(listOf(id))
+        viewModel.removeItem(id)
+    }
+
     /** Asks before something is taken off the home screen, the way a phone does. Undo still follows. */
     fun askRemove(target: HoldTarget) {
         val apps = if (libraryMode) "App Library" else "app drawer"
@@ -1662,7 +2036,10 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     title = "Remove “$name”?",
                     message = "Removing from the Dock will keep the app in your $apps.",
                     buttons = listOf(
-                        AlertButton("Remove from Dock") { viewModel.toggleDock(target.key) },
+                        AlertButton("Remove from Dock") {
+                            bubbles.pop(listOf(dockBubble(target.key)))
+                            viewModel.toggleDock(target.key)
+                        },
                         AlertButton("Uninstall App", danger = true) { viewModel.uninstall(target.key) },
                         AlertButton("Cancel") {},
                     ),
@@ -1674,7 +2051,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     title = "Remove “${appsByKey[item.key]?.label ?: "this app"}”?",
                     message = "Removing from Home Screen will keep the app in your $apps.",
                     buttons = listOf(
-                        AlertButton("Remove from Home Screen") { viewModel.removeItem(item.id) },
+                        AlertButton("Remove from Home Screen") { popOff(item.id) },
                         AlertButton("Uninstall App", danger = true) { viewModel.uninstall(item.key) },
                         AlertButton("Cancel") {},
                     ),
@@ -1683,14 +2060,14 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 is com.gabriel.zenithui.data.ShortcutCell -> alert = HomeAlert(
                     title = "Remove “${item.label}”?",
                     message = "Its app keeps the shortcut.",
-                    buttons = listOf(AlertButton("Remove", danger = true) { viewModel.removeItem(item.id) }, AlertButton("Cancel") {}),
+                    buttons = listOf(AlertButton("Remove", danger = true) { popOff(item.id) }, AlertButton("Cancel") {}),
                 )
 
                 is FolderCell -> alert = HomeAlert(
                     title = "Remove “${item.title}”?",
                     message = "Removing from Home Screen will keep all its apps in your $apps.",
                     buttons = listOf(
-                        AlertButton("Remove from Home Screen", danger = true) { viewModel.removeItem(item.id) },
+                        AlertButton("Remove from Home Screen", danger = true) { popOff(item.id) },
                         AlertButton("Cancel") {},
                     ),
                 )
@@ -1701,14 +2078,14 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     alert = HomeAlert(
                         title = "Remove “$name”?",
                         message = "You can add it again from Add Widget.",
-                        buttons = listOf(AlertButton("Remove", danger = true) { viewModel.removeItem(item.id) }, AlertButton("Cancel") {}),
+                        buttons = listOf(AlertButton("Remove", danger = true) { popOff(item.id) }, AlertButton("Cancel") {}),
                     )
                 }
 
                 is StackCell -> alert = HomeAlert(
                     title = "Remove this stack?",
                     message = "All ${item.members.size} widgets in it go. You can add them again from Add Widget.",
-                    buttons = listOf(AlertButton("Remove", danger = true) { viewModel.removeItem(item.id) }, AlertButton("Cancel") {}),
+                    buttons = listOf(AlertButton("Remove", danger = true) { popOff(item.id) }, AlertButton("Cancel") {}),
                 )
 
                 null -> Unit
@@ -1729,9 +2106,13 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 holdMenu.close()
                 when (row.what) {
                     HoldDo.SHORTCUT -> holdShortcuts.getOrNull(row.index)?.let { launchApp(it.key) }
-                    HoldDo.EDIT_HOME -> startEdit()
+                    HoldDo.EDIT_HOME -> startEdit(open.frame.center)
                     HoldDo.EDIT_NAME -> appKey?.let { showSheet(HomeSheet.EditApp(it)) }
-                    HoldDo.RESIZE -> resizingId = id
+                    // Into edit mode, with this app's corner out as well as the widgets'.
+                    HoldDo.RESIZE -> {
+                        startEdit(open.frame.center)
+                        if (editing) resizingId = id
+                    }
                     HoldDo.ADD_TO_HOME -> appKey?.let { key ->
                         val page = viewModel.addAppToFirstFreeSlot(key)
                         if (page == null) Toast.makeText(context, "Every page is full", Toast.LENGTH_SHORT).show() else revealPage(page)
@@ -1828,9 +2209,10 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 val by = pointer - open.start
                 val pickedUp = HoldGesture.picksUp(by.x, by.y, pickUpSlop, holdMenu.above, holdMenu.onMenu, settings.lockLayout)
                 if (pickedUp) {
-                    // Picked up, the home screen is being edited, and stays so when the thing is put down.
+                    // Picked up, the home screen is being edited, and stays so when the thing is put
+                    // down. The wave wakes everything from what was picked up.
                     holdMenu.close(pickedUp = true)
-                    editing = true
+                    if (!editing) beginEditing(open.frame.center)
                 }
                 pickedUp
             }
@@ -1849,7 +2231,10 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         )
     }
 
-    CompositionLocalProvider(LocalWidgetWorld provides widgetWorld) {
+    // The wallpaper a little darker, when Customise has been asked for that: a veil over it, under
+    // everything that stands on it, and the same darkening on the copy of it the glass shows.
+    val dimmed = animateFloatAsState(if (settings.dimWallpaper) WALLPAPER_DIM else 0f, tween(300), label = "dimWallpaper")
+    CompositionLocalProvider(LocalWidgetWorld provides widgetWorld, LocalWallpaperDim provides dimmed, LocalHomeCover provides homeCover) {
     Box(
         Modifier
             .fillMaxSize()
@@ -1930,12 +2315,10 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         // A wallpaper changing with the theme fades in here, behind everything.
         WallpaperFade(wallpaperIncoming, wallpaperOffset)
 
-        // The wallpaper a little darker, when Customise has been asked for that: a veil over it and
-        // under everything that stands on it.
-        val dimmed by animateFloatAsState(if (settings.dimWallpaper) 0.3f else 0f, tween(300), label = "dimWallpaper")
-        if (dimmed > 0.001f) {
+        // The veil that dims the wallpaper; the glass darkens its own copy by as much.
+        if (dimmed.value > 0.001f) {
             androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
-                drawRect(androidx.compose.ui.graphics.Color.Black.copy(alpha = dimmed))
+                drawRect(androidx.compose.ui.graphics.Color.Black.copy(alpha = dimmed.value))
             }
         }
 
@@ -1951,7 +2334,11 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     val t = liveTuning
                     // Under 1 it sinks back behind the app; over 1 it rushes towards you instead.
                     val zoom = 1f + (t[Tune.HomeScale] - 1f) * depth
-                    val scale = (1f - 0.06f * drawerProgress) * zoom
+                    // Under Settings or the widget gallery it sinks back a little, as it does under
+                    // the drawer, and comes forward again as the page is pulled away.
+                    val covered = homeCover.amount()
+                    val sink = if (motion.reduced) 1f else homeScaleUnderPage(covered)
+                    val scale = (1f - 0.06f * drawerProgress) * zoom * sink
                     scaleX = scale
                     scaleY = scale
                     // It zooms about the icon the app came from, as far as asked, so the eye is
@@ -1964,7 +2351,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     )
                     val sunk = depth.coerceIn(0f, 1f)
                     // Settings is glass over the wallpaper; the home screen is not seen through it.
-                    alpha = (1f - 0.55f * drawerProgress) * (1f - t[Tune.HomeDim] * sunk) * (1f - pageShown.value)
+                    alpha = (1f - 0.55f * drawerProgress) * (1f - t[Tune.HomeDim] * sunk) * (1f - covered)
                     // Pulled down for the swipe-down gesture: after the finger, but less and less.
                     if (!motion.reduced) translationY = band(pulled(), PULL_REACH.toPx())
                 }
@@ -2040,7 +2427,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                                             when {
                                                 resizingId != null -> resizingId = null
                                                 // A tap on the wallpaper is one of the ways out of edit mode.
-                                                editing -> endEdit()
+                                                editing -> endEdit(pageOrigin + at)
                                                 else -> ringAt(pageOrigin + at)
                                             }
                                         },
@@ -2052,7 +2439,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                                         },
                                         // Holding an empty spot starts edit mode, as on a phone;
                                         // Customise is the brush in its bar.
-                                        onLongPress = { if (resizingId == null && !editing) startEdit() },
+                                        onLongPress = { at -> if (resizingId == null && !editing) startEdit(pageOrigin + at) },
                                     )
                                 },
                         ) {
@@ -2098,6 +2485,13 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                                     },
                                     onRestoreWidget = { item, info -> viewModel.addHostedWidget(info, replacing = item.id) },
                                     onResizeDone = { resizingId = null },
+                                    onResizePull = { item, starting ->
+                                        if (starting) {
+                                            viewModel.beginChange()
+                                        } else {
+                                            viewModel.endChange({ "${viewModel.nameOf(item.id)} resized" })
+                                        }
+                                    },
                                     onGathered = { haptic.tick() },
                                     onOpenApp = { launchApp(it) },
                                     onOpenFolder = { folder, icon -> openFolder(folder.id, icon) },
@@ -2107,6 +2501,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                                     editing = editing,
                                     onBead = { askRemove(HoldTarget.Item(it.id)) },
                                     beads = !customising,
+                                    bubbles = bubbles,
                                     onSearch = { openDrawer(search = true) },
                                     onNoteChange = { viewModel.setNote(it) },
                                     onAmbient = { ambient = true },
@@ -2164,19 +2559,17 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 // Part of the home screen, it sinks, fades and softens with it as the drawer, a
                 // folder, an app or Settings comes over it.
                 searchBand = { band ->
-                    val removed by viewModel.removed.collectAsState()
-                    val removedWhat = when (removed.size) {
-                        0 -> null
-                        1 -> "${removedName(removed.first(), appsByKey)} removed"
-                        else -> "${removed.size} things removed"
-                    }
+                    // What Undo would take back: outside edit mode the one change left over, for a
+                    // few seconds; edited, every change made, newest first, for as long as it lasts.
+                    val undo by viewModel.undoable.collectAsState()
+                    val undoShown = undo?.takeIf { editing != it.timed && !customising }
                     // Edited, the pill stretches into the bar of controls; while something is
                     // carried the bar draws back into the pill, which shows the pages, so the
                     // dock is free to be dropped on.
                     val barShown = editing && !drag.isDragging && !customising
                     Box(band.zIndex(1f), contentAlignment = Alignment.Center) {
                         AnimatedVisibility(
-                            visible = !barShown && (removedWhat == null || editing),
+                            visible = !barShown && (undoShown == null || editing),
                             enter = bandSwapIn(motion.reduced),
                             exit = bandSwapOut(motion.reduced),
                         ) {
@@ -2198,10 +2591,24 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                             )
                         }
                         UndoPill(
-                            what = removedWhat,
-                            key = removed.firstOrNull()?.id,
+                            what = undoShown?.label,
+                            key = undoShown?.key,
                             millis = com.gabriel.zenithui.data.UNDO_MS,
-                            onUndo = { viewModel.undoRemove().firstOrNull()?.let { back -> revealPage(back.page) } },
+                            more = undoShown?.more ?: 0,
+                            timed = undoShown?.timed ?: true,
+                            // It happened on another page: the screen turns there to show it undone.
+                            // What comes back to the page, rather than moving back on it, blows
+                            // back together.
+                            onUndo = {
+                                val had = layout.mapTo(HashSet()) { it.id }
+                                val docked = settings.dock.toHashSet()
+                                val back = viewModel.undo()
+                                bubbles.back(
+                                    back.filter { it.id !in had }.map { it.id } +
+                                        viewModel.settings.value.dock.filter { it !in docked }.map(::dockBubble)
+                                )
+                                back.firstOrNull()?.let { revealPage(it.page) }
+                            },
                             // Edited, Undo stands just above the bar rather than in its place.
                             modifier = Modifier.padding(horizontal = 16.dp).offset(y = if (editing) (-56).dp else 0.dp),
                         )
@@ -2212,7 +2619,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                             onAdd = { widgetsOpen = true },
                             onCustomise = { customising = true },
                             onPages = { overview = true },
-                            onDone = { endEdit() },
+                            onDone = { at -> endEdit(at) },
                         )
                     }
                 },
@@ -2220,6 +2627,8 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     // The dock's slab stands on the wallpaper, as the page does: the same clear glass
                     // in Light and in Dark.
                     if (settings.showDock) OnWallpaper {
+                        // The dock's own icons, where a closing app can go back to (see IconPlaces).
+                        androidx.compose.runtime.CompositionLocalProvider(com.gabriel.zenithui.ui.common.LocalHomePlaces provides true) {
                         DockBar(
                             keys = settings.dock,
                             appsByKey = appsByKey,
@@ -2234,6 +2643,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                             editing = editing,
                             onBead = { askRemove(HoldTarget.Dock(it)) },
                             beads = !customising,
+                            bubbles = bubbles,
                             jiggleClock = { jiggleClock.floatValue },
                             jiggleStrength = { jiggleStrength.value },
                             onReorder = { from, to -> viewModel.moveInDock(from, to) },
@@ -2272,6 +2682,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                             // keeps the wallpaper in place behind it, as Search's does.
                             tracking = { arrivalClock.value },
                         )
+                        }
                     } else {
                         // Without the dock the pages reach down to the gesture bar instead.
                         Spacer(room.navigationBarsPadding().height(10.dp))
@@ -2395,58 +2806,6 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             )
         }
 
-        // Down from the top edge while something is being resized, and back up when it is done.
-        AnimatedVisibility(
-            visible = resizingId != null,
-            enter = edgeIn(motion.reduced),
-            exit = edgeOut(motion.reduced),
-            modifier = Modifier.align(Alignment.TopCenter),
-        ) {
-            Row(
-                Modifier
-                    .statusBarsPadding()
-                    .padding(start = BAR_ROOM, top = 12.dp, end = BAR_ROOM, bottom = BAR_ROOM)
-                    .pressBounce(0.96f)
-                    .glass(ZenithShapes.pill, strength = 1.2f, solid = 0.4f)
-                    .clickable { resizingId = null }
-                    .padding(horizontal = 20.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = "Pull the pointer to resize · tap to finish",
-                    color = palette.onGlass,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium,
-                )
-            }
-        }
-
-        // The same thing in taps: a widget's named sizes, and arrows that move it a cell at a time.
-        // It comes up from the foot of the screen, and on its way back down it is still the bar
-        // for whatever was last being resized.
-        val reshaping = resizingId?.let { id -> layout.firstOrNull { it.id == id } }
-        val reshaped = remember { arrayOfNulls<HomeItem>(1) }
-        if (reshaping != null) reshaped[0] = reshaping
-        AnimatedVisibility(
-            visible = reshaping != null,
-            enter = edgeIn(motion.reduced, fromFoot = true),
-            exit = edgeOut(motion.reduced, toFoot = true),
-            modifier = Modifier.align(Alignment.BottomCenter),
-        ) {
-            val item = reshaped[0]
-            if (item != null) ResizeBar(
-                item = item,
-                columns = settings.columns,
-                rows = settings.rows,
-                onSize = { size -> viewModel.resizeWidgetTo(item.id, size.spanX, size.spanY) },
-                onNudge = { dCol, dRows -> viewModel.nudgeItem(item.id, dCol, dRows) },
-                onDone = { resizingId = null },
-                modifier = Modifier
-                    .navigationBarsPadding()
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
-            )
-        }
-
         // ------------------------------------------------------------ drag layer
         if (drag.isDragging) {
             // Rest on a neighbour for a moment before a folder is on the cards.
@@ -2535,7 +2894,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                         showSheet(HomeSheet.Wallpapers)
                     },
                     onClock = {
-                        endEdit()
+                        endEdit(quietly = true)
                         ambient = true
                     },
                     onHelp = {
@@ -2543,7 +2902,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                         showSheet(HomeSheet.Help)
                     },
                     onSettings = {
-                        endEdit()
+                        endEdit(quietly = true)
                         settingsOpen = true
                     },
                     // The grid it sets is worked out for this screen and the home screen settled
@@ -2602,6 +2961,14 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 glass = settings.openAnimation == "glass",
                 catchTaps = cardOpening,
                 onTap = { closeCard() },
+                fade = {
+                    if (!closingCard) {
+                        1f
+                    } else {
+                        val grown = cardProgress.value
+                        CloseRules.closingAlpha(grown, closingFrom) * (if (closingVanishes) CloseRules.vanishAlpha(grown) else 1f)
+                    }
+                },
             )
         }
 
@@ -2639,6 +3006,9 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 gesture = { id -> showSheet(HomeSheet.GestureAction(id)) },
                 lockHelper = {
                     if (LockService.enabled(context)) LockService.openSettings(context) else showSheet(HomeSheet.LockHelper)
+                },
+                appPictures = {
+                    if (PictureService.enabled(context)) PictureService.openSettings(context) else showSheet(HomeSheet.AppPictures)
                 },
                 // Saving, switching, scheduling and sharing are Plus; opening a code and
                 // deleting a Look of your own never are.
@@ -2809,6 +3179,12 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 HomeSheet.LockHelper -> LockHelperSheet(
                     visible = up,
                     onOpen = { LockService.openSettings(context) },
+                    onDismiss = { hideSheet() },
+                )
+
+                HomeSheet.AppPictures -> AppPicturesSheet(
+                    visible = up,
+                    onOpen = { PictureService.openSettings(context) },
                     onDismiss = { hideSheet() },
                 )
 
@@ -3284,6 +3660,63 @@ private fun LockHelperSheet(visible: Boolean, onOpen: () -> Unit, onDismiss: () 
         Row(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             modifier = Modifier.appearIn(delayMillis = staggerDelay(2), riseFrom = 18f),
+        ) {
+            GlassButton(text = "Not now", onClick = onDismiss, modifier = Modifier.weight(1f))
+            GlassButton(
+                text = "Open settings",
+                filled = true,
+                onClick = {
+                    onOpen()
+                    onDismiss()
+                },
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
+}
+
+/**
+ * What the app picture helper is, before Android's page for it opens: also the disclosure Play
+ * asks for, of what it takes and what is done with it.
+ */
+@Composable
+private fun AppPicturesSheet(visible: Boolean, onOpen: () -> Unit, onDismiss: () -> Unit) {
+    val palette = LocalPalette.current
+    ZenithSheet(visible = visible, onDismiss = onDismiss, title = "App pictures") {
+        Text(
+            "Android only gives a home app a picture of another app through an accessibility service. Zenith's " +
+                "app picture helper is one that does nothing else: it takes a picture of the app in front every few " +
+                "seconds, so that app can be seen going back into its icon when you close it, and coming out of it " +
+                "when you open it again.",
+            color = palette.onGlass,
+            fontSize = 15.sp,
+            lineHeight = 21.sp,
+            modifier = Modifier.appearIn(delayMillis = staggerDelay(0), riseFrom = 18f),
+        )
+        Spacer(Modifier.height(12.dp))
+        Text(
+            "It cannot read what is on the screen. The pictures are kept in memory only, for the last few apps and " +
+                "five minutes at most, and all go when the screen goes off. Nothing is saved or sent anywhere. Apps " +
+                "that hide themselves from screenshots, such as banks, are left out. It costs a little battery while " +
+                "an app is open.",
+            color = palette.onGlass,
+            fontSize = 15.sp,
+            lineHeight = 21.sp,
+            modifier = Modifier.appearIn(delayMillis = staggerDelay(1), riseFrom = 18f),
+        )
+        Spacer(Modifier.height(12.dp))
+        Text(
+            "In the list that opens, choose Zenith app pictures and turn it on; on some phones it is under Installed " +
+                "apps. If Android says the setting is restricted, allow restricted settings from the menu in Zenith's " +
+                "App info first.",
+            color = palette.onGlassMuted,
+            fontSize = 13.sp,
+            modifier = Modifier.appearIn(delayMillis = staggerDelay(2), riseFrom = 18f),
+        )
+        Spacer(Modifier.height(18.dp))
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.appearIn(delayMillis = staggerDelay(3), riseFrom = 18f),
         ) {
             GlassButton(text = "Not now", onClick = onDismiss, modifier = Modifier.weight(1f))
             GlassButton(

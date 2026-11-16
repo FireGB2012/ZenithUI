@@ -27,7 +27,7 @@ data class GlassTuning(
      * meaning.
      */
     val tint: Float = 0f,
-    /** Where the light comes from, in degrees clockwise from the right; null is Zenith's, up and to the left. */
+    /** Where the light comes from, in degrees clockwise from the right; null is Zenith's, up and to the left on the diagonal. */
     val lightAngle: Float? = null,
     /** Whether the light swings the other way as the phone tips, with Tilt shine on. */
     val lightTilt: Boolean = true,
@@ -52,8 +52,11 @@ data class GlassTuning(
         val RAINBOW = 0f..3f
         val TINT = 0f..0.4f
 
-        /** Zenith's own light, as an angle: up and to the left, where [lightAngle] null puts it. */
-        const val ZENITH_LIGHT = 245.77f
+        /**
+         * Zenith's own light, as an angle: up and to the left on the diagonal, where [lightAngle] null
+         * puts it, as iOS's light falls on its glass.
+         */
+        const val ZENITH_LIGHT = 225f
 
         fun fromJson(o: JSONObject?): GlassTuning {
             if (o == null) return GlassTuning()

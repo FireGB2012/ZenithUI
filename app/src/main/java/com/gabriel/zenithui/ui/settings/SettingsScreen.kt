@@ -133,6 +133,8 @@ class SettingsActions(
     val gesture: (String) -> Unit = {},
     /** Says what the lock helper is, and opens Android's page for it. */
     val lockHelper: () -> Unit = {},
+    /** Says what the app picture helper is, and opens Android's page for it. */
+    val appPictures: () -> Unit = {},
     /** Everything the Looks page does. */
     val looks: LookActions? = null,
     /** The Glass studio's sheet (Plus). */

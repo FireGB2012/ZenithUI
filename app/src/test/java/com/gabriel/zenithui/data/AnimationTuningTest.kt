@@ -170,7 +170,32 @@ class AnimationTuningTest {
         assertEquals("28 dp", Tune.OpenCorner.show(28f))
         assertEquals("-12 dp", Tune.OpenArc.show(-12f))
         assertEquals("1.22×", Tune.LandScale.show(1.22f))
-        assertEquals("Off", Tune.CloseCard.show(0f))
+        // Its own size closing Into its icon, and no card closing Plain.
+        assertEquals("Auto", Tune.CloseCard.show(0f))
+        assertEquals("Auto", Tune.CloseCard.show(0.004f))
         assertEquals("60%", Tune.CloseCard.show(0.6f))
+        assertEquals("92%", Tune.ClosePicture.show(0.92f))
+        // Waiting for Android's own close: as long as Android says, or as long as set.
+        assertEquals("Auto", Tune.CloseWait.show(0f))
+        assertEquals("Auto", Tune.CloseWait.show(4f))
+        assertEquals("450 ms", Tune.CloseWait.show(450f))
+        assertEquals("1200 ms", Tune.CloseWait.show(1200f))
+    }
+
+    @Test
+    fun `the wait for Android's own close comes first in closing an app, and is Auto in every style`() {
+        assertEquals(Tune.CloseWait, Tune.entries.first { it.group == TuneGroup.Close })
+        AnimationPreset.entries.forEach { assertEquals(it.id, 0f, AnimationTuning.of(it)[Tune.CloseWait], 0f) }
+        // Set by hand to its first step, it is a wait of its own and not Auto any more.
+        assertTrue(AnimationTuning().with(Tune.CloseWait, Tune.CloseWait.step)[Tune.CloseWait] >= AndroidClose.WAIT_AUTO)
+    }
+
+    @Test
+    fun `a picture of the app starts back into its icon a little smaller than the screen, whatever the style`() {
+        AnimationPreset.entries.forEach { assertEquals(it.id, 0.92f, AnimationTuning.of(it)[Tune.ClosePicture], 0f) }
+        assertEquals(TuneGroup.Close, Tune.ClosePicture.group)
+        // Never so small that it is only an icon again, and never bigger than the screen.
+        assertEquals(0.3f, AnimationTuning().with(Tune.ClosePicture, 0.1f)[Tune.ClosePicture], 0f)
+        assertEquals(1f, AnimationTuning().with(Tune.ClosePicture, 1.4f)[Tune.ClosePicture], 0f)
     }
 }

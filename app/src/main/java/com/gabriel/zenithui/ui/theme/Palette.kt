@@ -132,7 +132,7 @@ fun ZenithPalette.wallColors(): WallColors = WallColors(
 )
 
 /**
- * The colour sets Zenith's painted wallpapers are made from, and nothing else now: the six free
+ * The colour sets Zenith's painted wallpapers are made from, and nothing else now: the free
  * ones, the ones bought with Aura points, your own, made in the theme maker while there was one,
  * and the one taken from the wallpaper. They were the app's themes once; Zenith itself is drawn in
  * [NeutralLook] whatever is stored. Their values are kept exactly, since a wallpaper painted from
@@ -201,7 +201,83 @@ object Palettes {
         glassTint = Color(0xFFAEB4C2),
     )
 
-    val all = listOf(Midnight, Aurora, Sunset, Frost, Sakura, Graphite)
+    // Seven more, added with the Depth wallpapers so there is a set for every colour a phone's own
+    // wallpapers come in: all blue, green, yellow, red and the berries, and two more for daylight.
+
+    val Ocean = ZenithPalette(
+        id = "ocean",
+        name = "Ocean",
+        tagline = "Deep water, blue all the way down",
+        accent = Color(0xFF0A6CFF),
+        accentAlt = Color(0xFF4FC3F7),
+        backdrop = listOf(Color(0xFF040B1A), Color(0xFF0A1C3D), Color(0xFF050F22)),
+        glassTint = Color(0xFF2F80FF),
+    )
+
+    val Lime = ZenithPalette(
+        id = "lime",
+        name = "Lime",
+        tagline = "Fresh green with a twist of yellow",
+        accent = Color(0xFF9BE22D),
+        accentAlt = Color(0xFF2FD38A),
+        backdrop = listOf(Color(0xFF07110A), Color(0xFF0F2814), Color(0xFF06120C)),
+        glassTint = Color(0xFF7FD84A),
+    )
+
+    val Citrus = ZenithPalette(
+        id = "citrus",
+        name = "Citrus",
+        tagline = "Lemon and tangerine in the warm dark",
+        accent = Color(0xFFFFD43B),
+        accentAlt = Color(0xFFFF8A1F),
+        backdrop = listOf(Color(0xFF141006), Color(0xFF2E200A), Color(0xFF150F07)),
+        glassTint = Color(0xFFFFC23D),
+    )
+
+    val Peach = ZenithPalette(
+        id = "peach",
+        name = "Peach",
+        tagline = "Soft apricot on warm white",
+        accent = Color(0xFFFF8A80),
+        accentAlt = Color(0xFFFFB74D),
+        backdrop = listOf(Color(0xFFFFF3EC), Color(0xFFFCE3D6), Color(0xFFFFF8F3)),
+        glassTint = Color(0xFFFFB396),
+        dark = false,
+    )
+
+    val Cherry = ZenithPalette(
+        id = "cherry",
+        name = "Cherry",
+        tagline = "Ripe red on black cherry",
+        accent = Color(0xFFFF2E4D),
+        accentAlt = Color(0xFFFF6A3D),
+        backdrop = listOf(Color(0xFF15050A), Color(0xFF320A15), Color(0xFF14060B)),
+        glassTint = Color(0xFFFF4458),
+    )
+
+    val Berry = ZenithPalette(
+        id = "berry",
+        name = "Berry",
+        tagline = "Raspberry into violet, rich and deep",
+        accent = Color(0xFFF0287A),
+        accentAlt = Color(0xFF7B4DFF),
+        backdrop = listOf(Color(0xFF12061A), Color(0xFF2A0C34), Color(0xFF110719)),
+        glassTint = Color(0xFFE0408F),
+    )
+
+    val Lavender = ZenithPalette(
+        id = "lavender",
+        name = "Lavender",
+        tagline = "Lilac light on a pale morning",
+        accent = Color(0xFF9D7BFF),
+        accentAlt = Color(0xFF6E9BFF),
+        backdrop = listOf(Color(0xFFF4F1FF), Color(0xFFE7E1FB), Color(0xFFF9F7FF)),
+        glassTint = Color(0xFFBBA8FF),
+        dark = false,
+    )
+
+    /** The free sets, round the colour wheel from Midnight, which comes first as it always has. */
+    val all = listOf(Midnight, Ocean, Frost, Aurora, Lime, Citrus, Peach, Sunset, Cherry, Berry, Sakura, Lavender, Graphite)
 
     // ---------------------------------------------------------------- aura sets
     // Bought with points rather than money, while Aura had a shop. Kept apart from [all], so only
@@ -310,7 +386,7 @@ object Palettes {
     }
 
     /**
-     * A wallpaper colour set by its id: one of the six, an Aura set, your own ([CUSTOM]) or the one
+     * A wallpaper colour set by its id: one of the free ones, an Aura set, your own ([CUSTOM]) or the one
      * taken from the wallpaper ([WALLPAPER]). An id it does not know is Midnight, as it always was.
      */
     fun setById(id: String, settings: ZenithSettings): ZenithPalette = when (id) {

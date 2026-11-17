@@ -123,6 +123,12 @@ class SettingsActions(
     val plus: () -> Unit,
     /** Takes somebody else's code; returns why not, or null when it was taken. With a server it is the server that is asked. */
     val redeem: suspend (String) -> String?,
+    /** Spends aura on a day of Plus: why not, in words, or null once it is bought. */
+    val buyPlusDay: () -> String? = { null },
+    /** Spends aura on one of Plus's wallpapers, for good: why not, in words, or null once it is bought. */
+    val buyDesign: (com.gabriel.zenithui.data.WallStyle) -> String? = { null },
+    /** Puts a flame a level brought on the Aura widget. */
+    val wearFlame: (com.gabriel.zenithui.data.AuraFlame) -> Unit = {},
     val help: () -> Unit,
     val reset: () -> Unit,
     /** Puts the layout back in line; returns how many items had to move. */
@@ -284,7 +290,7 @@ fun SettingsScreen(
                         SettingsPage.Apps -> AppsOptions(settings, plus, actions)
                         SettingsPage.Backup -> BackupOptions(plus, actions, onClose = onDismiss, onAccount = { open(SettingsPage.Account, null) })
                         SettingsPage.About -> AboutOptions(actions)
-                        SettingsPage.Aura -> AuraOptions(settings, actions, onAccount = { open(SettingsPage.Account, null) })
+                        SettingsPage.Aura -> AuraOptions(settings, plus, actions, onAccount = { open(SettingsPage.Account, null) })
                         SettingsPage.Looks -> actions.looks?.let { LooksOptions(settings, plus, looks, it) }
                         SettingsPage.Island -> IslandOptions(settings, plus, actions)
                         SettingsPage.Account -> AccountOptions(actions)
@@ -547,6 +553,7 @@ private fun summary(page: SettingsPage, settings: ZenithSettings, plus: PlusStat
     SettingsPage.Plus -> when {
         plus.lifetime -> "Yours for good"
         plus.subscribed -> "Subscribed"
+        plus.onAura -> "On with aura until ${com.gabriel.zenithui.data.AuraWords.until(plus.passUntil)}"
         plus.trialDaysLeft > 1 -> "${plus.trialDaysLeft} days of your trial left"
         plus.trialDaysLeft == 1 -> "Last day of your trial"
         else -> "Wallpapers, hidden apps, backup, the Notch"
@@ -566,7 +573,11 @@ private fun summary(page: SettingsPage, settings: ZenithSettings, plus: PlusStat
         settings.lookRules.isNotEmpty() -> "${settings.lookRules.size} on a schedule"
         else -> "Save your home screen and switch in a tap"
     }
-    SettingsPage.Aura -> if (settings.streak > 0) "${settings.aura} aura, ${settings.streak} day streak" else "${settings.aura} aura"
+    SettingsPage.Aura -> {
+        val level = com.gabriel.zenithui.data.AuraLevels.of(settings)
+        if (settings.streak > 0) "Level $level, ${com.gabriel.zenithui.data.AuraWords.count(settings.aura)} aura, ${settings.streak} day streak"
+        else "Level $level, ${com.gabriel.zenithui.data.AuraWords.count(settings.aura)} aura"
+    }
     SettingsPage.Account -> when {
         signed == null -> "Sign in, or create one"
         signed.account.username != null -> "@${signed.account.username}"

@@ -175,9 +175,14 @@ data class PlusStatus(
     val purchasable: Boolean = true,
     /** True once the monthly plan has a free trial in Play to sell, which it does not yet. */
     val playTrialOffer: Boolean = false,
+    /** When the days of Plus bought with aura end, in epoch millis, while they are still to come; nought otherwise. */
+    val passUntil: Long = 0L,
 ) {
     val inTrial: Boolean get() = !purchased && trialDaysLeft > 0
-    val active: Boolean get() = purchased || trialDaysLeft > 0
+    val active: Boolean get() = purchased || trialDaysLeft > 0 || passUntil > 0L
+
+    /** On only because of days bought with aura: not bought, and not in the free week. */
+    val onAura: Boolean get() = !purchased && trialDaysLeft == 0 && passUntil > 0L
 }
 
 /** Whole days of trial left, counting the day it started as day one. Zero until it is started. */

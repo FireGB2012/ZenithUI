@@ -306,6 +306,7 @@ private fun PlusHero(status: PlusStatus, modifier: Modifier = Modifier) {
         status.lifetime -> "Unlocked for good. Thank you — it follows you to every phone you sign in to."
         // Play does not tell the app which of the two plans it is, so no price is quoted here.
         status.subscribed -> "Subscribed through Google Play. Everything is on."
+        status.onAura -> "On with aura until ${com.gabriel.zenithui.data.AuraWords.until(status.passUntil)}. Everything is on."
         status.trialAvailable -> trialTerms(status)
         status.trialDaysLeft > 1 -> "${status.trialDaysLeft} days left of your free trial. Everything is on."
         status.trialDaysLeft == 1 -> "Last day of your free trial. Everything is on."

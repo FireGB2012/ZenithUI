@@ -20,6 +20,8 @@ import com.gabriel.zenithui.data.ShortcutCell
 import kotlinx.coroutines.flow.receiveAsFlow
 import com.gabriel.zenithui.data.ShortcutKeys
 import com.gabriel.zenithui.data.Aura
+import com.gabriel.zenithui.data.AuraShop
+import com.gabriel.zenithui.data.AuraSpend
 import com.gabriel.zenithui.data.CheckIn
 import com.gabriel.zenithui.data.Backup
 import com.gabriel.zenithui.data.BillingRepository
@@ -64,6 +66,7 @@ import com.gabriel.zenithui.data.server.SignedIn
 import com.gabriel.zenithui.data.server.ZenithServer
 import com.gabriel.zenithui.data.server.problem
 import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -150,6 +153,13 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
     val wallpaperRefused = director.refused
 
     /**
+     * Goes up when a day of Plus bought with aura may have run out, so [plus] is worked out again:
+     * at the moment it ends, and each time the home screen comes back, since a phone asleep keeps
+     * no time for a wait.
+     */
+    private val passClock = MutableStateFlow(0L)
+
+    /**
      * What Zenith Plus is worth to this user right now. Play is the authority on the purchase,
      * but the saved copy is what keeps Plus working on a plane or a dead network.
      */
@@ -165,6 +175,7 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
         billing.monthlyOffered,
         billing.quarterlyOffered,
         billing.amounts,
+        passClock,
     ) { values ->
         val settings = values[0] as ZenithSettings
         val purchased = values[1] as Boolean
@@ -191,6 +202,7 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
             amounts = amounts,
             purchasable = available,
             playTrialOffer = trialOffer,
+            passUntil = AuraShop.passUntil(settings.plusPassUntil, System.currentTimeMillis()),
         )
     }.stateIn(viewModelScope, SharingStarted.Eagerly, PlusStatus())
 
@@ -327,20 +339,43 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
                 if (bought && !settings.value.plusPurchased) store.update { it.copy(plusPurchased = true) }
             }
         }
-        // Free placement left switched on by someone whose Plus has since ended is not in effect,
-        // so their layout goes back onto whole rows. Only once Play itself has said nothing is
-        // bought: a subscriber who is merely offline must never have an arrangement undone.
         viewModelScope.launch {
             billing.answered.collect { answered ->
-                if (!answered) return@collect
-                val current = settings.value
-                val active = billing.purchased.value || current.plusPurchased || trialDaysLeft(current.plusTrialStart) > 0
-                if (active) return@collect
-                val tidied = LayoutTidy.afterPlusEnded(current, layout.value)
-                if (tidied != layout.value) store.setLayout(tidied)
+                if (answered) tidyIfPlusEnded()
+            }
+        }
+        // A day of Plus bought with aura ends at a time of its own: Plus is worked out again then,
+        // and the layout put back on whole rows if free placement was only on through it.
+        viewModelScope.launch {
+            settings.map { it.plusPassUntil }.distinctUntilChanged().collectLatest { until ->
+                val wait = until - System.currentTimeMillis()
+                if (wait <= 0L) return@collectLatest
+                delay(wait + 250L)
+                passClock.value = System.currentTimeMillis()
+                if (billing.answered.value) tidyIfPlusEnded()
+            }
+        }
+        viewModelScope.launch {
+            homePressed.collect {
+                passClock.value = System.currentTimeMillis()
+                if (billing.answered.value && settings.value.plusPassUntil > 0L) tidyIfPlusEnded()
             }
         }
         billing.refresh()
+    }
+
+    /**
+     * Free placement left switched on by someone whose Plus has since ended is not in effect, so
+     * their layout goes back onto whole rows. Only once Play itself has said nothing is bought: a
+     * subscriber who is merely offline must never have an arrangement undone.
+     */
+    private fun tidyIfPlusEnded() {
+        val current = settings.value
+        val active = billing.purchased.value || current.plusPurchased || trialDaysLeft(current.plusTrialStart) > 0 ||
+            AuraShop.passUntil(current.plusPassUntil, System.currentTimeMillis()) > 0L
+        if (active) return
+        val tidied = LayoutTidy.afterPlusEnded(current, layout.value)
+        if (tidied != layout.value) store.setLayout(tidied)
     }
 
     /**
@@ -389,15 +424,17 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
         if (last == today - 1 || last == 0L) {
             val streak = current.streak + 1
             val award = Aura.dailyReward(streak)
+            var reached: Int? = null
             store.update {
-                it.copy(
+                val earned = AuraShop.earn(it, award, System.currentTimeMillis())
+                reached = earned.reached.lastOrNull()
+                earned.settings.copy(
                     streak = streak,
                     lastCheckIn = today,
-                    aura = it.aura + award,
                     referralCode = it.referralCode.ifEmpty { Aura.newReferralCode() },
                 )
             }
-            _checkIn.value = CheckIn.Continued(streak = streak, awarded = award)
+            _checkIn.value = CheckIn.Continued(streak = streak, awarded = award, level = reached)
         } else {
             val lost = current.streak
             store.update {
@@ -438,11 +475,34 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
             cleaned == current.referralCode -> "That is your own code."
             else -> {
                 store.update {
-                    it.copy(referredBy = cleaned, aura = it.aura + Aura.REFERRAL_REWARD)
+                    AuraShop.earn(it, Aura.REFERRAL_REWARD, System.currentTimeMillis()).settings.copy(referredBy = cleaned)
                 }
                 null
             }
         }
+    }
+
+    // ---------------------------------------------------------------- what aura buys
+
+    /** A day of Plus, for aura: why not, in words, or null once it is bought. */
+    fun buyPlusDay(): String? = spend { AuraShop.buyPlusDay(it, plus.value, System.currentTimeMillis()) }
+
+    /** One of Plus's wallpapers, for aura and for good: why not, in words, or null once it is bought. */
+    fun buyDesign(style: WallStyle): String? = spend { AuraShop.buyDesign(it, style, plus.value) }
+
+    /** Puts [flame] on the Aura widget; one whose level is not reached yet is not put on. */
+    fun wearFlame(flame: com.gabriel.zenithui.data.AuraFlame) {
+        if (com.gabriel.zenithui.data.AuraLevels.of(settings.value) >= flame.level) store.update { it.copy(auraFlame = flame.id) }
+    }
+
+    /** Spends by [rule], asked of the settings as they stand at the moment they change. */
+    private fun spend(rule: (ZenithSettings) -> AuraSpend): String? {
+        when (val first = rule(settings.value)) {
+            is AuraSpend.Refused -> return first.why
+            is AuraSpend.Done -> Unit
+        }
+        store.update { current -> (rule(current) as? AuraSpend.Done)?.settings ?: current }
+        return null
     }
 
     // ---------------------------------------------------------------- Zenith Plus
@@ -498,9 +558,9 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
     fun backupText(): String = Backup.encode(store.config())
 
     /**
-     * Puts a backup back. The trial and the purchase are deliberately taken from the phone you
-     * are restoring onto, never from the file, so a backup can neither hand out Plus nor take it
-     * away from someone who paid. A backup [fromAccount] was sent without the hidden-apps PIN, so
+     * Puts a backup back. The trial, the purchase and any day of Plus bought with aura are
+     * deliberately taken from the phone you are restoring onto, never from the file, so a backup
+     * can neither hand out Plus nor take it away from someone who paid. A backup [fromAccount] was sent without the hidden-apps PIN, so
      * the one on this phone stays.
      */
     fun restoreBackup(text: String, fromAccount: Boolean = false): Boolean {
@@ -512,7 +572,8 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
         val back = backup.over(store.config())
         store.replace(
             back.copy(
-                settings = restored.copy(
+                // The day of Plus left is the phone's, as the trial and the purchase are.
+                settings = AuraShop.restoring(restored, current).copy(
                     plusTrialStart = current.plusTrialStart,
                     plusPurchased = current.plusPurchased,
                     hiddenPin = if (fromAccount) current.hiddenPin else restored.hiddenPin,
@@ -690,7 +751,7 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
                 else -> when (val reply = server.redeem(signed.token, cleaned)) {
                     is Reply.Ok -> {
                         accounts.update(reply.value)
-                        store.update { it.copy(referredBy = cleaned, aura = it.aura + Aura.REFERRAL_REWARD) }
+                        store.update { AuraShop.earn(it, Aura.REFERRAL_REWARD, System.currentTimeMillis()).settings.copy(referredBy = cleaned) }
                         null
                     }
                     else -> lost(reply)
@@ -773,7 +834,7 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
             items = fitted.second
         }
         val design = WallStyle.byName(next.wallpaperStyle)
-        if (design != null && design.plus && !plus.value.active) {
+        if (design != null && !AuraShop.ownsDesign(current, plus.value.active, design)) {
             next = next.copy(wallpaperStyle = current.wallpaperStyle, wallpaperPalette = current.wallpaperPalette)
         }
         next = next.copy(

@@ -54,6 +54,12 @@ object Aura {
 
     fun cleanCode(code: String): String = code.uppercase().filter { it.isLetterOrDigit() }.take(6)
 
+    /**
+     * Every point [settings] have earned, which their level comes from: what is marked earned, and
+     * never less than what is in hand, whatever wrote the settings.
+     */
+    fun earned(settings: ZenithSettings): Int = maxOf(settings.auraEarned, settings.aura).coerceAtLeast(0)
+
     /** Today, as a day number. Local time, because a streak is about your days, not UTC's. */
     fun today(): Long = LocalDate.now().toEpochDay()
 
@@ -108,8 +114,8 @@ sealed interface CheckIn {
     /** Already counted today. Nothing to say. */
     data object AlreadyDone : CheckIn
 
-    /** Another day in a row. */
-    data class Continued(val streak: Int, val awarded: Int) : CheckIn
+    /** Another day in a row; with [level], the level it took you to, when it took you to one. */
+    data class Continued(val streak: Int, val awarded: Int, val level: Int? = null) : CheckIn
 
     /**
      * A day was missed. Deliberately worth nothing: the streak resets, today earns nothing, and
@@ -119,12 +125,12 @@ sealed interface CheckIn {
 }
 
 /**
- * The five themes aura bought, in the order they were offered.
+ * The five Aura sets, in the order they come: colours for Zenith's painted wallpapers.
  *
- * Nothing is sold for aura now: the shop went with Zenith's colour themes, until Aura is rebuilt.
- * What somebody bought is still theirs (`unlockedThemes`), and each set bought stays offered as
- * colours for Zenith's painted wallpapers. They were priced so the cheapest was about a week of
- * turning up and the dearest a month or so.
+ * They were themes once, bought with aura until the shop went with Zenith's colour themes on
+ * 10 November 2026. Now each is reached at a level ([AuraLevels]); one somebody bought is still
+ * theirs whatever their level (`unlockedThemes`). [price] is what one cost then, which is counted
+ * back into the aura earned by settings from before levels.
  */
 @Immutable
 data class AuraTheme(
@@ -145,10 +151,10 @@ object AuraThemes {
 
     fun byId(id: String): AuraTheme? = all.firstOrNull { it.id == id }
 
-    /**
-     * The cheapest theme not yet among [unlocked], which is what the points were saved towards
-     * while there was a shop. Null once every one of them is owned.
-     */
+    /** What the sets [ids] cost in the old shop, each counted once: aura spent, and so aura earned. */
+    fun spentOn(ids: List<String>): Int = ids.distinct().sumOf { byId(it)?.price ?: 0 }
+
+    /** The cheapest set not yet among [unlocked], which is what the points were saved towards while there was a shop. */
     fun next(unlocked: List<String>): AuraTheme? = all.filter { it.id !in unlocked }.minByOrNull { it.price }
 
     fun isAuraTheme(paletteId: String): Boolean = all.any { it.id == paletteId }

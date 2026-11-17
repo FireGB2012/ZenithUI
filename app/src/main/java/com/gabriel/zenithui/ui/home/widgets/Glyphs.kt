@@ -23,6 +23,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
+import com.gabriel.zenithui.data.AuraFlame
 import com.gabriel.zenithui.data.WeatherCodes
 import com.gabriel.zenithui.ui.common.symbolShadowColour
 import com.gabriel.zenithui.ui.home.LocalBare
@@ -61,12 +62,27 @@ internal fun WeatherGlyph(code: Int, day: Boolean, size: Dp, modifier: Modifier 
     )
 }
 
-/** The streak's flame: orange, with a yellow heart. */
+/**
+ * The streak's flame: orange with a yellow heart, or in the colours of the [flame] a level brought.
+ * On a pale card, or anywhere pale (a light page, light glass), a flame whose body would be lost
+ * there, the white one or the gold, takes its deeper colour.
+ */
 @Composable
-internal fun FlameGlyph(size: Dp, modifier: Modifier = Modifier) {
-    val inks = glyphInks()
-    val shadow = glyphShadow()
+internal fun FlameGlyph(size: Dp, modifier: Modifier = Modifier, flame: AuraFlame = AuraFlame.Orange) {
     val bare = LocalBare.current
+    val card = LocalWidgetFill.current
+    val pale = !LocalPalette.current.dark
+    val inks = glyphInks().let { base ->
+        if (bare || flame == AuraFlame.Orange) return@let base
+        val ground = card?.top ?: if (pale) Color.White else null
+        val faint = ground != null && contrast(Color(flame.outer), ground) < 1.6f
+        base.copy(
+            flame = Color(if (faint) flame.markLight else flame.outer),
+            flameTip = Color(if (faint) flame.markLight else flame.tip),
+            flameHeart = Color(flame.heart),
+        )
+    }
+    val shadow = glyphShadow()
     Spacer(
         modifier
             .size(size)

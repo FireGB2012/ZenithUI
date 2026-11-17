@@ -115,6 +115,8 @@ import com.gabriel.zenithui.data.AppCell
 import com.gabriel.zenithui.data.AppInfo
 import com.gabriel.zenithui.data.DropPlanner
 import com.gabriel.zenithui.data.FolderCell
+import com.gabriel.zenithui.data.FolderGrid
+import com.gabriel.zenithui.data.FolderPour
 import com.gabriel.zenithui.data.HomeGeometry
 import com.gabriel.zenithui.data.HomeItem
 import com.gabriel.zenithui.data.PxRect
@@ -578,8 +580,8 @@ fun HomePage(
     /** Another icon has just joined the one being carried. */
     onGathered: () -> Unit = {},
     onOpenApp: (String) -> Unit,
-    /** A folder was tapped: which one, and where its icon is on screen, for it to open out of. */
-    onOpenFolder: (FolderCell, Rect) -> Unit,
+    /** A folder was tapped: which one, where its icon is on screen, for it to open out of, and where the finger was. */
+    onOpenFolder: (FolderCell, Rect, Offset) -> Unit,
     /** A finger has rested on something long enough: its menu comes, and it may then be picked up. */
     hold: HoldCalls,
     /** The thing whose menu is open: it stands a little larger while it is. */
@@ -1184,7 +1186,7 @@ fun HomePage(
                                     longPressHandled = false
                                     tryAwaitRelease()
                                 },
-                                onTap = {
+                                onTap = { tapAt ->
                                     if (longPressHandled) {
                                         longPressHandled = false
                                         return@detectTapGestures
@@ -1207,6 +1209,7 @@ fun HomePage(
                                                     cellRoot.x + icon.left, cellRoot.y + icon.top,
                                                     cellRoot.x + icon.right, cellRoot.y + icon.bottom,
                                                 ),
+                                                cellRoot + tapAt,
                                             )
                                         }
                                         // Tapping the clock opens the bedside screen; long press
@@ -1557,10 +1560,7 @@ fun HomeItemContent(
             showLabel = settings.showLabels,
             frame = geometry.iconFrame,
             style = settings.folderStyle,
-            // Cut like the app icons beside it. The free-form outlines (pebble, teardrop, hexagon,
-            // clover) keep the squircle: the lens draws every free-form outline as a superellipse, so
-            // glass clipped to one of them would show a squircle's rim cut off by the clip.
-            shape = ZenithShapes.forIconShape(settings.iconShape).takeUnless { it is IconOutlineShape } ?: ZenithShapes.icon,
+            shape = folderTileShape(settings.iconShape),
         )
 
         is WidgetCell -> {
@@ -1657,21 +1657,22 @@ private fun FolderInside(folder: FolderCell, appsByKey: Map<String, AppInfo>, ic
                 }
             }
         }
+        // Nine tiny icons, three by three, as iOS's folders show them: the first page of the open
+        // folder, in its places, so the pane opening out of the tile zooms them up into its apps.
         else -> Column(
-            verticalArrangement = Arrangement.spacedBy(iconSize * 0.06f),
-            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(iconSize * MINI_GAP),
+            modifier = Modifier.fillMaxSize(),
         ) {
-            folder.keys.take(4).chunked(2).forEach { rowKeys ->
-                Row(horizontalArrangement = Arrangement.spacedBy(iconSize * 0.06f)) {
+            FolderGrid.onPage(folder.keys, 0).chunked(FolderGrid.COLUMNS).forEach { rowKeys ->
+                Row(horizontalArrangement = Arrangement.spacedBy(iconSize * MINI_GAP)) {
                     rowKeys.forEach { key ->
                         AppIcon(
                             key = key,
                             label = appsByKey[key]?.label ?: "",
-                            size = iconSize * 0.33f,
+                            size = iconSize * MINI_ICON,
                             onGlass = true,
                         )
                     }
-                    if (rowKeys.size == 1) Spacer(Modifier.size(iconSize * 0.33f))
                 }
             }
         }
@@ -1752,6 +1753,20 @@ private fun SuperAppTile(key: String, label: String, frame: PxRect, showLabel: B
 
 /** The size icons are drawn at away from the grid: the drawer, folders, the dock's fallback. */
 val STANDARD_ICON_SIZE = 60.dp
+
+/**
+ * A folder's tile, cut like the app icons beside it, with [iconShape] from Settings. The free-form
+ * outlines (pebble, teardrop, hexagon, clover) keep the squircle: the lens draws every free-form
+ * outline as a superellipse, so glass clipped to one of them would show a squircle's rim cut off by
+ * the clip.
+ */
+internal fun folderTileShape(iconShape: String): androidx.compose.ui.graphics.Shape =
+    ZenithShapes.forIconShape(iconShape).takeUnless { it is IconOutlineShape } ?: ZenithShapes.icon
+
+/** A folder tile's nine tiny icons, where the open folder's apps fly out of and back into: [FolderPour]'s. */
+private const val MINI_ICON = FolderPour.MINI_ICON
+private const val MINI_GAP = FolderPour.MINI_GAP
+private const val MINI_EDGE = FolderPour.MINI_EDGE
 
 /**
  * Draws content at exactly [frame], in whole pixels, inside the space this is given. The space
@@ -1900,7 +1915,7 @@ fun FolderTile(
     modifier: Modifier = Modifier,
     /** On a home page: exactly where the folder goes inside its cell. Elsewhere it is centred. */
     frame: PxRect? = null,
-    /** "grid": four small, two by two; "stack": the first three fanned; "cover": the first large. */
+    /** "grid": nine small, three by three; "stack": the first three fanned; "cover": the first large. */
     style: String = "grid",
     /** The outline of its glass and its colour, so that it is cut like the app icons beside it. */
     shape: androidx.compose.ui.graphics.Shape = ZenithShapes.icon,
@@ -1920,6 +1935,21 @@ fun FolderTile(
                 .size(iconSize)
                 // An app opened from inside it goes back into it, if it has no icon of its own on show.
                 .then(if (frame != null) Modifier.homePlace(folder.keys, folder = true) else Modifier)
+                // The open folder drawn back into it is gulped down: a little wide and flat, a little
+                // tall, still, about its foot (FolderGulp). Read while drawing.
+                .then(
+                    if (frame != null) {
+                        Modifier.graphicsLayer {
+                            FolderGulp.squash(folder.id)?.let { (across, down) ->
+                                scaleX = across
+                                scaleY = down
+                                transformOrigin = TransformOrigin(0.5f, 1f)
+                            }
+                        }
+                    } else {
+                        Modifier
+                    }
+                )
                 // Jelly on a home page, as an app's icon is. A folder is glass, which lights up of
                 // itself as a ring of light from the wallpaper passes, so it takes no gleam.
                 .then(if (frame != null) Modifier.jellyIcon(shape) else Modifier.pressBounce()),
@@ -1930,7 +1960,7 @@ fun FolderTile(
                     .glass(shape, strength = 1.2f, material = GlassMaterial.Clear, interactive = true, tint = own ?: Color.Unspecified)
                     // A colour of its own, laid in the glass, easing in and out as it is chosen.
                     .background(shownColour.copy(alpha = shownColour.alpha * 0.3f), shape)
-                    .padding(iconSize * 0.12f),
+                    .padding(iconSize * MINI_EDGE),
                 contentAlignment = Alignment.Center,
             ) {
                 FolderInside(folder, appsByKey, iconSize, style)

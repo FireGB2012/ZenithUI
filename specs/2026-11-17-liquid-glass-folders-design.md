@@ -32,7 +32,7 @@
    capsule of glass with a clear button, as iOS's does in edit mode. The "N apps" count is gone.
 2. **The pane** is one size, whatever is in the folder (`FolderSize.of`): 78% of the screen's width,
    kept between 280 and 360 dp (320 dp on a 411 dp Galaxy A55), with 36 dp corners. Inside it 11 dp
-   from each side, three columns; the icons are 70% of a column, between 52 and 76 dp (68 dp on the
+   from each side, three columns; the icons are 70% of a column, between 52 and 76 dp (about 70 dp on the
    A55, about the home screen's own); each row is the icon, 6 dp, its name's line (20 dp) and 14 dp;
    24 dp above the first row and 18 dp under the last. The pane and the name above it stand in the
    middle of the screen together, and go up with the keyboard.

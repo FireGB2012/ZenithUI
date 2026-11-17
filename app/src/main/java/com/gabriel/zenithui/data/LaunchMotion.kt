@@ -27,6 +27,10 @@ object LaunchMotion {
      * and 1 at the screen, and each free to run a little past either end as a spring does. The
      * path bows upward by [arc] pixels at its half way point, and not at all at either end, so
      * the card still starts exactly on the icon and ends exactly on the screen.
+     *
+     * [squash] is a closing card landing in its icon: that much wider than it would be and that
+     * much flatter, about its middle, and narrower and taller when it is under 0 as it springs back
+     * past its shape. Never more than [MOST_SQUASH] either way.
      */
     fun frame(
         fromLeft: Float, fromTop: Float, fromRight: Float, fromBottom: Float,
@@ -34,10 +38,12 @@ object LaunchMotion {
         x: Float, y: Float, size: Float,
         arc: Float,
         startRadius: Float, endRadius: Float,
+        squash: Float = 0f,
     ): Frame {
         val grown = size.coerceAtLeast(0f)
-        val width = mix(fromRight - fromLeft, screenWidth, grown)
-        val height = mix(fromBottom - fromTop, screenHeight, grown)
+        val flat = squash.coerceIn(-MOST_SQUASH, MOST_SQUASH)
+        val width = mix(fromRight - fromLeft, screenWidth, grown) * (1f + flat)
+        val height = mix(fromBottom - fromTop, screenHeight, grown) * (1f - flat)
         val travelled = ((x + y) / 2f).coerceIn(0f, 1f)
         val centreX = mix((fromLeft + fromRight) / 2f, screenWidth / 2f, x)
         val centreY = mix((fromTop + fromBottom) / 2f, screenHeight / 2f, y) - arc * sin(PI.toFloat() * travelled)
@@ -46,9 +52,12 @@ object LaunchMotion {
             top = centreY - height / 2f,
             right = centreX + width / 2f,
             bottom = centreY + height / 2f,
-            radius = mix(startRadius, endRadius, grown.coerceAtMost(1f)),
+            radius = mix(startRadius, endRadius, grown.coerceAtMost(1f)).coerceAtMost(minOf(width, height) / 2f),
         )
     }
+
+    /** The most a card landing squashes, either way: never flatter, or narrower, than half its icon. */
+    const val MOST_SQUASH = 0.5f
 
     /**
      * How far something [dx], [dy] away from where it all starts is pushed out of the way, across

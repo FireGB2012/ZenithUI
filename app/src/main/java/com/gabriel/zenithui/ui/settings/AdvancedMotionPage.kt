@@ -45,6 +45,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -293,8 +294,11 @@ private fun StepButton(icon: ImageVector, says: String, enabled: Boolean, onClic
  * sums and the same springs as the real one ([LaunchMotion], [AnimationTuning]). Tap it to open,
  * tap again to close. Distances are scaled to its size, so what is seen here is what happens on
  * the real screen, only smaller. The blur is left out: it would cost more than a picture is worth.
- * Coming home [liquid], the icons rise on the wave out from the app's icon as it closes
- * ([LiquidArrival]), with a band of its light running out with it.
+ * Closing Into its icon, as on a Galaxy, the card fills the screen again, speeds into the icon and
+ * lands squashed while the home screen comes forward about its foot (CloseRules.bringsHome).
+ * Closing Plain, the card (if one is asked for) flies back and the icon lands; coming home
+ * [liquid], the icons rise on the wave out from the app's icon as it closes ([LiquidArrival]),
+ * with a band of its light running out with it.
  */
 @Composable
 private fun MotionPreview(tuning: AnimationTuning, closingPlain: Boolean, liquid: Boolean) {
@@ -314,6 +318,10 @@ private fun MotionPreview(tuning: AnimationTuning, closingPlain: Boolean, liquid
     val sink = remember { Animatable(0f) }
     /** The icon landing, 0 as it arrives to 1 settled. */
     val land = remember { Animatable(1f) }
+    /** A closing card landing squashed in its icon, springing back to 0, its shape. */
+    val squash = remember { Animatable(0f) }
+    /** Coming forward about the foot of the screen, behind a card going into its icon. */
+    var fromFoot by remember { mutableStateOf(false) }
     val wave = remember { Animatable(0f) }
     /** The arrival clock coming home like liquid, at rest past its end. */
     val arrive = remember { Animatable(FlyIn.AT_REST) }
@@ -341,16 +349,50 @@ private fun MotionPreview(tuning: AnimationTuning, closingPlain: Boolean, liquid
             }
             if (open) {
                 returning = false
+                fromFoot = false
+                squash.snapTo(0f)
                 land.snapTo(1f)
                 arrive.snapTo(FlyIn.AT_REST)
                 fly(1f)
             } else {
                 // On the phone Android takes the app's own window away. What Zenith draws is what
-                // follows: the home screen forward, the card going back into the icon (closing Plain,
-                // only if one is asked for), the landing. Coming home like liquid, everything else
-                // rises on the wave out from the icon meanwhile.
+                // follows. Into its icon: the card fills the screen again and goes into the icon,
+                // bringing the home screen forward with it once it is well on its way. Plain: the home
+                // screen forward, the card going back into the icon if one is asked for, the landing,
+                // and coming home like liquid everything else rising on the wave out from the icon.
                 returning = true
                 sink.snapTo(1f)
+                val asked = t[Tune.CloseCard]
+                val from = if (closingPlain && asked <= CloseRules.CARD_OFF) 0f else CloseRules.cardStart(asked)
+                val intoIcon = !closingPlain && from > CloseRules.CARD_OFF
+                fromFoot = intoIcon
+                if (intoIcon) {
+                    rest(from)
+                    launch {
+                        snapshotFlow { grow.value }.first { it <= CloseRules.HOME_GOES_AT }
+                        sink.animateTo(0f, t.springOf(Tune.ReturnStiffness, Tune.ReturnDamping))
+                    }
+                    val into = tween<Float>(
+                        durationMillis = Math.round(t.ms(Tune.CloseTime)).coerceAtLeast(1),
+                        easing = androidx.compose.animation.core.Easing { CloseRules.intoIcon(it) },
+                    )
+                    launch { x.animateTo(0f, into) }
+                    launch { y.animateTo(0f, into) }
+                    grow.animateTo(0f, into)
+                    val amount = t[Tune.CloseSquash]
+                    if (amount > 0f) {
+                        val stiffness = t.stiffness(Tune.LandStiffness)
+                        val damping = t[Tune.LandDamping]
+                        squash.snapTo(0f)
+                        squash.animateTo(
+                            targetValue = 0f,
+                            animationSpec = spring(dampingRatio = damping, stiffness = stiffness, visibilityThreshold = CloseRules.SQUASH_REST),
+                            initialVelocity = LaunchMotion.knockVelocity(amount, stiffness, damping),
+                        )
+                    }
+                    // The card was the icon by the time it got there: nothing lands, nothing is knocked.
+                    return@launch
+                }
                 launch { sink.animateTo(0f, t.springOf(Tune.ReturnStiffness, Tune.ReturnDamping)) }
                 if (liquid) {
                     // How long it runs does not hang on where it starts or how far it has to go.
@@ -361,8 +403,6 @@ private fun MotionPreview(tuning: AnimationTuning, closingPlain: Boolean, liquid
                         arrive.snapTo(FlyIn.AT_REST)
                     }
                 }
-                val asked = t[Tune.CloseCard]
-                val from = if (closingPlain && asked <= CloseRules.CARD_OFF) 0f else CloseRules.cardStart(asked)
                 if (from > CloseRules.CARD_OFF) {
                     rest(from)
                     val flight = launch { fly(0f) }
@@ -412,10 +452,15 @@ private fun MotionPreview(tuning: AnimationTuning, closingPlain: Boolean, liquid
             val depth = if (returning) sink.value.coerceIn(-0.12f, 1f) else grow.value.coerceIn(0f, 1f)
             val zoom = 1f + (t[Tune.HomeScale] - 1f) * depth
             val towards = if (depth != 0f) t[Tune.HomePivot] else 0f
-            val pivot = Offset(
-                size.width * LaunchMotion.pivot(target.x, size.width, towards),
-                size.height * LaunchMotion.pivot(target.y, size.height, towards),
-            )
+            val (footX, footY) = CloseRules.comeBackPivot()
+            val pivot = if (fromFoot && returning) {
+                Offset(size.width * footX, size.height * footY)
+            } else {
+                Offset(
+                    size.width * LaunchMotion.pivot(target.x, size.width, towards),
+                    size.height * LaunchMotion.pivot(target.y, size.height, towards),
+                )
+            }
             val dim = 1f - t[Tune.HomeDim] * depth.coerceIn(0f, 1f)
             val pushed = (if (returning) 0f else t[Tune.IconPush] * grow.value.coerceIn(0f, 1f)) + wave.value
             val reach = 150f * dp
@@ -487,8 +532,9 @@ private fun MotionPreview(tuning: AnimationTuning, closingPlain: Boolean, liquid
             }
             for (col in 0 until columns) drawIcon(Offset(cell * (col + 0.5f), size.height * 0.92f), plain)
 
-            // The app's own icon: out of sight under a card, landing once the card has gone.
-            val covered = grow.value > 0.002f
+            // The app's own icon: out of sight under a card, landing once the card has gone. A card
+            // going into its icon is the icon by the time it gets there, squashed for a moment.
+            val covered = grow.value > 0.002f || squash.isRunning
             if (!covered) {
                 val landed = land.value
                 val fade = t[Tune.LandFade]
@@ -498,12 +544,17 @@ private fun MotionPreview(tuning: AnimationTuning, closingPlain: Boolean, liquid
                     alpha = ((1f - fade) + fade * 1.6f * landed).coerceIn(0f, 1f),
                 )
             } else {
+                // Bringing the home screen back with it, the card goes into the icon where the icon is
+                // on the way, and moves with it as the home screen comes forward.
+                val rest = Rect(target.x - icon / 2f, target.y - icon / 2f, target.x + icon / 2f, target.y + icon / 2f)
+                val into = if (fromFoot && returning) CloseRules.fromFoot(rest, zoom, size.width, size.height) else rest
                 val frame = LaunchMotion.frame(
-                    target.x - icon / 2f, target.y - icon / 2f, target.x + icon / 2f, target.y + icon / 2f,
+                    into.left, into.top, into.right, into.bottom,
                     size.width, size.height,
                     x.value.coerceIn(-0.2f, 1.2f), y.value.coerceIn(-0.2f, 1.2f), grow.value.coerceIn(0f, 1.06f),
                     t[Tune.OpenArc] * dp,
-                    icon * 0.26f, t[Tune.OpenCorner] * dp,
+                    into.width * 0.26f, t[Tune.OpenCorner] * dp,
+                    squash = squash.value,
                 )
                 drawRoundRect(
                     brush = Brush.linearGradient(listOf(palette.accent, palette.accentAlt)),
@@ -511,14 +562,17 @@ private fun MotionPreview(tuning: AnimationTuning, closingPlain: Boolean, liquid
                     size = Size(frame.width, frame.height),
                     cornerRadius = CornerRadius(frame.radius),
                 )
-                // The logo in the middle of it, growing more slowly than the card.
+                // The logo in the middle of it, growing more slowly than the card. Going into the icon
+                // the card is the icon here, which has none.
                 val logo = icon * 0.5f + (t[Tune.OpenLogo] * dp - icon * 0.5f) * grow.value.coerceIn(0f, 1f)
-                drawRoundRect(
-                    color = Color.White.copy(alpha = 0.85f),
-                    topLeft = Offset(frame.centreX - logo / 2f, frame.centreY - logo / 2f),
-                    size = Size(logo, logo),
-                    cornerRadius = CornerRadius(logo * 0.26f),
-                )
+                if (!fromFoot || !returning) {
+                    drawRoundRect(
+                        color = Color.White.copy(alpha = 0.85f),
+                        topLeft = Offset(frame.centreX - logo / 2f, frame.centreY - logo / 2f),
+                        size = Size(logo, logo),
+                        cornerRadius = CornerRadius(logo * 0.26f),
+                    )
+                }
             }
         }
         Spacer(Modifier.height(8.dp))

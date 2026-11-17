@@ -81,6 +81,10 @@ frameworks/base):
    | vivo, iQOO, Honor, Huawei | 500, 1100 ms | 400, 900 ms |
    | Others | 450, 1000 ms | 350, 800 ms |
 
+   (2026-11-17: Samsung with gestures is now 600, 900 ms, counted to Zenith's own frames being on
+   show rather than to the app being gone, and the card waits up, full size: see
+   `2026-11-17-closing-like-void-design.md`.)
+
    Gestures are read from Android's `navigation_mode`, with One UI's and MIUI's own settings
    besides. Apps are allowed to read `navigation_mode`, and makers' own keys are always readable.
 3. **Some cases don't wait.**
@@ -103,6 +107,9 @@ frameworks/base):
   - If it never says, Zenith waits 1 s.
 - Phones whose own close is short may wait a little longer than they need to. That is by design:
   he asked to "wait a sec with nothing".
+- After the wait the icons flew in all the way, as after an unlock. Since
+  `2026-11-17-closing-like-void-design.md` a card going into the icon brings the home screen back
+  with it instead, whole and sunk back, coming forward about its foot, as Void's does.
 
 ## Checked
 

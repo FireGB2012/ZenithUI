@@ -70,6 +70,28 @@ class LaunchMotionTest {
     }
 
     @Test
+    fun `a closing card lands squashed, wider and flatter than its icon about its middle, then back to its shape`() {
+        fun landing(squash: Float) =
+            LaunchMotion.frame(120f, 900f, 288f, 1068f, 1344f, 2992f, 0f, 0f, 0f, 0f, 40f, 84f, squash = squash)
+        // 30% flatter, and as much wider, about the icon's own middle.
+        val flat = landing(0.3f)
+        assertEquals(168f * 1.3f, flat.width, 0.01f)
+        assertEquals(168f * 0.7f, flat.height, 0.01f)
+        assertEquals(204f, flat.centreX, 0.01f)
+        assertEquals(984f, flat.centreY, 0.01f)
+        assertTrue(flat.radius <= flat.height / 2f)
+        // Springing back a little past its shape: taller and narrower for a moment.
+        val tall = landing(-0.1f)
+        assertEquals(168f * 0.9f, tall.width, 0.01f)
+        assertEquals(168f * 1.1f, tall.height, 0.01f)
+        // Never flatter, or narrower, than half the icon.
+        assertEquals(84f, landing(0.9f).height, 0.01f)
+        assertEquals(84f, landing(-0.9f).width, 0.01f)
+        // None is the frame as it always was.
+        assertEquals(frame(0.3f, 0.3f, 0.3f), LaunchMotion.frame(120f, 900f, 288f, 1068f, 1344f, 2992f, 0.3f, 0.3f, 0.3f, 0f, 40f, 84f, squash = 0f))
+    }
+
+    @Test
     fun `what is nearest is pushed furthest, straight away from where it starts`() {
         val (nearX, nearY) = LaunchMotion.push(100f, 0f, 30f, 450f)
         val (farX, _) = LaunchMotion.push(900f, 0f, 30f, 450f)

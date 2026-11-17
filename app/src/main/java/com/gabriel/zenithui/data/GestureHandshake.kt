@@ -23,8 +23,11 @@ import kotlinx.coroutines.CompletableDeferred
  * spot instead of letting it fall to the foot of the screen, and says when it has got there.
  *
  * It is the only way a launcher that is not built into the phone has of moving another app's
- * window, and it needs no permission. Samsung's One UI does not ask other launchers, and with
- * buttons nobody is asked: there, Zenith's own picture of the app is used ([AppPictures]).
+ * window, and it needs no permission. With buttons nobody is asked: there, Zenith's own picture of
+ * the app is used ([AppPictures]), or the card it opened on. Samsung's One UI asks, and then closes
+ * the app into the middle of the screen whatever it is told, never saying the window got anywhere
+ * (seen on a Galaxy A55, 2026-11-17), so there it is told there is no icon and Zenith closes the
+ * app its own way after (AndroidClose.followsHandshake).
  */
 class GestureHandshake private constructor(
     /** The app being closed. */

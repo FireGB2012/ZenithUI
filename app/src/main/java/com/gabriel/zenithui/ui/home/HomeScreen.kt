@@ -681,6 +681,13 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
      */
     val cardX = remember { Animatable(0f) }
     val cardY = remember { Animatable(0f) }
+    /**
+     * How squashed a closing card is as it lands in its icon: wider and flatter, springing back to
+     * its shape (see [shrinkCard]). Nothing for an opening card.
+     */
+    val cardSquash = remember { Animatable(0f) }
+    /** How solid a closing card still is as it gives way to the icon under it, once it is on it. */
+    val cardLeaving = remember { Animatable(1f) }
     /** Pixels to a dp, for the distances in the tuning. */
     val pxPerDp = LocalDensity.current.density
     /** The numbers all of it runs on: the ones chosen in Settings, or calmer ones with movement reduced. */
@@ -697,11 +704,43 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         cardProgress.animateTo(to, t.springOf(Tune.OpenSizeStiffness, Tune.OpenSizeDamping))
     }
 
-    /** Puts all three at [at] between two frames, with nothing seen of it. */
+    /** Puts all of it at [at] between two frames, with nothing seen of it. */
     suspend fun restCard(at: Float = 0f) {
         cardX.snapTo(at)
         cardY.snapTo(at)
+        cardSquash.snapTo(0f)
         cardProgress.snapTo(at)
+    }
+
+    /**
+     * A closing card going into its icon, as Void's does: over the Shrinking time, slowly at first,
+     * the app back on the screen for a beat, and faster all the way in, its middle with it
+     * (CloseRules.intoIcon), so it lands with a bump. Then, if it is to [squash], it gets wider and
+     * flatter by Squash as it lands, and springs back to its shape on the landing's spring, coming
+     * to rest within a pixel (CloseRules.SQUASH_REST). Waits for all of it.
+     */
+    suspend fun shrinkCard(squash: Boolean) = kotlinx.coroutines.coroutineScope {
+        val t = liveTuning
+        val into = tween<Float>(
+            durationMillis = t.ms(Tune.CloseTime).roundToInt().coerceAtLeast(1),
+            easing = androidx.compose.animation.core.Easing { CloseRules.intoIcon(it) },
+        )
+        launch { cardX.animateTo(0f, into) }
+        launch { cardY.animateTo(0f, into) }
+        cardProgress.animateTo(0f, into)
+        val amount = t[Tune.CloseSquash]
+        if (squash && amount > 0f) {
+            val stiffness = t.stiffness(Tune.LandStiffness)
+            val damping = t[Tune.LandDamping]
+            // Sent off from its shape at the speed that takes it that far before it comes back: a
+            // bump, not a jump.
+            cardSquash.snapTo(0f)
+            cardSquash.animateTo(
+                targetValue = 0f,
+                animationSpec = androidx.compose.animation.core.spring(damping, stiffness, CloseRules.SQUASH_REST),
+                initialVelocity = LaunchMotion.knockVelocity(amount, stiffness, damping),
+            )
+        }
     }
     /** When the app was asked to open, or 0 while it has not been. */
     val launchedAt = remember { LongArray(1) }
@@ -720,6 +759,12 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
      * Android shows on the way home — no flash of the full-size screen before it sinks.
      */
     var holdSunk by remember { mutableStateOf(false) }
+    /**
+     * Back from an app after Android's own close, with a card going into the icon: the home screen
+     * comes forward about the middle of its foot, over the dock, where Android's close left the
+     * app (CloseRules.HOME_FOOT), as Void's does, and not about the icon.
+     */
+    var comeBackFromFoot by remember { mutableStateOf(false) }
     /** Set when an app covers Zenith, and let go of as Zenith comes forward again, so that happens once each time. */
     val away = remember { BooleanArray(1) }
     /** Android's question about the app being closed, as Zenith answered it (see [GestureHandshake]). */
@@ -736,6 +781,12 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
      * close both hold until then.
      */
     val waitingForAndroid = remember { BooleanArray(1) }
+    /**
+     * Set while the home screen is kept empty for a card to bring it back with it (see
+     * [CloseRules.bringsHome]): it has no arrival of its own this time, and shows whole, sunk back,
+     * in the frame the card goes up in ([revealHome]).
+     */
+    val homeHidden = remember { BooleanArray(1) }
     val waitJob = remember { arrayOfNulls<kotlinx.coroutines.Job>(1) }
     /** When Zenith was last covered, and whether by an app with the screen on, which Android then closes. */
     val coveredAt = remember { LongArray(1) }
@@ -793,6 +844,20 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             // Arrived: past the end of every style, so a change of style finds nothing part way in.
             arrivalClock.snapTo(FlyIn.AT_REST)
         }
+    }
+
+    /**
+     * The home screen kept empty for a closing card is shown whole, in its place, from this frame,
+     * with no arrival: the card is going up over it, and it comes forward as the card shrinks. The
+     * clock is set there and then, not on the next turn of the loop, so the frame the card goes up
+     * in already has it.
+     */
+    fun revealHome() {
+        if (!homeHidden[0]) return
+        homeHidden[0] = false
+        arrivalPending[0] = false
+        arrivalWave.value = null
+        scope.launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) { arrivalClock.snapTo(FlyIn.AT_REST) }
     }
     LaunchedEffect(Unit) {
         // A cold start: once the first frame is up.
@@ -881,9 +946,12 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
     val cardJob = remember { arrayOfNulls<kotlinx.coroutines.Job>(1) }
     var preparingLaunch by remember { mutableStateOf(false) }
 
-    fun steerCard(block: suspend kotlinx.coroutines.CoroutineScope.() -> Unit) {
+    fun steerCard(
+        start: kotlinx.coroutines.CoroutineStart = kotlinx.coroutines.CoroutineStart.DEFAULT,
+        block: suspend kotlinx.coroutines.CoroutineScope.() -> Unit,
+    ) {
         cardJob[0]?.cancel()
-        cardJob[0] = scope.launch(block = block)
+        cardJob[0] = scope.launch(start = start, block = block)
     }
 
     /** The app's icon arriving back in its place, and the icons round it knocked back by it. A folder only knocks. */
@@ -920,11 +988,19 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
      * with the place the icon is in when the home screen is at rest, which is where it will be by
      * the time the window gets there. Closing Plain, or with movement reduced, it is not answered
      * and Android closes the app its own way.
+     *
+     * One UI asks too, and then closes the app into the middle of the screen whatever it is told,
+     * never saying the window got anywhere (AndroidClose.followsHandshake). There it is told there
+     * is no icon, so that it does its own, and the app goes into its icon Zenith's own way after.
      */
     fun answerHandshake(ask: GestureHandshake) {
         val now = android.os.SystemClock.uptimeMillis()
         handshake[0] = null
         if (viewModel.settings.value.closeAnimation == CloseRules.PLAIN || liveMotion.reduced) return
+        if (!AndroidClose.followsHandshake(AndroidClose.makeHere())) {
+            ask.answer(null) {}
+            return
+        }
         val opened = returningCard[0]?.takeIf {
             CloseRules.packageOf(it.key) == ask.packageName && CloseRules.isWork(it.key) == !ask.personal
         }
@@ -1004,9 +1080,16 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
     /**
      * A card shrinking back into the icon the app is closing into, or with none on show into the
      * middle of the screen, fading as it goes: holding a picture of the app if there is one, and
-     * the icon's own colour and logo otherwise (the Closing card).
+     * the icon's own colour with the icon blown up on it otherwise (the Closing card).
+     *
+     * As Void's does: it fills the screen again, shrinks onto the icon and lands a little
+     * flattened, and is the icon by then, so it gives way to it in a few frames with no landing of
+     * its own (see [shrinkCard]). The icon's name stays on show all the while (AppLanding).
+     *
+     * With [hold] it goes up in this very frame and waits, full size, until that is done: on a
+     * phone that shows a still picture of Zenith before its own frames (CloseRules.cardFirst).
      */
-    fun closeIntoIcon(closed: Closing) {
+    fun closeIntoIcon(closed: Closing, bringHome: (() -> Unit)? = null, hold: kotlinx.coroutines.Deferred<Unit>? = null) {
         val t = liveTuning
         val picture = closed.picture?.asImageBitmap()
         val from = if (closed.route == CloseRoute.Picture) t[Tune.ClosePicture] else CloseRules.cardStart(t[Tune.CloseCard])
@@ -1014,13 +1097,16 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         val side = closed.opened?.from?.minDimension ?: (60f * pxPerDp)
         val target = spot?.bounds ?: CloseRules.middle(hostView.width.toFloat(), hostView.height.toFloat(), side)
         val landKey = closed.landKey
-        // The icon stays out of sight until the card has shrunk onto it, then lands.
+        // The icon stays out of sight until the card is on it, and is shown under it as the card gives way.
         if (landKey != null) AppLanding.hold(landKey)
         val opened = closed.opened
         // A super icon's own stretched picture, if it is going back into that same super icon.
         val wide = opened?.wideIcon?.takeIf { spot != null && (spot.bounds.center - opened.from.center).getDistance() < 4f * pxPerDp }
         val iconKey = landKey ?: closed.key
-        steerCard {
+        // Held up, it is set there and then, so the frame Zenith draws next already has it.
+        steerCard(if (hold != null) kotlinx.coroutines.CoroutineStart.UNDISPATCHED else kotlinx.coroutines.CoroutineStart.DEFAULT) {
+            // Whatever happens to the card, the home screen it was bringing back comes forward.
+            var broughtHome = bringHome == null
             try {
                 // Again, in case a card it took over from let go of it on its way out.
                 if (landKey != null) AppLanding.hold(landKey)
@@ -1031,19 +1117,42 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 closingCard = true
                 closingFrom = from
                 closingVanishes = spot == null
+                cardLeaving.snapTo(1f)
                 restCard(from)
-                val flight = launch { flyCard(0f) }
-                snapshotFlow { cardProgress.value }.first { it <= 0.03f }
-                flight.cancel()
+                // Bringing the home screen back with it: shown whole behind it from this frame, and
+                // on its way forward once the card is well on its way, so it is seen coming forward.
+                revealHome()
+                // Up at once, the app back on the screen, until Android's close is waited out.
+                hold?.await()
+                if (bringHome != null) {
+                    launch {
+                        snapshotFlow { cardProgress.value }.first { it <= CloseRules.HOME_GOES_AT }
+                        broughtHome = true
+                        bringHome()
+                    }
+                }
+                // Into the middle of the screen, with no icon to go into, it is gone by the time it gets there.
+                shrinkCard(squash = spot != null)
+                if (spot != null) {
+                    // On the icon, and as good as it: the icon is shown under it and it gives way, so an
+                    // icon drawn its own way (glass, a shape of its own) takes over without a jump.
+                    AppLanding.hold(null)
+                    cardLeaving.animateTo(0f, tween(CloseRules.HAND_OVER_MS, easing = androidx.compose.animation.core.LinearEasing))
+                }
                 card = null
                 closingCard = false
                 restCard()
-                if (spot != null) landIcon(landKey, spot.bounds)
             } finally {
-                // Turned round or cut short: never leave an icon hidden, or a card that cannot be tapped.
+                // Turned round or cut short: never leave an icon hidden, the home screen empty, or a
+                // card that cannot be tapped.
                 AppLanding.hold(null)
                 closingCard = false
                 closingVanishes = false
+                revealHome()
+                // Put away because Zenith was covered again, it is let go of at rest there (ON_STOP),
+                // and not sent forward while nobody can see it.
+                val seen = hostLifecycle?.currentState?.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED) != false
+                if (!broughtHome && seen) bringHome?.invoke()
             }
         }
     }
@@ -1077,6 +1186,10 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
      * window in front, or as the window gets focus or [CloseRules.SIGHT_WAIT_MS] later, whichever
      * comes first. Until it goes the home screen stays sunk back and the icon out of sight, so the
      * first frame seen is the start of the close.
+     *
+     * After that wait, a card going into the icon brings the home screen back with it, as Void's
+     * does (see [CloseRules.bringsHome]): shown whole as the card goes up, sunk back, and coming
+     * forward about the middle of its foot as the card shrinks, with no arrival of its own.
      */
     fun comeForward() {
         if (!away[0]) return
@@ -1094,18 +1207,33 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         arrivalFrom[0] = about
         // A card or a picture on its way into the icon: the icon is out of sight from the first frame.
         closed?.takeIf { it.route == CloseRoute.Card || it.route == CloseRoute.Picture }?.landKey?.let(AppLanding::hold)
+        // Android's own window going into the icon is Android's, and the icons are wanted in their
+        // places for it to land in, so that is not waited for; nor is anything with movement reduced.
+        val fromApp = coveredByApp[0]
+        coveredByApp[0] = false
+        val plan = if (fromApp && closed?.answer == null && !liveMotion.reduced) {
+            AndroidClose.planHere(context, liveTuning[Tune.CloseWait])
+        } else {
+            null
+        }
+        val withCard = CloseRules.bringsHome(waited = plan != null, route = closed?.route)
+        // On a phone that shows a still picture of Zenith before its own frames, the card is up
+        // from the start and only let go once the wait is over (CloseRules.cardFirst).
+        val held = if (closed != null && CloseRules.cardFirst(plan, closed.route)) kotlinx.coroutines.CompletableDeferred<Unit>() else null
+        val comeBack: () -> Unit = {
+            scope.launch {
+                // Snap to exactly where the hold leaves off before letting go of it, so the hand-over
+                // from holding to animating happens between two frames with nothing visible in it.
+                homeSink.snapTo(1f)
+                holdSunk = false
+                homeSink.animateTo(0f, liveTuning.springOf(Tune.ReturnStiffness, Tune.ReturnDamping))
+                comeBackFromFoot = false
+            }
+        }
         val turn = ++forwardTurn[0]
         forward[0] = go@{
-            val t = liveTuning
-            if (sunk) {
-                scope.launch {
-                    // Snap to exactly where the hold leaves off before letting go of it, so the hand-over
-                    // from holding to animating happens between two frames with nothing visible in it.
-                    homeSink.snapTo(1f)
-                    holdSunk = false
-                    homeSink.animateTo(0f, t.springOf(Tune.ReturnStiffness, Tune.ReturnDamping))
-                }
-            }
+            // Brought back by a card, it comes forward when the card says (see closeIntoIcon).
+            if (sunk && !withCard) comeBack()
             closed ?: return@go
             when (closed.route) {
                 CloseRoute.None -> Unit
@@ -1116,22 +1244,28 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     kotlinx.coroutines.withTimeoutOrNull(CloseRules.HANDSHAKE_WAIT_MS) { closed.answer?.arrived?.await() }
                     if (spot != null) receiveWindow(closed.landKey, spot.bounds)
                 }
-                CloseRoute.Card, CloseRoute.Picture -> closeIntoIcon(closed)
+                // Already up and waiting: let go of it.
+                CloseRoute.Card, CloseRoute.Picture -> if (held != null) {
+                    held.complete(Unit)
+                } else {
+                    closeIntoIcon(closed, bringHome = if (withCard) comeBack else null)
+                }
             }
         }
-        // Android's own window going into the icon is Android's, and the icons are wanted in their
-        // places for it to land in, so that is not waited for; nor is anything with movement reduced.
-        val fromApp = coveredByApp[0]
-        coveredByApp[0] = false
-        val plan = if (fromApp && closed?.answer == null && !liveMotion.reduced) {
-            AndroidClose.planHere(context, liveTuning[Tune.CloseWait])
-        } else {
-            null
-        }
         if (plan != null) {
-            // Empty from the first frame: everything is wound right back, and comes in from there.
+            // Empty from the first frame: everything is wound right back, and comes in from there,
+            // or with a card to bring it back is shown whole, sunk back, as the card goes up.
             waitingForAndroid[0] = true
             arrivalDepth.floatValue = FlyIn.FULL
+            if (withCard) {
+                homeHidden[0] = true
+                arrivalPending[0] = false
+                holdSunk = true
+                comeBackFromFoot = true
+            }
+            // The card up now, full size, over the home screen sunk back behind it, so the still
+            // picture the phone shows of Zenith before its own frames is the app back on the screen.
+            if (held != null && closed != null) closeIntoIcon(closed, bringHome = comeBack, hold = held)
             val startedAt = android.os.SystemClock.uptimeMillis()
             val since = coveredAt[0]
             waitJob[0]?.cancel()
@@ -1164,6 +1298,12 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         else -> homeSink.value.coerceIn(-0.12f, 1f)
     }
 
+    /**
+     * How far the home screen is zoomed for how far back it is: Home screen zoom behind an app, 1 at
+     * rest, and a little past 1 as it comes forward too far. Read while drawing.
+     */
+    fun homeZoom(): Float = 1f + (liveTuning[Tune.HomeScale] - 1f) * homeDepth()
+
     /** Sends the card back into its icon from wherever it is, and stops the app opening if it has not yet. */
     fun closeCard() {
         if (card == null) return
@@ -1180,6 +1320,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         card = target
         cardOpening = true
         closingCard = false
+        comeBackFromFoot = false
         // The icons nearest it make way, and the home screen zooms about it.
         HomeRipple.origin = target.from.center
         steerCard {
@@ -1218,6 +1359,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         // opening takes over from it.
         endWait()
         setOff()
+        revealHome()
         val current = card
         if (current != null && current.key == key) {
             openCard(current)
@@ -1282,10 +1424,20 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     waitJob[0]?.cancel()
                     waitJob[0] = null
                     waitingForAndroid[0] = false
+                    homeHidden[0] = false
+                    comeBackFromFoot = false
                     // Covered again before the last close was seen: it is dropped, its icon shown and
                     // the home screen let go of, at rest, so nothing is left waiting for it.
                     if (forward[0] != null) {
                         forward[0] = null
+                        // A card held up for it is put away with it (see CloseRules.cardFirst), even
+                        // one still fetching its icon. A card opening an app is dealt with below.
+                        if (!cardOpening) {
+                            cardJob[0]?.cancel()
+                            card = null
+                            closingCard = false
+                            scope.launch { restCard() }
+                        }
                         AppLanding.hold(null)
                         holdSunk = false
                         scope.launch { homeSink.snapTo(0f) }
@@ -2416,7 +2568,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     val depth = homeDepth()
                     val t = liveTuning
                     // Under 1 it sinks back behind the app; over 1 it rushes towards you instead.
-                    val zoom = 1f + (t[Tune.HomeScale] - 1f) * depth
+                    val zoom = homeZoom()
                     // Under Settings or the widget gallery it sinks back a little, as it does under
                     // the drawer, and comes forward again as the page is pulled away.
                     val covered = homeCover.amount()
@@ -2427,12 +2579,20 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     scaleY = scale
                     // It zooms about the icon the app came from, as far as asked, so the eye is
                     // carried into the app and out of it again at the same spot.
+                    // Back from an app after Android's own close, with a card going into the icon, it
+                    // comes forward about the middle of its foot instead, where Android's close left
+                    // the app, as Void's does (see comeForward).
                     val icon = HomeRipple.origin
                     val towards = if (depth != 0f && icon.isSpecified) t[Tune.HomePivot] else 0f
-                    transformOrigin = androidx.compose.ui.graphics.TransformOrigin(
-                        LaunchMotion.pivot(icon.x, size.width, towards),
-                        LaunchMotion.pivot(icon.y, size.height, towards),
-                    )
+                    transformOrigin = if (comeBackFromFoot && depth != 0f) {
+                        val (across, down) = CloseRules.comeBackPivot()
+                        androidx.compose.ui.graphics.TransformOrigin(across, down)
+                    } else {
+                        androidx.compose.ui.graphics.TransformOrigin(
+                            LaunchMotion.pivot(icon.x, size.width, towards),
+                            LaunchMotion.pivot(icon.y, size.height, towards),
+                        )
+                    }
                     val sunk = depth.coerceIn(0f, 1f)
                     // Settings is glass over the wallpaper; the home screen is not seen through it.
                     alpha = (1f - 0.55f * drawerOpenBy) * (1f - t[Tune.HomeDim] * sunk) * (1f - covered)
@@ -3128,9 +3288,15 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                         1f
                     } else {
                         val grown = cardProgress.value
-                        CloseRules.closingAlpha(grown, closingFrom) * (if (closingVanishes) CloseRules.vanishAlpha(grown) else 1f)
+                        CloseRules.closingAlpha(grown, closingFrom) *
+                            (if (closingVanishes) CloseRules.vanishAlpha(grown) else 1f) *
+                            cardLeaving.value
                     }
                 },
+                squash = { cardSquash.value },
+                ghost = closingCard,
+                // Bringing the home screen back with it, it goes into the icon where the icon is on the way.
+                homeZoom = { if (closingCard && comeBackFromFoot) homeZoom() else 1f },
             )
         }
 

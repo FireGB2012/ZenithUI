@@ -61,11 +61,18 @@ The Grid style shows nine tiny icons, three by three, as iOS's folders do: each 
 5% of it apart, 12% in from its edges, in the order the open folder has them. Stack and Cover are as
 they were. Its badge, its colour and its glass are as they were.
 
+While the folder is open its tile is away from the home screen, glass, tiny icons, badge and name
+alike, as the open pane is the tile poured out: it is never in two places at once. Gabriel saw it
+sitting under the open pane in the first shots (plain in Lite, where nothing is blurred) and said it
+should not be there. The tile goes in the frame the drop sets off from it, and the name under it
+fades over the first 120 ms (`FolderPour.nameLeaving`), as in Lite nothing behind is blurred to hide
+it going. Both come back only as the drop lands in the tile (`FolderPour.tileShown`).
+
 ### Liquid: opening (`FolderPour.frameIn`)
 
 The folder's glass tile becomes the pane: the open pane is one drop of glass that starts as the tile,
-exactly where it is and as round, and spreads out to the pane, the springs worked out rather than
-stepped, so any frame can be asked for:
+exactly where it is and as round (the tile itself is away from the first frame), and spreads out to
+the pane, the springs worked out rather than stepped, so any frame can be asked for:
 
 - **Wide, then tall.** Its width leads on a spring of 21.5 rad/s damped at 0.72; its height follows
   40 ms behind, 20 rad/s damped at 0.7. So it opens a touch wide and then a touch tall, about 4%
@@ -95,21 +102,24 @@ stepped, so any frame can be asked for:
 From wherever the drop is (a folder closed while still opening goes back from there), it draws back
 into its tile over 300 ms, slow out, quicker, and slow onto the tile (a cubic in and out), with no
 overshoot. The apps fly back with it into the tile's tiny icons, each from as far out as it had
-come, landing in them as the drop lands; the names and the name above go first, in the first 35%. Over the last 70 ms the drop fades and the tile shows through. Then the
-tile **gulps** (`FolderPour.gulp`): 7% wider and 6.5% flatter, then 2.5% narrower and taller, and still,
-over 340 ms. The blur behind clears as it goes, not after.
+come, landing in them as the drop lands; the names and the name above go first, in the first 35%.
+The tile stays away until the last 70 ms; over those the drop fades onto it as the tile comes back,
+the two always making one whole (`FolderPour.tileShown`). Then the tile **gulps**
+(`FolderPour.gulp`): 7% wider and 6.5% flatter, then 2.5% narrower and taller, and still, over
+340 ms. The blur behind clears as it goes, not after.
 
 ### Lite, and movement reduced
 
 - **Lite** (Motion & feel > Performance): no ring of light, no blur (the 38% dim instead). The
   drop, the zoom and the gulp are the same: they draw only the folder, and only while it moves.
 - **Movement reduced**: no drop, no zoom, no gulp; the pane fades in and out where it stands, in
-  150 ms.
+  150 ms, and the tile fades out and back as it does.
 
 ## What would be a failure even if it works
 
 - Glass that differs between Light and Dark, or a body on it that hides the rim.
 - Anything that wobbles: a spring under 0.7, a drop that swings more than once.
+- The folder's own tile on the home screen while it is open.
 - The home screen redrawing while the folder is open and nothing moves.
 - Something a folder could do before that it can no longer do: rename it, open its apps, take one
   out, see its badges.

@@ -39,6 +39,7 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
@@ -165,6 +166,21 @@ internal class FolderMotion {
         phase = Phase.Gone
     }
 
+    /**
+     * How much of the folder's own tile shows on the home screen: none while the folder is open,
+     * since the pane is the tile poured out, coming back as the drop lands in it (or, with movement
+     * reduced, as the pane fades). Read while drawing.
+     */
+    fun tileShown(): Float = when (phase) {
+        Phase.Gone -> 1f
+        Phase.Rest -> 0f
+        Phase.In -> if (grows) 0f else 1f - fade.value
+        Phase.Out -> if (grows && from != null) FolderPour.tileShown(out.value) else 1f - fade.value
+    }
+
+    /** How much of the name under the tile shows: as [tileShown], but fading as the drop leaves. Read while drawing. */
+    fun nameShown(): Float = if (phase == Phase.In && grows) FolderPour.nameLeaving(clock.value) else tileShown()
+
     /** How much of the veil behind is up: read while drawing. */
     fun shown(): Float = when (phase) {
         Phase.Gone -> 0f
@@ -178,6 +194,26 @@ internal class FolderMotion {
         const val VEIL_IN_S = 0.15f
     }
 }
+
+/**
+ * How much of a folder's tile, and of the name under it, shows on the home screen, read while
+ * drawing: all of it, but for the folder that is open, which is away from its tile (see
+ * [FolderMotion.tileShown]).
+ */
+@Stable
+internal interface FolderAway {
+    fun tile(id: String): Float
+    fun name(id: String): Float
+
+    companion object {
+        val Home = object : FolderAway {
+            override fun tile(id: String) = 1f
+            override fun name(id: String) = 1f
+        }
+    }
+}
+
+internal val LocalFolderAway = staticCompositionLocalOf { FolderAway.Home }
 
 /**
  * A folder's tile gulping the open pane down as it lands back in it: the tile is squashed, read

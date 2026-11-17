@@ -581,6 +581,14 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
     var folderUp by remember { mutableStateOf<FolderUp?>(null) }
     val folderMotion = remember { FolderMotion() }
     val folderJob = remember { arrayOfNulls<kotlinx.coroutines.Job>(1) }
+    // The open folder is away from its tile, which only comes back as the drop lands in it: for the
+    // tiles to read while drawing.
+    val folderAway = remember {
+        object : FolderAway {
+            override fun tile(id: String) = if (folderUp?.id == id) folderMotion.tileShown() else 1f
+            override fun name(id: String) = if (folderUp?.id == id) folderMotion.nameShown() else 1f
+        }
+    }
 
     // The one ring of light on the home screen, for every pane of glass and every icon to read while
     // drawing: a tap on the wallpaper sends it out, and so do edit mode's waves.
@@ -2490,7 +2498,12 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
     // The wallpaper a little darker, when Customise has been asked for that: a veil over it, under
     // everything that stands on it, and the same darkening on the copy of it the glass shows.
     val dimmed = animateFloatAsState(if (settings.dimWallpaper) WALLPAPER_DIM else 0f, tween(300), label = "dimWallpaper")
-    CompositionLocalProvider(LocalWidgetWorld provides widgetWorld, LocalWallpaperDim provides dimmed, LocalHomeCover provides homeCover) {
+    CompositionLocalProvider(
+        LocalWidgetWorld provides widgetWorld,
+        LocalWallpaperDim provides dimmed,
+        LocalHomeCover provides homeCover,
+        LocalFolderAway provides folderAway,
+    ) {
     Box(
         Modifier
             .fillMaxSize()

@@ -1923,6 +1923,9 @@ fun FolderTile(
     val density = LocalDensity.current
     val own = if (folder.colour == 0L) null else Color(folder.colour.toInt())
     val shownColour by animateColorAsState(own ?: Color.Transparent, tween(420), label = "folderColour")
+    // Away while it is open, its glass, tiny icons and badge at once, as the pane is the tile poured
+    // out, and its name fading: back as the drop lands in it. Read while drawing.
+    val away = LocalFolderAway.current
     Column(
         modifier = if (frame == null) modifier else modifier.fillMaxSize(),
         horizontalAlignment = if (frame == null) Alignment.CenterHorizontally else Alignment.Start,
@@ -1933,6 +1936,7 @@ fun FolderTile(
             Modifier
                 .then(if (frame != null) Modifier.padding(start = with(density) { frame.left.toDp() }) else Modifier)
                 .size(iconSize)
+                .graphicsLayer { alpha = away.tile(folder.id) }
                 // An app opened from inside it goes back into it, if it has no icon of its own on show.
                 .then(if (frame != null) Modifier.homePlace(folder.keys, folder = true) else Modifier)
                 // The open folder drawn back into it is gulped down: a little wide and flat, a little
@@ -1970,7 +1974,9 @@ fun FolderTile(
         }
         if (showLabel) {
             Box(
-                (if (frame != null) Modifier.fillMaxWidth() else Modifier).height(LABEL_LINE_HEIGHT),
+                (if (frame != null) Modifier.fillMaxWidth() else Modifier)
+                    .height(LABEL_LINE_HEIGHT)
+                    .graphicsLayer { alpha = away.name(folder.id) },
                 contentAlignment = Alignment.BottomCenter,
             ) {
                 IconLabel(folder.title)

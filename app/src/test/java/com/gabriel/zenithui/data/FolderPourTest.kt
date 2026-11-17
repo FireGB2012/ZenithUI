@@ -146,6 +146,38 @@ class FolderPourTest {
     }
 
     @Test
+    fun `the tile is away while the folder is out of it, and comes back only as the drop fades onto it`() {
+        val fadeFrom = 1f - FolderPour.FADE_MS.toFloat() / FolderPour.OUT_MS
+        assertEquals(0f, FolderPour.tileShown(0f), 0f)
+        assertEquals(0f, FolderPour.tileShown(fadeFrom - 0.01f), 0f)
+        assertEquals(1f, FolderPour.tileShown(1f), 0f)
+        val rest = FolderPour.frameIn(FolderPour.IN_S, g)
+        var fraction = 0f
+        while (fraction <= 1f) {
+            // The drop and the tile under it always make one between them: never both, never neither.
+            assertEquals("at $fraction", 1f, FolderPour.tileShown(fraction) + FolderPour.frameOut(fraction, rest, g).alpha, 0.0001f)
+            fraction += 0.01f
+        }
+    }
+
+    @Test
+    fun `the tile's name under it fades as the drop leaves, rather than going at once`() {
+        assertEquals(1f, FolderPour.nameLeaving(0f), 0f)
+        assertEquals(0f, FolderPour.nameLeaving(FolderPour.NAME_OUT_S), 0f)
+        assertEquals(0f, FolderPour.nameLeaving(FolderPour.IN_S), 0f)
+        // Gone well before the drop is still, and only ever going.
+        assertTrue(FolderPour.NAME_OUT_S <= FolderPour.IN_S / 4f)
+        var last = 1f
+        var t = 0f
+        while (t <= FolderPour.IN_S) {
+            val now = FolderPour.nameLeaving(t)
+            assertTrue("at $t", now <= last)
+            last = now
+            t += 0.004f
+        }
+    }
+
+    @Test
     fun `the apps come out nearest the finger first`() {
         val xs = floatArrayOf(10f, 20f, 30f, 10f, 20f, 30f)
         val ys = floatArrayOf(10f, 10f, 10f, 20f, 20f, 20f)

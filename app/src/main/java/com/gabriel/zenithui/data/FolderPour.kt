@@ -158,6 +158,9 @@ object FolderPour {
     /** How far into closing the names, and the name above, are gone. */
     const val WORDS_OUT = 0.35f
 
+    /** How long the name under the tile takes to fade as the drop leaves it, in seconds. */
+    const val NAME_OUT_S = 0.12f
+
     /** The tile's gulp once the drop is back in it. */
     const val GULP_MS = 340
 
@@ -233,9 +236,18 @@ object FolderPour {
         val middleX = lerp(from.left + from.width / 2f, g.tileLeft + g.tileWidth / 2f, p)
         val middleY = lerp(from.top + from.height / 2f, g.tileTop + g.tileHeight / 2f, p)
         val radius = min(lerp(from.radius, g.tileRadius, p), min(width, height) / 2f)
+        return PourFrame(middleX - width / 2f, middleY - height / 2f, width, height, radius.coerceAtLeast(0f), 1f - tileShown(f))
+    }
+
+    /**
+     * How much of the folder's own tile shows on the home screen, [fraction] of the way through
+     * closing: none while the folder is out of it, as the open pane is the tile poured out, and
+     * coming back over the last [FADE_MS] as the drop fades onto it, so the two always make one.
+     */
+    fun tileShown(fraction: Float): Float {
         val fadeFrom = 1f - FADE_MS.toFloat() / OUT_MS
-        val alpha = if (f <= fadeFrom) 1f else (1f - (f - fadeFrom) / (1f - fadeFrom)).coerceIn(0f, 1f)
-        return PourFrame(middleX - width / 2f, middleY - height / 2f, width, height, radius.coerceAtLeast(0f), alpha)
+        val f = fraction.coerceIn(0f, 1f)
+        return if (f <= fadeFrom) 0f else ((f - fadeFrom) / (1f - fadeFrom)).coerceIn(0f, 1f)
     }
 
     /** How far back into the tile the drop is, [fraction] of the way through closing: slow off, quicker, slow on. */
@@ -301,6 +313,12 @@ object FolderPour {
 
     /** How solid the words are [fraction] of the way through closing: gone by [WORDS_OUT]. */
     fun wordsLeaving(fraction: Float): Float = (1f - fraction / WORDS_OUT).coerceIn(0f, 1f)
+
+    /**
+     * How solid the name under the tile is, [seconds] after the drop set off: the tile is the drop,
+     * so it goes at once, but its name fades over [NAME_OUT_S], where nothing behind is blurred.
+     */
+    fun nameLeaving(seconds: Float): Float = (1f - seconds / NAME_OUT_S).coerceIn(0f, 1f)
 
     /**
      * The tile gulping the drop down, [fraction] of the way through: as wide and as tall as it is,

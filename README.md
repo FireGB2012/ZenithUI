@@ -570,7 +570,7 @@ numbers it all runs on).
   your hand settles from where it was let go, each starting from wherever it was last seen.
 - **Folders** pour out of their tile as a drop of liquid glass, wide first and then tall, sloshing
   once and settling, the tile's tiny icons zooming up into the apps nearest the finger first; closed,
-  the drop is drawn back into the tile, which gulps it down.
+  the drop is drawn back into the tile, which gulps it down. The tile is away while it is open.
 - **Widgets** animate their own changes: rolling digits, a ring that springs to its value and
   glints while charging, every other gauge filling the same way as it appears, today's dot drawing
   itself in, toggles that fill with their own colour from the middle as they come on.

@@ -20,7 +20,9 @@ Android plays its own close, then shows the home screen. There are three ways ro
    intent: where is this app's icon? A home app that answers gets the app's real window sprung into
    that spot. No permission, nothing to switch on. Samsung's One UI does not ask launchers that
    are not its own (Niagara's developer, Android Authority, February 2025); Xiaomi does not let
-   them have gestures at all; with buttons, nobody is asked.
+   them have gestures at all; with buttons, nobody is asked. (Corrected 2026-11-17: One UI does
+   ask, filmed on a Galaxy A55, and then closes the app into the middle of the screen whatever it
+   is told, so a Galaxy is not answered: see `2026-11-17-closing-like-void-design.md`.)
 2. **A picture of the app** (what the competitor does). Android gives no app a picture of another,
    with two exceptions. Screen recording (`MediaProjection`) asks every time it starts, puts a
    recording dot up and needs a foreground service: no use to a launcher. An accessibility service

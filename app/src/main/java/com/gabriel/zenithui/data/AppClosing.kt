@@ -178,6 +178,15 @@ object CloseRules {
     fun bringsHome(waited: Boolean, route: CloseRoute?): Boolean =
         waited && (route == CloseRoute.Card || route == CloseRoute.Picture)
 
+    /**
+     * Whether a card bringing the home screen back goes up the moment Zenith is back, full size,
+     * and waits there for Android's close to be waited out ([plan]), rather than going up then:
+     * on a phone that shows a still picture of Zenith before its own frames (One UI with gestures,
+     * see AndroidClose), so that picture is the app back on the screen, as Void's is.
+     */
+    fun cardFirst(plan: AndroidClose.Plan?, route: CloseRoute?): Boolean =
+        plan?.cardFirst == true && bringsHome(waited = true, route = route)
+
     private fun asBefore(target: Boolean, recent: Boolean, cardFrom: Float): CloseRoute = when {
         !target || !recent -> CloseRoute.None
         cardFrom > CARD_OFF -> CloseRoute.Card

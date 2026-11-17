@@ -116,6 +116,34 @@ class AndroidCloseTest {
     }
 
     @Test
+    fun `One UI asks where the icon is but closes the app its own way, so only the other makes are answered`() {
+        // Seen on Gabriel's A55 (2026-11-17): asked, answered, and the app still went to the middle
+        // of the screen, with no word that it had got anywhere.
+        assertFalse(AndroidClose.followsHandshake(Make.Samsung))
+        for (make in Make.entries - Make.Samsung) assertTrue("$make", AndroidClose.followsHandshake(make))
+    }
+
+    @Test
+    fun `on One UI with gestures the card goes up at once and waits there, for the still picture One UI shows first`() {
+        assertTrue(plan()!!.cardFirst)
+        // That is the phone's way of showing Zenith, whatever the wait is set to.
+        assertTrue(plan(chosen = 800f)!!.cardFirst)
+        assertTrue(plan(sdk = 33)!!.cardFirst)
+        // With buttons, and on every other make, the home screen waits empty and the card goes up after.
+        assertFalse(plan(gestures = false)!!.cardFirst)
+        for (make in Make.entries - Make.Samsung) assertFalse("$make", plan(make = make)!!.cardFirst)
+    }
+
+    @Test
+    fun `on One UI with gestures Zenith's own frames show a good half second after it is back, so the card leaves no sooner`() {
+        // Gabriel's A55: its close is over about 0.15 s after Zenith resumes, then the wallpaper, then
+        // a still picture of Zenith fading in, and Zenith's own frames from about 0.52 to 0.62 s.
+        val galaxy = AndroidClose.span(Make.Samsung, gestures = true)
+        assertEquals(600L, galaxy.usualMs)
+        assertEquals(900L, galaxy.mostMs)
+    }
+
+    @Test
     fun `it sets off when Android says it is done, but not before the close could be over, and not after the most it takes`() {
         val wait = AndroidClose.Plan(atLeastMs = 400, atMostMs = 1000, listens = true)
         // Said at 600 ms after coming back: then.

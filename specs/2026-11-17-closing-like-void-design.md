@@ -6,6 +6,8 @@
 - Status: built. Gabriel sent a screen recording of the Void launcher closing Chrome on his Galaxy
   A55 with gestures ("Watch this this ishow void does th anim thing close stuff"), and asked for
   Zenith's close to be like it: the app, the icon, the home screen and the timing.
+- Then he tried it on the A55 ("it doesnt rlly work") and sent a recording of Zenith: on his phone
+  it never got as far as the card. See "On Gabriel's phone", below.
 
 ## What Void does
 
@@ -86,17 +88,71 @@ Times from the frame the card goes up.
 | Home screen at the landing | 60 to 80% of the way forward | 55 to 60% of the way forward |
 | Home screen still | about 650 ms | about 600 ms |
 
+## On Gabriel's phone
+
+Read off his recording of Zenith closing Gmail and Messages, frame by frame.
+
+- **No card at all.** Nothing filled the screen and nothing went into the icon: the home screen
+  came forward about the icon, as it does after the handshake, and about 0.9 s later the icon
+  swelled a little (Gmail's from 181 to 197 px across, Messages' from 181 to 198). That swell is
+  the icon taking Android's window (`receiveWindow`), which only happens on the handshake route.
+- **Why.** One UI does ask where the icon is: the home intent carries `GestureNavContract`'s
+  question, which the 11-16 design had down as never happening on a Galaxy. Zenith answered it,
+  so the close took the handshake route: no card, no wait for Android's close, and the window left
+  to Android to spring into the icon. One UI then closed the app into the middle of the screen
+  whatever it was told and never said the window had got anywhere, so after `HANDSHAKE_WAIT_MS`
+  the icon took a window that never came.
+- **How One UI shows Zenith.** Zenith is resumed as the finger lets go, and kept out of sight
+  while One UI shrinks the app into the middle of the screen (about 0.15 s). The wallpaper shows
+  alone for about 0.13 s. Then a still picture of Zenith, of what it is drawing then, fades in over
+  about 0.22 s, and Zenith's own frames take over only 0.52 to 0.62 s after it resumed. Void's
+  recording shows the same steps: its still picture is its card at full size, which is why its
+  close looks right on One UI.
+
+What changes:
+
+1. **A Galaxy is not answered** (`AndroidClose.followsHandshake`). It is told there is no icon,
+   so that it does its own close, and the app goes into its icon Zenith's way after it.
+2. **The card goes up at once** on One UI with gestures (`AndroidClose.Plan.cardFirst`,
+   `CloseRules.cardFirst`): full size, in the frame Zenith resumes in, over the home screen sunk
+   back, and it waits there until Android's close has been waited out. One UI's still picture is
+   then the app back on the screen, as Void's is, and the card is seen leaving it for its icon.
+3. **No sooner than 0.6 s.** One UI with gestures is waited out for 600 to 900 ms (it was 450 to
+   1000), counted to Zenith's own frames being on show rather than to the app being gone, or the
+   card would shrink unseen behind the still picture.
+4. Covered again while the card waits (another app, the screen off), the card is put away with the
+   close it was waiting for, and the home screen let go of at rest.
+
+Checked in the JVM rig (`ComingHomeShotsTest.closingMailOnOneUi`), set up as Gabriel's phone: One
+UI's question comes with the home intent, and the frames are composed as the A55 shows them (One
+UI's close, the wallpaper, the still picture fading in from 280 ms, Zenith's own frames from 560 ms,
+with Android saying its close is over then). One UI was answered once, with no icon. Zenith draws
+the card full size from its first frame; the still picture is that card; it leaves at about 600 ms,
+is in the icon by about 880 ms, squashes and lands, with the home screen coming forward about its
+foot. On the commit before (`beb87f7`) the same rig shows no card and the icon swelling, as on the
+phone.
+
 ## Not changed
 
 - Closing Plain: Android's own close, then the icon landing, as before.
 - The Pixel handshake: Android's own window goes into the icon, and the home screen arrives as
-  it did. Nothing waits there, so nothing comes back with a card.
+  it did. Nothing waits there, so nothing comes back with a card. Every make but Samsung is still
+  answered.
+- One UI with buttons: the home screen waits, empty, for Android's close, and the card goes up
+  after it, as before.
 - Unlocking: the home screen arrives the way Coming home says, liquid by default.
 - How long Zenith waits for Android's own close (`AndroidClose`).
 
 ## Limits
 
-- None of it has been seen on a phone yet, only in the JVM rig.
+- The close as it is now (the card up at once) has not been seen on a phone yet, only in the JVM
+  rig modelled on Gabriel's recording.
+- When One UI takes its still picture, and when it says its close is over
+  (`onEnterAnimationComplete`), are not known. The card is up from the first frame and waits at
+  least 600 ms, so the still picture is the card either way; if the word never comes, it leaves at
+  900 ms.
+- Only Samsung has been seen asking and then closing its own way. Another make doing the same
+  would show the old fault (no card, and the icon swelling late).
 - Void's beat at full screen was 40 ms in one close and 190 ms in the other, which looks like Void
   loading its home screen. Zenith's beat comes from the curve, and is the same every time.
 - The card draws the app's icon picture. An icon drawn as glass or in 3D on the home screen looks a
@@ -115,3 +171,7 @@ Times from the frame the card goes up.
   - `AnimationTuningTest`: the new numbers, their place in the list, the presets and the speed.
 - Frames from the JVM rig, as a Galaxy with gestures closing Mail: One UI's fall drawn in over the
   first 480 ms, then Zenith's part, every 16 ms.
+- After Gabriel's recording: `AndroidCloseTest` (a Galaxy is not answered; on One UI with gestures
+  the card goes up at once, whatever the wait is set to; One UI's 600 to 900 ms), `CloseRulesTest`
+  (the card goes up at once only to bring the home screen back after a wait), and the rig's
+  `closingMailOnOneUi`, before and after.

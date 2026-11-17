@@ -34,6 +34,15 @@ import kotlin.math.roundToLong
  * the bottom of the screen in 225 ms. The makers who write their own do not say, so theirs are
  * set a little long; OnePlus, Oppo and realme are known to show a launcher not their own about a
  * second late since Android 14.
+ *
+ * One UI with gestures, as filmed on a Galaxy A55 (2026-11-17): Zenith is resumed as the finger
+ * lets go and kept out of sight while One UI shrinks the app into the middle of the screen, about
+ * 0.15 s. The wallpaper shows alone for a moment, then a still picture of Zenith, taken from what
+ * it is drawing then, fades in, and Zenith's own frames take over only 0.52 to 0.62 s after it was
+ * resumed. So there the card goes up at once and waits, full size, for the wait to be over
+ * ([Plan.cardFirst]): the still picture is the app back on the screen, as Void's is, and the card
+ * is seen leaving it for its icon. One UI also asks where the icon is ([GestureHandshake]), and
+ * then closes the app its own way all the same ([followsHandshake]).
  */
 object AndroidClose {
 
@@ -52,8 +61,21 @@ object AndroidClose {
     /**
      * How Zenith waits on coming back from an app: at least [atLeastMs], then until Android says
      * it is done if it [listens], and [atMostMs] at the most, all from the moment Zenith is back.
+     *
+     * With [cardFirst] the closing card goes up as soon as Zenith is back and waits there, full
+     * size, rather than going up once the wait is over: on a phone that keeps Zenith out of sight
+     * through its own close and then shows a still picture of it before its own frames (One UI
+     * with gestures), so that picture is the app back on the screen and not an empty home screen.
      */
-    data class Plan(val atLeastMs: Long, val atMostMs: Long, val listens: Boolean)
+    data class Plan(val atLeastMs: Long, val atMostMs: Long, val listens: Boolean, val cardFirst: Boolean = false)
+
+    /**
+     * Whether Android on this [make] does what Zenith answers when it asks where a closing app's
+     * icon is ([GestureHandshake]): springs the app's window into that spot and says when it is
+     * there. One UI asks, and then closes the app into the middle of the screen all the same,
+     * never saying it got anywhere, so a Galaxy is not answered and gets Zenith's own close.
+     */
+    fun followsHandshake(make: Make): Boolean = make != Make.Samsung
 
     /** The make of phone, from Build.MANUFACTURER and Build.BRAND. */
     fun make(manufacturer: String, brand: String): Make {
@@ -81,7 +103,8 @@ object AndroidClose {
     fun span(make: Make, gestures: Boolean): Span = if (gestures) {
         when (make) {
             Make.Pixel -> Span(400, 800)
-            Make.Samsung -> Span(450, 1000)
+            // Until Zenith's own frames are on show, not only until the app is gone: see above.
+            Make.Samsung -> Span(600, 900)
             Make.Xiaomi -> Span(450, 1000)
             Make.Oppo -> Span(600, 1300)
             Make.Vivo, Make.Honor -> Span(500, 1100)
@@ -102,16 +125,22 @@ object AndroidClose {
      * animation of Android's. Null when Android's animations are off and there is nothing to wait for.
      */
     fun plan(make: Make, gestures: Boolean, animatorScale: Float, transitionScale: Float, sdk: Int, chosen: Float): Plan? {
+        // How this phone shows Zenith again, whatever the wait is set to.
+        val cardFirst = make == Make.Samsung && gestures
         if (chosen >= WAIT_AUTO) {
             val ms = chosen.roundToLong()
-            return Plan(ms, ms, listens = false)
+            return Plan(ms, ms, listens = false, cardFirst = cardFirst)
         }
         val scale = (if (gestures) animatorScale else transitionScale).coerceIn(0f, 10f)
         if (scale <= 0f) return null
         val span = span(make, gestures)
         val least = (span.usualMs * scale).roundToLong()
         val most = (span.mostMs * scale).roundToLong()
-        return if (sdk >= SAYS_DONE_SDK) Plan(least, most, listens = true) else Plan(least, least, listens = false)
+        return if (sdk >= SAYS_DONE_SDK) {
+            Plan(least, most, listens = true, cardFirst = cardFirst)
+        } else {
+            Plan(least, least, listens = false, cardFirst = cardFirst)
+        }
     }
 
     /**
@@ -160,6 +189,9 @@ object AndroidClose {
         saidDone.value.takeIf { it > since }?.let { tookMs.value = (it - startedAt).coerceAtLeast(0L) }
     }
 
+    /** The make of this phone. */
+    fun makeHere(): Make = make(Build.MANUFACTURER.orEmpty(), Build.BRAND.orEmpty())
+
     /** [plan] for this phone as it is set now, with [chosen] from the slider. */
     fun planHere(context: Context, chosen: Float): Plan? {
         val resolver = context.contentResolver
@@ -173,7 +205,7 @@ object AndroidClose {
             xiaomiGestures = global("force_fsg_nav_bar"),
         )
         return plan(
-            make(Build.MANUFACTURER.orEmpty(), Build.BRAND.orEmpty()),
+            makeHere(),
             gestures,
             animatorScale = scale(Settings.Global.ANIMATOR_DURATION_SCALE),
             transitionScale = scale(Settings.Global.TRANSITION_ANIMATION_SCALE),

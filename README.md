@@ -493,7 +493,12 @@ far out of an opening folder each app is) and `AnimationTuning` (the numbers it 
   back with it (`CloseRules.bringsHome`): whole behind the card from its first frame, sunk back, and
   coming forward about the middle of its foot as the card lands, with no arrival of its own; the
   card goes into the icon where it is drawn on the way, and moves with it (`CloseRules.fromFoot`).
-  With the handshake the close starts once Zenith can be seen (its window's
+  One UI asks where the icon is too, and then closes the app into the middle of the screen whatever
+  it is told, so a Galaxy is not answered (`AndroidClose.followsHandshake`). It keeps Zenith out of
+  sight through its own close and shows a still picture of it before Zenith's own frames, about
+  0.55 s after it is back, so there the card goes up at once, full size, and waits, the still
+  picture being the app back on the screen, and it sets off no sooner than 0.6 s
+  (`AndroidClose.Plan.cardFirst`). With the handshake the close starts once Zenith can be seen (its window's
   focus, or 450 ms after it resumed): the home screen comes forward on a spring that carries it a
   little too far, the icon swells as the window arrives, and the icons round it are knocked back
   and swing home. The icon is the one it was opened from, or that app's icon on the page on show
@@ -907,9 +912,10 @@ before.
 
 ## Known limits
 
-- Opening and closing apps into their icons has not been tried on a phone yet. The gesture
-  handshake only happens with gesture navigation on phones whose recents are AOSP's (not One UI,
-  not with buttons); App pictures needs Android 11 and a Zenith from Play or put on with a
+- Closing an app has only been filmed on a Galaxy A55 with gestures, and the way it closes there
+  now (the card up at once) not yet. The gesture handshake is only followed with gesture
+  navigation on phones whose recents are AOSP's (One UI asks and then closes the app its own way;
+  nobody asks with buttons); App pictures needs Android 11 and a Zenith from Play or put on with a
   computer. Without the handshake Android's own close still plays before Zenith's, with the home
   screen empty until it is over: how long is Android's word from Android 14 on, and a guess for
   the make of phone before that. An app that had to start again shows its splash screen after the

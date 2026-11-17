@@ -11,7 +11,8 @@
 - His phone is a Galaxy A55, on One UI. One UI does not ask launchers that are not its own where an
   app's icon is (Android Authority, February 2025, from Niagara's developer; Galaxy owners on
   Niagara's feature board, 2025), so the gesture handshake never happens there. Nor does it with
-  buttons, on any phone.
+  buttons, on any phone. (Corrected 2026-11-17: filmed on the A55, One UI does ask, and then
+  closes the app its own way whatever it is told; see `2026-11-17-closing-like-void-design.md`.)
 - The copy that installs by tapping it has no app picture helper: Play Protect refuses a sideloaded
   app with an accessibility service.
 - The colour card was off unless *Closing card* was turned up in Advanced animation settings.

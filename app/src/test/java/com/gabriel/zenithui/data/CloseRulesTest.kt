@@ -157,6 +157,21 @@ class CloseRulesTest {
     }
 
     @Test
+    fun `the card goes up at once only to bring the home screen back after a wait, on a phone that shows Zenith late`() {
+        val late = AndroidClose.Plan(atLeastMs = 600, atMostMs = 900, listens = true, cardFirst = true)
+        val prompt = AndroidClose.Plan(atLeastMs = 400, atMostMs = 800, listens = true)
+        assertTrue(CloseRules.cardFirst(late, CloseRoute.Card))
+        assertTrue(CloseRules.cardFirst(late, CloseRoute.Picture))
+        // A phone that shows Zenith as it is: the home screen waits empty, and the card goes up after.
+        assertFalse(CloseRules.cardFirst(prompt, CloseRoute.Card))
+        // Nothing waited for (movement reduced, Android's animations off): no card held up either.
+        assertFalse(CloseRules.cardFirst(null, CloseRoute.Card))
+        for (route in listOf(CloseRoute.Land, CloseRoute.Handshake, CloseRoute.None, null)) {
+            assertFalse("$route", CloseRules.cardFirst(late, route))
+        }
+    }
+
+    @Test
     fun `its squash comes to rest within a pixel, so it is never seen to jump back into shape`() {
         // On the biggest icon a phone shows, about 230 pixels; Compose's own, 0.01, is two of them or more.
         assertTrue(CloseRules.SQUASH_REST > 0f)

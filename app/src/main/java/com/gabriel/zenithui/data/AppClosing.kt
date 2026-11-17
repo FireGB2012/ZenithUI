@@ -42,11 +42,44 @@ object CloseRules {
     const val CARD_OFF = 0.005f
 
     /**
-     * How far to full size the closing card sets off from, left at Auto. Smaller than a picture
-     * does: by the time Zenith is seen Android's own close has already taken the app away, and the
-     * card carries on from about where it left it instead of filling the screen again.
+     * How far to full size the closing card sets off from, left at Auto: the whole screen, as
+     * Void's does. Zenith waits for Android's own close to be over first (AndroidClose), so the
+     * card is the app back as it was left, going into its icon, and not a carrying on from part
+     * way. (It was 72% while Zenith's close ran on top of Android's.)
      */
-    const val CARD_START = 0.72f
+    const val CARD_START = 1f
+
+    /** How solid the app's icon is on a closing card that fills the screen: a ghost of it. */
+    const val GHOST_FAINT = 0.06f
+
+    /** The share of the way to full size below which the icon on a closing card is solid. */
+    const val GHOST_SOLID = 0.3f
+
+    /** How wide the icon on a closing card is at full size, against the card's own width. */
+    const val GHOST_SPAN = 1.12f
+
+    /**
+     * How far down the screen the home screen comes forward about, as a share of its height:
+     * the middle of its foot, over the dock, where Android's own close leaves the app and Void's
+     * home screen comes forward from.
+     */
+    const val HOME_FOOT = 0.88f
+
+    /**
+     * How far a closing card bringing the home screen back has shrunk, as a share of the screen,
+     * when the home screen starts forward: once the card is well on its way into its icon, so the
+     * home screen is seen coming forward as the card lands, as Void's is, and is not over behind it.
+     */
+    const val HOME_GOES_AT = 0.7f
+
+    /**
+     * How near its shape a landing card's squash has to be to count as back, as a share of its
+     * icon: about a pixel. Compose's own, 0.01, is two, a jump the eye catches as the card stops.
+     */
+    const val SQUASH_REST = 0.005f
+
+    /** How long a closing card takes to give way to the icon under it once it is on it. */
+    const val HAND_OVER_MS = 90
 
     /**
      * How long after resuming Zenith waits to be seen before closing the app anyway. Resuming is
@@ -86,6 +119,65 @@ object CloseRules {
     /** How far to full size the closing card sets off from: [cardFrom] if it is set to a size, [CARD_START] at Auto. */
     fun cardStart(cardFrom: Float): Float = if (cardFrom > CARD_OFF) cardFrom else CARD_START
 
+    /**
+     * How solid the app's icon on a closing card is at [grown] of the way to full size: a ghost
+     * of it while the card fills the screen, coming in as it shrinks, and solid by [GHOST_SOLID],
+     * so the card is its icon again by the time it gets there, as Void's is.
+     */
+    fun ghostAlpha(grown: Float): Float {
+        val t = ((1f - grown) / (1f - GHOST_SOLID)).coerceIn(0f, 1f)
+        return GHOST_FAINT + (1f - GHOST_FAINT) * t * t * (3f - 2f * t)
+    }
+
+    /**
+     * How wide the app's icon is drawn on a closing card [cardWidth] wide at [grown]: the card's
+     * own width at the icon, a little more at full size. It is the icon blown up, cut to the card,
+     * so a card wider than it is high shows the middle of it, as a flattened landing does.
+     */
+    fun ghostSide(cardWidth: Float, grown: Float): Float = cardWidth * (1f + (GHOST_SPAN - 1f) * grown.coerceIn(0f, 1f))
+
+    /**
+     * How far into its icon a closing card is, as a share of its way, at [fraction] of its time
+     * (Shrinking time): slowly at first, the app back on the screen for a beat, and faster all the
+     * way in, so it lands with a bump and squashes (see LaunchMotion.frame), as Void's does. The
+     * fraction cubed: an eighth of the way half way through, and three times an even pace at the end.
+     */
+    fun intoIcon(fraction: Float): Float {
+        val t = fraction.coerceIn(0f, 1f)
+        return t * t * t
+    }
+
+    /** Where the home screen comes forward about, back from an app, as shares of its width and height. */
+    fun comeBackPivot(): Pair<Float, Float> = 0.5f to HOME_FOOT
+
+    /**
+     * Where [rest], a place on a [width] by [height] home screen at rest, is drawn while the home
+     * screen is zoomed [zoom] about the middle of its foot ([comeBackPivot]), coming forward with a
+     * closing card. The card goes into its icon there, where the icon is on the way, and moves with
+     * it as the home screen comes forward, as Void's does, so its name stays right under it.
+     */
+    fun fromFoot(rest: Rect, zoom: Float, width: Float, height: Float): Rect {
+        if (zoom == 1f) return rest
+        val (across, down) = comeBackPivot()
+        val pivotX = width * across
+        val pivotY = height * down
+        return Rect(
+            left = pivotX + (rest.left - pivotX) * zoom,
+            top = pivotY + (rest.top - pivotY) * zoom,
+            right = pivotX + (rest.right - pivotX) * zoom,
+            bottom = pivotY + (rest.bottom - pivotY) * zoom,
+        )
+    }
+
+    /**
+     * Whether the home screen comes back with the card: shown whole behind it as it goes up, sunk
+     * back, and coming forward about [HOME_FOOT] as it shrinks, with no arrival of its own, as
+     * Void's does. That is once Android's own close has been waited out ([waited]), when a card or
+     * a picture goes back into the icon. Otherwise the home screen arrives as it always has.
+     */
+    fun bringsHome(waited: Boolean, route: CloseRoute?): Boolean =
+        waited && (route == CloseRoute.Card || route == CloseRoute.Picture)
+
     private fun asBefore(target: Boolean, recent: Boolean, cardFrom: Float): CloseRoute = when {
         !target || !recent -> CloseRoute.None
         cardFrom > CARD_OFF -> CloseRoute.Card
@@ -101,8 +193,13 @@ object CloseRules {
         return t * t * (3f - 2f * t)
     }
 
-    /** How solid a closing card that set off at [from] is at [grown]: it comes in over its first stretch. */
-    fun closingAlpha(grown: Float, from: Float): Float = ((from - grown) / CLOSE_FADE_IN).coerceIn(0f, 1f)
+    /**
+     * How solid a closing card that set off at [from] is at [grown]: one smaller than the screen
+     * comes in over its first stretch, so it never pops up over the home screen; one that fills it
+     * is solid from its first frame, the app back as it was left, as Void's is.
+     */
+    fun closingAlpha(grown: Float, from: Float): Float =
+        if (from >= 1f) 1f else ((from - grown) / CLOSE_FADE_IN).coerceIn(0f, 1f)
 
     /** How solid a card with no icon to go into is at [grown]: it fades out over its last stretch. */
     fun vanishAlpha(grown: Float): Float = (grown / VANISH).coerceIn(0f, 1f)

@@ -60,6 +60,9 @@ accessibility service, or a stand-in it draws itself.
   at focus it started too soon, behind the falling app: since
   `2026-11-16-waiting-for-androids-close-design.md` the home screen waits, empty, until Android says
   its close is over.
+- The card started at 72% and carried the logo an app's own opening screen shows. Since
+  `2026-11-17-closing-like-void-design.md` it fills the whole screen with the icon blown up on it,
+  goes into the icon faster and faster and lands squashed, as Void's does, with no landing or ripple.
 
 ## Checked
 

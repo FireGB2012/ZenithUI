@@ -79,3 +79,10 @@ hundredth of the way, in just under a second.
   at once, and is all but up by the time the card reaches it, so the landing plays as it did.
 - The wait for Android's own close: the home screen stays empty until it is over, and the wave
   starts then.
+
+## Since
+
+- `2026-11-17-closing-like-void-design.md`: back from an app after waiting for Android's own close
+  (a Galaxy), a card going into the icon brings the home screen back with it, whole, as Void's
+  does, so no wave plays then. The wave still plays after an unlock, and back from an app where
+  nothing waits (the Pixel handshake) or no card goes into the icon (closing Plain).

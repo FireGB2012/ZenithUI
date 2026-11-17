@@ -150,6 +150,7 @@ class AnimationTuningTest {
         for (tune in listOf(Tune.OpenXDamping, Tune.OpenYDamping, Tune.OpenSizeDamping, Tune.ReturnDamping, Tune.LandDamping)) {
             assertTrue(tune.id, calm[tune] >= 1f)
         }
+        assertEquals(0f, calm[Tune.CloseSquash], 0f)
         assertEquals(0f, calm[Tune.OpenArc], 0f)
         assertEquals(1f, calm[Tune.HomeScale], 0f)
         assertEquals(0f, calm[Tune.HomeBlur], 0f)
@@ -175,6 +176,8 @@ class AnimationTuningTest {
         assertEquals("Auto", Tune.CloseCard.show(0.004f))
         assertEquals("60%", Tune.CloseCard.show(0.6f))
         assertEquals("92%", Tune.ClosePicture.show(0.92f))
+        assertEquals("280 ms", Tune.CloseTime.show(280f))
+        assertEquals("30%", Tune.CloseSquash.show(0.3f))
         // Waiting for Android's own close: as long as Android says, or as long as set.
         assertEquals("Auto", Tune.CloseWait.show(0f))
         assertEquals("Auto", Tune.CloseWait.show(4f))
@@ -191,12 +194,38 @@ class AnimationTuningTest {
     }
 
     @Test
-    fun `a picture of the app starts back into its icon a little smaller than the screen, whatever the style`() {
-        AnimationPreset.entries.forEach { assertEquals(it.id, 0.92f, AnimationTuning.of(it)[Tune.ClosePicture], 0f) }
+    fun `a picture of the app starts back into its icon as big as the screen, whatever the style`() {
+        AnimationPreset.entries.forEach { assertEquals(it.id, 1f, AnimationTuning.of(it)[Tune.ClosePicture], 0f) }
         assertEquals(TuneGroup.Close, Tune.ClosePicture.group)
         // Never so small that it is only an icon again, and never bigger than the screen.
         assertEquals(0.3f, AnimationTuning().with(Tune.ClosePicture, 0.1f)[Tune.ClosePicture], 0f)
         assertEquals(1f, AnimationTuning().with(Tune.ClosePicture, 1.4f)[Tune.ClosePicture], 0f)
+    }
+
+    @Test
+    fun `the card shrinking back into its icon has a time of its own, and lands a little flattened`() {
+        val close = Tune.entries.filter { it.group == TuneGroup.Close }
+        // After where it starts from, and before the landing, whose spring its squash springs back on.
+        assertEquals(close.indexOf(Tune.ClosePicture) + 1, close.indexOf(Tune.CloseTime))
+        assertEquals(close.indexOf(Tune.CloseTime) + 1, close.indexOf(Tune.CloseSquash))
+        assertEquals(close.indexOf(Tune.CloseSquash) + 1, close.indexOf(Tune.LandScale))
+        // About as long as Void's takes to get into its icon.
+        assertEquals(TuneUnit.Ms, Tune.CloseTime.unit)
+        assertTrue(Tune.CloseTime.own in 220f..340f)
+        // Zenith's own lands flattened, as Void's does; Bouncy more, Fluid and Dynamic less, Classic not at all.
+        val own = AnimationTuning()[Tune.CloseSquash]
+        assertTrue(own >= 0.2f)
+        assertTrue(AnimationTuning.of(AnimationPreset.Bouncy)[Tune.CloseSquash] > own)
+        assertTrue(AnimationTuning.of(AnimationPreset.Fluid)[Tune.CloseSquash] < own)
+        assertTrue(AnimationTuning.of(AnimationPreset.Dynamic)[Tune.CloseSquash] < own)
+        assertEquals(0f, AnimationTuning.of(AnimationPreset.Classic)[Tune.CloseSquash], 0f)
+        // Never flatter than half its icon.
+        assertTrue(Tune.CloseSquash.max <= 0.5f)
+        // Calm is longer; the speed runs it as it runs every other time, so Dynamic is quicker and Sweet slower.
+        assertTrue(AnimationTuning.of(AnimationPreset.Fluid)[Tune.CloseTime] > Tune.CloseTime.own)
+        assertEquals(Tune.CloseTime.own / 2f, AnimationTuning().paced(2f).ms(Tune.CloseTime), 0.01f)
+        assertTrue(AnimationTuning.of(AnimationPreset.Dynamic).ms(Tune.CloseTime) < Tune.CloseTime.own)
+        assertTrue(AnimationTuning.of(AnimationPreset.Sweet).ms(Tune.CloseTime) > Tune.CloseTime.own)
     }
 
     @Test

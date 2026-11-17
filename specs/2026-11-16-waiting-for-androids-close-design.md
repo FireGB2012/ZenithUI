@@ -103,6 +103,9 @@ frameworks/base):
   - If it never says, Zenith waits 1 s.
 - Phones whose own close is short may wait a little longer than they need to. That is by design:
   he asked to "wait a sec with nothing".
+- After the wait the icons flew in all the way, as after an unlock. Since
+  `2026-11-17-closing-like-void-design.md` a card going into the icon brings the home screen back
+  with it instead, whole and sunk back, coming forward about its foot, as Void's does.
 
 ## Checked
 

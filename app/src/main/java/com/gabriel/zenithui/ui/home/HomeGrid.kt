@@ -948,7 +948,10 @@ fun HomePage(
                             scaleX *= squash.x
                             scaleY *= squash.y
                         }
-                        alpha = wayAlpha * gatheredAlpha * (if (opens != null) AppLanding.alphaFor(opens) else 1f)
+                        // An app's icon on its own waits out of sight for a closing card while its name stays
+                        // (see AppTile); anything else waits whole.
+                        alpha = wayAlpha * gatheredAlpha *
+                            (if (opens != null) AppLanding.alphaFor(opens, iconOnly = item is AppCell && item.isPlainIcon) else 1f)
                         // Parallax: while pages slide, items drift apart from the middle of the page
                         // and settle back together as it lands, so the page has depth.
                         translationX = pageOffset() * cellWidthPx * PAGE_PARALLAX *
@@ -1816,7 +1819,9 @@ fun AppTile(
                 .then(if (frame != null) Modifier.homePlace(key) else Modifier)
                 // On a home page an icon is jelly, whatever Pressing says, and gleams as a ring of light
                 // from the wallpaper passes; in the drawer and a folder's panel it keeps Pressing.
-                .then(if (frame != null) Modifier.jellyIcon(shape).iconGleam(shape) else Modifier.pressBounce()),
+                .then(if (frame != null) Modifier.jellyIcon(shape).iconGleam(shape) else Modifier.pressBounce())
+                // On a home page, out of sight while a closing app's card is on its way to it; its name stays.
+                .then(if (frame != null) Modifier.graphicsLayer { alpha = AppLanding.iconAlphaFor(key) } else Modifier),
         )
         if (showLabel) {
             // Always exactly LABEL_LINE_HEIGHT tall, so every icon's top edge sits on one line and

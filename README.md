@@ -479,20 +479,28 @@ far out of an opening folder each app is) and `AnimationTuning` (the numbers it 
   (`GestureHandshake`, Launcher3's `GestureNavContract`) and springs the app's own window into it;
   the icon swells a little as it arrives. Elsewhere, with **App pictures** on, a card holding a
   picture of the app shrinks into the icon once Android's own close is done, the picture giving way
-  to the icon's colour and logo as it gets small. With neither (One UI, buttons, or the copy of
-  Zenith that installs by tapping it), the card the app opened on, in its colour and with its logo,
-  shrinks back into the icon from 72% of the screen. Without the handshake Android plays its own
-  close of the app first, over Zenith, so the home screen waits for it, empty, until Android says
-  it is over (`AndroidClose`, `specs/2026-11-16-waiting-for-androids-close-design.md`; before
-  Android 14 the usual length for that make of phone), and then the home screen comes home, on a
-  wave out from the icon, as the app goes into it. Advanced animation settings → *Wait for Android's close* sets it by hand. With the
-  handshake it starts once Zenith can be seen (its window's focus, or 450 ms after it resumed). The
-  home screen comes forward again on a spring that carries it a little too far, the app's icon
-  lands in its place with a bounce, and the icons round it are knocked back and swing home. The
-  icon is the one it was opened from, or that app's icon on the page on show or in the dock, or the
-  folder holding it (`IconPlaces`, which keeps where each sits at rest); with none, the card shrinks
-  into the middle of the screen and fades. Settings → Motion & feel → **Closing apps** has *Into
-  its icon* and *Plain*: Android's own close, then the landing, which is how it was.
+  to the icon's colour and icon as it gets small. With neither (One UI, buttons, or the copy of
+  Zenith that installs by tapping it), a card in the app's colour does it. Without the handshake
+  Android plays its own close of the app first, over Zenith, so the home screen waits for it, empty,
+  until Android says it is over (`AndroidClose`, `specs/2026-11-16-waiting-for-androids-close-design.md`;
+  before Android 14 the usual length for that make of phone). Advanced animation settings → *Wait
+  for Android's close* sets it by hand. Then it closes the way the Void launcher does
+  (`specs/2026-11-17-closing-like-void-design.md`): the card fills the whole screen, the app's icon
+  blown up faintly on it, sits for a beat, and goes into the icon faster and faster
+  (`CloseRules.intoIcon`, *Shrinking time*), landing squashed and springing back to the icon's shape
+  (*Squash as it lands*, on the landing's spring). It is the icon by then, and gives way to it in
+  90 ms: no landing, no ripple, and the icon's name stays on show throughout. The home screen comes
+  back with it (`CloseRules.bringsHome`): whole behind the card from its first frame, sunk back, and
+  coming forward about the middle of its foot as the card lands, with no arrival of its own; the
+  card goes into the icon where it is drawn on the way, and moves with it (`CloseRules.fromFoot`).
+  With the handshake the close starts once Zenith can be seen (its window's
+  focus, or 450 ms after it resumed): the home screen comes forward on a spring that carries it a
+  little too far, the icon swells as the window arrives, and the icons round it are knocked back
+  and swing home. The icon is the one it was opened from, or that app's icon on the page on show
+  or in the dock, or the folder holding it (`IconPlaces`, which keeps where each sits at rest); with
+  none, the card shrinks into the middle of the screen and fades. Settings → Motion & feel →
+  **Closing apps** has *Into its icon* and *Plain*: Android's own close, then the icon landing with
+  a bounce, which is how it was.
 - **App pictures** (`PictureService`, Android 11 and later, off until switched on in Accessibility;
   only in a copy of Zenith that has it, so not the one that installs by tapping it, since Play
   Protect refuses a sideloaded app with an accessibility service). An accessibility service that

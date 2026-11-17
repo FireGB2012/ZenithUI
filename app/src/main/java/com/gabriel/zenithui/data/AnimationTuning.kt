@@ -8,7 +8,7 @@ import kotlin.math.roundToInt
 enum class TuneGroup(val title: String, val note: String) {
     Open("Opening an app", "The card that grows out of the icon until it fills the screen."),
     Home("Home screen behind", "What the rest of the home screen does while the app opens, and undoes as you come back."),
-    Close("Closing an app", "Android's own close of the app first, then the home screen coming forward again, and the app's icon landing in its place."),
+    Close("Closing an app", "Android's own close of the app first, then the app filling the screen again and shrinking back into its icon as the home screen comes forward."),
     Arrive(
         "Liquid coming home",
         "With Coming home set to Liquid: as you unlock, or come back from an app, a wave runs out from the app's icon or the " +
@@ -67,14 +67,21 @@ enum class Tune(
     ReturnDamping("returnDamping", TuneGroup.Close, "Return damping", 0.3f, 1.2f, 0.01f, TuneUnit.Ratio, 0.7f, "Under 1.00 it comes a little too far forward and settles."),
     CloseCard(
         "closeCard", TuneGroup.Close, "Closing card", 0f, 1f, 0.01f, TuneUnit.Percent, 0f,
-        "The card in the app's colour that shrinks back into its icon when there is no picture of the app: its size to start from. " +
-            "Auto is ${(CloseRules.CARD_START * 100f).roundToInt()}% closing Into its icon, and no card closing Plain.",
+        "The card in the app's colour, its icon blown up on it, that shrinks back into its icon when there is no picture of the app: " +
+            "its size to start from. Auto is ${(CloseRules.CARD_START * 100f).roundToInt()}% closing Into its icon, the whole screen, " +
+            "and no card closing Plain.",
     ),
-    ClosePicture("closePicture", TuneGroup.Close, "Picture starts at", 0.3f, 1f, 0.01f, TuneUnit.Percent, 0.92f, "With the app picture helper on, how big the picture of the app is as it starts back into its icon."),
-    LandScale("landScale", TuneGroup.Close, "Icon lands from", 1f, 2f, 0.01f, TuneUnit.Times, 1.22f, "How large the app's icon is as it arrives back in its place."),
-    LandStiffness("landStiffness", TuneGroup.Close, "Landing stiffness", 40f, 1200f, 5f, TuneUnit.Plain, 380f, "How fast the icon comes down to size."),
-    LandDamping("landDamping", TuneGroup.Close, "Landing damping", 0.2f, 1.2f, 0.01f, TuneUnit.Ratio, 0.5f, "Under 1.00 the icon bounces as it lands."),
-    LandFade("landFade", TuneGroup.Close, "Landing fade", 0f, 1f, 0.01f, TuneUnit.Percent, 0.65f, "How faint the icon is as it arrives."),
+    ClosePicture("closePicture", TuneGroup.Close, "Picture starts at", 0.3f, 1f, 0.01f, TuneUnit.Percent, 1f, "With the app picture helper on, how big the picture of the app is as it starts back into its icon."),
+    CloseTime(
+        "closeTime", TuneGroup.Close, "Shrinking time", 120f, 700f, 10f, TuneUnit.Ms, 280f,
+        "How long the card takes to shrink back into the app's icon. It starts slowly, the app back on the screen for a beat, " +
+            "and speeds up all the way in, so it lands with a bump.",
+    ),
+    CloseSquash("closeSquash", TuneGroup.Close, "Squash as it lands", 0f, 0.5f, 0.01f, TuneUnit.Percent, 0.3f, "How much flatter than its icon the card gets as it lands, before it springs back to its shape on the landing's spring. 0% lands it as it is."),
+    LandScale("landScale", TuneGroup.Close, "Icon lands from", 1f, 2f, 0.01f, TuneUnit.Times, 1.22f, "With no card bringing it back (closing Plain), how large the app's icon is as it arrives in its place."),
+    LandStiffness("landStiffness", TuneGroup.Close, "Landing stiffness", 40f, 1200f, 5f, TuneUnit.Plain, 380f, "How fast the card's squash springs back as it lands, and an icon landing with no card comes down to size."),
+    LandDamping("landDamping", TuneGroup.Close, "Landing damping", 0.2f, 1.2f, 0.01f, TuneUnit.Ratio, 0.5f, "Under 1.00 the card's squash, or an icon landing with no card, bounces a little past its shape."),
+    LandFade("landFade", TuneGroup.Close, "Landing fade", 0f, 1f, 0.01f, TuneUnit.Percent, 0.65f, "How faint an icon landing with no card is as it arrives."),
     Ripple("ripple", TuneGroup.Close, "Ripple round the icon", 0f, 40f, 1f, TuneUnit.Dp, 12f, "How far the icons round it are knocked back as it lands."),
 
     ArriveWave("arriveWave", TuneGroup.Arrive, "Wave across the screen", 200f, 1500f, 10f, TuneUnit.Ms, 520f, "How long the wave takes to run from where it starts to the far corner of the screen."),
@@ -137,7 +144,7 @@ enum class AnimationPreset(
 ) {
     Zenith(
         "zenith", "Zenith",
-        "Zenith's own: the card takes a slight curve, the home screen sinks back, and the icon lands with a bounce.",
+        "Zenith's own: the card takes a slight curve, the home screen sinks back, and a closing app lands in its icon a little flattened.",
         1f, emptyMap(),
     ),
     Fluid(
@@ -152,6 +159,7 @@ enum class AnimationPreset(
             Tune.HomeScale to 1.12f, Tune.HomePivot to 1f, Tune.HomeDim to 0.35f, Tune.HomeBlur to 6f,
             Tune.IconPush to 0f,
             Tune.ReturnStiffness to 220f, Tune.ReturnDamping to 0.88f,
+            Tune.CloseTime to 330f, Tune.CloseSquash to 0.08f,
             Tune.LandScale to 1.08f, Tune.LandStiffness to 300f, Tune.LandDamping to 0.75f, Tune.LandFade to 0.3f,
             Tune.Ripple to 0f,
             Tune.ArriveWave to 600f, Tune.ArriveStiffness to 180f, Tune.ArriveDamping to 1f, Tune.ArriveFrom to 0.86f,
@@ -169,6 +177,7 @@ enum class AnimationPreset(
             Tune.HomeScale to 0.92f, Tune.HomePivot to 0f, Tune.HomeDim to 0.2f, Tune.HomeBlur to 10f,
             Tune.IconPush to 6f,
             Tune.ReturnStiffness to 260f, Tune.ReturnDamping to 0.6f,
+            Tune.CloseTime to 260f, Tune.CloseSquash to 0.45f,
             Tune.LandScale to 1.3f, Tune.LandStiffness to 420f, Tune.LandDamping to 0.42f, Tune.LandFade to 0.5f,
             Tune.Ripple to 18f,
             Tune.ArriveStiffness to 260f, Tune.ArriveDamping to 0.6f, Tune.ArriveFrom to 0.74f, Tune.ArrivePull to 32f,
@@ -182,6 +191,7 @@ enum class AnimationPreset(
             Tune.OpenXDamping to 0.96f, Tune.OpenYDamping to 0.96f, Tune.OpenSizeDamping to 0.98f,
             Tune.OpenArc to 0f, Tune.IconPush to 4f,
             Tune.ReturnDamping to 0.9f,
+            Tune.CloseSquash to 0.12f,
             Tune.LandScale to 1.1f, Tune.LandDamping to 0.8f, Tune.Ripple to 4f,
             Tune.ArriveDamping to 0.92f, Tune.ArriveFrom to 0.86f, Tune.ArrivePull to 16f,
         ),
@@ -194,6 +204,7 @@ enum class AnimationPreset(
             Tune.OpenXDamping to 0.8f, Tune.OpenYDamping to 0.78f, Tune.OpenArc to 22f,
             Tune.HomeBlur to 14f, Tune.IconPush to 14f,
             Tune.ReturnDamping to 0.62f,
+            Tune.CloseSquash to 0.35f,
             Tune.LandDamping to 0.45f, Tune.Ripple to 16f,
             Tune.ArriveWave to 640f, Tune.ArriveDamping to 0.72f, Tune.ArrivePull to 30f, Tune.ArriveLight to 0.75f,
         ),
@@ -209,6 +220,7 @@ enum class AnimationPreset(
             Tune.OpenArc to 0f, Tune.OpenLaunchAt to 0.55f, Tune.OpenShadow to 0f,
             Tune.HomePivot to 0f, Tune.IconPush to 0f,
             Tune.ReturnStiffness to 320f, Tune.ReturnDamping to 0.72f,
+            Tune.CloseTime to 240f, Tune.CloseSquash to 0f,
             Tune.Ripple to 0f,
         ),
     );
@@ -246,6 +258,9 @@ data class AnimationTuning(
      * so the pace goes in squared.
      */
     fun stiffness(tune: Tune): Float = this[tune] * pace * pace
+
+    /** A time in milliseconds at the pace in use: twice the pace, half the time. */
+    fun ms(tune: Tune): Float = this[tune] / pace
 
     /** Whether anything has been moved off the preset. */
     val custom: Boolean get() = changed.keys.any { Tune.byId(it) != null } || (speed > 0f && speed != base.speed)
@@ -295,6 +310,7 @@ data class AnimationTuning(
                 Tune.OpenSizeStiffness.id to 520f, Tune.OpenSizeDamping.id to 1f,
                 Tune.HomeScale.id to 1f, Tune.HomeBlur.id to 0f, Tune.HomeDim.id to 0.15f,
                 Tune.ReturnStiffness.id to 520f, Tune.ReturnDamping.id to 1f,
+                Tune.CloseTime.id to 200f, Tune.CloseSquash.id to 0f,
                 Tune.LandScale.id to 1f, Tune.LandDamping.id to 1f, Tune.LandFade.id to 0f,
             ),
         )

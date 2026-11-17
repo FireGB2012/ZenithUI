@@ -133,6 +133,23 @@ fun AppLaunchCard(
     onTap: () -> Unit,
     /** How solid the whole card is, read while drawing: a closing card comes in, and one with nowhere to go fades out. */
     fade: () -> Float = { 1f },
+    /**
+     * How squashed it is, read while drawing: a closing card landing in its icon is that much wider
+     * and flatter for a moment, and springs back to its shape (see LaunchMotion.frame).
+     */
+    squash: () -> Float = { 0f },
+    /**
+     * Closing, as Void's does: the icon is drawn as wide as the card, cut to it, a ghost of itself
+     * while the card fills the screen and solid by the time it is small (see CloseRules.ghostAlpha),
+     * instead of the logo an app's own opening screen shows.
+     */
+    ghost: Boolean = false,
+    /**
+     * How far the home screen under it is zoomed about the middle of its foot, read while drawing:
+     * coming back with a closing card, the card goes into its icon where the icon is drawn on the
+     * way, and moves with it (see CloseRules.fromFoot). 1, at rest, for every other card.
+     */
+    homeZoom: () -> Float = { 1f },
 ) {
     val palette = LocalPalette.current
     val icon = card.icon
@@ -163,7 +180,9 @@ fun AppLaunchCard(
             ),
     ) {
         val p = progress().coerceIn(0f, 1.06f)
-        if (p <= 0.002f) return@Canvas
+        // At the icon a card is nothing to draw, except a closing one, which is the icon by then:
+        // squashed as it lands, and giving way to the icon under it.
+        if (p <= 0.002f && !ghost) return@Canvas
         val solid = fade().coerceIn(0f, 1f)
         if (solid <= 0.003f) return@Canvas
         // Faded as one, so the colour under the picture never shows through it on the way.
@@ -174,7 +193,7 @@ fun AppLaunchCard(
         }
         try {
             drawFrame@ run {
-                val from = card.from
+                val from = CloseRules.fromFoot(card.from, homeZoom(), size.width, size.height)
                 val wide = card.wideIcon
                 // An icon's own rounding at the start, the phone's screen corners at the end. A super icon
                 // starts from its own flatter rounding, so the card leaves it without a jump.
@@ -187,6 +206,7 @@ fun AppLaunchCard(
                     x().coerceIn(-0.2f, 1.2f), y().coerceIn(-0.2f, 1.2f), p,
                     look.arc.toPx(),
                     startRadius, look.corner.toPx(),
+                    squash = squash(),
                 )
                 val left = frame.left
                 val top = frame.top
@@ -275,7 +295,31 @@ fun AppLaunchCard(
                 }
 
                 val bitmap = icon
-                if (bitmap != null) {
+                if (bitmap != null && ghost) {
+                    // Closing: the icon blown up to the card's width and cut to it, a ghost of itself while
+                    // the card fills the screen, solid as it gets small, and the card is its icon again
+                    // when it gets there. A flattened card shows the middle of it. Over a super icon's own
+                    // picture it gives way to it near the end, as the logo does.
+                    val wideAlpha = if (wide != null) ((p - 0.15f) / 0.35f).coerceIn(0f, 1f) else 1f
+                    val ghostAlpha = CloseRules.ghostAlpha(p) * wideAlpha
+                    if (ghostAlpha > 0.003f) {
+                        val side = CloseRules.ghostSide(right - left, p)
+                        val centreX = (left + right) / 2f
+                        val centreY = (top + bottom) / 2f
+                        clip.reset()
+                        clip.addRoundRect(RoundRect(left, top, right, bottom, corners))
+                        clipPath(clip) {
+                            drawImage(
+                                image = bitmap,
+                                srcOffset = IntOffset.Zero,
+                                srcSize = IntSize(bitmap.width, bitmap.height),
+                                dstOffset = IntOffset((centreX - side / 2f).roundToInt(), (centreY - side / 2f).roundToInt()),
+                                dstSize = IntSize(side.roundToInt().coerceAtLeast(1), side.roundToInt().coerceAtLeast(1)),
+                                alpha = ghostAlpha,
+                            )
+                        }
+                    }
+                } else if (bitmap != null) {
                     // The logo grows more slowly than the card, easing towards the size an app's own opening
                     // screen shows it at, so the hand-over to the app is seamless.
                     val startSide = if (wide != null) from.minDimension * 0.62f else from.minDimension
@@ -401,12 +445,19 @@ object AppLanding {
         return if (itemKey == swelling) landing * (1f + swell.value) else landing
     }
 
-    /** How solid: back to full a little before it has finished settling. */
-    fun alphaFor(itemKey: String): Float = when {
-        itemKey == held -> 0f
+    /**
+     * How solid: back to full a little before it has finished settling. An item that shows its
+     * name under its icon ([iconOnly]) keeps it while the icon is held: only the icon waits for
+     * the card ([iconAlphaFor]), as Void's does.
+     */
+    fun alphaFor(itemKey: String, iconOnly: Boolean = false): Float = when {
+        itemKey == held -> if (iconOnly) 1f else 0f
         itemKey != key -> 1f
         else -> ((1f - fade) + fade * 1.6f * progress.value).coerceIn(0f, 1f)
     }
+
+    /** How solid the icon itself is, apart from its name: out of sight while a closing card is on its way to it. */
+    fun iconAlphaFor(itemKey: String): Float = if (itemKey == held) 0f else 1f
 }
 
 /**

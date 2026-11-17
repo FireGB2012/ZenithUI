@@ -1,6 +1,7 @@
 package com.gabriel.zenithui.ui.home
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
@@ -22,11 +23,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.gabriel.zenithui.data.AuraFlame
+import com.gabriel.zenithui.data.AuraLevels
 import com.gabriel.zenithui.data.CheckIn
+import com.gabriel.zenithui.data.title
 import com.gabriel.zenithui.ui.common.LocalMotionLevel
 import com.gabriel.zenithui.ui.common.appearIn
 import com.gabriel.zenithui.ui.common.edgeIn
 import com.gabriel.zenithui.ui.common.edgeOut
+import com.gabriel.zenithui.ui.home.widgets.FlameGlyph
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.ZenithShapes
 import com.gabriel.zenithui.ui.theme.glass
@@ -37,17 +42,20 @@ import kotlinx.coroutines.delay
  *
  * Deliberately not a dialog. Nothing is dismissed, nothing is tapped, nothing waits for you: you
  * unlock your phone, a line slides down to say where you are, and it goes again. A home screen
- * that demands a tap before you can use it is a home screen people uninstall.
+ * that demands a tap before you can use it is a home screen people uninstall. A day that takes you
+ * to a level says so on a second line, and stays a little longer to be read. The flame is the one
+ * you wear on the Aura widget ([flame]).
  */
 @Composable
-fun StreakStrip(state: CheckIn?, onShown: () -> Unit, modifier: Modifier = Modifier) {
+fun StreakStrip(state: CheckIn?, onShown: () -> Unit, modifier: Modifier = Modifier, flame: AuraFlame = AuraFlame.Orange) {
     val palette = LocalPalette.current
     var visible by remember(state) { mutableStateOf(state != null) }
+    val level = (state as? CheckIn.Continued)?.level
 
     LaunchedEffect(state) {
         if (state == null) return@LaunchedEffect
         visible = true
-        delay(3600)
+        delay(if (level != null) 5200 else 3600)
         visible = false
         // Let it finish sliding out before the state is cleared underneath it.
         delay(400)
@@ -70,27 +78,45 @@ fun StreakStrip(state: CheckIn?, onShown: () -> Unit, modifier: Modifier = Modif
                 .padding(horizontal = 16.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(
-                imageVector = Icons.Rounded.LocalFireDepartment,
-                contentDescription = null,
-                tint = if (broken) palette.onGlassMuted else palette.onGlass,
-                modifier = Modifier
-                    .size(17.dp)
-                    // A streak kept going: the flame catches a beat after the strip lands. One
-                    // that is lost has no flame to light.
-                    .then(if (broken) Modifier else Modifier.appearIn(delayMillis = 240, fromScale = 0.2f, riseFrom = 0f)),
-            )
+            if (broken) {
+                // A streak that is lost has no flame to light.
+                Icon(
+                    imageVector = Icons.Rounded.LocalFireDepartment,
+                    contentDescription = null,
+                    tint = palette.onGlassMuted,
+                    modifier = Modifier.size(17.dp),
+                )
+            } else {
+                // A streak kept going: the flame catches a beat after the strip lands.
+                FlameGlyph(
+                    size = if (level != null) 22.dp else 17.dp,
+                    flame = flame,
+                    modifier = Modifier.appearIn(delayMillis = 240, fromScale = 0.2f, riseFrom = 0f),
+                )
+            }
             Spacer(Modifier.width(9.dp))
-            Text(
-                text = when (state) {
-                    is CheckIn.Continued -> "Streak ${state.streak} · +${state.awarded} aura"
-                    is CheckIn.Broken -> "Streak lost — back to day one tomorrow"
-                    else -> ""
-                },
-                color = palette.onGlass,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium,
-            )
+            Column {
+                Text(
+                    text = when (state) {
+                        is CheckIn.Continued -> "Streak ${state.streak} · +${state.awarded} aura"
+                        is CheckIn.Broken -> "Streak lost — back to day one tomorrow"
+                        else -> ""
+                    },
+                    color = palette.onGlass,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                )
+                if (level != null) {
+                    val reward = AuraLevels.reward(level)
+                    Text(
+                        text = "Level $level" + (reward?.let { " · ${it.title}" } ?: ""),
+                        color = palette.onGlass,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.appearIn(delayMillis = 420, fromScale = 0.9f, riseFrom = 8f),
+                    )
+                }
+            }
         }
     }
 }

@@ -25,6 +25,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.gabriel.zenithui.data.AuraFlame
 import com.gabriel.zenithui.data.StreakWeek
 import com.gabriel.zenithui.data.WidgetForm
 import com.gabriel.zenithui.ui.home.LocalBare
@@ -39,7 +40,8 @@ import java.util.Locale
 
 /**
  * Streak: the days in a row you have come back, under a flame, this week as seven days with the ones
- * the streak covers ticked in orange and today ringed until it counts, and your aura.
+ * the streak covers ticked in the flame's colour (orange, until a level brings another) and today
+ * ringed until it counts, and your aura.
  *
  * - Mini: the flame and the streak.
  * - Strip: the flame and the streak; wider, your aura and this week as dots too.
@@ -59,7 +61,11 @@ internal fun StreakWidget(form: WidgetForm, width: Dp, height: Dp) {
     val letters = remember(today, firstDay) {
         com.gabriel.zenithui.data.CalendarFacts.week(today, firstDay).map { it.dayOfWeek.getDisplayName(TextStyle.NARROW, Locale.getDefault()) }
     }
-    val orange = hue(Hue.Orange)
+    // The flame a level brought, if one is worn; the week's marks wear its colour too.
+    val flame = remember(settings?.auraFlame, settings?.auraEarned, settings?.aura) {
+        settings?.let { AuraFlame.worn(it) } ?: AuraFlame.Orange
+    }
+    val orange = hue(flame.markDark, flame.markLight)
     val days = if (streak == 1) "day in a row" else "days in a row"
     val spoken = "$streak $days, $aura aura"
 
@@ -67,12 +73,12 @@ internal fun StreakWidget(form: WidgetForm, width: Dp, height: Dp) {
         val root = Modifier.fillMaxSize().says(spoken)
         when (form) {
             WidgetForm.Mini -> Column(root.padding(INSET_MINI), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-                FlameGlyph(18.dp)
+                FlameGlyph(18.dp, flame = flame)
                 Hero("$streak", 20.sp, weight = FontWeight.Medium, rolling = true)
             }
 
             WidgetForm.Strip -> Row(root.padding(horizontal = INSET_STRIP), verticalAlignment = Alignment.CenterVertically) {
-                FlameGlyph(28.dp)
+                FlameGlyph(28.dp, flame = flame)
                 Spacer(Modifier.width(8.dp))
                 Hero("$streak", 28.sp, rolling = true)
                 Spacer(Modifier.width(10.dp))
@@ -89,7 +95,7 @@ internal fun StreakWidget(form: WidgetForm, width: Dp, height: Dp) {
 
             WidgetForm.Square -> Column(root.padding(INSET)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    FlameGlyph(20.dp)
+                    FlameGlyph(20.dp, flame = flame)
                     Spacer(Modifier.width(5.dp))
                     Label("Streak", color = wordHue(orange))
                 }
@@ -104,7 +110,7 @@ internal fun StreakWidget(form: WidgetForm, width: Dp, height: Dp) {
 
             WidgetForm.Wide -> Row(root.padding(INSET), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.width(112.dp)) {
-                    FlameGlyph(34.dp)
+                    FlameGlyph(34.dp, flame = flame)
                     Hero("$streak", 48.sp, weight = FontWeight.Normal, rolling = true)
                     Words(days, Type.meta, weight = FontWeight.Medium, color = soft())
                 }
@@ -118,7 +124,7 @@ internal fun StreakWidget(form: WidgetForm, width: Dp, height: Dp) {
 
             WidgetForm.Tall -> Column(root.padding(INSET), horizontalAlignment = Alignment.CenterHorizontally) {
                 Spacer(Modifier.height(6.dp))
-                FlameGlyph(52.dp)
+                FlameGlyph(52.dp, flame = flame)
                 Spacer(Modifier.height(6.dp))
                 Hero("$streak", 56.sp, weight = FontWeight.Normal, rolling = true)
                 Words(days, Type.body, weight = FontWeight.Medium, color = soft())
@@ -135,7 +141,7 @@ internal fun StreakWidget(form: WidgetForm, width: Dp, height: Dp) {
                 }
                 Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        FlameGlyph(84.dp)
+                        FlameGlyph(84.dp, flame = flame)
                         Spacer(Modifier.width(12.dp))
                         Column {
                             Hero("$streak", 72.sp, weight = FontWeight.Normal, rolling = true)

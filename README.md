@@ -244,7 +244,7 @@ anywhere else.
 | Countdown | 2×2 | The days to a date you name, in rolling digits, and the whole wait as a field of dots, those gone lit: a dot a day, a week or a month, as many as the room holds; "today" on the day, and the days since after |
 | Photo frame | 2×2 | Up to twelve of your photos, picked with Android's own picker and kept small in Zenith's files, edge to edge; a different one each time you come home, crossing over, and the next at a tap |
 | To-do | 2×2 | A short list in blue: what is left first and how many, a tick that fills and draws itself, the ticked ones sliding below the rest, a line to add one |
-| Aura | 2×2 | Your streak under a drawn flame, this week ticked off day by day, and your aura |
+| Aura | 2×2 | Your streak under a drawn flame, this week ticked off day by day, and your aura; the flame, ticks and dots in the colour you wear, from the flames your level has reached |
 | Weather | 2×2 | The iPhone's: the place, a big temperature, a drawn sky and its words, and today's low to high on a bar coloured by the temperature; Wide and Large chart the next hours, Tall lists them, and Large adds the days ahead. For a place you choose (`WeatherRepository`, Open-Meteo) |
 
 They are one family, drawn from scratch to one design (`ui/home/widgets/WidgetKit.kt`: one grid,
@@ -345,11 +345,22 @@ is made. Wallpaper & appearance holds the theme (see Themes, below), light or da
 Dark: pages and words change, and the home screen's glass stays the same), the font, the wallpaper,
 and with Liquid Glass the glass and Tilt shine; there is no colour to choose on its own.
 
-**Aura** is one of those pages (`ui/settings/AuraPage.kt`): the balance; the streak as a ladder of
-seven days, each with what it pays; your code to copy or share, and the box for somebody else's.
-`Aura.ladder` is a plain function with tests. With the colour themes gone aura has nothing to buy
-until Aura is rebuilt, the last step of the rebuild; themes bought with it are kept, and stay among
-a wallpaper's colour sets.
+**Aura** is one of those pages (`ui/settings/AuraPage.kt`). Aura is two numbers: what you have to
+spend, and all you have ever earned, which spending never touches
+([`specs/2026-11-17-aura-levels-and-plus-design.md`](specs/2026-11-17-aura-levels-and-plus-design.md)).
+At the top, your level over the aura in hand, and round them a ring for the way to the next level
+and what it brings; then the streak as a ladder of seven days, each with what it pays. **Levels**
+come from what was earned, so one is never lost: level `n` at `25 n (n - 1)`, each asking a day more
+at the top of the streak than the last. Levels 2 to 12 bring, by turns, a colour for the Aura
+widget's flame and one of the five Aura colour sets for the wallpapers (the sets were themes once,
+and one bought with aura before levels is kept); every level after that brings a day of Plus. The
+page shows them as a road of tiles, then the flames to wear. **Spend your aura** sells a day of Plus
+for 250 (everything Plus has, 24 hours from now, or added to a day still running) and any of Plus's
+nine wallpapers for 1,000, for good; each asks twice, the price and then Buy. A day is not sold
+while Plus is yours, nor a wallpaper once it is yours for good. Last, your code to copy or share,
+and the box for somebody else's. The rules are plain functions with tests (`AuraLevels`,
+`AuraShop`, `Aura.ladder`). A level reached in the morning check-in is said on the strip that
+slides down: "Level 5 · Tide colours".
 
 Every option is listed once in `SettingsCatalog`, which is what the search reads. Any Nova- or
 ADW-compatible icon pack installed on the device is detected and its `appfilter.xml` is parsed.
@@ -369,8 +380,9 @@ rows under them sit in a group of their own, a line between each.
 
 Zenith paints its own wallpapers on the phone (`WallpaperArt`, `WallDesigns`, `WallDepth`):
 forty-one designs on five shelves — Depth, Soft, Lines, Shapes and Scenes — nine of them for Zenith
-Plus. Every design comes in a choice of colour sets (thirteen free ones round the colour wheel, six
-of them once Zenith's themes, any bought with aura, colours of your own made before the themes went,
+Plus, each of which aura can also buy for good, from its preview or the Aura page. Every design comes in a choice of colour sets (thirteen free ones round the colour wheel, six
+of them once Zenith's themes, the Aura sets your level has reached or that you bought with aura,
+colours of your own made before the themes went,
 and colours taken from your wallpaper) and has a light picture and a dark one, each made so labels
 and the status bar stay readable over it.
 
@@ -802,8 +814,10 @@ Android 13. Nothing is captured or blurred per frame.
 
 Zenith works in full without it. Plus (`data/Plus.kt`, through Google Play Billing) adds hidden apps
 behind a PIN, backup and restore, the island, free placement, the Glass studio, saving, switching,
-scheduling and sharing Looks, seven of the wallpapers and backups to an account. It is free for
-seven days, then one of three plans, the shortest first on its sheet:
+scheduling and sharing Looks, nine of the wallpapers and backups to an account. It is free for
+seven days, then one of three plans, the shortest first on its sheet. Aura buys a day of it at a
+time, and a level past twelve brings one (see Aura, under Customisation): Plus is on until the day
+runs out, which its sheet and Settings say, and then Zenith is as it is when the free week ends.
 
 | Plan | Price | In Play |
 | --- | --- | --- |

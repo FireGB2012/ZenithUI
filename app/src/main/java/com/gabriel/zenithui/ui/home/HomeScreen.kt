@@ -3248,6 +3248,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             state = checkIn,
             onShown = { viewModel.clearCheckIn() },
             modifier = Modifier.align(Alignment.TopCenter),
+            flame = com.gabriel.zenithui.data.AuraFlame.worn(settings),
         )
 
         // What letting go of a swipe down will do, coming down from the top as the page is pulled.
@@ -3328,6 +3329,9 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 restore = { withPlus { openBackup.launch(arrayOf("*/*")) } },
                 plus = { showSheet(HomeSheet.Plus) },
                 redeem = { code -> viewModel.redeemAuraCode(code) },
+                buyPlusDay = viewModel::buyPlusDay,
+                buyDesign = viewModel::buyDesign,
+                wearFlame = viewModel::wearFlame,
                 help = { showSheet(HomeSheet.Help) },
                 reset = { viewModel.resetEverything() },
                 tidy = { viewModel.tidyUp() },
@@ -3565,6 +3569,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     onFollow = { on -> viewModel.updateSettings { it.copy(wallpaperFollow = on) } },
                     onPlus = { showSheet(HomeSheet.Plus) },
                     onDismiss = { hideSheet() },
+                    onBuyDesign = viewModel::buyDesign,
                 )
 
                 HomeSheet.Plus -> PlusSheet(

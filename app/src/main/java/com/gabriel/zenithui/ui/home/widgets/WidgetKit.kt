@@ -150,9 +150,13 @@ internal enum class Hue(val dark: Long, val light: Long) {
  * card it would not stand out on.
  */
 @Composable
-internal fun hue(hue: Hue): Color {
+internal fun hue(hue: Hue): Color = hue(hue.dark, hue.light)
+
+/** A colour of the widget's own as [hue] wears one: [dark] for dark glass and dark cards, [light] for pale ones. */
+@Composable
+internal fun hue(dark: Long, light: Long): Color {
     val palette = LocalPalette.current
-    val base = Color(if (palette.dark) hue.dark else hue.light)
+    val base = Color(if (palette.dark) dark else light)
     val worn = if (palette.ownColour > 0f) lerp(base, palette.accent, palette.ownColour.coerceAtMost(1f)) else base
     val card = LocalWidgetFill.current ?: return worn
     return if (minOf(contrast(worn, card.top), contrast(worn, card.bottom)) < STANDS_OUT) palette.onGlass else worn

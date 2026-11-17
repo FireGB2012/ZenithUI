@@ -200,9 +200,23 @@ data class ZenithSettings(
     val hiddenApps: List<String> = emptyList(),
     /** Digits asked for before the hidden list can be seen. Empty means no PIN. */
     val hiddenPin: String = "",
+    /**
+     * When the days of Plus bought with aura (or brought by a level) run out, in epoch millis; 0, or
+     * a time gone by, for none. Like the trial, it is this phone's: never taken from a backup.
+     */
+    val plusPassUntil: Long = 0L,
     // ------------------------------------------------------------------ Aura
-    /** Points in hand. */
+    /** Points in hand, to spend. */
     val aura: Int = 0,
+    /**
+     * Every point ever earned. Spending never touches it, and the level comes from it (see
+     * [AuraLevels]); settings from before levels read it as [aura] plus what the old shop cost.
+     */
+    val auraEarned: Int = 0,
+    /** The colour of the Aura widget's flame, by [AuraFlame] id; worn once its level is reached. */
+    val auraFlame: String = "orange",
+    /** The Plus wallpaper designs bought with aura, by [WallStyle] name: yours with or without Plus. */
+    val auraDesigns: List<String> = emptyList(),
     /** Days in a row, counting today once it has been checked in. */
     val streak: Int = 0,
     /** The day the streak was last counted, as an epoch day. 0 means never. */
@@ -315,6 +329,7 @@ data class ZenithSettings(
         put("plusPurchased", plusPurchased)
         put("hiddenApps", JSONArray(hiddenApps))
         put("hiddenPin", hiddenPin)
+        put("plusPassUntil", plusPassUntil)
         put("customAccent", customAccent)
         put("customAccentAlt", customAccentAlt)
         put("customBackdrop", customBackdrop)
@@ -324,6 +339,9 @@ data class ZenithSettings(
         put("wallBackdrop", wallBackdrop)
         put("wallDark", wallDark)
         put("aura", aura)
+        put("auraEarned", auraEarned)
+        put("auraFlame", auraFlame)
+        put("auraDesigns", JSONArray(auraDesigns))
         put("streak", streak)
         put("lastCheckIn", lastCheckIn)
         put("unlockedThemes", JSONArray(unlockedThemes))
@@ -357,6 +375,11 @@ data class ZenithSettings(
             val d = ZenithSettings()
             val columns = o.optInt("columns", d.columns)
             val rows = o.optInt("rows", d.rows)
+            val aura = o.optInt("aura", d.aura)
+            val unlockedThemes = o.optJSONArray("unlockedThemes").toStringList()
+            // Settings from before levels: everything earned was either still in hand or spent in
+            // the old shop. (A level never counts less than what is in hand: see Aura.earned.)
+            val auraEarned = if (o.has("auraEarned")) o.optInt("auraEarned", 0) else aura + AuraThemes.spentOn(unlockedThemes)
             return ZenithSettings(
                 onboarded = o.optBoolean("onboarded", d.onboarded),
                 userName = o.optString("userName", d.userName),
@@ -443,10 +466,14 @@ data class ZenithSettings(
                 wallAccentAlt = o.optLong("wallAccentAlt", d.wallAccentAlt),
                 wallBackdrop = o.optLong("wallBackdrop", d.wallBackdrop),
                 wallDark = o.optBoolean("wallDark", d.wallDark),
-                aura = o.optInt("aura", d.aura),
+                plusPassUntil = o.optLong("plusPassUntil", d.plusPassUntil),
+                aura = aura,
+                auraEarned = auraEarned,
+                auraFlame = o.optString("auraFlame", d.auraFlame),
+                auraDesigns = o.optJSONArray("auraDesigns").toStringList(),
                 streak = o.optInt("streak", d.streak),
                 lastCheckIn = o.optLong("lastCheckIn", d.lastCheckIn),
-                unlockedThemes = o.optJSONArray("unlockedThemes").toStringList(),
+                unlockedThemes = unlockedThemes,
                 referralCode = o.optString("referralCode", d.referralCode),
                 referredBy = o.optString("referredBy", d.referredBy),
                 referralsPaid = o.optJSONObject("referralsPaid")?.let { paid ->

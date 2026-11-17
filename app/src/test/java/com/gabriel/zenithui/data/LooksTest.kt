@@ -48,7 +48,7 @@ class LooksTest {
         assertEquals("aurora", kept.getString("paletteId"))
         assertEquals("clover", kept.getString("iconShape"))
         assertEquals(5, kept.getInt("columns"))
-        for (personal in listOf("userName", "note", "todos", "hiddenApps", "hiddenPin", "aura", "plusPurchased", "referralCode", "lookRules", "activeLook")) {
+        for (personal in listOf("userName", "note", "todos", "hiddenApps", "hiddenPin", "aura", "auraEarned", "auraFlame", "auraDesigns", "plusPassUntil", "plusPurchased", "referralCode", "lookRules", "activeLook")) {
             assertFalse("$personal is not in a Look", kept.has(personal))
         }
         assertEquals(layout.size, JSONArray(look().layout).length())

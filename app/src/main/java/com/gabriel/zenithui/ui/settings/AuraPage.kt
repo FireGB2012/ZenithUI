@@ -3,6 +3,7 @@ package com.gabriel.zenithui.ui.settings
 import android.content.Intent
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
@@ -14,17 +15,26 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoAwesome
@@ -32,6 +42,8 @@ import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.IosShare
 import androidx.compose.material.icons.rounded.LocalFireDepartment
+import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -40,6 +52,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -47,9 +60,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
@@ -59,12 +74,23 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.gabriel.zenithui.data.Aura
 import com.gabriel.zenithui.data.AuraDay
 import com.gabriel.zenithui.data.AuraDayState
+import com.gabriel.zenithui.data.AuraFlame
+import com.gabriel.zenithui.data.AuraLevels
+import com.gabriel.zenithui.data.AuraReward
+import com.gabriel.zenithui.data.AuraShop
+import com.gabriel.zenithui.data.AuraWords
+import com.gabriel.zenithui.data.PlusStatus
+import com.gabriel.zenithui.data.WallStyle
 import com.gabriel.zenithui.data.ZenithSettings
+import com.gabriel.zenithui.data.server.Account
+import com.gabriel.zenithui.data.title
 import com.gabriel.zenithui.ui.common.LocalMotionLevel
 import com.gabriel.zenithui.ui.common.appearIn
 import com.gabriel.zenithui.ui.common.popIn
@@ -73,36 +99,89 @@ import com.gabriel.zenithui.ui.common.rememberHaptics
 import com.gabriel.zenithui.ui.common.shake
 import com.gabriel.zenithui.ui.common.unfoldIn
 import com.gabriel.zenithui.ui.common.unfoldOut
+import com.gabriel.zenithui.ui.home.WallpaperImage
+import com.gabriel.zenithui.ui.home.widgets.FlameGlyph
 import com.gabriel.zenithui.ui.onboarding.PrimaryButton
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.LocalZenithFont
+import com.gabriel.zenithui.ui.theme.Palettes
 import com.gabriel.zenithui.ui.theme.ZenithShapes
 import com.gabriel.zenithui.ui.theme.glass
 import com.gabriel.zenithui.ui.theme.inkOnTint
+import com.gabriel.zenithui.ui.theme.toned
 import kotlinx.coroutines.delay
-import kotlin.math.roundToInt
-import androidx.compose.runtime.rememberCoroutineScope
-import com.gabriel.zenithui.data.server.Account
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 /**
- * Aura, as a page of Settings: where points are earned.
+ * Aura, as a page of Settings: what you have, what it has earned you, and what it buys.
  *
- * It is all on this one page on purpose — how much you have, the streak that keeps it coming, and
- * the code you can pass on. Nothing here is hidden behind a second screen. Points have nothing to
- * buy for now: the themes they bought went with Zenith's colour themes, and Aura is to be rebuilt.
- * What you have is kept, and a set already bought is still offered for Zenith's wallpapers.
+ * It is all on this one page on purpose: the aura in hand inside a ring that runs round to your
+ * next level, the streak that keeps it coming, what each level brings and the flame you wear, what
+ * aura buys, and the code you can pass on. Nothing here is hidden behind a second screen. Spending
+ * never costs a level: the level counts what was earned. See
+ * `specs/2026-11-17-aura-levels-and-plus-design.md`.
  */
 @Composable
-internal fun AuraOptions(settings: ZenithSettings, actions: SettingsActions, onAccount: () -> Unit) {
+internal fun AuraOptions(settings: ZenithSettings, plus: PlusStatus, actions: SettingsActions, onAccount: () -> Unit) {
     val haptics = rememberHaptics()
-    /** Goes up each time points arrive: the ring answers with a ripple. */
+    /** Goes up each time points arrive or are spent: the ring answers with a ripple. */
     var stirred by remember { mutableIntStateOf(0) }
+    val earned = Aura.earned(settings)
+    val level = AuraLevels.of(earned)
 
     Spot("aura") {
-        AuraRing(settings, stirred)
+        AuraRing(aura = settings.aura, earned = earned, stirred = stirred)
         Spacer(Modifier.height(12.dp))
         StreakLadder(settings.streak)
+    }
+
+    Spot("auraLevels") {
+        LevelRoad(
+            settings = settings,
+            level = level,
+            earned = earned,
+            onWear = { flame ->
+                haptics.tick()
+                actions.wearFlame(flame)
+            },
+            onColours = actions.wallpaper,
+        )
+    }
+
+    Spot("auraFlame") {
+        FlamePicker(
+            worn = AuraFlame.worn(settings),
+            level = level,
+            onWear = { flame ->
+                haptics.tick()
+                actions.wearFlame(flame)
+            },
+        )
+    }
+
+    Spot("auraShop") {
+        AuraShopGroup(
+            settings = settings,
+            plus = plus,
+            onPlusDay = {
+                val refused = actions.buyPlusDay()
+                if (refused == null) {
+                    haptics.confirm()
+                    stirred++
+                }
+                refused
+            },
+            onDesign = { style ->
+                val refused = actions.buyDesign(style)
+                if (refused == null) {
+                    haptics.confirm()
+                    stirred++
+                }
+                refused
+            },
+            onWallpapers = actions.wallpaper,
+        )
     }
 
     // With a server, codes are real: it knows whose each one is and counts who has used it, and
@@ -111,19 +190,19 @@ internal fun AuraOptions(settings: ZenithSettings, actions: SettingsActions, onA
     val account = actions.account
     if (account != null && account.signed == null) {
         Spot("auraCode") {
-            Spot("auraRedeem") { CodesNeedAccount(Modifier.riseIn(2), onAccount) }
+            Spot("auraRedeem") { CodesNeedAccount(Modifier.riseIn(6), onAccount) }
         }
         // A code used before there were accounts is still a code used.
-        if (settings.referredBy.isNotEmpty()) Redeem(settings.referredBy, Modifier.riseIn(3), onRedeem = { null })
+        if (settings.referredBy.isNotEmpty()) Redeem(settings.referredBy, Modifier.riseIn(7), onRedeem = { null })
     } else {
         Spot("auraCode") {
-            YourCode(settings.referralCode, account?.signed?.account, Modifier.riseIn(2))
+            YourCode(settings.referralCode, account?.signed?.account, Modifier.riseIn(6))
         }
 
         Spot("auraRedeem") {
             Redeem(
                 redeemed = settings.referredBy,
-                modifier = Modifier.riseIn(3),
+                modifier = Modifier.riseIn(7),
                 onRedeem = { code ->
                     val refused = actions.redeem(code)
                     if (refused == null) {
@@ -140,25 +219,43 @@ internal fun AuraOptions(settings: ZenithSettings, actions: SettingsActions, onA
 // ------------------------------------------------------------------------------- what you have
 
 /**
- * What you have, counted up as the page arrives, inside a ring in the words' ink. With nothing to
- * save towards, the ring is always whole, but it still draws itself round as the page arrives, and
- * sends out a ripple then and again whenever points arrive; the rest of the time it is still.
+ * The aura in hand, counted up as the page arrives, inside a ring in the words' ink that runs round
+ * to the next level. It draws itself to where you stand as the page arrives; when a level is reached
+ * while you look, it closes, ripples, and starts round again from the top. Points arriving or being
+ * spent send a ripple too; the rest of the time it is still.
  */
 @Composable
-private fun AuraRing(settings: ZenithSettings, stirred: Int) {
+private fun AuraRing(aura: Int, earned: Int, stirred: Int) {
     val palette = LocalPalette.current
     val reduced = LocalMotionLevel.current.reduced
+    val level = AuraLevels.of(earned)
+    val progress = AuraLevels.progress(earned)
 
-    val counted = remember { Animatable(if (reduced) settings.aura.toFloat() else 0f) }
-    val drawn = remember { Animatable(if (reduced) 1f else 0f) }
+    val counted = remember { Animatable(if (reduced) aura.toFloat() else 0f) }
+    val drawn = remember { Animatable(if (reduced) progress else 0f) }
     val ripple = remember { Animatable(1f) }
-    LaunchedEffect(settings.aura, reduced) {
-        if (reduced) counted.snapTo(settings.aura.toFloat()) else counted.animateTo(settings.aura.toFloat(), tween(900, easing = FastOutSlowInEasing))
+    /** The level the ring is showing: it catches up with [level] once the ring has closed. */
+    var shown by remember { mutableIntStateOf(level) }
+    var closed by remember { mutableIntStateOf(0) }
+
+    LaunchedEffect(aura, reduced) {
+        if (reduced) counted.snapTo(aura.toFloat()) else counted.animateTo(aura.toFloat(), tween(900, easing = FastOutSlowInEasing))
     }
-    LaunchedEffect(reduced) {
-        if (reduced) drawn.snapTo(1f) else drawn.animateTo(1f, spring(dampingRatio = 0.7f, stiffness = 60f))
+    LaunchedEffect(level, progress, reduced) {
+        if (reduced) {
+            drawn.snapTo(progress)
+            shown = level
+            return@LaunchedEffect
+        }
+        if (level > shown) {
+            drawn.animateTo(1f, tween(520, easing = FastOutSlowInEasing))
+            shown = level
+            closed++
+            drawn.snapTo(0f)
+        }
+        drawn.animateTo(progress, spring(dampingRatio = 0.8f, stiffness = 60f))
     }
-    LaunchedEffect(stirred, reduced) {
+    LaunchedEffect(stirred, closed, reduced) {
         if (reduced) return@LaunchedEffect
         ripple.snapTo(0f)
         ripple.animateTo(1f, tween(1100, easing = LinearOutSlowInEasing))
@@ -187,12 +284,13 @@ private fun AuraRing(settings: ZenithSettings, stirred: Int) {
                 val topLeft = Offset(center.x - radius, center.y - radius)
                 val box = Size(radius * 2f, radius * 2f)
                 drawArc(palette.onGlass.copy(alpha = 0.10f), 0f, 360f, useCenter = false, topLeft = topLeft, size = box, style = Stroke(band))
-                // Turned so it starts at the top as it draws itself round.
+                // Turned so it starts at the top. A sliver is always shown, so the start of the way is seen.
+                val sweep = (360f * drawn.value.coerceIn(0f, 1f)).coerceAtLeast(1.5f)
                 rotate(-90f) {
                     drawArc(
                         color = palette.onGlass,
                         startAngle = 0f,
-                        sweepAngle = 360f * drawn.value.coerceIn(0f, 1f),
+                        sweepAngle = sweep,
                         useCenter = false,
                         topLeft = topLeft,
                         size = box,
@@ -201,17 +299,35 @@ private fun AuraRing(settings: ZenithSettings, stirred: Int) {
                 }
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Counted(settings.aura) { counted.value }
+                AnimatedContent(
+                    targetState = shown,
+                    transitionSpec = { popIn(reduced, from = 0.6f).togetherWith(fadeOut(tween(120))) },
+                    label = "auraLevel",
+                ) { at ->
+                    Text(
+                        "LEVEL $at",
+                        color = palette.onGlassMuted,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        letterSpacing = 1.2.sp,
+                    )
+                }
+                Counted(aura) { counted.value }
                 Text("aura", color = palette.onGlassMuted, fontSize = 13.sp)
             }
         }
+        val next = AuraLevels.next(level)
         Text(
-            text = "Earned for turning up, day after day",
+            text = "${AuraWords.count(AuraLevels.toNext(earned))} more earned for level ${level + 1}: ${next.title.lowercaseFirst()}",
             color = palette.onGlassMuted,
             fontSize = 13.sp,
+            textAlign = TextAlign.Center,
         )
     }
 }
+
+/** "Blue flame" as it reads after a colon: "blue flame". "A day of Plus" keeps its capital P. */
+private fun String.lowercaseFirst(): String = replaceFirstChar { it.lowercase() }
 
 /**
  * The number in the ring. On its own so that, while it counts, it is the only thing composed
@@ -221,12 +337,12 @@ private fun AuraRing(settings: ZenithSettings, stirred: Int) {
 @Composable
 private fun Counted(balance: Int, value: () -> Float) {
     Text(
-        text = value().roundToInt().toString(),
+        text = AuraWords.count(value().roundToInt()),
         color = LocalPalette.current.onGlass,
         fontSize = 46.sp,
         fontWeight = FontWeight.Bold,
         letterSpacing = (-1).sp,
-        modifier = Modifier.clearAndSetSemantics { contentDescription = balance.toString() },
+        modifier = Modifier.clearAndSetSemantics { contentDescription = "${AuraWords.count(balance)} aura" },
     )
 }
 
@@ -324,6 +440,435 @@ private fun LadderDay(day: AuraDay, modifier: Modifier) {
             fontSize = 9.5.sp,
             maxLines = 1,
         )
+    }
+}
+
+// ------------------------------------------------------------------------------- what levels bring
+
+/**
+ * What each level brings, as a shelf of tiles to swipe along, from level two to the first day of
+ * Plus: the ones reached marked as yours, the next with what is left to earn, the rest with the
+ * level they come at. It starts with the last one reached in view. A flame reached is put on with
+ * a tap; a colour set reached opens the wallpapers, where it now is.
+ */
+@Composable
+private fun LevelRoad(
+    settings: ZenithSettings,
+    level: Int,
+    earned: Int,
+    onWear: (AuraFlame) -> Unit,
+    onColours: () -> Unit,
+) {
+    val palette = LocalPalette.current
+    val worn = AuraFlame.worn(settings)
+    val road = remember { AuraLevels.rewards + AuraLevels.reward(AuraLevels.LAST_REWARD + 1)!! }
+    // The last tile reached, and the next beside it.
+    val start = (road.indexOfLast { it.level <= level }).coerceAtLeast(0)
+    val shelf = rememberLazyListState(initialFirstVisibleItemIndex = (start - 1).coerceAtLeast(0))
+    Group(rise = 2) {
+        Row(Modifier.padding(start = 16.dp, end = 16.dp, top = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("What levels bring", color = palette.onGlass, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            Text("Level $level", color = palette.onGlassMuted, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+        }
+        Spacer(Modifier.height(12.dp))
+        LazyRow(
+            state = shelf,
+            contentPadding = PaddingValues(horizontal = 14.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            itemsIndexed(road, key = { _, reward -> reward.level }) { _, reward ->
+                RewardTile(
+                    reward = reward,
+                    reached = reward.level <= level || (reward is AuraReward.Colours && AuraLevels.hasColours(settings, reward.set.id)),
+                    next = reward.level == level + 1,
+                    toGo = AuraLevels.threshold(reward.level) - earned,
+                    worn = reward is AuraReward.Flame && reward.flame == worn,
+                    onClick = {
+                        when (reward) {
+                            is AuraReward.Flame -> if (reward.level <= level) onWear(reward.flame)
+                            is AuraReward.Colours -> if (AuraLevels.hasColours(settings, reward.set.id)) onColours()
+                            is AuraReward.PlusDay -> Unit
+                        }
+                    },
+                )
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        Note(
+            "Levels count all the aura you earn, so spending never costs you one. " +
+                "After level ${AuraLevels.LAST_REWARD}, every level brings a day of Plus.",
+            Modifier.padding(start = 12.dp, end = 12.dp, bottom = 14.dp),
+        )
+    }
+}
+
+@Composable
+private fun RewardTile(reward: AuraReward, reached: Boolean, next: Boolean, toGo: Int, worn: Boolean, onClick: () -> Unit) {
+    val palette = LocalPalette.current
+    val ring by animateColorAsState(
+        when {
+            worn -> palette.accent
+            next -> palette.onGlass.copy(alpha = 0.55f)
+            else -> palette.onGlass.copy(alpha = 0.10f)
+        },
+        tween(220),
+        label = "rewardRing",
+    )
+    Column(
+        Modifier
+            .width(98.dp)
+            .pressBounce(0.95f)
+            .clip(RoundedCornerShape(18.dp))
+            .background(palette.onGlass.copy(alpha = if (reached) 0.07f else 0.035f))
+            .border(if (worn || next) 1.5.dp else 1.dp, ring, RoundedCornerShape(18.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 10.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Box(Modifier.size(58.dp), contentAlignment = Alignment.Center) {
+            Box(Modifier.graphicsLayer { alpha = if (reached || next) 1f else 0.45f }, contentAlignment = Alignment.Center) {
+                RewardPicture(reward)
+            }
+            if (!reached) {
+                Box(
+                    Modifier
+                        .align(Alignment.TopEnd)
+                        .size(20.dp)
+                        .clip(CircleShape)
+                        .background(Color.Black.copy(alpha = 0.5f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(Icons.Rounded.Lock, contentDescription = null, tint = Color.White, modifier = Modifier.size(11.dp))
+                }
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        Text(
+            reward.label,
+            color = palette.onGlass,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            when {
+                worn -> "Wearing"
+                reached && reward is AuraReward.Colours -> "In wallpapers"
+                reached -> "Yours"
+                next -> "${AuraWords.count(toGo.coerceAtLeast(0))} to go"
+                reward is AuraReward.PlusDay -> "Level ${reward.level} on"
+                else -> "Level ${reward.level}"
+            },
+            color = if (next || worn) palette.onGlass else palette.onGlassMuted,
+            fontSize = 11.sp,
+            fontWeight = if (next || worn) FontWeight.Medium else FontWeight.Normal,
+            maxLines = 1,
+        )
+    }
+}
+
+/**
+ * A reward's name as a tile has room for it: a colour set by its name alone, since its picture is the
+ * wallpaper in those colours and "Obsidian colours" is wider than a tile.
+ */
+private val AuraReward.label: String
+    get() = when (this) {
+        is AuraReward.Colours -> set.name
+        else -> title
+    }
+
+/** What a reward looks like: its flame, its colours as one of Zenith's wallpapers, or Plus's star. */
+@Composable
+private fun RewardPicture(reward: AuraReward) {
+    val palette = LocalPalette.current
+    when (reward) {
+        is AuraReward.Flame -> Box(
+            Modifier.size(52.dp).clip(CircleShape).background(palette.onGlass.copy(alpha = 0.08f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            FlameGlyph(34.dp, flame = reward.flame)
+        }
+        is AuraReward.Colours -> {
+            val dark = isSystemInDarkTheme()
+            val set = remember(reward.set.id, dark) { Palettes.byId(reward.set.id).toned(palette.dark) }
+            WallpaperImage(
+                style = WallStyle.Iris,
+                palette = set,
+                widthPx = 120,
+                modifier = Modifier.size(width = 38.dp, height = 56.dp).clip(RoundedCornerShape(9.dp)),
+            )
+        }
+        is AuraReward.PlusDay -> Box(
+            Modifier.size(52.dp).clip(CircleShape).background(palette.onGlass.copy(alpha = 0.08f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(Icons.Rounded.Star, contentDescription = null, tint = palette.onGlass, modifier = Modifier.size(26.dp))
+        }
+    }
+}
+
+/**
+ * The flame you wear on the Aura widget and the morning strip: each colour reached is a disc to
+ * tap, the one worn ringed; the rest wait, faint, with the level they come at.
+ */
+@Composable
+private fun FlamePicker(worn: AuraFlame, level: Int, onWear: (AuraFlame) -> Unit) {
+    val palette = LocalPalette.current
+    Group(padding = 14.dp, rise = 3) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Your flame", color = palette.onGlass, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            Text(worn.label, color = palette.onGlassMuted, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+        }
+        Spacer(Modifier.height(12.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            AuraFlame.entries.forEach { flame ->
+                val reached = flame.level <= level
+                val on = flame == worn
+                val ring by animateColorAsState(if (on) palette.accent else Color.Transparent, tween(200), label = "flameRing")
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Box(
+                        Modifier
+                            .size(42.dp)
+                            .border(2.dp, ring, CircleShape)
+                            .padding(3.dp)
+                            .pressBounce(0.9f)
+                            .clip(CircleShape)
+                            .background(palette.onGlass.copy(alpha = if (reached) 0.09f else 0.04f))
+                            .clickable(enabled = reached) { onWear(flame) },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Box(Modifier.graphicsLayer { alpha = if (reached) 1f else 0.3f }) {
+                            FlameGlyph(24.dp, flame = flame)
+                        }
+                    }
+                    Spacer(Modifier.height(5.dp))
+                    Text(
+                        if (reached) flame.label else "Lv ${flame.level}",
+                        color = if (on) palette.onGlass else palette.onGlassMuted,
+                        fontSize = 10.sp,
+                        fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal,
+                        maxLines = 1,
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        Note("It is the flame on your Aura widget, and on the line that slides down each morning. The week's ticks wear it too.")
+    }
+}
+
+// ------------------------------------------------------------------------------- what aura buys
+
+/**
+ * What aura in hand buys: a day of Plus, and Plus's wallpapers one at a time, for good. A price is
+ * asked twice, as the App Store asks: the first tap says what it will spend, the second spends it.
+ * Why something cannot be bought is said under it, in words.
+ */
+@Composable
+private fun AuraShopGroup(
+    settings: ZenithSettings,
+    plus: PlusStatus,
+    onPlusDay: () -> String?,
+    onDesign: (WallStyle) -> String?,
+    onWallpapers: () -> Unit,
+) {
+    val palette = LocalPalette.current
+    val reduced = LocalMotionLevel.current.reduced
+    var refusal by remember { mutableStateOf<String?>(null) }
+    Group(rise = 4) {
+        Row(Modifier.padding(start = 16.dp, end = 16.dp, top = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("Spend your aura", color = palette.onGlass, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            Text("${AuraWords.count(settings.aura)} to spend", color = palette.onGlassMuted, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+        }
+        Spacer(Modifier.height(6.dp))
+
+        // A day of Plus.
+        val dayLine = when {
+            plus.purchased -> "Plus is yours already"
+            plus.inTrial -> "Plus is on for your free week"
+            plus.onAura -> "On until ${AuraWords.until(plus.passUntil)}. Another goes on the end"
+            else -> "Hidden apps, backup, the Notch and every wallpaper, for 24 hours"
+        }
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                Modifier.size(36.dp).clip(RoundedCornerShape(11.dp)).background(palette.onGlass.copy(alpha = 0.1f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(Icons.Rounded.Star, contentDescription = null, tint = palette.onGlass, modifier = Modifier.size(19.dp))
+            }
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f)) {
+                Text("A day of Plus", color = palette.onGlass, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+                // A note stands in from the edge of a group; here it lines up under its title.
+                Note(dayLine, Modifier.offset(x = (-4).dp))
+            }
+            Spacer(Modifier.width(10.dp))
+            PricePill(
+                price = AuraShop.PLUS_DAY,
+                enabled = !plus.purchased && !plus.inTrial,
+                affordable = settings.aura >= AuraShop.PLUS_DAY,
+                onBuy = { refusal = onPlusDay() },
+            )
+        }
+        GroupDivider(inset = 14.dp)
+
+        // Plus's wallpapers.
+        Row(Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("Plus wallpapers", color = palette.onGlass, fontSize = 16.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+            Text(
+                if (plus.lifetime) "All yours with Plus" else "Yours for good",
+                color = palette.onGlassMuted,
+                fontSize = 12.sp,
+            )
+        }
+        Spacer(Modifier.height(10.dp))
+        val dark = palette.dark
+        val colours = remember(settings.wallpaperPalette, settings.paletteId, dark) {
+            Palettes.setById(settings.wallpaperPalette.ifEmpty { settings.paletteId }, settings).toned(dark)
+        }
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 14.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            itemsIndexed(AuraShop.designs, key = { _, style -> style.name }) { _, style ->
+                val owned = style.name in settings.auraDesigns || plus.lifetime
+                DesignTile(
+                    style = style,
+                    colours = colours,
+                    owned = owned,
+                    affordable = settings.aura >= AuraShop.DESIGN,
+                    onBuy = { refusal = onDesign(style) },
+                    onOpen = onWallpapers,
+                )
+            }
+        }
+        AnimatedVisibility(visible = refusal != null, enter = unfoldIn(reduced), exit = unfoldOut(reduced)) {
+            Note(refusal.orEmpty(), Modifier.padding(start = 12.dp, end = 12.dp, top = 10.dp))
+        }
+        Spacer(Modifier.height(12.dp))
+        Note(
+            "A day of Plus is ${AuraShop.PLUS_DAY} aura and a wallpaper ${AuraWords.count(AuraShop.DESIGN)}. " +
+                "When a day runs out, Zenith is as it is after the free week; a wallpaper bought stays yours.",
+            Modifier.padding(start = 12.dp, end = 12.dp, bottom = 14.dp),
+        )
+    }
+    LaunchedEffect(refusal) {
+        if (refusal != null) {
+            delay(5_000)
+            refusal = null
+        }
+    }
+}
+
+@Composable
+private fun DesignTile(
+    style: WallStyle,
+    colours: com.gabriel.zenithui.ui.theme.ZenithPalette,
+    owned: Boolean,
+    affordable: Boolean,
+    onBuy: () -> Unit,
+    onOpen: () -> Unit,
+) {
+    val palette = LocalPalette.current
+    Column(Modifier.width(86.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .aspectRatio(0.56f)
+                .pressBounce(0.95f)
+                .clip(RoundedCornerShape(14.dp))
+                .border(1.dp, palette.onGlass.copy(alpha = 0.12f), RoundedCornerShape(14.dp))
+                .clickable(onClick = onOpen),
+        ) {
+            WallpaperImage(style = style, palette = colours, widthPx = 180, modifier = Modifier.fillMaxSize())
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(style.label, color = palette.onGlass, fontSize = 12.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+        Spacer(Modifier.height(6.dp))
+        if (owned) {
+            Row(
+                Modifier.height(30.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Rounded.Check, contentDescription = null, tint = palette.onGlass, modifier = Modifier.size(14.dp))
+                Spacer(Modifier.width(4.dp))
+                Text("Yours", color = palette.onGlass, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+            }
+        } else {
+            PricePill(price = AuraShop.DESIGN, enabled = true, affordable = affordable, onBuy = onBuy, compact = true)
+        }
+    }
+}
+
+/**
+ * A price to tap, the App Store's way: the price in a pill; tapped, it becomes "Buy" in the blue for
+ * a few seconds; tapped again, it buys. Short of aura, a tap goes straight through, to be told why
+ * not. Off ([enabled] false), it is faint and does nothing.
+ */
+@Composable
+private fun PricePill(price: Int, enabled: Boolean, affordable: Boolean, onBuy: () -> Unit, compact: Boolean = false) {
+    val palette = LocalPalette.current
+    val haptics = rememberHaptics()
+    val reduced = LocalMotionLevel.current.reduced
+    var asking by remember { mutableStateOf(false) }
+    LaunchedEffect(asking) {
+        if (asking) {
+            delay(4_000)
+            asking = false
+        }
+    }
+    val fill by animateColorAsState(
+        when {
+            asking -> palette.accent
+            else -> palette.onGlass.copy(alpha = if (enabled) 0.10f else 0.05f)
+        },
+        tween(180),
+        label = "priceFill",
+    )
+    val ink = when {
+        asking -> inkOnTint(palette.accent)
+        !enabled || !affordable -> palette.onGlassMuted
+        else -> palette.onGlass
+    }
+    Box(
+        Modifier
+            .height(30.dp)
+            .pressBounce(0.92f)
+            .clip(ZenithShapes.pill)
+            .background(fill)
+            .clickable(enabled = enabled) {
+                when {
+                    !affordable -> onBuy()
+                    !asking -> {
+                        haptics.tick()
+                        asking = true
+                    }
+                    else -> {
+                        asking = false
+                        onBuy()
+                    }
+                }
+            }
+            .padding(horizontal = if (compact) 12.dp else 14.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        AnimatedContent(
+            targetState = asking,
+            transitionSpec = { popIn(reduced, from = 0.8f).togetherWith(fadeOut(tween(90))) },
+            label = "priceWords",
+        ) { buying ->
+            Text(
+                if (buying) "Buy" else AuraWords.count(price),
+                color = ink,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+            )
+        }
     }
 }
 

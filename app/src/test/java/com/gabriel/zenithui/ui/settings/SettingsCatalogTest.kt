@@ -99,6 +99,12 @@ class SettingsCatalogTest {
         assertEquals("aura", found("streak").first())
         assertEquals("auraCode", found("share").first())
         assertEquals("auraRedeem", found("redeem").first())
+        assertEquals("auraLevels", found("level").first())
+        assertTrue("auraLevels" in found("unlock"))
+        assertEquals("auraFlame", found("flame colour").first())
+        assertEquals("auraShop", found("spend").first())
+        assertTrue("auraShop" in found("buy"))
+        assertTrue("auraShop" in found("plus day"))
         SettingsCatalog.on(SettingsPage.Aura).forEach { assertTrue(it.id, it.id.startsWith("aura")) }
     }
 

@@ -107,6 +107,15 @@ import com.gabriel.zenithui.ui.theme.wallColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.compose.animation.AnimatedVisibility
+import com.gabriel.zenithui.data.AuraLevels
+import com.gabriel.zenithui.data.AuraShop
+import com.gabriel.zenithui.data.AuraWords
+import com.gabriel.zenithui.ui.common.rememberHaptics
+import com.gabriel.zenithui.ui.common.unfoldIn
+import com.gabriel.zenithui.ui.common.unfoldOut
+import com.gabriel.zenithui.ui.onboarding.QuietButton
+import kotlinx.coroutines.delay
 
 /**
  * A gallery of wallpapers Zenith paints itself, in a choice of colour sets, each with a light
@@ -131,6 +140,8 @@ fun WallpaperSheet(
     onFollow: (Boolean) -> Unit,
     onPlus: () -> Unit,
     onDismiss: () -> Unit,
+    /** Buys a Plus design with aura, for good: why not, in words, or null once it is bought. Null where nothing is sold. */
+    onBuyDesign: ((WallStyle) -> String?)? = null,
 ) {
     val context = LocalContext.current
     // The colour set the wallpaper is painted in, or would be: an empty one is from settings saved
@@ -143,14 +154,16 @@ fun WallpaperSheet(
         Palettes.setById(settings.wallpaperPalette.ifEmpty { settings.paletteId }, settings)
     }
     // The wallpaper's colours first, then every other set a design can be painted in: the free ones,
-    // the Aura sets you bought, your own if you made one, and the one taken from your wallpaper.
+    // the Aura sets your level has reached (or that you bought while there was a shop), your own if
+    // you made one, and the one taken from your wallpaper.
+    val auraSets = AuraLevels.colourSets(settings)
     val palettes = remember(
-        current, settings.unlockedThemes, settings.paletteId,
+        current, auraSets, settings.paletteId,
         settings.customAccent, settings.customAccentAlt, settings.customBackdrop, settings.customDark,
         settings.wallAccent, settings.wallAccentAlt, settings.wallBackdrop, settings.wallDark,
     ) {
         val madeOwn = settings.paletteId == Palettes.CUSTOM || settings.customAccent != ZenithSettings().customAccent
-        val others = Palettes.all + Palettes.aura.filter { it.id in settings.unlockedThemes } +
+        val others = Palettes.all + Palettes.aura.filter { it.id in auraSets } +
             listOfNotNull(Palettes.custom(settings).takeIf { madeOwn }, Palettes.fromWallpaper(settings))
         listOf(current) + others.filter { it.id != current.id }
     }
@@ -255,7 +268,7 @@ fun WallpaperSheet(
                     home = home,
                     dark = dark,
                     following = settings.wallpaperFollow,
-                    locked = selection.first.plus && !plusActive,
+                    locked = !AuraShop.ownsDesign(settings, plusActive, selection.first),
                     startOnLock = settings.wallpaperLock,
                     onSet = { colours, lockToo ->
                         // No toast: the wallpaper fading in behind the sheet as it closes says it.
@@ -263,6 +276,7 @@ fun WallpaperSheet(
                         onDismiss()
                     },
                     onPlus = onPlus,
+                    onBuy = onBuyDesign?.let { buy -> { buy(selection.first) } },
                 )
             }
         }
@@ -341,7 +355,7 @@ private fun Browse(
                             Thumb(
                                 style = style,
                                 palette = toned,
-                                locked = style.plus && !plusActive,
+                                locked = !AuraShop.ownsDesign(settings, plusActive, style),
                                 inUse = style == inUse,
                                 modifier = Modifier.weight(1f),
                             ) { centre -> onPick(style, theme, centre) }
@@ -382,6 +396,8 @@ private fun Preview(
     startOnLock: Boolean,
     onSet: (colours: String, lockToo: Boolean) -> Unit,
     onPlus: () -> Unit,
+    /** Buys this design with aura; null where it is not sold. */
+    onBuy: (() -> String?)? = null,
 ) {
     val ui = LocalPalette.current
     var target by remember { mutableStateOf(if (startOnLock) "both" else "home") }
@@ -470,7 +486,54 @@ private fun Preview(
                 }
             },
         )
+        if (locked && onBuy != null) {
+            Spacer(Modifier.height(2.dp))
+            BuyWithAura(aura = settings.aura, onBuy = onBuy)
+        }
         Spacer(Modifier.height(4.dp))
+    }
+}
+
+/**
+ * The other way to a Plus design: aura, for good. Asked twice, as the App Store asks: the first tap
+ * says what it will spend, the second spends it. Short of aura, it says how short.
+ */
+@Composable
+private fun BuyWithAura(aura: Int, onBuy: () -> String?) {
+    val haptics = rememberHaptics()
+    val reduced = LocalMotionLevel.current.reduced
+    var asking by remember { mutableStateOf(false) }
+    var refusal by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(asking) {
+        if (asking) {
+            delay(4_000)
+            asking = false
+        }
+    }
+    val price = AuraShop.DESIGN
+    val words = when {
+        aura < price -> "Or ${AuraWords.count(price)} aura: you have ${AuraWords.count(aura.coerceAtLeast(0))}"
+        asking -> "Tap again to spend ${AuraWords.count(price)} aura"
+        else -> "Or get it for ${AuraWords.count(price)} aura, for good"
+    }
+    Column {
+        QuietButton(
+            text = words,
+            onClick = {
+                when {
+                    aura < price -> refusal = "You need ${AuraWords.count(price - aura.coerceAtLeast(0))} more aura. Turning up each day earns it."
+                    !asking -> asking = true
+                    else -> {
+                        asking = false
+                        refusal = onBuy()
+                        if (refusal == null) haptics.confirm()
+                    }
+                }
+            },
+        )
+        AnimatedVisibility(visible = refusal != null, enter = unfoldIn(reduced), exit = unfoldOut(reduced)) {
+            Caption(refusal.orEmpty(), Modifier.fillMaxWidth())
+        }
     }
 }
 
@@ -596,7 +659,7 @@ private fun rememberWallpaperArt(style: WallStyle, palette: ZenithPalette, width
 
 /** A painted wallpaper as a picture. It fades in once ready rather than popping. */
 @Composable
-private fun WallpaperImage(style: WallStyle, palette: ZenithPalette, widthPx: Int, modifier: Modifier) {
+internal fun WallpaperImage(style: WallStyle, palette: ZenithPalette, widthPx: Int, modifier: Modifier) {
     val ui = LocalPalette.current
     val image = rememberWallpaperArt(style, palette, widthPx)
     val shown by animateFloatAsState(if (image != null) 1f else 0f, tween(260), label = "wallpaperFade")

@@ -115,6 +115,9 @@ object SettingsCatalog {
         SettingsEntry("lookSchedule", SettingsPage.Looks, "Schedule", "look time night work automatic switch"),
         SettingsEntry("lookCode", SettingsPage.Looks, "Open a code", "look friend code import featured received", server = true),
         SettingsEntry("aura", SettingsPage.Aura, "Aura", "streak points daily reward balance flame"),
+        SettingsEntry("auraLevels", SettingsPage.Aura, "Levels", "level xp rank unlock rewards next earned colours sets"),
+        SettingsEntry("auraFlame", SettingsPage.Aura, "Your flame", "fire colour color widget blue purple green gold rose white"),
+        SettingsEntry("auraShop", SettingsPage.Aura, "Spend aura", "buy shop store price plus day wallpapers designs points"),
         SettingsEntry("auraCode", SettingsPage.Aura, "Your code", "referral share invite friend copy"),
         SettingsEntry("auraRedeem", SettingsPage.Aura, "Redeem a code", "referral gift friend enter"),
 

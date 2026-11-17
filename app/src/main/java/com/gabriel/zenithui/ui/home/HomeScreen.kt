@@ -145,6 +145,8 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.collectLatest
 import com.gabriel.zenithui.data.DropPlanner
 import com.gabriel.zenithui.data.FolderCell
+import com.gabriel.zenithui.data.FolderPour
+import com.gabriel.zenithui.data.FolderSize
 import com.gabriel.zenithui.data.HoldDo
 import com.gabriel.zenithui.data.HoldEntry
 import com.gabriel.zenithui.data.HoldGesture
@@ -574,17 +576,17 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         sheetVisible = false
     }
 
-    // A folder open out of its icon: which one and where its icon is, and how far open it is.
-    var folderUp by remember { mutableStateOf<Pair<String, androidx.compose.ui.geometry.Rect?>?>(null) }
-    val folderProgress = remember { Animatable(0f) }
+    // A folder poured out of its tile: which one, where its tile is and where it was tapped, and how
+    // far it has got (FolderMotion), read while laying out and drawing.
+    var folderUp by remember { mutableStateOf<FolderUp?>(null) }
+    val folderMotion = remember { FolderMotion() }
     val folderJob = remember { arrayOfNulls<kotlinx.coroutines.Job>(1) }
-
-    fun openFolder(id: String, from: androidx.compose.ui.geometry.Rect?) {
-        hideSheet()
-        folderUp = id to from
-        folderJob[0]?.cancel()
-        folderJob[0] = scope.launch {
-            if (motion.reduced) folderProgress.animateTo(1f, tween(Motion.REDUCED_MS)) else folderProgress.animateTo(1f, Motion.open())
+    // The open folder is away from its tile, which only comes back as the drop lands in it: for the
+    // tiles to read while drawing.
+    val folderAway = remember {
+        object : FolderAway {
+            override fun tile(id: String) = if (folderUp?.id == id) folderMotion.tileShown() else 1f
+            override fun name(id: String) = if (folderUp?.id == id) folderMotion.nameShown() else 1f
         }
     }
 
@@ -654,13 +656,40 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         viewModel.setEditing(false)
     }
 
-    /** Back into its icon; only then is it gone, so the home screen is never left dimmed behind nothing. */
+    /**
+     * A folder poured out of its tile as liquid glass, from [tile], where it was tapped at [tap] (both
+     * on the screen): see FolderPour. A ring of light runs out from the finger as it spreads, as the
+     * coming-home wave's does, but not in Lite. With movement reduced, or no tile to come out of (a
+     * folder renamed from its menu has one), it only fades in.
+     */
+    fun openFolder(id: String, tile: androidx.compose.ui.geometry.Rect?, tap: Offset? = null) {
+        hideSheet()
+        folderUp = FolderUp(id, tile, tap)
+        val grows = !liveMotion.reduced && tile != null
+        val pace = viewModel.settings.value.animation.pace
+        folderJob[0]?.cancel()
+        folderJob[0] = scope.launch { folderMotion.open(grows, pace) }
+        if (grows && !lite && tile != null) {
+            sendWave(
+                tap ?: tile.center,
+                com.gabriel.zenithui.ui.theme.RingStyle.arrive(FolderPour.RING_MS / pace, FolderPour.RING_PEAK),
+            )
+        }
+    }
+
+    /**
+     * Back into its tile, which gulps it down; only then is it gone, so the home screen is never
+     * left dimmed behind nothing. The blur behind clears as it goes.
+     */
     fun closeFolder() {
-        if (folderUp == null) return
+        val up = folderUp ?: return
+        if (folderMotion.closing) return
+        val pace = viewModel.settings.value.animation.pace
         folderJob[0]?.cancel()
         folderJob[0] = scope.launch {
-            if (motion.reduced) folderProgress.animateTo(0f, tween(Motion.REDUCED_MS)) else folderProgress.animateTo(0f, Motion.close())
-            folderUp = null
+            folderMotion.close(pace)
+            if (folderUp == up) folderUp = null
+            if (folderMotion.grows) FolderGulp.play(up.id, pace)
         }
     }
 
@@ -2054,8 +2083,8 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         targetValue = when {
             // (Behind the drawer the home screen frosts over by a blurred copy fading in instead:
             // see DrawerFrost.)
-            // An open folder has the home screen out of focus behind it.
-            folderUp != null -> 14.dp
+            // An open folder has the home screen out of focus behind it; it clears as the folder goes.
+            folderUp != null && !folderMotion.closing -> 14.dp
             // So has Search, open out of its pill; below Android 12 the blur does nothing, and the
             // field's dim alone is behind it.
             searchOpen -> 16.dp
@@ -2355,7 +2384,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     HoldDo.APP_INFO -> appKey?.let { viewModel.openAppInfo(it) }
                     HoldDo.REMOVE -> askRemove(target)
                     // It opens out of its own icon, as it does from a tap.
-                    HoldDo.RENAME -> id?.let { openFolder(it, open.frame) }
+                    HoldDo.RENAME -> id?.let { openFolder(it, open.frame, null) }
                     HoldDo.SET_UP -> (item as? WidgetCell)?.let { widget ->
                         val kind = com.gabriel.zenithui.data.Widgets.baseType(widget.type)
                         if (kind == "toggles") showSheet(HomeSheet.Toggles) else setUpWidget(kind)
@@ -2469,7 +2498,12 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
     // The wallpaper a little darker, when Customise has been asked for that: a veil over it, under
     // everything that stands on it, and the same darkening on the copy of it the glass shows.
     val dimmed = animateFloatAsState(if (settings.dimWallpaper) WALLPAPER_DIM else 0f, tween(300), label = "dimWallpaper")
-    CompositionLocalProvider(LocalWidgetWorld provides widgetWorld, LocalWallpaperDim provides dimmed, LocalHomeCover provides homeCover) {
+    CompositionLocalProvider(
+        LocalWidgetWorld provides widgetWorld,
+        LocalWallpaperDim provides dimmed,
+        LocalHomeCover provides homeCover,
+        LocalFolderAway provides folderAway,
+    ) {
     Box(
         Modifier
             .fillMaxSize()
@@ -2778,7 +2812,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                                     },
                                     onGathered = { haptic.tick() },
                                     onOpenApp = { launchApp(it) },
-                                    onOpenFolder = { folder, icon -> openFolder(folder.id, icon) },
+                                    onOpenFolder = { folder, icon, tap -> openFolder(folder.id, icon, tap) },
                                     hold = holdCalls,
                                     heldId = (holdMenu.open?.target as? HoldTarget.Item)?.id,
                                     heldSquash = { holdMenu.squash() },
@@ -3153,31 +3187,55 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         }
 
         // ------------------------------------------------------------ folder
-        folderUp?.let { (id, icon) ->
-            val folder = layout.firstOrNull { it.id == id } as? FolderCell
+        // The folders' apps, drawn at the open folder's size and kept to hand, off the main thread:
+        // a folder pours out of its tile with its apps in it from the first frame, never with blank
+        // plates that fade in as they load, and never reading a file as it starts to move.
+        val folderKeys = remember(layout) { layout.filterIsInstance<FolderCell>().flatMap { it.keys }.distinct() }
+        val folderIconPx = if (drawerWidthPx <= 0f) 0 else with(LocalDensity.current) {
+            FolderSize.of(drawerWidthPx / this.density).icon.dp.roundToPx().coerceIn(48, 288)
+        }
+        val iconVersion by viewModel.icons.version.collectAsState()
+        LaunchedEffect(folderKeys, folderIconPx, settings.iconStyle, iconVersion) {
+            if (folderIconPx <= 0) return@LaunchedEffect
+            viewModel.icons.warm(
+                purpose = "folders",
+                keys = folderKeys,
+                sizePx = folderIconPx,
+                glyphs = com.gabriel.zenithui.data.IconStyles.of(settings.iconStyle) != com.gabriel.zenithui.data.IconStyles.ORIGINAL,
+            )
+        }
+        folderUp?.let { up ->
+            val folder = layout.firstOrNull { it.id == up.id } as? FolderCell
             // Taking the last app out dissolves the folder: then there is nothing left to show.
             LaunchedEffect(folder == null) {
                 if (folder == null) {
                     folderJob[0]?.cancel()
-                    folderProgress.snapTo(0f)
                     folderUp = null
                 }
             }
-            if (folder != null) FolderPanel(
-                folder = folder,
-                origin = icon,
-                progress = { folderProgress.value },
-                grows = !motion.reduced,
-                appsByKey = appsByKey,
-                settings = settings,
-                onOpen = {
-                    launchApp(it)
-                    closeFolder()
-                },
-                onRemoveApp = { viewModel.removeFromFolder(folder.id, it) },
-                onRename = { viewModel.renameFolder(folder.id, it) },
-                onDismiss = { closeFolder() },
-            )
+            // On the wallpaper, as the hold menu is: the same clear glass and white names in Light
+            // and in Dark, lit by the home screen's one ring of light.
+            if (folder != null) OnWallpaper {
+                androidx.compose.runtime.CompositionLocalProvider(LocalGlassRing provides glassRing) {
+                    FolderPanel(
+                        folder = folder,
+                        tile = up.tile,
+                        tileShape = folderTileShape(settings.iconShape),
+                        tap = up.tap,
+                        motion = folderMotion,
+                        blurred = canFrost,
+                        appsByKey = appsByKey,
+                        settings = settings,
+                        onOpen = {
+                            launchApp(it)
+                            closeFolder()
+                        },
+                        onRemoveApp = { viewModel.removeFromFolder(folder.id, it) },
+                        onRename = { viewModel.renameFolder(folder.id, it) },
+                        onDismiss = { closeFolder() },
+                    )
+                }
+            }
         }
 
         // ------------------------------------------------------------ the hold menu

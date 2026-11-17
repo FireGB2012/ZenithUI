@@ -507,7 +507,7 @@ internal fun HomeOptions(settings: ZenithSettings, plus: PlusStatus, preview: Se
                     when (settings.folderStyle) {
                         "stack" -> "The first three apps fanned like cards. A folder's own colour is in its menu."
                         "cover" -> "The first app large, the next two small at its corner."
-                        else -> "Four apps, two by two. A folder's own colour is in its menu."
+                        else -> "Nine apps, three by three, as the open folder has them. A folder's own colour is in its menu."
                     }
                 )
             }

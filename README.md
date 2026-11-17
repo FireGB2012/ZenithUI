@@ -61,7 +61,7 @@ settings are still kept, for old backups and Looks.)
   icons, with no names** (Customise), which take the room their names had. Each app's logo stands
   off its tile as on iOS 26 (`LogoLift`): a soft shadow straight down under it, its face lit from
   above, and a hairline of light on its edge. Their names are white with a soft shadow on the home
-  screen, in light and in dark, as on an iPhone; the drawer and folders keep their own ink. See
+  screen, in light and in dark, as on an iPhone, and in an open folder; the drawer keeps its own ink. See
   `specs/2026-11-16-3d-logos-and-bigger-icons-design.md`.
 - **Widgets** are square: Small (2×2), Medium (4×2) and Large (4×4), with one corner radius, each with
   its name under it like an icon's (another app's widget shows its app's name). On the iPhone grid a
@@ -125,7 +125,10 @@ stretching, and a press is a small one with no wobble.
   class, `HomeGeometry`, works out every position in whole pixels. (Zenith Plus free placement still
   puts things anywhere.)
 - **Folders** — drop one app onto another to create a folder; drop onto a folder to add to it.
-  Tap a folder for a bottom sheet with an editable name; long-press an app inside to take it out.
+  Tap a folder and it pours out of its tile as a pane of liquid glass, as iOS 26's folders look:
+  its name big and bold above it (tap it to rename), its apps three by three with their names and
+  badges, nine to a page with page dots; long-press an app inside to take it out. See
+  `specs/2026-11-17-liquid-glass-folders-design.md`.
 - **Remove** — drag to the "Remove" target at the top.
 - **Resize** — in edit mode every widget has a corner to pull: a short arc of white round its
   bottom-right corner. Pull it and it follows your finger, while the widget snaps to whole cells
@@ -476,8 +479,9 @@ Everything that moves is a spring, and anything that can be worked out without a
 function with a test: `MotionLevel` (how much moves), `PageEffects` (where a page is drawn part way
 through a swipe), `FlyIn` (when each item arrives), `LiquidArrival` (the wave the home screen comes
 home on, and how far each thing on it has risen), `LaunchMotion` (where an opening app's card is),
-`SheetPull` (where a sheet sits under a finger, and whether letting go puts it away), `Unpack` (how
-far out of an opening folder each app is) and `AnimationTuning` (the numbers it all runs on).
+`SheetPull` (where a sheet sits under a finger, and whether letting go puts it away), `FolderPour`
+(the drop of glass a folder opens as, and how far out of it each app is) and `AnimationTuning` (the
+numbers it all runs on).
 
 - **Opening an app.** The icon grows into a card that fills the screen, and the app appears over
   it. The card's middle travels across and down on springs of their own while a third grows it, so
@@ -564,8 +568,9 @@ far out of an opening folder each app is) and `AnimationTuning` (the numbers it 
   it is ready, and goes back up.
 - **The dock.** Its icons never jump: the others close up round a gap or make room, and the one in
   your hand settles from where it was let go, each starting from wherever it was last seen.
-- **Folders** grow out of their own icon into a pane of glass and go back into it, and their apps
-  come out one after another as it opens.
+- **Folders** pour out of their tile as a drop of liquid glass, wide first and then tall, sloshing
+  once and settling, the tile's tiny icons zooming up into the apps nearest the finger first; closed,
+  the drop is drawn back into the tile, which gulps it down. The tile is away while it is open.
 - **Widgets** animate their own changes: rolling digits, a ring that springs to its value and
   glints while charging, every other gauge filling the same way as it appears, today's dot drawing
   itself in, toggles that fill with their own colour from the middle as they come on.
@@ -639,8 +644,8 @@ the switch is off.
 
 - **Dock**: the glass slab, **Floating** (the same slab, closing up round fewer than four apps), or
   **Icons only**; and a switch that hides it, keeping its apps for when it is back.
-- **Folders**: Grid, Stack (the first three fanned) or Cover (the first app large), and a colour
-  of its own from a folder's menu.
+- **Folders**: Grid (nine tiny icons, three by three, as iOS's), Stack (the first three fanned) or
+  Cover (the first app large), and a colour of its own from a folder's menu.
 - **Lock layout**: a hold only opens an item's menu, the dock's icons stay put, and every menu
   offers to unlock. **Hide the status bar**: it comes in for a moment from the very top.
 

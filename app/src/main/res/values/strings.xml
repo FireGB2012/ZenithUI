@@ -4,6 +4,8 @@
     <string name="lock_service">Zenith lock helper</string>
     <string name="lock_service_summary">Locks the phone when you use the gesture you chose for it in Zenith.</string>
     <string name="lock_service_description">Zenith uses this for one thing: turning the screen off and locking the phone when you use the gesture you chose for it, the way the side button does. It asks Android for no events and cannot see what is on the screen, so nothing on it is read, kept or sent. Every other part of Zenith works without it.</string>
+    <string name="live_wallpaper">Zenith Live</string>
+    <string name="live_wallpaper_description">The moving design you picked on Zenith\'s Live shelf, in its colours, light and dark. It only moves while you can see it.</string>
     <string name="picture_service">Zenith app pictures</string>
     <string name="picture_service_summary">Lets an app you close shrink back into its icon, and grow out of it again, as itself.</string>
     <string name="picture_service_description">Zenith uses this for one thing: a picture of the app in front, now and then, so that when you close it you see the app itself go back into its icon, and coming out of it when you open it again. It is told only that another screen came to the front and cannot read what is on the screen. The pictures stay in memory, small, for the last few apps and five minutes at most, and are let go of when the screen goes off. Nothing is written down or sent anywhere. Apps that hide themselves from screenshots stay hidden. Every other part of Zenith works without it.</string>

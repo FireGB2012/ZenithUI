@@ -381,17 +381,29 @@ rows under them sit in a group of their own, a line between each.
 
 ## Wallpapers
 
-Zenith paints its own wallpapers on the phone (`WallpaperArt`, `WallDesigns`, `WallDepth`):
-forty-one designs on five shelves — Depth, Soft, Lines, Shapes and Scenes — nine of them for Zenith
-Plus, each of which aura can also buy for good, from its preview or the Aura page. Every design comes in a choice of colour sets (thirteen free ones round the colour wheel, six
+Zenith paints its own wallpapers on the phone (`WallpaperArt`, `WallDesigns`, `WallDepth`,
+`WallDepthMore`, `LiveScenes`): fifty-four designs on six shelves — Live, Depth, Soft, Lines, Shapes
+and Scenes — eleven of them for Zenith Plus, each of which aura can also buy for good, from its preview or the Aura page. Every design comes in a choice of colour sets (thirteen free ones round the colour wheel, six
 of them once Zenith's themes, the Aura sets your level has reached or that you bought with aura,
 colours of your own made before the themes went,
 and colours taken from your wallpaper) and has a light picture and a dark one, each made so labels
 and the status bar stay readable over it.
 
-**Depth**, the first shelf, is eight designs with a body to them, as the wallpapers that come with
-an iPhone or a Galaxy have: Iris, Layers, Satin, Marbles, Liquid and Twist, and for Plus, Loop and
-Eclipse. They are lit as things in the world are, light added as light, their colours run between
+**Live**, the first shelf, is five designs that move, set as Android's live wallpaper
+(`live/LiveWallpaper`, "Zenith Live"). Hover, Tide and Cosmos drift on their own while they can be
+seen; Lotus and Daybreak hold still on the lock screen and open once as you unlock into the home
+screen. Each paints its layers once and then only moves them, on its own thread with the hardware
+canvas: 60 frames a second in Full, 30 in Lite, still with Battery saver on or movement reduced, and
+nothing at all while it cannot be seen (the rules are in `LiveWall`, with `LiveWallTest`). Android
+asks you to confirm a live wallpaper once, in its own screen; Zenith opens it, and puts the old
+design back if you back out. Where the lock screen does not show the live wallpaper itself and "Home
+and lock" was chosen, Zenith puts a still of it there, an unlock design in its lock pose, and the
+glass bends a still of it at its home pose. In the picker they carry a LIVE badge and their preview
+moves. See `specs/2026-11-18-live-and-more-depth-wallpapers-design.md`.
+
+**Depth** is sixteen designs with a body to them, as the wallpapers that come with an iPhone or a
+Galaxy have: Iris, Layers, Satin, Marbles, Liquid, Twist, Fluted, Orb, Arcs, Pond, Dew and Fan,
+and for Plus, Loop, Eclipse, Stack and Gem. They are lit as things in the world are, light added as light, their colours run between
 the set's two accents round the colour wheel the short way in OKLab (`DepthKit`), so a gradient stays
 vivid where the same two colours mixed as RGB go grey. They are worked out a pixel at a time on all
 the phone's cores; the ribbon in Twist is drawn as a mesh. See
@@ -814,8 +826,10 @@ checks it is still current by the number Android gives every wallpaper (`Wallpap
 noted when the copy is made; see `WallpaperTrust`). The wallpaper's colours are only the fallback:
 Samsung phones never announce them to the app that set the wallpaper. Android 14+ shows a
 still wallpaper zoomed by a tenth to leave room for parallax, and the shader matches that. With no
-usable copy (a live wallpaper, or one set in another app) panes fall back to frosted glass with a
-rim of the same kind, rather than showing a picture that is not really behind them. Android 12
+usable copy (another app's live wallpaper, or one set in another app) panes fall back to frosted
+glass with a rim of the same kind, rather than showing a picture that is not really behind them.
+Zenith's own live wallpaper is the exception: the glass bends a still of its design at its home
+pose, painted from the settings (`LiveWallpapers.glassStill`). Android 12
 uses the frosted copy, and "No glass" widgets draw their numbers and icons plain white below
 Android 13. Nothing is captured or blurred per frame.
 

@@ -14,6 +14,8 @@ import com.gabriel.zenithui.data.WallpaperArt
 import com.gabriel.zenithui.data.WallpaperFollow
 import com.gabriel.zenithui.data.WallpaperSource
 import com.gabriel.zenithui.data.ZenithSettings
+import com.gabriel.zenithui.live.LiveWallpaper
+import com.gabriel.zenithui.live.LiveWallpapers
 import com.gabriel.zenithui.ui.theme.Palettes
 import com.gabriel.zenithui.ui.theme.wallColors
 import kotlinx.coroutines.CancellationException
@@ -49,6 +51,10 @@ data class Incoming(val image: ImageBitmap, val leaving: Boolean, val since: Lon
  *
  * It only ever repaints a wallpaper Zenith set and that is still on screen: a photo, or anything
  * chosen in another app, is left alone, and choosing one ends the following ([forget]).
+ *
+ * A design that moves is Android's live wallpaper ([LiveWallpaper]), which paints itself in the
+ * colours the settings say. Here it only needs putting up, which Android asks you to confirm
+ * ([askLive]), a still of it on the lock screen if that was asked for, and the glass told.
  */
 class WallpaperDirector(
     private val app: Application,
@@ -57,6 +63,8 @@ class WallpaperDirector(
     private val source: WallpaperSource,
     /** Called when something else has become the wallpaper: Zenith's design is no longer in use. */
     private val forget: () -> Unit,
+    /** Called when a design that moves was asked for and Zenith's live wallpaper is not up: Android's screen for it is to be opened. */
+    private val askLive: () -> Unit,
 ) {
     /** Everything in the settings that decides the picture, and nothing that does not. */
     private data class Wanted(
@@ -129,9 +137,11 @@ class WallpaperDirector(
     /** Android announced that the wallpaper changed, from here or from anywhere else. */
     fun wallpaperChanged() {
         announced.value += 1
-        if (settings.value.wallpaperStyle.isEmpty()) return
+        val name = settings.value.wallpaperStyle
+        if (name.isEmpty()) return
+        val live = WallStyle.byName(name)?.live != null
         scope.launch {
-            val ours = withContext(Dispatchers.IO) { GlassWallpaper.isCurrent(app) }
+            val ours = withContext(Dispatchers.IO) { if (live) LiveWallpapers.isOurs(app) else GlassWallpaper.isCurrent(app) }
             if (!ours) forget()
         }
     }
@@ -151,6 +161,12 @@ class WallpaperDirector(
         if (style == null) {
             answered = request
             dismiss()
+            return
+        }
+        if (style.live != null) {
+            answered = request
+            dismiss()
+            followLive(style, now, explicit)
             return
         }
         val colors = Palettes.forWallpaper(now, now.isDark(systemDark.value)).wallColors()
@@ -197,6 +213,27 @@ class WallpaperDirector(
         withTimeoutOrNull(SHOWN_WAIT_MS) { announced.first { it != before } }
         delay(SHOWN_GRACE_MS)
         dismiss()
+    }
+
+    /**
+     * A design that moves. Android puts a live wallpaper up only once you confirm it in its own
+     * screen, so asked for ([explicit]) and not up yet, that screen is asked for; not asked for and
+     * not up, something else has become the wallpaper. Up, it paints itself; what is left is the
+     * lock screen's still of it, the tone it keeps while following is off, and the glass.
+     */
+    private suspend fun followLive(style: WallStyle, now: ZenithSettings, explicit: Boolean) {
+        val ours = withContext(Dispatchers.IO) { LiveWallpapers.isOurs(app) }
+        if (!ours) {
+            if (explicit) askLive() else forget()
+            return
+        }
+        val dark = now.isDark(systemDark.value)
+        if (explicit || now.wallpaperFollow) LiveWallpapers.keepTone(app, dark)
+        if (now.wallpaperLock) {
+            val colors = LiveWallpapers.colors(app, now, systemDark.value)
+            withContext(Dispatchers.Default) { LiveWallpapers.setLockStill(app, style, colors, force = explicit) }
+        }
+        source.refresh()
     }
 
     /** Takes the layer away, if it is up, and hands the glass back to whatever the wallpaper really is. */

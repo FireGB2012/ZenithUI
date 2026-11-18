@@ -27,8 +27,12 @@ internal object WallDesigns {
 
     fun paint(style: WallStyle, easel: Easel) = with(easel) {
         when (style) {
+            WallStyle.Hover, WallStyle.Tide, WallStyle.Cosmos, WallStyle.Lotus, WallStyle.Daybreak ->
+                LiveScene.paintStill(style, c, canvas, w, h)
             WallStyle.Iris, WallStyle.Layers, WallStyle.Satin, WallStyle.Marbles,
             WallStyle.Liquid, WallStyle.Twist, WallStyle.Loop, WallStyle.Eclipse -> WallDepth.paint(style, this)
+            WallStyle.Fluted, WallStyle.Orb, WallStyle.Arcs, WallStyle.Pond, WallStyle.Dew,
+            WallStyle.Fan, WallStyle.Stack, WallStyle.Gem -> WallDepthMore.paint(style, this)
             WallStyle.Glow -> glow()
             WallStyle.Calm -> calm()
             WallStyle.Mesh -> mesh()

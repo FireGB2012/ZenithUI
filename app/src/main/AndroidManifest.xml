@@ -19,6 +19,8 @@
     <!-- The torch tile uses the flash when there is one; the launcher works without it. -->
     <uses-feature android:name="android.hardware.camera.flash" android:required="false" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <!-- The designs that move are a live wallpaper; on a phone without them they are not offered. -->
+    <uses-feature android:name="android.software.live_wallpaper" android:required="false" />
 
     <queries>
         <intent>
@@ -127,6 +129,23 @@
             <intent-filter>
                 <action android:name="android.service.notification.NotificationListenerService" />
             </intent-filter>
+        </service>
+
+        <!-- The designs that move (the Live shelf), as Android's live wallpaper. Android binds to it
+             only once you have set it in its own wallpaper screen; it draws only while it is seen,
+             reads nothing and sends nothing. -->
+        <service
+            android:name=".live.LiveWallpaper"
+            android:directBootAware="false"
+            android:exported="true"
+            android:label="@string/live_wallpaper"
+            android:permission="android.permission.BIND_WALLPAPER">
+            <intent-filter>
+                <action android:name="android.service.wallpaper.WallpaperService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.service.wallpaper"
+                android:resource="@xml/live_wallpaper" />
         </service>
 
         <!-- The island over other apps (Plus): started by Zenith while the island is on and allowed,

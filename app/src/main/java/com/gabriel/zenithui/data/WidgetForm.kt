@@ -145,5 +145,23 @@ object WidgetLayouts {
         }
     }
 
+    /**
+     * The name of the design a widget has at one size, a word or two, for a widget whose sizes are
+     * different designs of the same thing and so are best told apart by name: the clock is figures
+     * at one size and a face at the next. Testers found its sizes hard to tell apart. Null for a
+     * kind with none; [kind], [width] and [height] are as for [note].
+     */
+    fun style(kind: String, width: Float, height: Float): String? = when (kind) {
+        "clock" -> when (WidgetForm.of(width, height)) {
+            WidgetForm.Mini -> "Face only"
+            WidgetForm.Strip -> "Digital"
+            WidgetForm.Square -> "Analogue"
+            WidgetForm.Wide -> "Side by side"
+            WidgetForm.Tall -> "Stacked"
+            WidgetForm.Big -> "Big face"
+        }
+        else -> null
+    }
+
     private fun togglesNote(grid: ToggleGrid, chosen: Int): String = grid.note(chosen)
 }

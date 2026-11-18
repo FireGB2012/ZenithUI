@@ -6,6 +6,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.EnterExitState
 import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -17,6 +18,7 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.snapping.SnapPosition
 import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
@@ -34,19 +36,26 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Layers
 import androidx.compose.material.icons.rounded.LayersClear
+import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -66,16 +75,21 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -85,6 +99,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.gabriel.zenithui.data.HomeGeometry
 import com.gabriel.zenithui.data.ROW_UNITS
+import com.gabriel.zenithui.data.WidgetBlurbs
 import com.gabriel.zenithui.data.WidgetLayouts
 import com.gabriel.zenithui.data.WidgetSize
 import com.gabriel.zenithui.data.WidgetSizes
@@ -105,7 +120,6 @@ import com.gabriel.zenithui.ui.common.unfoldIn
 import com.gabriel.zenithui.ui.common.unfoldOut
 import com.gabriel.zenithui.ui.common.wordsChange
 import com.gabriel.zenithui.ui.onboarding.PrimaryButton
-import com.gabriel.zenithui.ui.onboarding.Segmented
 import com.gabriel.zenithui.ui.theme.GlassMaterial
 import com.gabriel.zenithui.ui.theme.LocalBackdrop
 import com.gabriel.zenithui.ui.theme.LocalPalette
@@ -120,8 +134,8 @@ import kotlin.math.min
  * The widgets, as a page of their own: every one of them drawn for real, in your theme, on your
  * wallpaper, with the clock telling the time and the battery showing its charge — what you see
  * here is what lands on the home screen. Tapping one grows it into a showcase where its sizes
- * stand in a row, each a different design; glass or no glass is one switch; and one button puts
- * it on the page.
+ * stand in a row, each a different design; glass or no glass is one choice; and one button puts
+ * it on the page. Each card says in a few words what its widget is for ([WidgetBlurbs]).
  *
  * [geometry] is the home page's own lines, so every preview is cut to exactly the size it will be.
  */
@@ -269,19 +283,21 @@ private fun Gallery(
             if (stacking) {
                 "The one you choose goes onto the widget you held. Swipe up or down on the stack to go between them."
             } else {
-                "Each one is live. Tap it to see its sizes and add it."
+                // Short enough for one line at its larger size on a phone of ordinary width.
+                "Each one is live. Tap it to see its sizes."
             },
             color = palette.onGlassMuted,
-            fontSize = 15.sp,
-            lineHeight = 21.sp,
+            fontSize = 16.sp,
+            lineHeight = 23.sp,
             modifier = Modifier
                 .padding(horizontal = 4.dp)
                 .arriving(arrive, 0),
         )
-        // What the switch does is said under it, where the eye is when it is used.
+        // What the choice does is said under it, where the eye is when it is used.
         Column(Modifier.arriving(arrive, 1)) {
-            StyleSwitch(bare, onBare)
-            Spacer(Modifier.height(8.dp))
+            StyleHeading(Modifier.padding(start = 4.dp, bottom = 8.dp))
+            StyleChoice(bare, onBare)
+            Spacer(Modifier.height(10.dp))
             StyleNote(bare, Modifier.padding(horizontal = 4.dp))
         }
         square.chunked(2).forEachIndexed { row, pair ->
@@ -295,6 +311,7 @@ private fun Gallery(
                         size = sizes[WidgetSizes.startIndex(sizes)],
                         sizes = sizes.size,
                         wellHeight = 196.dp,
+                        blurbLines = 2,
                         settings = settings,
                         geometry = geometry,
                         bare = bare,
@@ -312,6 +329,7 @@ private fun Gallery(
             size = toggleSizes.firstOrNull { it.name == WidgetSizes.WIDE } ?: toggleSizes[WidgetSizes.startIndex(toggleSizes)],
             sizes = toggleSizes.size,
             wellHeight = 196.dp,
+            blurbLines = 1,
             settings = settings,
             geometry = geometry,
             bare = bare,
@@ -339,18 +357,87 @@ private fun Gallery(
     }
 }
 
+/** What the choice under it is of, so the two sides of it are read as a choice. */
+@Composable
+private fun StyleHeading(modifier: Modifier = Modifier) {
+    Text(
+        "WIDGET STYLE",
+        color = LocalPalette.current.onGlassMuted,
+        fontSize = 13.sp,
+        fontWeight = FontWeight.SemiBold,
+        letterSpacing = 1.sp,
+        modifier = modifier.semantics { heading() },
+    )
+}
+
 /**
- * Glass or no glass: the one choice that changes every widget on the page at once, so each side
- * of it says so in a symbol as well as a word, a pane and a pane struck through.
+ * Glass or no glass: the one choice that changes every widget on the page at once. Testers found
+ * its two sides hard to make out as a row of options, so each is a card of its own: its name large,
+ * what it means under it, and a symbol, a pane and a pane struck through. The one chosen has a ring
+ * in the accent round it and its symbol lit, so which it is never rests on a shade of grey alone.
  */
 @Composable
-private fun StyleSwitch(bare: Boolean, onBare: (Boolean) -> Unit) {
-    Segmented(
-        options = listOf("glass" to "Glass", "bare" to "No glass"),
-        selected = if (bare) "bare" else "glass",
-        onSelect = { onBare(it == "bare") },
-        icons = listOf(Icons.Rounded.Layers, Icons.Rounded.LayersClear),
-    )
+private fun StyleChoice(bare: Boolean, onBare: (Boolean) -> Unit, modifier: Modifier = Modifier) {
+    Row(
+        modifier
+            .fillMaxWidth()
+            .selectableGroup(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        StyleOption("Glass", "On a pane", Icons.Rounded.Layers, chosen = !bare, Modifier.weight(1f)) { onBare(false) }
+        StyleOption("No glass", "No pane", Icons.Rounded.LayersClear, chosen = bare, Modifier.weight(1f)) { onBare(true) }
+    }
+}
+
+@Composable
+private fun StyleOption(
+    name: String,
+    means: String,
+    icon: ImageVector,
+    chosen: Boolean,
+    modifier: Modifier,
+    onChoose: () -> Unit,
+) {
+    val palette = LocalPalette.current
+    val haptics = rememberHaptics()
+    val ring by animateColorAsState(if (chosen) palette.accent else palette.onGlass.copy(alpha = 0.16f), tween(200), label = "styleRing")
+    val disc by animateColorAsState(if (chosen) palette.accent else palette.onGlass.copy(alpha = 0.1f), tween(200), label = "styleDisc")
+    val symbol by animateColorAsState(if (chosen) palette.onAccent else palette.onGlass, tween(200), label = "styleSymbol")
+    Row(
+        modifier
+            .pressBounce(0.96f)
+            .clip(corners(20.dp))
+            .background(palette.onGlass.copy(alpha = if (chosen) 0.1f else 0.05f))
+            .border(if (chosen) 2.dp else 1.dp, ring, corners(20.dp))
+            .selectable(
+                selected = chosen,
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                role = Role.RadioButton,
+            ) {
+                if (!chosen) {
+                    haptics.tick()
+                    onChoose()
+                }
+            }
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            Modifier
+                .size(38.dp)
+                .clip(CircleShape)
+                .background(disc),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(icon, contentDescription = null, tint = symbol, modifier = Modifier.size(21.dp))
+        }
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            Text(name, color = palette.onGlass, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(means, color = palette.onGlassMuted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }
 }
 
 /** What the style chosen means, changing where it stands when the other is chosen. */
@@ -371,8 +458,8 @@ private fun StyleNote(bare: Boolean, modifier: Modifier = Modifier) {
                 "On a pane of glass that bends your wallpaper."
             },
             color = palette.onGlassMuted,
-            fontSize = 13.sp,
-            lineHeight = 18.sp,
+            fontSize = 15.sp,
+            lineHeight = 21.sp,
         )
     }
 }
@@ -413,7 +500,10 @@ private fun Modifier.arriving(arrive: Boolean, turn: Int, card: Boolean = false)
         .placedAgainWith { progress.value }
 }
 
-/** One widget in the gallery: itself, live, on the wallpaper, with its name underneath. */
+/**
+ * One widget in the gallery: itself, live, on the wallpaper, with its name underneath and what it
+ * is for under that, in [blurbLines] lines: the same on every card in a row, so the rows line up.
+ */
 @Composable
 private fun WidgetCard(
     spec: WidgetSpec,
@@ -421,6 +511,7 @@ private fun WidgetCard(
     /** How many sizes its showcase offers. */
     sizes: Int,
     wellHeight: Dp,
+    blurbLines: Int,
     settings: ZenithSettings,
     geometry: HomeGeometry?,
     bare: Boolean,
@@ -463,11 +554,25 @@ private fun WidgetCard(
         ) { name ->
             Text(name, color = palette.onGlass, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
+        WidgetBlurbs.of(spec.type)?.let { blurb ->
+            Text(
+                blurb,
+                color = palette.onGlassMuted,
+                fontSize = 14.sp,
+                lineHeight = 19.sp,
+                style = balanced,
+                minLines = blurbLines,
+                maxLines = blurbLines,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(start = 4.dp, end = 4.dp, top = 2.dp),
+            )
+        }
         Text(
             if (sizes == 1) "1 size" else "$sizes sizes",
             color = palette.onGlassMuted,
             fontSize = 13.sp,
-            modifier = Modifier.padding(start = 4.dp, end = 4.dp, top = 1.dp, bottom = 2.dp),
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier.padding(start = 4.dp, end = 4.dp, top = 6.dp, bottom = 2.dp),
         )
     }
 }
@@ -571,6 +676,8 @@ private fun Showcase(
         val notes = remember(real, kind, settings.toggles.size) {
             real.map { WidgetLayouts.note(kind, it.width.value, it.height.value, settings.toggles.size) }
         }
+        // And, for a widget whose sizes are different designs of one thing, the name of each.
+        val styles = remember(real, kind) { real.map { WidgetLayouts.style(kind, it.width.value, it.height.value) } }
 
         Column(
             Modifier
@@ -585,7 +692,7 @@ private fun Showcase(
                 scale = scale,
                 width = stageWidth,
                 strip = strip,
-                names = sizes.map { "${it.name}, ${it.spanX} by ${it.rows}" },
+                names = sizes.mapIndexed { index, size -> "${size.name}, ${size.spanX} by ${size.rows}" + (styles[index]?.let { ", $it" } ?: "") },
                 bare = bare,
                 settings = settings,
                 onPick = goTo,
@@ -617,24 +724,26 @@ private fun Showcase(
                     Text(
                         "${size.name}  \u00B7  ${size.spanX} \u00D7 ${size.rows}",
                         color = palette.onGlass,
-                        fontSize = 16.sp,
+                        fontSize = 17.sp,
                         fontWeight = FontWeight.SemiBold,
                     )
+                    styles[index]?.let { style -> StyleTag(style, Modifier.padding(top = 8.dp)) }
                     notes[index]?.let { note ->
-                        Spacer(Modifier.height(4.dp))
+                        Spacer(Modifier.height(6.dp))
                         Text(
                             note,
                             color = palette.onGlassMuted,
-                            fontSize = 14.sp,
-                            lineHeight = 20.sp,
+                            fontSize = 15.sp,
+                            lineHeight = 21.sp,
                             textAlign = TextAlign.Center,
+                            style = balanced,
                         )
                     }
                 }
             }
             Spacer(Modifier.height(20.dp))
             Column(Modifier.padding(horizontal = STAGE_INSET), horizontalAlignment = Alignment.CenterHorizontally) {
-                StyleSwitch(bare, onBare)
+                StyleChoice(bare, onBare)
                 Spacer(Modifier.height(14.dp))
                 AnimatedContent(
                     targetState = (if (bare) bareOf(spec) else spec).description,
@@ -644,9 +753,10 @@ private fun Showcase(
                     Text(
                         words,
                         color = palette.onGlassMuted,
-                        fontSize = 15.sp,
-                        lineHeight = 22.sp,
+                        fontSize = 16.sp,
+                        lineHeight = 23.sp,
                         textAlign = TextAlign.Center,
+                        style = balanced,
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
@@ -673,8 +783,8 @@ private fun Showcase(
                     Text(
                         "No page has room for it at this size. Try a smaller one, or free up some space.",
                         color = palette.onGlass,
-                        fontSize = 14.sp,
-                        lineHeight = 20.sp,
+                        fontSize = 15.sp,
+                        lineHeight = 21.sp,
                         textAlign = TextAlign.Center,
                         modifier = Modifier
                             .fillMaxWidth()
@@ -685,7 +795,8 @@ private fun Showcase(
                 Text(
                     "Once it is on the page you can pull it to any size you like.",
                     color = palette.onGlassMuted,
-                    fontSize = 13.sp,
+                    fontSize = 14.sp,
+                    lineHeight = 19.sp,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -755,8 +866,8 @@ private fun Stage(
 }
 
 /**
- * The sizes by name, each over the room it takes on the page ([SizeShape]), so they can be told
- * apart before any of them is looked at. A pill lies under the size in the middle of the stage and
+ * The sizes by name, each over the room it takes on the page ([SizeShape]) and with its columns by
+ * rows under it, so they can be told apart before any of them is looked at. A pill lies under the size in the middle of the stage and
  * goes with the stage as it is pulled, stretching towards the next size on the way and drawing
  * itself up there, as the pill of a row of options does; that size's shape lights up in the
  * accent. A tap on a name brings its size to the middle. All of it is drawn from [position], so
@@ -810,19 +921,28 @@ private fun SizePicker(
                     rows = size.rows,
                     columns = columns,
                     maxRows = tallest,
-                    modifier = Modifier.size(width = 42.dp, height = 28.dp),
+                    modifier = Modifier.size(width = 50.dp, height = 34.dp),
                     lit = near,
                 )
-                Spacer(Modifier.height(7.dp))
+                Spacer(Modifier.height(8.dp))
                 Text(
                     size.name,
                     color = palette.onGlass,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     modifier = Modifier
                         .graphicsLayer { alpha = 0.66f + 0.34f * near() }
                         // Said already, with its cells, by the size it names.
+                        .clearAndSetSemantics { },
+                )
+                Text(
+                    "${size.spanX} \u00D7 ${size.rows}",
+                    color = palette.onGlassMuted,
+                    fontSize = 12.sp,
+                    maxLines = 1,
+                    modifier = Modifier
+                        .graphicsLayer { alpha = 0.75f + 0.25f * near() }
                         .clearAndSetSemantics { },
                 )
             }
@@ -849,6 +969,24 @@ private fun sizeChange(reduced: Boolean, forwards: Boolean): ContentTransform {
         },
         // A size whose line runs onto a second takes the room smoothly, and nothing is cut off.
         sizeTransform = SizeTransform(clip = false),
+    )
+}
+
+/** The name of the design a size is ([WidgetLayouts.style]), in a capsule tinted with the accent. */
+@Composable
+private fun StyleTag(style: String, modifier: Modifier = Modifier) {
+    val palette = LocalPalette.current
+    Text(
+        style,
+        color = palette.onGlass,
+        fontSize = 14.sp,
+        fontWeight = FontWeight.SemiBold,
+        maxLines = 1,
+        modifier = modifier
+            .clip(corners(13.dp))
+            .background(palette.accent.copy(alpha = 0.22f))
+            .border(1.dp, palette.accent.copy(alpha = 0.55f), corners(13.dp))
+            .padding(horizontal = 12.dp, vertical = 4.dp),
     )
 }
 
@@ -893,6 +1031,13 @@ private fun stripPosition(strip: LazyListState, opensOn: Int): Float {
     }
     return before.index.toFloat()
 }
+
+/**
+ * The words' style, set in lines of about the same length where the phone can (Android 13 and
+ * later), so a second line is never one word on its own: for words in a narrow card, or centred.
+ */
+private val balanced: TextStyle
+    @Composable @ReadOnlyComposable get() = LocalTextStyle.current.copy(lineBreak = LineBreak.Heading)
 
 /** How small the showcase is when it starts out of a card, as a share of itself. */
 private const val GROWS_FROM = 0.35f

@@ -4,6 +4,7 @@ import android.accessibilityservice.AccessibilityService
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.provider.Settings
 import android.view.accessibility.AccessibilityEvent
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -55,6 +56,18 @@ class LockService : AccessibilityService() {
         fun notifications(): Boolean = instance?.performGlobalAction(GLOBAL_ACTION_NOTIFICATIONS) == true
 
         fun quickSettings(): Boolean = instance?.performGlobalAction(GLOBAL_ACTION_QUICK_SETTINGS) == true
+
+        /**
+         * Whether this copy of Zenith has the helper at all. The Play build goes without it until
+         * Play's Accessibility API declaration is made (app/src/release/AndroidManifest.xml); there,
+         * Lock the phone would only lead to an Accessibility page without Zenith on it.
+         */
+        fun available(context: Context): Boolean = runCatching {
+            context.packageManager.getServiceInfo(
+                ComponentName(context, LockService::class.java),
+                PackageManager.MATCH_DISABLED_COMPONENTS,
+            )
+        }.isSuccess
 
         /** Whether it has been switched on in Android's settings, running or not. */
         fun enabled(context: Context): Boolean {

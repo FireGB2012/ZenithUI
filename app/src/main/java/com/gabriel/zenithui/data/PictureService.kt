@@ -278,7 +278,8 @@ class PictureService : AccessibilityService() {
 
         /**
          * Whether this copy of Zenith offers it (see [PictureRules.offered]): the copy that installs
-         * by tapping it has none, and its row would only lead to an Accessibility page without Zenith.
+         * by tapping it has none, nor has the Play build until Play's Accessibility API declaration
+         * is made, and there its row would only lead to an Accessibility page without Zenith.
          */
         fun available(context: Context): Boolean = PictureRules.offered(
             Build.VERSION.SDK_INT,

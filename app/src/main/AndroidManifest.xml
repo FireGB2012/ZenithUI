@@ -21,6 +21,10 @@
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <!-- The designs that move are a live wallpaper; on a phone without them they are not offered. -->
     <uses-feature android:name="android.software.live_wallpaper" android:required="false" />
+    <!-- Home stands upright (MainActivity's portrait), which makes Play count a portrait screen as
+         required and keep Zenith off tablets, Chromebooks and Android XR. It is not required: on a
+         large screen Android lets Zenith turn anyway. Play's pre-review check asked for this (108). -->
+    <uses-feature android:name="android.hardware.screen.portrait" android:required="false" />
 
     <queries>
         <intent>

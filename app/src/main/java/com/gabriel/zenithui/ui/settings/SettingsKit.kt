@@ -73,6 +73,8 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -89,6 +91,8 @@ import com.gabriel.zenithui.ui.common.rememberTick
 import com.gabriel.zenithui.ui.common.rollOver
 import com.gabriel.zenithui.ui.common.wordsChange
 import com.gabriel.zenithui.ui.theme.LocalPalette
+import com.gabriel.zenithui.ui.theme.LocalTheme
+import com.gabriel.zenithui.ui.theme.isGlass
 import com.gabriel.zenithui.ui.theme.ZenithShapes
 import com.gabriel.zenithui.ui.theme.corners
 import com.gabriel.zenithui.ui.theme.themeSurface
@@ -148,18 +152,45 @@ internal fun Modifier.riseIn(index: Int): Modifier {
  */
 @Composable
 internal fun Group(padding: Dp = 0.dp, rise: Int? = null, content: @Composable ColumnScope.() -> Unit) {
+    val glass = LocalTheme.current.isGlass
+    val edge = LocalPalette.current.edge
     Column(
         Modifier
             .fillMaxWidth()
             .then(if (rise != null) Modifier.riseIn(rise) else Modifier)
             // The theme's block: a faint wash in Liquid Glass, a card in Clean, and so on.
             .themeSurface(GROUP_SHAPE)
+            // In Liquid Glass a hairline round the wash as well, so where one group ends and the
+            // next begins is seen at a glance rather than worked out from the gap between them.
+            // The other themes draw an edge of their own.
+            .then(if (glass) Modifier.border(1.dp, edge.copy(alpha = edge.alpha * GROUP_EDGE), GROUP_SHAPE) else Modifier)
             .padding(padding),
         content = content,
     )
 }
 
 private val GROUP_SHAPE = RoundedCornerShape(22.dp)
+
+/** How much of a panel's edge colour a group's hairline is drawn in: enough to see, not a frame. */
+private const val GROUP_EDGE = 0.8f
+
+/**
+ * The name of a category of settings, set over its group. A step stronger than small print and
+ * marked as a heading, so the first page reads as its parts, and a screen reader can go from one
+ * category to the next.
+ */
+@Composable
+internal fun CategoryHeading(text: String, modifier: Modifier = Modifier) {
+    Text(
+        text.uppercase(),
+        color = LocalPalette.current.onGlass.copy(alpha = 0.9f),
+        fontSize = 13.sp,
+        fontWeight = FontWeight.SemiBold,
+        letterSpacing = 1.2.sp,
+        modifier = modifier.semantics { heading() },
+    )
+}
+
 private val TILE_SHAPE = RoundedCornerShape(11.dp)
 
 @Composable

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Release builds (the Play bundle) leave out Zenith's two accessibility helpers. Play does not take
+    an app with an accessibility service until its Accessibility API declaration is made in Play
+    Console (see RELEASING.md), so until then the Play build goes without them. Debug builds keep
+    both. Without them the app hides Lock the phone, the Lock helper row and App pictures:
+    LockService.available and PictureService.available look for the services in the manifest.
+
+    To put them back in the Play build once the declaration is made, delete this file.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <application>
+        <service
+            android:name="com.gabriel.zenithui.data.LockService"
+            tools:node="remove" />
+        <service
+            android:name="com.gabriel.zenithui.data.PictureService"
+            tools:node="remove" />
+    </application>
+</manifest>

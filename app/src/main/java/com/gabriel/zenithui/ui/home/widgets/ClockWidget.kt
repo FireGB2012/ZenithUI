@@ -36,7 +36,8 @@ import java.time.format.DateTimeFormatter
  * greeting and the next alarm. Its face is paper by day and night by night ([dialFaceAt]).
  *
  * - Mini: the face alone.
- * - Strip: the time, the day and the date, and the next alarm where it fits.
+ * - Strip: the time, the day (shortened where the whole of it does not fit) and the date, and the
+ *   next alarm where it fits.
  * - Square: the face with its hours written round it and the day under twelve.
  * - Wide: a greeting, the time and the date, beside the face.
  * - Tall: the face, the time and the date under it, and the next alarm at the foot.
@@ -50,6 +51,7 @@ internal fun ClockWidget(form: WidgetForm, width: Dp, height: Dp, userName: Stri
     val time = ClockWords.time(now, h24)
     val half = ClockWords.half(now, h24)
     val weekday = remember(now.toLocalDate()) { now.format(DateTimeFormatter.ofPattern("EEEE")) }
+    val shortWeekday = remember(now.toLocalDate()) { now.format(DateTimeFormatter.ofPattern("EEE")) }
     val date = remember(now.toLocalDate()) { now.format(DateTimeFormatter.ofPattern("d MMMM")) }
     val shortDate = remember(now.toLocalDate()) { now.format(DateTimeFormatter.ofPattern("d MMM")) }
     val short = remember(now.toLocalDate()) { now.format(DateTimeFormatter.ofPattern("EEE d")).uppercase() }
@@ -75,7 +77,8 @@ internal fun ClockWidget(form: WidgetForm, width: Dp, height: Dp, userName: Stri
                 TimeLine(time, half, 30.sp)
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
-                    Words(weekday, Type.body, weight = FontWeight.SemiBold)
+                    // "Wed" where "Wednesday" would be cut short: at its smallest it read "Wedne...".
+                    FirstThatFits(listOf(weekday, shortWeekday), Type.body, weight = FontWeight.SemiBold)
                     Words(if (w >= 250.dp) date else shortDate, Type.meta, color = soft())
                 }
                 if (alarm != null && w >= 250.dp) {

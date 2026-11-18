@@ -62,7 +62,7 @@ data class ThemeColours(
     val backdrop: List<Long>,
     /** The face of a panel that is not glass: a group of rows, a card. Its alpha is its own. */
     val surface: Long,
-    /** Words, and the icons beside them. Second lines are the same at [MUTED]. */
+    /** Words, and the icons beside them. Second lines are the same at [muted]. */
     val ink: Long,
     /** The colour of actions: buttons, what is chosen, sliders, links. */
     val accent: Long,
@@ -102,8 +102,18 @@ data class ThemeColours(
     }
 
     companion object {
-        /** Second lines and small print: the ink at this much, which every theme is tested to hold. */
+        /** Second lines and small print in Light: the ink at this much, which every theme is tested to hold. */
         const val MUTED = 0.74f
+
+        /**
+         * The same in Dark. Testers asked twice for the subtitles in Settings to stand out more
+         * against the dark, so there they are 84% of the ink: seven to one or better on every dark
+         * page and panel, and still a step behind the words above them.
+         */
+        const val MUTED_DARK = 0.84f
+
+        /** How much of the ink second lines and small print are, in Dark or in Light. */
+        fun muted(dark: Boolean): Float = if (dark) MUTED_DARK else MUTED
 
         /** "#AARRGGBB", as a theme is written down. */
         fun hex(argb: Long): String = "#%08X".format(argb and 0xFFFFFFFFL)

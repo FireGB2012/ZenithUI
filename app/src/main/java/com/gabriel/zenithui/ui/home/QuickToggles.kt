@@ -223,18 +223,35 @@ private val TILE_END = 14.dp
 
 /** Inside a card, all round. */
 private val CARD_PAD = 14.dp
-private val CARD_DISC = 44.dp
 
 /** A card's corners: rounder than the widget's would allow, as Control Center's own modules are. */
 private val CARD_SHAPE = RoundedCornerShape(18.dp)
 
-/** How much of a round button its symbol fills: it is a big button now, so a little less than half. */
-private const val BUTTON_SYMBOL = 0.44f
-private val SMALLEST_SYMBOL = 18.dp
-private val LARGEST_SYMBOL = 28.dp
+/**
+ * How large a control's symbol is. Testers asked for them a little larger, to be known at a glance:
+ * each is now about a tenth larger than it was, and still leaves a ring of its disc round it, the
+ * disc's colour being how a control says it is on.
+ */
+internal object ToggleSymbols {
+    /** How much of a round button its symbol fills: half. */
+    const val BUTTON = 0.5f
+    val SMALLEST = 19.dp
+    val LARGEST = 32.dp
 
-/** The same for a "No glass" control, where the symbol is the whole button. */
-private const val BARE_TOGGLE_SYMBOL = 0.7f
+    /** How much of a tile's disc its symbol fills. */
+    const val TILE = 0.58f
+
+    /** A card's disc, and its symbol. */
+    val CARD_DISC = 44.dp
+    val CARD = 26.dp
+
+    /** The same for a "No glass" control, where the symbol is the whole button. */
+    const val BARE = 0.76f
+
+    fun button(size: Dp): Dp = (size * BUTTON).coerceIn(SMALLEST, LARGEST)
+
+    fun tile(disc: Dp): Dp = disc * TILE
+}
 
 /** A tile's disc: most of its height, inside the tile's round end. */
 private fun tileDisc(tileHeight: Dp): Dp = (tileHeight * 0.6f).coerceIn(30.dp, 40.dp)
@@ -427,8 +444,6 @@ private fun BareSymbol(toggle: QuickToggle, size: Dp) {
     Symbol(toggle.icon, size, tint = ink)
 }
 
-private fun symbolFor(button: Dp): Dp = (button * BUTTON_SYMBOL).coerceIn(SMALLEST_SYMBOL, LARGEST_SYMBOL)
-
 @Composable
 private fun ToggleButton(toggle: QuickToggle, size: Dp) {
     val bare = LocalBare.current
@@ -445,7 +460,7 @@ private fun ToggleButton(toggle: QuickToggle, size: Dp) {
             .clickable(role = if (toggle.option.id == "torch") Role.Switch else Role.Button, onClick = toggle.onClick),
         contentAlignment = Alignment.Center,
     ) {
-        if (bare) BareSymbol(toggle, size * BARE_TOGGLE_SYMBOL) else LitDisc(toggle, size, symbolFor(size))
+        if (bare) BareSymbol(toggle, size * ToggleSymbols.BARE) else LitDisc(toggle, size, ToggleSymbols.button(size))
     }
 }
 
@@ -468,7 +483,7 @@ private fun ToggleTile(toggle: QuickToggle, name: String, scale: Float, height: 
             .padding(start = (height - disc) / 2, end = TILE_END),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (bare) BareSymbol(toggle, disc * 0.8f) else LitDisc(toggle, disc, disc * 0.5f)
+        if (bare) BareSymbol(toggle, disc * 0.8f) else LitDisc(toggle, disc, ToggleSymbols.tile(disc))
         Spacer(Modifier.width(TILE_DISC_GAP))
         NameAndState(toggle, name, TILE_NAME, TILE_WORDS, scale)
     }
@@ -488,7 +503,7 @@ private fun ToggleCard(toggle: QuickToggle, name: String, scale: Float, modifier
             .padding(CARD_PAD),
         verticalArrangement = Arrangement.SpaceBetween,
     ) {
-        if (bare) BareSymbol(toggle, CARD_DISC * 0.8f) else LitDisc(toggle, CARD_DISC, 23.dp)
+        if (bare) BareSymbol(toggle, ToggleSymbols.CARD_DISC * 0.8f) else LitDisc(toggle, ToggleSymbols.CARD_DISC, ToggleSymbols.CARD)
         NameAndState(toggle, name, CARD_NAME, CARD_WORDS, scale)
     }
 }

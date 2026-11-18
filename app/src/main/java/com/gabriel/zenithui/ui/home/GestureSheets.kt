@@ -76,6 +76,8 @@ fun GestureActionSheet(
     apps: List<AppInfo>,
     /** Whether the lock helper is on, so Lock the phone can say it is still to be set up. */
     helperOn: Boolean,
+    /** Whether this copy of Zenith has the lock helper at all: without it, locking is not offered. */
+    lockHelper: Boolean = true,
     shortcutsOf: suspend (String) -> List<AppShortcut>,
     onPick: (String) -> Unit,
     onDismiss: () -> Unit,
@@ -85,11 +87,12 @@ fun GestureActionSheet(
     val words = query.trim().lowercase()
     val shown = remember(apps, words) { if (words.isEmpty()) apps else apps.filter { words in it.label.lowercase() } }
     var opened by remember { mutableStateOf<String?>(null) }
+    val offered = remember(lockHelper) { GestureActions.offered(lockHelper) }
 
     ZenithSheet(visible = visible, onDismiss = onDismiss, title = Gestures.label(gesture), maxHeightFraction = 0.86f) {
         LazyColumn(Modifier.weight(1f, fill = false)) {
-            items(GestureActions.fixed, key = { it }) { action ->
-                val index = GestureActions.fixed.indexOf(action)
+            items(offered, key = { it }) { action ->
+                val index = offered.indexOf(action)
                 ChoiceLine(
                     title = GestureActions.label(action) { null },
                     detail = GestureActions.detail(action),

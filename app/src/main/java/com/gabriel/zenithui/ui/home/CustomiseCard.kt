@@ -4,7 +4,9 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -22,12 +24,15 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.Apps
 import androidx.compose.material.icons.rounded.GridView
 import androidx.compose.material.icons.rounded.LightMode
+import androidx.compose.material.icons.rounded.Wallpaper
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -46,23 +51,30 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.gabriel.zenithui.data.IconStyles
+import com.gabriel.zenithui.data.WallStyle
 import com.gabriel.zenithui.data.WidgetLooks
 import com.gabriel.zenithui.ui.common.AppIcon
 import com.gabriel.zenithui.ui.common.LocalMotionLevel
 import com.gabriel.zenithui.ui.common.Motion
 import com.gabriel.zenithui.ui.common.rememberTick
 import com.gabriel.zenithui.ui.common.LocalIconStyle
+import com.gabriel.zenithui.ui.theme.LocalGlassLevels
+import com.gabriel.zenithui.ui.theme.LocalPalette
+import com.gabriel.zenithui.ui.theme.ZenithPalette
 import com.gabriel.zenithui.ui.theme.corners
 import com.gabriel.zenithui.ui.theme.glass
+import com.gabriel.zenithui.ui.theme.toned
 import com.gabriel.zenithui.ui.theme.wallPaneInk
 
 /** What lies on the card under its words, in their ink (see [wallPaneInk]): faint, and when chosen less so. */
@@ -72,9 +84,12 @@ private val fillStrong: Color @Composable @ReadOnlyComposable get() = wallPaneIn
 /**
  * Customise: a card of glass at the foot of the home screen, with the home screen itself above it
  * changing as you choose. How the icons are drawn, how the widgets are, larger icons with no names
- * under them, a dimmer wallpaper, and the ways on to the wallpapers, the bedside clock, How It Works
- * and Settings. It takes the place of the Customise sheet, and is reached from the brush in edit
- * mode's bar.
+ * under them, a dimmer wallpaper, the wallpaper (a picture of it, with what it is and what it does),
+ * and the ways on to the bedside clock, How It Works and Settings. It takes the place of the
+ * Customise sheet, and is reached from the brush in edit mode's bar.
+ *
+ * Testers found its options close together, so each part of it now stands apart from the next, with
+ * a fine line between them, and the buttons at its foot have more room round them and between them.
  *
  * It stands on the wallpaper, so it is the same clear glass in Light and in Dark. A touch on the home
  * screen above it, or Back, puts it away.
@@ -94,6 +109,12 @@ internal fun CustomiseCard(
     /** Shown only while they apply: the new look not yet on, Zenith not yet the home app. */
     showNewLook: Boolean,
     showMakeHome: Boolean,
+    /** The wallpaper in use: one of Zenith's designs, or null for a picture of your own or one set elsewhere. */
+    wallpaper: WallStyle?,
+    /** The colours that design is painted in. */
+    wallpaperColours: ZenithPalette?,
+    /** Whether it is painted again when light and dark changes. */
+    wallpaperFollows: Boolean,
     onIconStyle: (String) -> Unit,
     onWidgetLook: (String) -> Unit,
     onLarge: (Boolean) -> Unit,
@@ -169,7 +190,7 @@ internal fun CustomiseCard(
 
             // Each style on a real icon from this home screen, as it will look.
             Row(
-                Modifier.fillMaxWidth().padding(top = 14.dp, start = 6.dp, end = 6.dp),
+                Modifier.fillMaxWidth().padding(top = SECTION_GAP, start = 6.dp, end = 6.dp),
                 horizontalArrangement = Arrangement.SpaceAround,
             ) {
                 for (style in listOf(IconStyles.ORIGINAL, IconStyles.GLASS, IconStyles.TINTED)) {
@@ -183,7 +204,8 @@ internal fun CustomiseCard(
                 }
             }
 
-            Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Hairline()
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text("Widgets", color = wallPaneInk(), fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                 Row(Modifier.clip(corners(15.dp)).background(fill).padding(3.dp)) {
                     for (look in listOf(WidgetLooks.COLOUR, WidgetLooks.GLASS)) {
@@ -200,25 +222,27 @@ internal fun CustomiseCard(
                                     }
                                 }
                                 .semantics { stateDescription = if (on) "Chosen" else "Not chosen" }
-                                .padding(horizontal = 14.dp, vertical = 6.dp),
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
                         ) {
-                            Text(WidgetLooks.label(look), color = wallPaneInk(), fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                            Text(WidgetLooks.label(look), color = wallPaneInk(), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
                         }
                     }
                 }
             }
 
+            Hairline()
+            WallpaperRow(wallpaper, wallpaperColours, wallpaperFollows, onWallpaper)
+
             // The ways on, all of them in sight: they wrap onto a second line rather than run off
             // the card's edge, where the last of them was cut in half. They put the card away as
             // they go.
             FlowRow(
-                Modifier.fillMaxWidth().padding(top = 14.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+                Modifier.fillMaxWidth().padding(top = SECTION_GAP),
+                horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 if (showNewLook) Capsule("Use the New Look", onNewLook)
                 if (showMakeHome) Capsule("Make Zenith Your Home Screen", onMakeHome)
-                Capsule("Wallpaper", onWallpaper)
                 Capsule("Bedside Clock", onClock)
                 Capsule("How It Works", onHelp)
                 Capsule("All Settings", onSettings)
@@ -294,8 +318,72 @@ private fun Capsule(words: String, onClick: () -> Unit) {
             .clip(corners(16.dp))
             .background(fill)
             .clickable(role = Role.Button, onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .padding(horizontal = 14.dp, vertical = 10.dp),
     ) {
-        Text(words, color = wallPaneInk(), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+        Text(words, color = wallPaneInk(), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
     }
 }
+
+/** A fine line across the card between one part of it and the next, with room above and below. */
+@Composable
+private fun Hairline() {
+    Box(
+        Modifier
+            .padding(vertical = SECTION_GAP)
+            .fillMaxWidth()
+            .height(1.dp)
+            .background(wallPaneInk().copy(alpha = 0.14f)),
+    )
+}
+
+/**
+ * The way on to the wallpapers, as a picture of the wallpaper in use beside what it is called, in
+ * which colours, and what it does ([WallpaperSummary]). The picture is the wallpaper itself where
+ * Zenith has a copy of it, or the design painted afresh; for one set in another app, which Android
+ * keeps from Zenith, a symbol.
+ */
+@Composable
+private fun WallpaperRow(style: WallStyle?, colours: ZenithPalette?, follows: Boolean, onClick: () -> Unit) {
+    val ink = wallPaneInk()
+    val picture = LocalGlassLevels.current?.sharp
+    val name = WallpaperSummary.name(style, colours, ownPicture = picture != null)
+    val how = WallpaperSummary.how(style, follows, ownPicture = picture != null)
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(corners(20.dp))
+            .background(fill)
+            .clickable(role = Role.Button, onClickLabel = "Choose a wallpaper", onClick = onClick)
+            .padding(10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            Modifier
+                .size(width = 40.dp, height = 72.dp)
+                .clip(corners(10.dp))
+                .background(fillStrong)
+                .border(1.dp, ink.copy(alpha = 0.22f), corners(10.dp)),
+            contentAlignment = Alignment.Center,
+        ) {
+            val dark = LocalPalette.current.dark
+            when {
+                picture != null -> Image(picture, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                style != null && colours != null ->
+                    WallpaperImage(style, remember(colours, dark) { colours.toned(dark) }, widthPx = 120, modifier = Modifier.fillMaxSize())
+                else -> Icon(Icons.Rounded.Wallpaper, contentDescription = null, tint = ink, modifier = Modifier.size(20.dp))
+            }
+        }
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            Text("Wallpaper", color = ink, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+            Spacer(Modifier.height(2.dp))
+            Text(name, color = ink.copy(alpha = 0.86f), fontSize = 13.5.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(how, color = ink.copy(alpha = 0.86f), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        Spacer(Modifier.width(6.dp))
+        Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, contentDescription = null, tint = ink.copy(alpha = 0.7f), modifier = Modifier.size(22.dp))
+    }
+}
+
+/** Between one part of the card and the next: above and below the line between them. */
+private val SECTION_GAP = 16.dp

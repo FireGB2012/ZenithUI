@@ -600,7 +600,7 @@ private fun rememberNotificationAccess(): Boolean {
 internal fun MotionOptions(settings: ZenithSettings, actions: SettingsActions, onAdvanced: () -> Unit) {
     val change = actions.change
     val context = LocalContext.current
-    // The copy of Zenith that installs by tapping it has no picture helper to offer.
+    // Neither the copy that installs by tapping it nor, for now, the Play build has the picture helper to offer.
     val pictures = remember(context) { PictureService.available(context) }
     Group(rise = 0) {
         Spot("animations") {

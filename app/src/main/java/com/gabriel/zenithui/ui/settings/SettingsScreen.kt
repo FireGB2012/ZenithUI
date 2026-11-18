@@ -83,6 +83,8 @@ import com.gabriel.zenithui.data.AnimationPreset
 import com.gabriel.zenithui.data.AppInfo
 import com.gabriel.zenithui.data.HomeItem
 import com.gabriel.zenithui.data.IconShapes
+import com.gabriel.zenithui.data.LockService
+import com.gabriel.zenithui.data.PictureService
 import com.gabriel.zenithui.data.PlusStatus
 import com.gabriel.zenithui.data.ZenithSettings
 import com.gabriel.zenithui.ui.common.FullPage
@@ -90,7 +92,6 @@ import com.gabriel.zenithui.ui.common.LargeTitle
 import com.gabriel.zenithui.ui.common.LocalMotionLevel
 import com.gabriel.zenithui.ui.common.Motion
 import com.gabriel.zenithui.ui.common.PAGE_GONE_MS
-import com.gabriel.zenithui.ui.common.SectionLabel
 import com.gabriel.zenithui.ui.common.TITLE_GONE_PX
 import com.gabriel.zenithui.ui.common.appearIn
 import com.gabriel.zenithui.ui.common.popIn
@@ -268,7 +269,9 @@ fun SettingsScreen(
                     .fillMaxSize()
                     .verticalScroll(scroll)
                     .padding(horizontal = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                // A little more room between groups than there was, on every page, so each stands
+                // apart from the next.
+                verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 LargeTitle(current?.title ?: "Settings", scrolled = { scroll.value })
                 CompositionLocalProvider(
@@ -373,10 +376,12 @@ private fun Groups(settings: ZenithSettings, plus: PlusStatus, account: AccountA
         Column(
             Modifier
                 .riseIn(block + 1)
-                .padding(top = if (block == 0) 2.dp else 10.dp),
+                // Testers asked for the categories to stand further apart: a category is now
+                // twice as far from the next as before, with its heading in a stronger ink.
+                .padding(top = if (block == 0) 4.dp else CATEGORY_GAP),
         ) {
             // Over the tiles of its rows, not over the edge of the group.
-            SectionLabel(heading, Modifier.padding(start = 14.dp, bottom = 8.dp))
+            CategoryHeading(heading, Modifier.padding(start = 14.dp, bottom = 10.dp))
             Group {
                 pages.forEachIndexed { index, page ->
                     if (index > 0) GroupDivider()
@@ -393,9 +398,20 @@ private fun Groups(settings: ZenithSettings, plus: PlusStatus, account: AccountA
     }
 }
 
+/** Between one category of the first page and the next, over the room every block has: see [SettingsScreen]. */
+private val CATEGORY_GAP = 20.dp
+
 @Composable
 private fun Results(query: String, server: Boolean, onOpen: (SettingsPage, String?) -> Unit) {
-    val found = remember(query, server) { SettingsCatalog.search(query, server) }
+    val context = LocalContext.current
+    // A copy of Zenith without an accessibility helper has no row for it to find.
+    val helpers = remember(context) {
+        buildSet {
+            if (LockService.available(context)) add(Helper.Lock)
+            if (PictureService.available(context)) add(Helper.Pictures)
+        }
+    }
+    val found = remember(query, server, helpers) { SettingsCatalog.search(query, server, helpers) }
     if (found.isEmpty()) {
         Note("Nothing in Settings is called “${query.trim()}”.", Modifier.padding(top = 6.dp))
         return

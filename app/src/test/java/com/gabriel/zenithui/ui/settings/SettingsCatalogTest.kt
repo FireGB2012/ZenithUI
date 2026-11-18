@@ -161,4 +161,22 @@ class SettingsCatalogTest {
         assertEquals("backup", SettingsCatalog.search("back up", server = false).first().id)
         assertEquals(SettingsCatalog.search("haptics"), SettingsCatalog.search("haptics", server = false))
     }
+
+    @Test
+    fun `a copy of Zenith without an accessibility helper has no row for it to find, and nothing else goes missing`() {
+        val none = emptySet<Helper>()
+        assertEquals(emptyList<SettingsEntry>(), SettingsCatalog.search("lock helper", helpers = none))
+        assertEquals(emptyList<SettingsEntry>(), SettingsCatalog.search("app pictures", helpers = none))
+        assertTrue("lockHelper" !in SettingsCatalog.on(SettingsPage.Gestures, helpers = none).map { it.id })
+        assertTrue("appPictures" !in SettingsCatalog.on(SettingsPage.Motion, helpers = none).map { it.id })
+        // One without the other: each row goes with its own helper.
+        assertEquals("lockHelper", SettingsCatalog.search("lock helper", helpers = setOf(Helper.Lock)).first().id)
+        assertEquals(emptyList<SettingsEntry>(), SettingsCatalog.search("app pictures", helpers = setOf(Helper.Lock)))
+        assertEquals("appPictures", SettingsCatalog.search("app pictures", helpers = setOf(Helper.Pictures)).first().id)
+        // With both, as before; and what needs neither is found either way.
+        assertEquals("lockHelper", SettingsCatalog.search("lock helper").first().id)
+        assertEquals("appPictures", SettingsCatalog.search("app pictures").first().id)
+        assertEquals(SettingsCatalog.search("haptics"), SettingsCatalog.search("haptics", helpers = none))
+        assertEquals(SettingsCatalog.on(SettingsPage.Home), SettingsCatalog.on(SettingsPage.Home, helpers = none))
+    }
 }

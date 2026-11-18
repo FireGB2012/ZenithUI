@@ -50,6 +50,32 @@ class GesturesTest {
     }
 
     @Test
+    fun `a copy of Zenith without the lock helper does not offer locking`() {
+        assertEquals(GestureActions.fixed, GestureActions.offered(lockHelper = true))
+        val without = GestureActions.offered(lockHelper = false)
+        assertEquals(GestureActions.fixed - GestureActions.LOCK, without)
+        // No gesture needs the helper by default, so every default is still on offer.
+        Gestures.ids.forEach { assertTrue(it, Gestures.default(it) in without) }
+    }
+
+    @Test
+    fun `locking chosen in a copy with the lock helper does the gesture's default in one without`() {
+        // From a backup, or a phone that had a copy with the helper: the choice itself is kept, for
+        // a copy that has the helper again.
+        val chosen = mapOf(
+            Gestures.DOUBLE_TAP to GestureActions.LOCK,
+            Gestures.SWIPE_DOWN to GestureActions.LOCK,
+            Gestures.TWO_UP to GestureActions.TORCH,
+        )
+        assertEquals(GestureActions.NONE, Gestures.actionFor(Gestures.DOUBLE_TAP, chosen, lockHelper = false))
+        assertEquals(GestureActions.NOTIFICATIONS, Gestures.actionFor(Gestures.SWIPE_DOWN, chosen, lockHelper = false))
+        assertEquals(GestureActions.TORCH, Gestures.actionFor(Gestures.TWO_UP, chosen, lockHelper = false))
+        // With the helper, locking is locking.
+        assertEquals(GestureActions.LOCK, Gestures.actionFor(Gestures.DOUBLE_TAP, chosen, lockHelper = true))
+        assertEquals(GestureActions.LOCK, Gestures.actionFor(Gestures.DOUBLE_TAP, chosen))
+    }
+
+    @Test
     fun `chosen gestures survive being written and read back`() {
         val settings = ZenithSettings(gestures = mapOf(Gestures.DOUBLE_TAP to GestureActions.LOCK, Gestures.TWO_UP to GestureActions.app("a/b")))
         assertEquals(settings.gestures, ZenithSettings.fromJson(JSONObject(settings.toJson().toString())).gestures)

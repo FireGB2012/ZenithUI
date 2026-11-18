@@ -37,8 +37,15 @@ object Gestures {
         else -> GestureActions.NONE
     }
 
-    /** What [id] does: what you chose for it, or what it does by default. */
-    fun actionFor(id: String, chosen: Map<String, String>): String = chosen[id] ?: default(id)
+    /**
+     * What [id] does: what you chose for it, or what it does by default. Locking chosen in a copy
+     * of Zenith with the lock helper counts as no choice in a copy without one ([lockHelper]); the
+     * choice itself is kept, for a copy that has the helper again.
+     */
+    fun actionFor(id: String, chosen: Map<String, String>, lockHelper: Boolean = true): String {
+        val action = chosen[id] ?: return default(id)
+        return if (!lockHelper && GestureActions.needsHelper(action)) default(id) else action
+    }
 
     /** [chosen] with [action] for [id]. Choosing a gesture's default is the same as not choosing. */
     fun with(chosen: Map<String, String>, id: String, action: String): Map<String, String> =
@@ -110,4 +117,10 @@ object GestureActions {
 
     /** Whether [action] can only work once Zenith's lock helper is switched on in Android's settings. */
     fun needsHelper(action: String): Boolean = action == LOCK
+
+    /**
+     * The ones a gesture can be set to in this copy of Zenith. One without the lock helper (the Play
+     * build, until Play's Accessibility API declaration is made) does not offer locking.
+     */
+    fun offered(lockHelper: Boolean): List<String> = if (lockHelper) fixed else fixed.filterNot { needsHelper(it) }
 }

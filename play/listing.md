@@ -136,6 +136,10 @@ A whole new home screen.
 Already set up? Zenith asks once before anything moves.
 ```
 
+For 3.8 (107): the same text as 106 above. 107 is 106 without the two accessibility helpers
+(Lock with a gesture, App pictures), which Play only takes with its Accessibility API declaration;
+the notes never mentioned them, so they stand as they are.
+
 For the next update, the one that makes everything yours (check it is under 500 characters):
 
 ```

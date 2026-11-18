@@ -21,6 +21,13 @@ enum class SettingsPage(val title: String, val opensSheet: Boolean = false) {
 }
 
 /**
+ * Zenith's two accessibility helpers, which a copy of Zenith can be without: the Play build has
+ * neither until Play's Accessibility API declaration is made (app/src/release/AndroidManifest.xml),
+ * and the copy that installs by tapping it has no app picture helper.
+ */
+enum class Helper { Lock, Pictures }
+
+/**
  * One option: where it lives, what it is called on the page, and the other words somebody might
  * type when looking for it.
  */
@@ -31,6 +38,8 @@ data class SettingsEntry(
     val keywords: String = "",
     /** Only there in a build that has a server to talk to. */
     val server: Boolean = false,
+    /** Only there in a copy of Zenith that has this accessibility helper. */
+    val helper: Helper? = null,
 )
 
 /**
@@ -75,7 +84,7 @@ object SettingsCatalog {
         SettingsEntry("performance", SettingsPage.Motion, "Performance", "lag laggy slow smooth smoothness fps frames frame rate stutter jank speed fast lite auto"),
         SettingsEntry("openAnimation", SettingsPage.Motion, "Opening apps", "launch colour color glass card"),
         SettingsEntry("closeAnimation", SettingsPage.Motion, "Closing apps", "close shrink into icon plain window"),
-        SettingsEntry("appPictures", SettingsPage.Motion, "App pictures", "screenshot accessibility helper picture real open close"),
+        SettingsEntry("appPictures", SettingsPage.Motion, "App pictures", "screenshot accessibility helper picture real open close", helper = Helper.Pictures),
         SettingsEntry("pageEffect", SettingsPage.Motion, "Page swipe", "depth slide cube stack carousel wheel flip fold transition effect turn"),
         SettingsEntry("arrival", SettingsPage.Motion, "Coming home", "arrive fly in unlock cascade below middle liquid wave ripple splash"),
         SettingsEntry("drawerArrival", SettingsPage.Motion, "Opening the drawer", "app drawer rise grow glass swipe up"),
@@ -97,7 +106,7 @@ object SettingsCatalog {
         SettingsEntry("gesture_pinchIn", SettingsPage.Gestures, "Pinch in", "zoom customise gesture"),
         SettingsEntry("gesture_pinchOut", SettingsPage.Gestures, "Pinch out", "zoom overview pages gesture spread"),
         SettingsEntry("gesture_home", SettingsPage.Gestures, "Home button, when already home", "press first page gesture"),
-        SettingsEntry("lockHelper", SettingsPage.Gestures, "Lock helper", "accessibility lock screen off double tap"),
+        SettingsEntry("lockHelper", SettingsPage.Gestures, "Lock helper", "accessibility lock screen off double tap", helper = Helper.Lock),
 
         SettingsEntry("appsView", SettingsPage.Apps, "Swipe up for", "drawer library list"),
         SettingsEntry("drawerSort", SettingsPage.Apps, "Order", "sort drawer most used newest colour color alphabetical a to z"),
@@ -138,19 +147,23 @@ object SettingsCatalog {
         SettingsEntry("privacy", SettingsPage.About, "Privacy policy", "data"),
     )
 
-    /** What is on [page]. In a build with no [server], what needs one is not there. */
-    fun on(page: SettingsPage, server: Boolean = true): List<SettingsEntry> = entries.filter { it.page == page && (server || !it.server) }
+    /**
+     * What is on [page]. In a build with no [server], what needs one is not there, and nor is what
+     * needs an accessibility helper this copy does not have ([helpers]).
+     */
+    fun on(page: SettingsPage, server: Boolean = true, helpers: Set<Helper> = Helper.entries.toSet()): List<SettingsEntry> =
+        entries.filter { it.page == page && it.inBuild(server, helpers) }
 
     /**
      * What a search for [query] finds. Every word typed has to start a word of the option's title,
      * of its other words, or of its page's name. Options matched by their title alone come first;
      * otherwise they keep the order of the pages. In a build with no [server], what needs one is
-     * never found.
+     * never found, and nor is what needs an accessibility helper this copy does not have ([helpers]).
      */
-    fun search(query: String, server: Boolean = true): List<SettingsEntry> {
+    fun search(query: String, server: Boolean = true, helpers: Set<Helper> = Helper.entries.toSet()): List<SettingsEntry> {
         val typed = words(query)
         if (typed.isEmpty()) return emptyList()
-        val entries = if (server) entries else entries.filter { !it.server }
+        val entries = entries.filter { it.inBuild(server, helpers) }
         val byTitle = entries.filter { entry ->
             val title = words(entry.title)
             typed.all { word -> title.any { it.startsWith(word) } }
@@ -161,6 +174,10 @@ object SettingsCatalog {
         }
         return byTitle + (byAnything - byTitle.toSet())
     }
+
+    /** Whether this option is there in a build with or without a server, and with these [helpers]. */
+    private fun SettingsEntry.inBuild(hasServer: Boolean, helpers: Set<Helper>): Boolean =
+        (hasServer || !server) && (helper == null || helper in helpers)
 
     private val gaps = Regex("[^\\p{L}\\p{N}]+")
 

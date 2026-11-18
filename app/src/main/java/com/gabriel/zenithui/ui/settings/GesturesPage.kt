@@ -14,8 +14,10 @@ import androidx.compose.material.icons.rounded.ZoomOutMap
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.gabriel.zenithui.data.AppInfo
 import com.gabriel.zenithui.data.GestureActions
@@ -27,16 +29,19 @@ import com.gabriel.zenithui.data.ZenithSettings
 /**
  * Settings → Gestures: every gesture on the home screen and what it does now. A row opens the
  * list of what it could do instead. A gesture set to lock the phone says when the lock helper it
- * needs is still to be switched on.
+ * needs is still to be switched on. A copy of Zenith without the helper (the Play build, until
+ * Play's Accessibility API declaration is made) has no Lock helper row and does not lock.
  */
 @Composable
 internal fun GestureOptions(settings: ZenithSettings, preview: SettingsPreview, actions: SettingsActions) {
     val helperOn by LockService.on.collectAsState()
+    val context = LocalContext.current
+    val lockHelper = remember(context) { LockService.available(context) }
     Group(rise = 0) {
         Gestures.ids.forEachIndexed { index, id ->
             if (index > 0) GroupDivider()
             Spot("gesture_$id") {
-                val action = Gestures.actionFor(id, settings.gestures)
+                val action = Gestures.actionFor(id, settings.gestures, lockHelper)
                 ActionRow(
                     icon = gestureIcon(id),
                     title = Gestures.label(id),
@@ -47,20 +52,22 @@ internal fun GestureOptions(settings: ZenithSettings, preview: SettingsPreview, 
             }
         }
     }
-    Group(rise = 1) {
-        Spot("lockHelper") {
-            ActionRow(
-                icon = if (helperOn) Icons.Rounded.Lock else Icons.Rounded.LockOpen,
-                title = "Lock helper",
-                subtitle = if (helperOn) "On. A gesture can lock the phone" else "Off. Only needed to lock the phone with a gesture",
-                status = if (helperOn) "On" else null,
-                onClick = actions.lockHelper,
-            )
+    if (lockHelper) {
+        Group(rise = 1) {
+            Spot("lockHelper") {
+                ActionRow(
+                    icon = if (helperOn) Icons.Rounded.Lock else Icons.Rounded.LockOpen,
+                    title = "Lock helper",
+                    subtitle = if (helperOn) "On. A gesture can lock the phone" else "Off. Only needed to lock the phone with a gesture",
+                    status = if (helperOn) "On" else null,
+                    onClick = actions.lockHelper,
+                )
+            }
         }
     }
     Note(
         "Swipe up always opens your apps, and holding an empty spot always opens Customise, whatever is chosen here.",
-        Modifier.riseIn(2).padding(horizontal = 14.dp),
+        Modifier.riseIn(if (lockHelper) 2 else 1).padding(horizontal = 14.dp),
     )
 }
 

@@ -228,6 +228,9 @@ it stays on so the app can be seen going into it.
 
 Locking needs the **lock helper** (`LockService`), an accessibility service that does nothing else:
 it asks for no events and cannot see the screen. A sheet says so before Android's page opens. The
+Play build has no lock helper until Play's Accessibility API declaration is made
+(`app/src/release/AndroidManifest.xml`, see RELEASING.md): there Lock the phone and the Lock
+helper row are not offered (`LockService.available`), and a gesture set to lock does its default. The
 shade and quick settings are pulled down the way Android's own launchers do it
 (`SystemPanels`), with the helper as the way round a phone that refuses. The torch is one `Torch`
 for the gesture and the Quick Toggles widget alike, which now knows when the torch was turned on
@@ -540,7 +543,8 @@ numbers it all runs on).
   a bounce, which is how it was.
 - **App pictures** (`PictureService`, Android 11 and later, off until switched on in Accessibility;
   only in a copy of Zenith that has it, so not the one that installs by tapping it, since Play
-  Protect refuses a sideloaded app with an accessibility service). An accessibility service that
+  Protect refuses a sideloaded app with an accessibility service, nor the Play build until Play's
+  Accessibility API declaration is made). An accessibility service that
   does nothing else: 0.7 s after an app's screen comes to the front,
   and every 3 s after while it stays there, it takes a screenshot, shrinks it to at most 1280 px
   and keeps it in memory (`AppPictures`) for the last four apps, five minutes at most. A picture

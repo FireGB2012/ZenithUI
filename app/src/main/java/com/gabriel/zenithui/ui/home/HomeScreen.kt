@@ -327,6 +327,9 @@ fun HomeScreen(viewModel: ZenithViewModel) {
 private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableState<Offset>) {
     val palette = LocalPalette.current
     val context = LocalContext.current
+    // Whether this copy of Zenith has the lock helper. The Play build goes without it until Play's
+    // Accessibility API declaration is made; there a gesture set to lock does its default instead.
+    val lockHelper = remember(context) { LockService.available(context) }
 
     val settings by viewModel.settings.collectAsState()
     val layout by viewModel.layout.collectAsState()
@@ -1687,7 +1690,8 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             GestureActions.QUICK_SETTINGS -> if (!SystemPanels.quickSettings(context)) {
                 Toast.makeText(context, "This phone does not let Zenith pull the quick settings down", Toast.LENGTH_SHORT).show()
             }
-            GestureActions.LOCK -> if (!LockService.lock()) showSheet(HomeSheet.LockHelper)
+            // Without the helper in this copy there is no Android page to send anybody to.
+            GestureActions.LOCK -> if (!LockService.lock() && lockHelper) showSheet(HomeSheet.LockHelper)
             GestureActions.DRAWER -> openDrawer()
             // The Search pill's search, its glass stretching out of the pill, with the keyboard up.
             GestureActions.SEARCH -> openSearch()
@@ -1750,7 +1754,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
     // with the drawer shut, is the swipe-down gesture: the page comes a little way after the finger,
     // on a band that gives less the further it is pulled, a hint at the top says what letting go
     // will do and lights up once it will, and the page springs home when it is let go.
-    val swipeDownAction by androidx.compose.runtime.rememberUpdatedState(Gestures.actionFor(Gestures.SWIPE_DOWN, settings.gestures))
+    val swipeDownAction by androidx.compose.runtime.rememberUpdatedState(Gestures.actionFor(Gestures.SWIPE_DOWN, settings.gestures, lockHelper))
     var dragKind by remember { mutableIntStateOf(DRAG_UNDECIDED) }
     var pullDown by remember { mutableFloatStateOf(0f) }
     var pulling by remember { mutableStateOf(false) }
@@ -2159,7 +2163,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             val busy = (card != null && cardOpening) || sheetVisible || settingsOpen || widgetsOpen ||
                 folderUp != null || drawer.value > 0.02f || resizingId != null || ambient || askingNewLook || searchOpen ||
                 holdMenu.open != null || alert != null || editing || customising
-            val action = Gestures.actionFor(Gestures.HOME, viewModel.settings.value.gestures)
+            val action = Gestures.actionFor(Gestures.HOME, viewModel.settings.value.gestures, lockHelper)
             // Home while an app is still opening sends it straight back into its icon.
             if (card != null && cardOpening) closeCard()
             hideSheet()
@@ -2596,7 +2600,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                                 abs(span / startSpan - 1f) < 0.25f -> if (travel.y > 0f) Gestures.TWO_DOWN else Gestures.TWO_UP
                             else -> null
                         } ?: continue
-                        val action = Gestures.actionFor(gesture, viewModel.settings.value.gestures)
+                        val action = Gestures.actionFor(gesture, viewModel.settings.value.gestures, lockHelper)
                         if (action == GestureActions.NONE) continue
                         fired = true
                         haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
@@ -2742,7 +2746,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                             )
                         }
 
-                        val doubleTap = Gestures.actionFor(Gestures.DOUBLE_TAP, settings.gestures)
+                        val doubleTap = Gestures.actionFor(Gestures.DOUBLE_TAP, settings.gestures, lockHelper)
                         val doubleTapNow by androidx.compose.runtime.rememberUpdatedState(doubleTap)
                         var pageOrigin by remember { mutableStateOf(Offset.Zero) }
                         Box(
@@ -3643,9 +3647,10 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     GestureActionSheet(
                         visible = up,
                         gesture = current.gesture,
-                        current = Gestures.actionFor(current.gesture, settings.gestures),
+                        current = Gestures.actionFor(current.gesture, settings.gestures, lockHelper),
                         apps = apps,
                         helperOn = helperOn,
+                        lockHelper = lockHelper,
                         shortcutsOf = { pkg -> viewModel.shortcuts(pkg) },
                         onPick = { action ->
                             viewModel.updateSettings { it.copy(gestures = Gestures.with(it.gestures, current.gesture, action)) }

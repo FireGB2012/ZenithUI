@@ -83,6 +83,8 @@ import com.gabriel.zenithui.data.AnimationPreset
 import com.gabriel.zenithui.data.AppInfo
 import com.gabriel.zenithui.data.HomeItem
 import com.gabriel.zenithui.data.IconShapes
+import com.gabriel.zenithui.data.LockService
+import com.gabriel.zenithui.data.PictureService
 import com.gabriel.zenithui.data.PlusStatus
 import com.gabriel.zenithui.data.ZenithSettings
 import com.gabriel.zenithui.ui.common.FullPage
@@ -401,7 +403,15 @@ private val CATEGORY_GAP = 20.dp
 
 @Composable
 private fun Results(query: String, server: Boolean, onOpen: (SettingsPage, String?) -> Unit) {
-    val found = remember(query, server) { SettingsCatalog.search(query, server) }
+    val context = LocalContext.current
+    // A copy of Zenith without an accessibility helper has no row for it to find.
+    val helpers = remember(context) {
+        buildSet {
+            if (LockService.available(context)) add(Helper.Lock)
+            if (PictureService.available(context)) add(Helper.Pictures)
+        }
+    }
+    val found = remember(query, server, helpers) { SettingsCatalog.search(query, server, helpers) }
     if (found.isEmpty()) {
         Note("Nothing in Settings is called “${query.trim()}”.", Modifier.padding(top = 6.dp))
         return

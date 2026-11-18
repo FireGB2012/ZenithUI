@@ -7,7 +7,7 @@
 | Application ID | `com.gabriel.zenithui` |
 | Debug builds install as | `com.gabriel.zenithui.debug` (so a debug and a release build can coexist) |
 | minSdk / targetSdk | 31 (Android 12) / 37 |
-| Version | `versionCode` and `versionName` in `app/build.gradle.kts` (106 / 3.8 as of 2026-11-18) |
+| Version | `versionCode` and `versionName` in `app/build.gradle.kts` (107 / 3.8 as of 2026-11-18) |
 
 The application ID is permanent once the first build is uploaded to Play. Change it **before**
 uploading if you want a different one — edit `applicationId` and `namespace` in
@@ -88,7 +88,12 @@ Verify a build before uploading:
 - [ ] Note: the moment the monthly base plan has its free-trial offer, Play runs the seven days
       instead of the app. No new build needed — see `play/listing.md`.
 - [ ] Declare in-app purchases on the store listing (the Ads answer stays "No").
-- [ ] App content → **Accessibility API**: since the lock helper (`data/LockService.kt`), Play asks
+- [ ] App content → **Accessibility API**: release builds leave both accessibility helpers out
+  (`app/src/release/AndroidManifest.xml`), so no declaration is needed for now. 106 had them and
+  Play would not save its release without the declaration; 107 is the same app without them, and
+  in it Lock the phone, the Lock helper row and App pictures are not offered. Debug builds keep
+  both. To put them back: make the declaration below, delete that file, build again.
+  Since the lock helper (`data/LockService.kt`), Play asks
   for a declaration. Zenith is *not* an accessibility tool; the use is "lock the screen with a
   gesture the user chose". The in-app disclosure is the "Lock with a gesture" sheet, shown before
   Android's page opens. Play also wants a short video of that flow: set Double tap to Lock the

@@ -72,6 +72,11 @@ class MainActivity : ComponentActivity() {
         viewModel.onEnvironmentChanged()
     }
 
+    /** Android's own screen for putting Zenith's live wallpaper up: a design that moves needs its say-so once. */
+    private val livePicker = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        viewModel.liveAnswered()
+    }
+
     /** Android's own "allow Zenith to create widgets" question, for another app's widget. */
     private val widgetBind = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         viewModel.widgetBound(result.resultCode == RESULT_OK)
@@ -94,6 +99,19 @@ class MainActivity : ComponentActivity() {
             repeatOnLifecycle(Lifecycle.State.RESUMED) {
                 viewModel.settings.map { it.onboarded }.collect { onboarded ->
                     if (onboarded) askToBeDefaultLauncher()
+                }
+            }
+        }
+
+        // A design that moves was set: Android shows it and asks to put it up.
+        lifecycleScope.launch {
+            viewModel.liveAsks.collect {
+                val opened = com.gabriel.zenithui.live.LiveWallpapers.pickers(this@MainActivity).any { intent ->
+                    runCatching { livePicker.launch(intent) }.isSuccess
+                }
+                if (!opened) {
+                    android.widget.Toast.makeText(this@MainActivity, "This phone has no screen for live wallpapers", android.widget.Toast.LENGTH_SHORT).show()
+                    viewModel.liveAnswered()
                 }
             }
         }
@@ -154,6 +172,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        // Back from Android's live wallpaper screen, should its answer not have come back to us.
+        viewModel.liveAnswered()
         viewModel.refreshWallpaper()
         viewModel.refreshApps()
         // Notification dots come from a listener Android can drop while Zenith is in the back.

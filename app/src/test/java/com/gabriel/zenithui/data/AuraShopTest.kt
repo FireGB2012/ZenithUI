@@ -90,9 +90,9 @@ class AuraShopTest {
     // ------------------------------------------------------------------------------- Plus wallpapers
 
     @Test
-    fun `the wallpapers aura buys are the nine Plus designs, in the picker's order`() {
+    fun `the wallpapers aura buys are the eleven Plus designs, in the picker's order`() {
         assertEquals(WallStyle.entries.filter { it.plus }, AuraShop.designs)
-        assertEquals(9, AuraShop.designs.size)
+        assertEquals(11, AuraShop.designs.size)
     }
 
     @Test

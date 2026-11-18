@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Zenith's moving designs. Which one, and in which colours, is chosen in Zenith's wallpaper sheet. -->
+<wallpaper xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/live_wallpaper_description"
+    android:thumbnail="@drawable/live_wallpaper_thumb" />

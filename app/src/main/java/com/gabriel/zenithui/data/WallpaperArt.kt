@@ -24,8 +24,9 @@ import kotlin.random.Random
  */
 data class WallColors(val accent: Int, val accentAlt: Int, val deep: Int, val mid: Int, val base: Int, val dark: Boolean = true)
 
-/** The shelves the designs are sorted onto in the picker. Depth, the newest, is first. */
+/** The shelves the designs are sorted onto in the picker. Live, the newest, is first, then Depth. */
 enum class WallGroup(val label: String) {
+    Live("Live"),
     Depth("Depth"),
     Soft("Soft"),
     Lines("Lines"),
@@ -36,18 +37,32 @@ enum class WallGroup(val label: String) {
 /**
  * The designs Zenith can paint. Every one of them works in any colour set, light and dark.
  * Those marked [plus] are for Zenith Plus; each shelf keeps designs anyone can use, and they come
- * first on it. A design is remembered by its name, so the names stay as they are; the order here
- * is the order in the picker.
+ * first on it. Those with a [live] motion move: they are set as Android's live wallpaper rather
+ * than as a picture (see [LiveMotion]). A design is remembered by its name, so the names stay as
+ * they are; the order here is the order in the picker.
  */
-enum class WallStyle(val label: String, val group: WallGroup, val plus: Boolean = false) {
+enum class WallStyle(val label: String, val group: WallGroup, val plus: Boolean = false, val live: LiveMotion? = null) {
+    Hover("Hover", WallGroup.Live, live = LiveMotion.Idle),
+    Tide("Tide", WallGroup.Live, live = LiveMotion.Idle),
+    Cosmos("Cosmos", WallGroup.Live, live = LiveMotion.Idle),
+    Lotus("Lotus", WallGroup.Live, live = LiveMotion.Unlock),
+    Daybreak("Daybreak", WallGroup.Live, live = LiveMotion.Unlock),
     Iris("Iris", WallGroup.Depth),
     Layers("Layers", WallGroup.Depth),
     Satin("Satin", WallGroup.Depth),
     Marbles("Marbles", WallGroup.Depth),
     Liquid("Liquid", WallGroup.Depth),
     Twist("Twist", WallGroup.Depth),
+    Fluted("Fluted", WallGroup.Depth),
+    Orb("Orb", WallGroup.Depth),
+    Arcs("Arcs", WallGroup.Depth),
+    Pond("Pond", WallGroup.Depth),
+    Dew("Dew", WallGroup.Depth),
+    Fan("Fan", WallGroup.Depth),
     Loop("Loop", WallGroup.Depth, plus = true),
     Eclipse("Eclipse", WallGroup.Depth, plus = true),
+    Stack("Stack", WallGroup.Depth, plus = true),
+    Gem("Gem", WallGroup.Depth, plus = true),
     Glow("Glow", WallGroup.Soft),
     Calm("Calm", WallGroup.Soft),
     Mesh("Mesh", WallGroup.Soft),
@@ -97,10 +112,15 @@ enum class WallStyle(val label: String, val group: WallGroup, val plus: Boolean 
  */
 object WallpaperArt {
 
-    fun render(style: WallStyle, colors: WallColors, width: Int, height: Int): Bitmap {
+    /**
+     * [style] painted [width] by [height]. A design that moves is painted as it stands still: its
+     * frame at 0 seconds, [open] of the way from its lock-screen pose to its home-screen pose (an
+     * idle design has only the one).
+     */
+    fun render(style: WallStyle, colors: WallColors, width: Int, height: Int, open: Float = 1f): Bitmap {
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val easel = Easel(Canvas(bitmap), colors, width.toFloat(), height.toFloat(), Random(style.name.hashCode()))
-        WallDesigns.paint(style, easel)
+        if (style.live != null) LiveScene.paintStill(style, colors, easel.canvas, easel.w, easel.h, open) else WallDesigns.paint(style, easel)
         // A fine grain keeps big gradients from banding on a real screen. Thumbnails are too small
         // to show it, so they skip it.
         if (width >= 600) easel.grain()

@@ -8,23 +8,53 @@ import org.junit.Test
 class WallStyleTest {
 
     @Test
-    fun `there are forty-one designs, sorted onto five shelves`() {
-        assertEquals(41, WallStyle.entries.size)
+    fun `there are fifty-four designs, sorted onto six shelves`() {
+        assertEquals(54, WallStyle.entries.size)
         val shelves = WallStyle.entries.groupBy { it.group }.mapValues { it.value.size }
         assertEquals(
-            mapOf(WallGroup.Depth to 8, WallGroup.Soft to 9, WallGroup.Lines to 9, WallGroup.Shapes to 8, WallGroup.Scenes to 7),
+            mapOf(
+                WallGroup.Live to 5,
+                WallGroup.Depth to 16,
+                WallGroup.Soft to 9,
+                WallGroup.Lines to 9,
+                WallGroup.Shapes to 8,
+                WallGroup.Scenes to 7,
+            ),
             shelves,
         )
     }
 
     @Test
-    fun `the Depth shelf is the newest, first in the picker, and six of its eight are for everyone`() {
-        assertEquals(WallGroup.Depth, WallGroup.entries.first())
+    fun `the Live shelf is the newest and first in the picker, then Depth, with its eight new ones before its Plus ones`() {
+        assertEquals(listOf(WallGroup.Live, WallGroup.Depth), WallGroup.entries.take(2))
+        assertEquals(listOf("Hover", "Tide", "Cosmos", "Lotus", "Daybreak"), WallStyle.entries.take(5).map { it.name })
         assertEquals(
-            listOf("Iris", "Layers", "Satin", "Marbles", "Liquid", "Twist", "Loop", "Eclipse"),
-            WallStyle.entries.take(8).map { it.name },
+            listOf(
+                "Iris", "Layers", "Satin", "Marbles", "Liquid", "Twist",
+                "Fluted", "Orb", "Arcs", "Pond", "Dew", "Fan",
+                "Loop", "Eclipse", "Stack", "Gem",
+            ),
+            WallStyle.entries.filter { it.group == WallGroup.Depth }.map { it.name },
         )
-        assertEquals(listOf("Loop", "Eclipse"), WallStyle.entries.filter { it.group == WallGroup.Depth && it.plus }.map { it.name })
+        assertEquals(
+            listOf("Loop", "Eclipse", "Stack", "Gem"),
+            WallStyle.entries.filter { it.group == WallGroup.Depth && it.plus }.map { it.name },
+        )
+    }
+
+    @Test
+    fun `three designs drift on their own, two open as the phone unlocks, and only the Live shelf moves`() {
+        assertEquals(
+            listOf("Hover", "Tide", "Cosmos"),
+            WallStyle.entries.filter { it.live == LiveMotion.Idle }.map { it.name },
+        )
+        assertEquals(
+            listOf("Lotus", "Daybreak"),
+            WallStyle.entries.filter { it.live == LiveMotion.Unlock }.map { it.name },
+        )
+        WallStyle.entries.forEach { assertEquals(it.name, it.group == WallGroup.Live, it.live != null) }
+        // Anyone can have one that moves.
+        WallStyle.entries.filter { it.live != null }.forEach { assertEquals(it.name, false, it.plus) }
     }
 
     @Test
@@ -41,9 +71,9 @@ class WallStyleTest {
     }
 
     @Test
-    fun `nine designs are for Plus, and the eight that were always free still are`() {
+    fun `eleven designs are for Plus, and the eight that were always free still are`() {
         assertEquals(
-            setOf("Silk", "Halo", "Ribbons", "Prism", "Bloom", "Horizon", "Nebula", "Loop", "Eclipse"),
+            setOf("Silk", "Halo", "Ribbons", "Prism", "Bloom", "Horizon", "Nebula", "Loop", "Eclipse", "Stack", "Gem"),
             WallStyle.entries.filter { it.plus }.map { it.name }.toSet(),
         )
         listOf("Glow", "Calm", "Waves", "Orbit", "Facets", "Bands", "Dunes", "Aurora").forEach {

@@ -78,11 +78,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.lifecycleScope
 import com.gabriel.zenithui.data.GlassWallpaper
+import com.gabriel.zenithui.data.LiveMotion
 import com.gabriel.zenithui.data.WallGroup
 import com.gabriel.zenithui.data.WallStyle
 import com.gabriel.zenithui.data.WallpaperArt
 import com.gabriel.zenithui.data.ZenithSettings
 import com.gabriel.zenithui.data.findActivity
+import com.gabriel.zenithui.live.LiveWallpapers
 import com.gabriel.zenithui.ui.common.LocalMotionLevel
 import com.gabriel.zenithui.ui.common.Motion
 import com.gabriel.zenithui.ui.common.pressBounce
@@ -400,7 +402,11 @@ private fun Preview(
     onBuy: (() -> String?)? = null,
 ) {
     val ui = LocalPalette.current
-    var target by remember { mutableStateOf(if (startOnLock) "both" else "home") }
+    val reduced = LocalMotionLevel.current.reduced
+    val context = LocalContext.current
+    // An unlock design is made for the lock screen too: its lock pose is what it opens from.
+    var target by remember { mutableStateOf(if (startOnLock || style.live == LiveMotion.Unlock) "both" else "home") }
+    val liveUp = remember(style) { style.live != null && LiveWallpapers.isOurs(context) }
     val configuration = LocalConfiguration.current
     val screenWidth = home.screenWidth.takeIf { it > 0.dp } ?: configuration.screenWidthDp.dp
     val screenHeight = home.screenHeight.takeIf { it > 0.dp } ?: configuration.screenHeightDp.dp
@@ -417,7 +423,14 @@ private fun Preview(
             listOf(false, true).forEach { night ->
                 val now = night == dark
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    val art = rememberWallpaperArt(style, remember(palette, night) { palette.toned(night) }, widthPx = 360)
+                    val toned = remember(palette, night) { palette.toned(night) }
+                    val art = rememberWallpaperArt(style, toned, widthPx = 360)
+                    // A design that moves is seen moving: drifting, or opening over and over.
+                    val moving = if (style.live != null) {
+                        rememberLiveArt(style, remember(toned) { toned.wallColors() }, 360, (360 / 0.46f).toInt(), moving = !reduced)
+                    } else {
+                        null
+                    }
                     val appear by animateFloatAsState(if (art != null) 1f else 0f, tween(260), label = "previewFade")
                     val ring by animateColorAsState(if (now) ui.accent else Color.Transparent, tween(220), label = "previewRing")
                     Box(
@@ -440,6 +453,7 @@ private fun Preview(
                                     appsByKey = home.appsByKey,
                                     settings = settings,
                                     wallpaper = art,
+                                    movingWallpaper = moving,
                                     screenWidth = screenWidth,
                                     screenHeight = screenHeight,
                                     shown = Int.MAX_VALUE,
@@ -469,15 +483,24 @@ private fun Preview(
         )
         Spacer(Modifier.height(10.dp))
         Caption(
-            if (!following) {
-                "Following is off, so it stays as it is until you set it again."
-            } else {
-                "In ${coloursOf(palette)}. It changes between light and dark as Zenith does."
+            when {
+                style.live == LiveMotion.Idle ->
+                    "It moves gently on its own while you can see it, and holds still in Battery saver." +
+                        if (liveUp) "" else " Android asks you once to confirm a wallpaper that moves."
+                style.live == LiveMotion.Unlock ->
+                    "Still on the lock screen; as you unlock into your home screen, it opens." +
+                        if (liveUp) "" else " Android asks you once to confirm a wallpaper that moves."
+                !following -> "Following is off, so it stays as it is until you set it again."
+                else -> "In ${coloursOf(palette)}. It changes between light and dark as Zenith does."
             }
         )
         Spacer(Modifier.height(12.dp))
         PrimaryButton(
-            text = if (locked) "Unlock with Plus" else "Set wallpaper",
+            text = when {
+                locked -> "Unlock with Plus"
+                style.live != null -> "Set live wallpaper"
+                else -> "Set wallpaper"
+            },
             onClick = {
                 if (locked) {
                     onPlus()
@@ -613,6 +636,7 @@ private fun Thumb(
                 .clickable { onClick(centre[0]) },
         ) {
             WallpaperImage(style = style, palette = palette, widthPx = 240, modifier = Modifier.fillMaxSize())
+            if (style.live != null) LiveBadge(Modifier.align(Alignment.TopStart).padding(7.dp))
             if (locked) {
                 Box(
                     Modifier
@@ -634,6 +658,30 @@ private fun Thumb(
             fontSize = 12.sp,
             fontWeight = if (inUse) FontWeight.SemiBold else FontWeight.Normal,
         )
+    }
+}
+
+/** The mark on a design that moves, as a Live Photo has: a ringed dot and the word. */
+@Composable
+private fun LiveBadge(modifier: Modifier) {
+    Row(
+        modifier
+            .height(20.dp)
+            .clip(RoundedCornerShape(50))
+            .background(Color.Black.copy(alpha = 0.42f))
+            .padding(start = 5.dp, end = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            Modifier
+                .size(10.dp)
+                .border(1.dp, Color.White.copy(alpha = 0.9f), CircleShape)
+                .padding(2.5.dp)
+                .clip(CircleShape)
+                .background(Color.White),
+        )
+        Spacer(Modifier.width(4.dp))
+        Text("LIVE", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.6.sp)
     }
 }
 
@@ -679,7 +727,7 @@ internal fun WallpaperImage(style: WallStyle, palette: ZenithPalette, widthPx: I
 
 /**
  * Painted thumbnails, kept by how much memory they take and not by how many there are:
- * forty-one designs in every colour set, light and dark, would otherwise be a great many pictures.
+ * fifty-four designs in every colour set, light and dark, would otherwise be a great many pictures.
  */
 private val thumbCache = object : LruCache<String, ImageBitmap>(24 * 1024 * 1024) {
     override fun sizeOf(key: String, value: ImageBitmap): Int = value.width * value.height * 4

@@ -142,8 +142,45 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
     /** The wallpaper as the glass shows it, or null when Zenith has no copy of it. */
     val glassLevels = wallpaperSource.levels
 
-    private val director = WallpaperDirector(application, viewModelScope, store.settings, wallpaperSource) {
-        store.update { it.copy(wallpaperStyle = "") }
+    private val _liveAsks = kotlinx.coroutines.channels.Channel<Unit>(kotlinx.coroutines.channels.Channel.CONFLATED)
+
+    /** A design that moves was set, and Android's screen for putting the live wallpaper up is to be opened. */
+    val liveAsks = _liveAsks.receiveAsFlow()
+
+    private val director = WallpaperDirector(
+        application, viewModelScope, store.settings, wallpaperSource,
+        forget = { store.update { it.copy(wallpaperStyle = "") } },
+        askLive = { _liveAsks.trySend(Unit) },
+    )
+
+    /**
+     * The wallpaper as it was before a design that moves was set, while Android asks whether to put
+     * the live wallpaper up: what goes back if the answer is no.
+     */
+    private data class BeforeLive(val style: String, val palette: String, val lock: Boolean)
+
+    private var beforeLive: BeforeLive? = null
+
+    /** Notes what to go back to if [design] needs Android's say-so first and does not get it. */
+    private fun noteBeforeLive(design: WallStyle?, current: ZenithSettings) {
+        if (design?.live == null || com.gabriel.zenithui.live.LiveWallpapers.isOurs(getApplication())) return
+        // Asked again before answering: what goes back is still what was there first.
+        if (beforeLive == null) beforeLive = BeforeLive(current.wallpaperStyle, current.wallpaperPalette, current.wallpaperLock)
+    }
+
+    /**
+     * Back from Android's live wallpaper screen. Put up, the design is followed from now on (the
+     * lock screen's still, the glass); not, the wallpaper there was before stays, and so does the
+     * design the settings had for it.
+     */
+    fun liveAnswered() {
+        val before = beforeLive ?: return
+        beforeLive = null
+        if (com.gabriel.zenithui.live.LiveWallpapers.isOurs(getApplication())) {
+            director.request()
+        } else {
+            store.update { it.copy(wallpaperStyle = before.style, wallpaperPalette = before.palette, wallpaperLock = before.lock) }
+        }
     }
 
     /** A wallpaper fading in over the old one, for the home screen to draw; null when there is none. */
@@ -852,7 +889,10 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
         screenDp?.let { (w, h) -> resolveGrid(w, h) }
         tidyWidgetIds()
         viewModelScope.launch { icons.configure(next.iconPack, next.iconShape) }
-        if (next.wallpaperStyle.isNotEmpty()) director.request()
+        if (next.wallpaperStyle.isNotEmpty()) {
+            noteBeforeLive(WallStyle.byName(next.wallpaperStyle), current)
+            director.request()
+        }
         _lookPut.trySend(Unit)
     }
 
@@ -1038,6 +1078,7 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
      * any more.
      */
     fun setWallpaper(style: WallStyle, colours: String, lockToo: Boolean) {
+        noteBeforeLive(style, settings.value)
         store.update {
             it.copy(
                 wallpaperStyle = style.name,

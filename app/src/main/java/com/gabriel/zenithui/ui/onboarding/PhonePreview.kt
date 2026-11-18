@@ -4,6 +4,7 @@ import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -26,6 +27,7 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
@@ -122,6 +124,11 @@ fun PhonePreview(
     zoom: () -> Float = { 0f },
     /** Whether it floats against the phone's lean: on setup's stage, not where it is a picture in a list. */
     floats: Boolean = false,
+    /**
+     * A wallpaper that moves, drawn into the whole screen in place of [wallpaper] once it is ready,
+     * on every frame it asks for by reading state as it draws.
+     */
+    movingWallpaper: (DrawScope.() -> Unit)? = null,
 ) {
     val palette = LocalPalette.current
     val edge = palette.onGlass.copy(alpha = 0.16f)
@@ -242,6 +249,7 @@ fun PhonePreview(
                         appsByKey = appsByKey,
                         settings = settings,
                         wallpaper = wallpaper,
+                        movingWallpaper = movingWallpaper,
                         shown = shown,
                         // Over the last stretch of the zoom the preview's own background dissolves,
                         // so your real wallpaper is already there when the home screen takes over.
@@ -262,6 +270,7 @@ private fun MiniHome(
     appsByKey: Map<String, AppInfo>,
     settings: ZenithSettings,
     wallpaper: ImageBitmap?,
+    movingWallpaper: (DrawScope.() -> Unit)?,
     shown: Int,
     backgroundAlpha: () -> Float,
 ) {
@@ -287,7 +296,9 @@ private fun MiniHome(
                 .fillMaxSize()
                 .drawBehind { drawRect(backdrop, alpha = backgroundAlpha()) }
         ) {
-            if (wallpaper != null) {
+            if (movingWallpaper != null) {
+                Canvas(Modifier.fillMaxSize().graphicsLayer { alpha = backgroundAlpha() }) { movingWallpaper() }
+            } else if (wallpaper != null) {
                 Image(
                     wallpaper,
                     contentDescription = null,

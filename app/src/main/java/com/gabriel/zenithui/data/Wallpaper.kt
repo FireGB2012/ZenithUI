@@ -9,6 +9,7 @@ import android.os.Handler
 import android.os.Looper
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import com.gabriel.zenithui.live.LiveWallpapers
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -164,8 +165,16 @@ class WallpaperSource(context: Context) {
             if (presenting) return@withContext
             val manager = WallpaperManager.getInstance(appContext)
             if (runCatching { manager.wallpaperInfo != null }.getOrDefault(false)) {
-                // A live wallpaper moves; any still picture of it in the glass would be wrong.
-                clear()
+                // Another app's live wallpaper moves in ways no still picture of it could follow.
+                // Zenith's own is a design Zenith can paint: the glass bends a still of it.
+                if (!LiveWallpapers.isOurs(appContext)) {
+                    clear()
+                    return@withContext
+                }
+                val still = LiveWallpapers.glassStill(appContext)
+                if (_levels.value != null && loadedKey == still.key) return@withContext
+                prepare(LiveWallpapers.paint(still))
+                loadedKey = still.key
                 return@withContext
             }
             val onScreen = GlassWallpaper.screenKey(appContext)

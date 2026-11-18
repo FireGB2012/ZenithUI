@@ -140,6 +140,10 @@ For 3.8 (107): the same text as 106 above. 107 is 106 without the two accessibil
 (Lock with a gesture, App pictures), which Play only takes with its Accessibility API declaration;
 the notes never mentioned them, so they stand as they are.
 
+For 3.8 (108): the same text again. 108 is 107 with a portrait screen marked as not required
+(`android.hardware.screen.portrait`), which Play's pre-review check asked for so tablets,
+Chromebooks and Android XR are not ruled out. Nothing a phone shows changed.
+
 For the next update, the one that makes everything yours (check it is under 500 characters):
 
 ```

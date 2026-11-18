@@ -7,7 +7,7 @@
 | Application ID | `com.gabriel.zenithui` |
 | Debug builds install as | `com.gabriel.zenithui.debug` (so a debug and a release build can coexist) |
 | minSdk / targetSdk | 31 (Android 12) / 37 |
-| Version | `versionCode` and `versionName` in `app/build.gradle.kts` (107 / 3.8 as of 2026-11-18) |
+| Version | `versionCode` and `versionName` in `app/build.gradle.kts` (108 / 3.8 as of 2026-11-18) |
 
 The application ID is permanent once the first build is uploaded to Play. Change it **before**
 uploading if you want a different one — edit `applicationId` and `namespace` in
@@ -88,6 +88,10 @@ Verify a build before uploading:
 - [ ] Note: the moment the monthly base plan has its free-trial offer, Play runs the seven days
       instead of the app. No new build needed — see `play/listing.md`.
 - [ ] Declare in-app purchases on the store listing (the Ads answer stays "No").
+- [ ] No hardware feature may be required unless Zenith cannot work without it: Play's pre-review
+  check stops a release that rules devices out ("Erklæringer om påkrævede hardwarefunktioner").
+  MainActivity's portrait lock makes Android imply `android.hardware.screen.portrait`, so the
+  manifest marks it `required="false"` (since 108). A new `uses-feature` gets `required="false"` too.
 - [ ] App content → **Accessibility API**: release builds leave both accessibility helpers out
   (`app/src/release/AndroidManifest.xml`), so no declaration is needed for now. 106 had them and
   Play would not save its release without the declaration; 107 is the same app without them, and

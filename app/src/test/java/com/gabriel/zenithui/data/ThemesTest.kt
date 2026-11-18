@@ -69,12 +69,25 @@ class ThemesTest {
                 val page = c.backdrop.first()
                 val panel = ThemeContrast.over(c.surface, page)
                 assertTrue("$where words on a panel", ThemeContrast.ratio(c.ink, panel) >= 7.0)
-                assertTrue("$where second lines on a panel", ThemeContrast.ratio(ThemeContrast.withAlpha(c.ink, ThemeColours.MUTED), panel) >= 4.5)
+                assertTrue("$where second lines on a panel", ThemeContrast.ratio(ThemeContrast.withAlpha(c.ink, ThemeColours.muted(dark)), panel) >= 4.5)
+                // Testers found the subtitles hard to pick out against the dark: in Dark they are
+                // held to seven to one, what the web asks of small print at its strictest.
+                if (dark) {
+                    assertTrue("$where second lines on a panel in the dark", ThemeContrast.ratio(ThemeContrast.withAlpha(c.ink, ThemeColours.muted(dark)), panel) >= 7.0)
+                    assertTrue("$where second lines on the page in the dark", ThemeContrast.ratio(ThemeContrast.withAlpha(c.ink, ThemeColours.muted(dark)), page) >= 7.0)
+                }
                 assertTrue("$where words on the page", ThemeContrast.ratio(c.ink, page) >= 7.0)
                 // The button that does the thing.
                 assertTrue("$where words on the accent", ThemeContrast.ratio(c.onAccent, c.accent) >= 3.0)
             }
         }
+    }
+
+    @Test
+    fun `second lines are stronger in the dark than in the light, and still a step behind the words`() {
+        assertEquals(0.74f, ThemeColours.muted(dark = false), 0f)
+        assertTrue(ThemeColours.muted(dark = true) > ThemeColours.muted(dark = false))
+        assertTrue(ThemeColours.muted(dark = true) <= 0.86f)
     }
 
     @Test

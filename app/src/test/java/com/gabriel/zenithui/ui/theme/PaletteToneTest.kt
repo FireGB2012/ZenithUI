@@ -84,7 +84,9 @@ class PaletteToneTest {
                 for (behind in toned.backdrop) {
                     for (ground in listOf(behind, toned.onGlass.copy(alpha = 0.07f).compositeOver(behind))) {
                         val ratio = contrast(toned.onGlassMuted.compositeOver(ground), ground)
-                        assertTrue("${palette.name}, ${if (dark) "dark" else "light"}: $ratio to 1", ratio >= 6f)
+                        // And seven in the dark, where they asked again for more.
+                        val least = if (dark) 7f else 6f
+                        assertTrue("${palette.name}, ${if (dark) "dark" else "light"}: $ratio to 1", ratio >= least)
                     }
                 }
             }

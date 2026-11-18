@@ -7,7 +7,7 @@
 | Application ID | `com.gabriel.zenithui` |
 | Debug builds install as | `com.gabriel.zenithui.debug` (so a debug and a release build can coexist) |
 | minSdk / targetSdk | 31 (Android 12) / 37 |
-| Version | `versionCode = 1`, `versionName = "1.0"` in `app/build.gradle.kts` |
+| Version | `versionCode` and `versionName` in `app/build.gradle.kts` (106 / 3.8 as of 2026-11-18) |
 
 The application ID is permanent once the first build is uploaded to Play. Change it **before**
 uploading if you want a different one — edit `applicationId` and `namespace` in

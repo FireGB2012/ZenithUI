@@ -181,6 +181,7 @@ import com.gabriel.zenithui.ui.settings.SettingsPreview
 import com.gabriel.zenithui.ui.settings.SettingsScreen
 import com.gabriel.zenithui.ui.theme.LocalWallpaperDim
 import com.gabriel.zenithui.ui.theme.LocalWallpaperOffset
+import com.gabriel.zenithui.ui.theme.Palettes
 import com.gabriel.zenithui.ui.theme.ZenithShapes
 import com.gabriel.zenithui.ui.theme.glass
 import com.gabriel.zenithui.ui.theme.inkOnTint
@@ -3301,6 +3302,11 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     iconShape = ZenithShapes.forIconShape(settings.iconShape),
                     showNewLook = !NewLook.isOn(settings),
                     showMakeHome = !isDefaultLauncher,
+                    wallpaper = WallStyle.byName(settings.wallpaperStyle),
+                    wallpaperColours = remember(settings) {
+                        Palettes.setById(settings.wallpaperPalette.ifEmpty { settings.paletteId }, settings)
+                    },
+                    wallpaperFollows = settings.wallpaperFollow,
                     onIconStyle = { style -> viewModel.updateSettings { it.copy(iconStyle = style) } },
                     onWidgetLook = { look -> viewModel.updateSettings { it.copy(widgetLook = look) } },
                     // Larger icons are icons with no names under them: they take the room the names had.

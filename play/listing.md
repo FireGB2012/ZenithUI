@@ -122,6 +122,20 @@ Easier to read, and easier to find your way round.
 - Settings is set out in three headed blocks
 ```
 
+For 3.8 (106), the new home screen and the third round of what testers asked for (493 characters):
+
+```
+A whole new home screen.
+- Liquid Glass like iOS 26, or the Clean, Neon and Retro themes
+- Widgets designed again for every size, in glass or no glass
+- Quick Toggles set out like Control Center, with bigger symbols
+- Folders pour out as liquid glass; apps open out of their icons
+- Live wallpapers and Depth designs
+- Bigger widget descriptions, brighter subtitles in dark
+- Customise shows your wallpaper; Settings has clearer sections
+Already set up? Zenith asks once before anything moves.
+```
+
 For the next update, the one that makes everything yours (check it is under 500 characters):
 
 ```

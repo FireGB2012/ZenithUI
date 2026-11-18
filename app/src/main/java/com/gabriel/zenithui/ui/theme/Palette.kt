@@ -7,6 +7,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.toArgb
 import com.gabriel.zenithui.data.Theme
+import com.gabriel.zenithui.data.ThemeColours
 import com.gabriel.zenithui.data.ThemeMaterial
 import com.gabriel.zenithui.data.Themes
 import com.gabriel.zenithui.data.WallColors
@@ -58,10 +59,11 @@ data class ZenithPalette(
     /**
      * Second lines, small print, the names of options not chosen. It was 62% of the ink, which on
      * a pale backdrop came out barely above what small print needs; testers found the subtitles
-     * in Settings hard to pick out from the dark. At 74% it holds six to one on every backdrop, and
-     * every theme is tested to hold it (`ThemesTest`).
+     * in Settings hard to pick out from the dark. At 74% it held six to one on every backdrop, and
+     * they asked again about the dark: there it is now 84% (seven to one or better), and 74% in
+     * Light. Every theme is tested to hold it (`ThemesTest`, `PaletteToneTest`).
      */
-    val onGlassMuted: Color get() = ink.copy(alpha = ink.alpha * 0.74f)
+    val onGlassMuted: Color get() = ink.copy(alpha = ink.alpha * ThemeColours.muted(dark))
 
     /**
      * Decoration: a widget's own colour where it has one, else the words' ink. A heading or a gauge

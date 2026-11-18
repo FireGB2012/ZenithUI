@@ -25,6 +25,27 @@ class WidgetFormTest {
     }
 
     @Test
+    fun `each size of the clock is a design with a short name of its own`() {
+        // Testers could not tell the clock's sizes apart: each now says which design it is.
+        val names = spaces.values.map { (width, height) -> WidgetLayouts.style("clock", width, height) }
+        names.forEach { name ->
+            assertNotNull(name)
+            assertTrue(name!!, name.length <= 12)
+        }
+        assertEquals(names.size, names.toSet().size)
+        assertEquals("Digital", WidgetLayouts.style("clock", 170f, 90f))
+        assertEquals("Analogue", WidgetLayouts.style("clock", 170f, 190f))
+        // A "No glass" clock is set out just as the glass one is.
+        assertEquals(WidgetLayouts.style("clock", 350f, 330f), WidgetLayouts.style(Widgets.baseType("bare_clock"), 350f, 330f))
+    }
+
+    @Test
+    fun `a widget whose designs have no names of their own says none`() {
+        assertNull(WidgetLayouts.style("battery", 170f, 190f))
+        assertNull(WidgetLayouts.style("hologram", 170f, 190f))
+    }
+
+    @Test
     fun `four toggles in a two by two are round buttons, two by two`() {
         val grid = ToggleGrid.of(170f, 190f, chosen = 4)
         assertEquals(4, grid.shown)

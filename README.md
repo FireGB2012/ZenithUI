@@ -518,8 +518,12 @@ numbers it all runs on).
   focus, or 450 ms after it resumed): the home screen comes forward on a spring that carries it a
   little too far, the icon swells as the window arrives, and the icons round it are knocked back
   and swing home. The icon is the one it was opened from, or that app's icon on the page on show
-  or in the dock, or the folder holding it (`IconPlaces`, which keeps where each sits at rest); with
-  none, the card shrinks into the middle of the screen and fades. Settings → Motion & feel →
+  or in the dock, or the folder holding it (`IconPlaces`, which keeps where each sits at rest). With
+  none on show it goes off the screen towards where the app lives (`CloseAway`,
+  `specs/2026-11-18-closing-off-to-where-it-lives-design.md`): off the side towards the page its icon
+  is on, down into the drawer, or off the side into the App Library, keeping to that edge all the way
+  and gone as it gets there; coming home stays on the page on show for the first of those. With no
+  place known for it on the page on show, it shrinks into the middle and fades. Settings → Motion & feel →
   **Closing apps** has *Into its icon* and *Plain*: Android's own close, then the icon landing with
   a bounce, which is how it was.
 - **App pictures** (`PictureService`, Android 11 and later, off until switched on in Accessibility;

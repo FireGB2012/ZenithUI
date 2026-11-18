@@ -131,6 +131,7 @@ import com.gabriel.zenithui.data.StackCell
 import com.gabriel.zenithui.data.LockService
 import com.gabriel.zenithui.data.AndroidClose
 import com.gabriel.zenithui.data.AppPictures
+import com.gabriel.zenithui.data.CloseAway
 import com.gabriel.zenithui.data.CloseRoute
 import com.gabriel.zenithui.data.CloseRules
 import com.gabriel.zenithui.data.GestureHandshake
@@ -218,6 +219,11 @@ private class Closing(
     val pkg: String,
     /** The icon it goes into, at rest; null when there is none on show. */
     val spot: IconPlaces.Spot?,
+    /**
+     * With no icon on show, which way it goes off the screen, towards where it lives (see
+     * CloseAway): down into the drawer, or to the side into the library or towards its page.
+     */
+    val away: CloseAway.Way?,
     /** Its card as it was opened from Zenith, if it was. */
     val opened: AppExpansion?,
     val route: CloseRoute,
@@ -823,6 +829,11 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
     /** Where a closing card set off from, and whether it has no icon to go into and fades instead. */
     var closingFrom by remember { androidx.compose.runtime.mutableFloatStateOf(1f) }
     var closingVanishes by remember { mutableStateOf(false) }
+    /**
+     * Whether a closing card is on its way off the screen, towards where its app lives (see
+     * CloseAway): straight there, with no arc, and not with the home screen as it comes forward.
+     */
+    var closingAway by remember { mutableStateOf(false) }
 
     // Arriving. One clock for the whole home screen: at 0 everything is out, and by the end of the
     // arrival (FlyIn.TOTAL_MS, or a liquid wave's own end) it is all in its place, where the clock is
@@ -1090,6 +1101,20 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         } else {
             IconPlaces.find(back?.key ?: key, pkg, work, near = back?.from)
         }
+        // With no icon of it on show, it goes off the screen towards where it lives: its page, the
+        // drawer below or the library to the side (CloseAway).
+        val away = if (spot == null) {
+            CloseAway.way(
+                key, pkg, work,
+                items = viewModel.layout.value,
+                // On show, its icon there would have been found: this is a dock put away, below.
+                dock = current.dock,
+                shownPage = pagerState.currentPage,
+                library = current.appsView == "library",
+            )
+        } else {
+            null
+        }
         // Opened from Zenith a long time ago and never seen closing: maybe not the app closing now.
         val recent = back == null || (launchedAt[0] != 0L && now - launchedAt[0] < CLOSE_WINDOW_MS)
         // A picture from this time it was open, so it shows what was on the screen as it closed,
@@ -1103,13 +1128,15 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             }
         }
         val route = CloseRules.route(style, asked = answer != null, target = spot != null, picture = picture != null, recent = recent, cardFrom = liveTuning[Tune.CloseCard])
-        return Closing(key, pkg, spot, back, route, picture, answer, at = now).also { closing[0] = it }
+        return Closing(key, pkg, spot, away, back, route, picture, answer, at = now).also { closing[0] = it }
     }
 
     /**
-     * A card shrinking back into the icon the app is closing into, or with none on show into the
-     * middle of the screen, fading as it goes: holding a picture of the app if there is one, and
-     * the icon's own colour with the icon blown up on it otherwise (the Closing card).
+     * A card shrinking back into the icon the app is closing into, or with none on show off the
+     * screen towards where the app lives (CloseAway: down into the drawer, or to the side into the
+     * library or towards its page), or failing that into the middle of the screen, fading as it
+     * goes: holding a picture of the app if there is one, and the icon's own colour with the icon
+     * blown up on it otherwise (the Closing card).
      *
      * As Void's does: it fills the screen again, shrinks onto the icon and lands a little
      * flattened, and is the icon by then, so it gives way to it in a few frames with no landing of
@@ -1124,7 +1151,12 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         val from = if (closed.route == CloseRoute.Picture) t[Tune.ClosePicture] else CloseRules.cardStart(t[Tune.CloseCard])
         val spot = closed.spot
         val side = closed.opened?.from?.minDimension ?: (60f * pxPerDp)
-        val target = spot?.bounds ?: CloseRules.middle(hostView.width.toFloat(), hostView.height.toFloat(), side)
+        val screenWidth = hostView.width.toFloat()
+        val screenHeight = hostView.height.toFloat()
+        val away = closed.away.takeIf { spot == null }
+        val target = spot?.bounds
+            ?: away?.let { CloseAway.target(it, screenWidth, screenHeight, side) }
+            ?: CloseRules.middle(screenWidth, screenHeight, side)
         val landKey = closed.landKey
         // The icon stays out of sight until the card is on it, and is shown under it as the card gives way.
         if (landKey != null) AppLanding.hold(landKey)
@@ -1145,7 +1177,9 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 cardOpening = false
                 closingCard = true
                 closingFrom = from
-                closingVanishes = spot == null
+                // Off the screen it is gone as it gets there; only into the middle does it fade.
+                closingVanishes = spot == null && away == null
+                closingAway = away != null
                 cardLeaving.snapTo(1f)
                 restCard(from)
                 // Bringing the home screen back with it: shown whole behind it from this frame, and
@@ -1160,7 +1194,8 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                         bringHome()
                     }
                 }
-                // Into the middle of the screen, with no icon to go into, it is gone by the time it gets there.
+                // Off the screen, or into the middle of it, with no icon to go into, it is gone by the
+                // time it gets there.
                 shrinkCard(squash = spot != null)
                 if (spot != null) {
                     // On the icon, and as good as it: the icon is shown under it and it gives way, so an
@@ -1177,6 +1212,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 AppLanding.hold(null)
                 closingCard = false
                 closingVanishes = false
+                closingAway = false
                 revealHome()
                 // Put away because Zenith was covered again, it is let go of at rest there (ON_STOP),
                 // and not sent forward while nobody can see it.
@@ -2135,11 +2171,12 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             closeDrawer()
             closeSearch()
             // Coming back from an app that goes back into an icon on show stays on that page, so the
-            // app can be seen going into it. Anything else goes back to the first page.
-            val intoIcon = !again && workOutClosing()?.let { it.spot != null && it.route != CloseRoute.None } == true
+            // app can be seen going into it, and so does one going off towards its page, so the way
+            // it goes is the way to it (CloseAway.staysOnPage). Anything else goes back to the first page.
+            val staysHere = !again && workOutClosing()?.let { CloseAway.staysOnPage(it.spot != null, it.away, it.route) } == true
             if (again && !busy && action != GestureActions.FIRST_PAGE) {
                 runGesture(action)
-            } else if (pagerState.currentPage != 0 && !intoIcon) {
+            } else if (pagerState.currentPage != 0 && !staysHere) {
                 pagerState.animateScrollToPage(0)
             }
         }
@@ -3338,7 +3375,10 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 progress = { cardProgress.value },
                 x = { cardX.value },
                 y = { cardY.value },
-                look = remember(tuning) { CardLook.of(tuning) },
+                // Off the screen it goes straight, keeping to the edge it goes through (CloseAway).
+                look = remember(tuning, closingCard && closingAway) {
+                    CardLook.of(tuning).let { if (closingCard && closingAway) it.copy(arc = 0.dp) else it }
+                },
                 glass = settings.openAnimation == "glass",
                 catchTaps = cardOpening,
                 onTap = { closeCard() },
@@ -3354,8 +3394,9 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 },
                 squash = { cardSquash.value },
                 ghost = closingCard,
-                // Bringing the home screen back with it, it goes into the icon where the icon is on the way.
-                homeZoom = { if (closingCard && comeBackFromFoot) homeZoom() else 1f },
+                // Bringing the home screen back with it, it goes into the icon where the icon is on the
+                // way. Off the screen it goes to the edge, which the home screen does not move.
+                homeZoom = { if (closingCard && comeBackFromFoot && !closingAway) homeZoom() else 1f },
             )
         }
 

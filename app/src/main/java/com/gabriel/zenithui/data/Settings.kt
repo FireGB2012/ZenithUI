@@ -388,7 +388,8 @@ data class ZenithSettings(
                 userName = o.optString("userName", d.userName),
                 paletteId = o.optString("paletteId", d.paletteId),
                 appearance = o.optString("appearance", d.appearance),
-                theme = o.optString("theme", d.theme).ifEmpty { d.theme },
+                // A theme that went (Neon, Retro) is read as the one after it: see Themes.successor.
+                theme = Themes.successor(o.optString("theme", d.theme).ifEmpty { d.theme }),
                 glass = o.optDouble("glass", d.glass.toDouble()).toFloat(),
                 glassBody = o.optString("glassPanels", d.glassBody),
                 // Layouts saved before densities existed are matched to the nearest preset.

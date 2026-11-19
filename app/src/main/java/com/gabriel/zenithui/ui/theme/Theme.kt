@@ -163,7 +163,7 @@ private fun Themed(
     glassTuning: GlassTuning,
     content: @Composable () -> Unit,
 ) {
-    // The theme's colours in Light or in Dark: Neon is always dark, the others follow Appearance.
+    // The theme's colours in Light or in Dark: Aurora is always dark, the others follow Appearance.
     // Light and Dark change at once, as an iPhone's do; a change of theme cross-fades.
     val dark = Themes.isDark(theme, settings.isDark(isSystemInDarkTheme()))
     val palette = remember(theme, dark) { theme.palette(dark) }

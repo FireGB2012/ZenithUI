@@ -15,7 +15,7 @@ class SettingsJsonTest {
         userName = "Gabriel",
         paletteId = "sunset",
         appearance = "auto",
-        theme = "neon",
+        theme = "aurora",
         glass = 0.55f,
         glassBody = "solid",
         gridDensity = "roomy",

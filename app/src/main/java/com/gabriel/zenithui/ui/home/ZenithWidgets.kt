@@ -119,7 +119,8 @@ import com.gabriel.zenithui.ui.theme.LocalOnWallpaper
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.LocalWidgetLook
 import com.gabriel.zenithui.ui.theme.LocalZenithFont
-import com.gabriel.zenithui.ui.theme.WALLPAPER_VEIL
+import com.gabriel.zenithui.ui.theme.LocalTheme
+import com.gabriel.zenithui.ui.theme.glassColours
 import com.gabriel.zenithui.ui.theme.ZenithShapes
 import com.gabriel.zenithui.ui.theme.addOutline
 import com.gabriel.zenithui.ui.theme.glass
@@ -237,9 +238,11 @@ fun ZenithWidget(
         return
     }
 
-    // A widget with a colour of its own is on a home page, whose glass has the wallpaper's grey veil,
-    // so its colour comes in from that grey and goes back to it.
-    val tint = if (own.shows) lerp(WALLPAPER_VEIL, own.colour, own.mix.coerceAtMost(1f)) else Color.Unspecified
+    // A widget with a colour of its own is on a home page, whose glass has the theme's veil (Liquid
+    // Glass's grey), so its colour comes in from that veil and goes back to it.
+    val theme = LocalTheme.current
+    val veil = remember(theme) { theme.glassColours().veil }
+    val tint = if (own.shows) lerp(veil, own.colour, own.mix.coerceAtMost(1f)) else Color.Unspecified
     BoxWithConstraints(
         modifier
             // Glass made from the wallpaper, or, for a widget with a colour of its own, tinted with that.

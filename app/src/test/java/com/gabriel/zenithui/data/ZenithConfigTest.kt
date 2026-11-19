@@ -12,7 +12,7 @@ class ZenithConfigTest {
 
     private val settings = ZenithSettings(
         userName = "Gabriel",
-        theme = "neon",
+        theme = "aurora",
         appearance = "light",
         font = "rounded",
         columns = 5,
@@ -28,7 +28,7 @@ class ZenithConfigTest {
 
     private val look = Looks.capture(settings, layout, "Night", "look-1", 1_000L)
 
-    private val mine = Themes.Neon.copy(id = "mine", name = "Mine")
+    private val mine = Themes.Aurora.copy(id = "mine", name = "Mine")
 
     private val config = ZenithConfig(settings, layout, listOf(look), listOf(mine))
 
@@ -89,7 +89,7 @@ class ZenithConfigTest {
     @Test
     fun `a theme of your own cannot take the id of one Zenith comes with, or of another of yours`() {
         val written = config.toJson(savedAt = 5L)
-        written.getJSONArray("themes").put(Themes.Retro.toJson()).put(mine.copy(name = "Again").toJson())
+        written.getJSONArray("themes").put(Themes.Frost.toJson()).put(mine.copy(name = "Again").toJson())
         assertEquals(listOf(mine), ZenithConfig.parse(written.toString())?.themes)
     }
 
@@ -97,7 +97,7 @@ class ZenithConfigTest {
     fun `a config put back over another brings its own Looks and themes, and keeps the others`() {
         val older = look.copy(name = "Older")
         val other = Looks.capture(settings, layout, "Day", "look-2", 2_000L)
-        val theirs = Themes.Retro.copy(id = "theirs", name = "Theirs")
+        val theirs = Themes.Frost.copy(id = "theirs", name = "Theirs")
         val here = ZenithConfig(ZenithSettings(userName = "Here"), emptyList(), listOf(older, other), listOf(mine.copy(name = "Old"), theirs))
 
         val back = config.over(here)

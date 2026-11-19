@@ -50,7 +50,7 @@ import com.gabriel.zenithui.ui.theme.themed
  * Setup's look: the four themes as small cards, each drawn in itself, and Light or Dark under them.
  * A tap on a card turns the whole of setup into that theme there and then (ZenithTheme cross-fades
  * it), the phone above it included, so what you pick is what you see before you have built anything;
- * the card tells the backdrop where to start its ring of light. Neon is always dark, and says so,
+ * the card tells the backdrop where to start its ring of light. Aurora is always dark, and says so,
  * while Light and Dark are kept for the others.
  */
 @Composable

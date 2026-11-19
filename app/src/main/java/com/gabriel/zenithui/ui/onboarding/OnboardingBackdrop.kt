@@ -35,10 +35,10 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
-import com.gabriel.zenithui.data.ThemeMaterial
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.LocalParallax
 import com.gabriel.zenithui.ui.theme.LocalTheme
+import com.gabriel.zenithui.ui.theme.glassColours
 import com.gabriel.zenithui.ui.theme.TiltRest
 import kotlinx.coroutines.launch
 import kotlin.math.cos
@@ -134,8 +134,8 @@ private const val PULSE_UNIT = 1000f
 
 /**
  * The light behind setup: the theme's page (in Liquid Glass black to iOS's dark grey, or its pale
- * grey to white) with three soft lights drifting over it, white in Liquid Glass and Clean, the
- * theme's own colours in Neon and Retro. The first time setup opens they rise up from below the
+ * grey to white) with three soft lights drifting over it, white in Liquid Glass and Clean, the two
+ * colours of the theme's light in Aurora and Frost. The first time setup opens they rise up from below the
  * screen, like a sunrise. Tilt the phone and they drift with it, each by a different amount, as
  * light far behind the glass would ([LocalParallax]; not with movement reduced).
  */
@@ -190,13 +190,10 @@ fun OnboardingBackdrop(
     }
 
     val dark = palette.dark
-    // White light, with no colour in it, in a theme that is only glass or only paper; a theme with
-    // colours of its own lights setup in them.
+    // The light of the theme's glass: white, with no colour in it, in Liquid Glass and Clean; in a
+    // glass theme with two colours of light, setup is lit in them, as its glass's edges are.
     val theme = LocalTheme.current
-    val lights = when (theme.material) {
-        ThemeMaterial.NEON, ThemeMaterial.RETRO -> listOf(palette.accent, palette.accentAlt, palette.accent)
-        else -> List(3) { Color.White }
-    }
+    val lights = remember(theme) { theme.glassColours().let { listOf(it.rim, it.rimFar, it.rim) } }
     val strength = if (dark) ORB_ALPHA_DARK else ORB_ALPHA_LIGHT
     val backdrop = palette.backdrop
     val parallax = LocalParallax.current

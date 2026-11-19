@@ -50,7 +50,7 @@ data class SettingsEntry(
 object SettingsCatalog {
 
     val entries: List<SettingsEntry> = listOf(
-        SettingsEntry("theme", SettingsPage.Theme, "Theme", "theme themes liquid glass clean neon retro style look favourite favorite star yours"),
+        SettingsEntry("theme", SettingsPage.Theme, "Theme", "theme themes liquid glass aurora frost clean style look favourite favorite star yours"),
         SettingsEntry("appearance", SettingsPage.Theme, "Light or dark", "auto night day mode appearance"),
         SettingsEntry("font", SettingsPage.Theme, "Font", "typeface text letters inter serif mono condensed hand casual"),
         SettingsEntry("numberFont", SettingsPage.Theme, "Numbers", "clock digits font thin typeface time"),

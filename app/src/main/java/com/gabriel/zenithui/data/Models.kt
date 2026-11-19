@@ -425,7 +425,10 @@ object Widgets {
         Weather.copy(type = BARE_PREFIX + Weather.type, title = "Glass Weather", description = "The temperature in glass, under a glass sky."),
     )
 
-    fun byType(type: String): WidgetSpec? = all.firstOrNull { it.type == type } ?: noGlass.firstOrNull { it.type == type }
+    /** The widget of [type]: one of Zenith's, or one you made, which is a widget like any other to the layout. */
+    fun byType(type: String): WidgetSpec? =
+        if (MadeWidgets.isMade(type)) MadeWidgets.spec(type)
+        else all.firstOrNull { it.type == type } ?: noGlass.firstOrNull { it.type == type }
 
     /** The name under a widget nothing better is known for. */
     const val UNNAMED = "Widget"
@@ -450,6 +453,11 @@ object Widgets {
         Weather.type -> "Weather"
         else -> UNNAMED
     }
+
+    /** The same for any widget, among them those you made, [made] being their designs: one you made goes by the name you gave it. */
+    fun shortName(type: String, made: List<MadeWidget>): String =
+        if (MadeWidgets.isMade(type)) MadeWidgets.find(made, type)?.name?.trim()?.takeIf { it.isNotEmpty() } ?: UNNAMED
+        else shortName(type)
 
     /**
      * The name under another app's widget, [provider] being its flattened component name: the

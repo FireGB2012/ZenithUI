@@ -68,6 +68,12 @@ class SettingsJsonTest {
         countdownFrom = 20_400L,
         framePhotos = listOf("frame-1.jpg"),
         todos = listOf(TodoItem("bread"), TodoItem("post", done = true)),
+        madeWidgets = listOf(
+            MadeWidget(
+                id = "m1", name = "Morning", spanX = 4, rows = 2, back = MadeBack.COLOUR, colour = 0xFF0A84FF,
+                pieces = listOf(Piece(id = "p1", kind = PieceKinds.TIME, x = 0.1f, align = PieceAlign.START)),
+            ),
+        ),
         weatherPlace = "Oslo",
         weatherLat = 59.91,
         weatherLon = 10.75,

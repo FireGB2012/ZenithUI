@@ -39,6 +39,8 @@ import com.gabriel.zenithui.data.withId
 import com.gabriel.zenithui.data.IconLoader
 import com.gabriel.zenithui.data.LayoutBuilder
 import com.gabriel.zenithui.data.LayoutTidy
+import com.gabriel.zenithui.data.MadeWidget
+import com.gabriel.zenithui.data.MadeWidgets
 import com.gabriel.zenithui.data.NewLook
 import com.gabriel.zenithui.data.OptimizeJob
 import com.gabriel.zenithui.data.Optimizing
@@ -1164,6 +1166,74 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
         store.update { it.copy(framePhotos = kept) }
         before.filterNot { it in kept }.forEach { runCatching { java.io.File(frameDir, it).delete() } }
         return true
+    }
+
+    // ---------------------------------------------------------------- widgets you make
+
+    /** Where the photos on the widgets you made are kept. */
+    val madeDir = java.io.File(application.filesDir, "made").apply { mkdirs() }
+
+    /** Keeps [design] under Your widgets, new or changed; every copy of it on the home screen shows it as it is now. */
+    fun keepMadeWidget(design: MadeWidget) = store.update { it.copy(madeWidgets = MadeWidgets.saved(it.madeWidgets, design)) }
+
+    /**
+     * Keeps [design] and puts it on the first page with room for it, at its own size; that page, or
+     * null when no page has room.
+     */
+    fun addMadeWidget(design: MadeWidget): Int? {
+        keepMadeWidget(design)
+        return change("${design.name.ifBlank { MadeWidgets.spec(design.type).title }} added") {
+            addWidgetNow(design.type, design.spanX, design.rows * ROW_UNITS)
+        }
+    }
+
+    /**
+     * Deletes the widget you made with the id [id], and every copy of it on the home screen and in
+     * stacks. Undo can bring none of them back, as there is nothing left to draw them from.
+     */
+    fun deleteMadeWidget(id: String) {
+        val type = MadeWidgets.typeOf(id)
+        fun holds(item: HomeItem): Boolean = when (item) {
+            is WidgetCell -> item.type == type
+            is StackCell -> item.members.any { !it.hosted && it.type == type }
+            else -> false
+        }
+        val before = layout.value
+        val after = MadeWidgets.withoutDesign(before, id)
+        // The page goes first, so no copy is ever drawn without its design.
+        if (after != before) store.setLayout(after)
+        if (undoHolds().any(::holds)) forgetUndo()
+        store.update { s -> s.copy(madeWidgets = s.madeWidgets.filterNot { it.id == id }) }
+        tidyMadePhotos()
+    }
+
+    /**
+     * Keeps the photo at [uri] for a widget you made, no bigger than a screen: its name, or null when
+     * it could not be read. One that can be seen through stays so.
+     */
+    suspend fun keepMadePhoto(uri: android.net.Uri): String? = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        runCatching {
+            val source = android.graphics.ImageDecoder.createSource(getApplication<Application>().contentResolver, uri)
+            val picture = android.graphics.ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
+                decoder.allocator = android.graphics.ImageDecoder.ALLOCATOR_SOFTWARE
+                val longest = maxOf(info.size.width, info.size.height)
+                if (longest > FRAME_SIDE) decoder.setTargetSampleSize(longest / FRAME_SIDE)
+            }
+            val clear = picture.hasAlpha()
+            val name = "made-${System.currentTimeMillis()}.${if (clear) "png" else "jpg"}"
+            java.io.File(madeDir, name).outputStream().use {
+                if (clear) picture.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
+                else picture.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, it)
+            }
+            picture.recycle()
+            name
+        }.getOrNull()
+    }
+
+    /** Lets go of every photo that no widget you made shows any more. */
+    fun tidyMadePhotos() {
+        val shown = MadeWidgets.photos(settings.value.madeWidgets)
+        madeDir.listFiles()?.filter { it.name !in shown }?.forEach { runCatching { it.delete() } }
     }
 
     /** What the Countdown counts down to; a [day] of 0 clears it. */

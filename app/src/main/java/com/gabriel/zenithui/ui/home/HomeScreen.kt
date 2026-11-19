@@ -158,6 +158,7 @@ import com.gabriel.zenithui.data.HomeItem
 import com.gabriel.zenithui.data.SizeChoice
 import com.gabriel.zenithui.data.LaunchMotion
 import com.gabriel.zenithui.data.LayoutBuilder
+import com.gabriel.zenithui.data.MadeWidgets
 import com.gabriel.zenithui.data.NewLook
 import com.gabriel.zenithui.data.ROW_UNITS
 import com.gabriel.zenithui.data.Tune
@@ -509,6 +510,8 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
     // The widget the gallery is choosing another to stack onto, while it is.
     var stackOnto by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(widgetsOpen) { if (!widgetsOpen) stackOnto = null }
+    // And the widget maker, over the gallery or straight over the home screen, while it is open.
+    var makerOpen by remember { mutableStateOf<MakerOpen?>(null) }
     // The home screen fades out and sinks back under either of them, exactly as far as it is covered:
     // as they come up, and as they are pulled away again by a finger.
     val homeCover = remember { HomeCover() }
@@ -934,7 +937,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
     // A Look the schedule has due waits for a moment with nothing under the finger and nothing
     // open over the home screen, and then goes on as one put on by hand does.
     val lookDue by viewModel.lookDue.collectAsState()
-    val idle = !dragging && drag.item == null && !sheetVisible && !settingsOpen && !widgetsOpen &&
+    val idle = !dragging && drag.item == null && !sheetVisible && !settingsOpen && !widgetsOpen && makerOpen == null &&
         !drawerShown && folderUp == null && card == null && resizingId == null && !ambient && !overview &&
         !askingNewLook && !searchShown && holdMenu.open == null && alert == null && !editing && !customising
     LaunchedEffect(lookDue, idle) {
@@ -2160,7 +2163,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             // gesture, whatever that has been set to. Anything else folds everything back.
             val again = viewModel.homeAgain.value != seenAgain[0]
             seenAgain[0] = viewModel.homeAgain.value
-            val busy = (card != null && cardOpening) || sheetVisible || settingsOpen || widgetsOpen ||
+            val busy = (card != null && cardOpening) || sheetVisible || settingsOpen || widgetsOpen || makerOpen != null ||
                 folderUp != null || drawer.value > 0.02f || resizingId != null || ambient || askingNewLook || searchOpen ||
                 holdMenu.open != null || alert != null || editing || customising
             val action = Gestures.actionFor(Gestures.HOME, viewModel.settings.value.gestures, lockHelper)
@@ -2172,6 +2175,8 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             endEdit()
             settingsOpen = false
             widgetsOpen = false
+            // What was being made is kept as it goes (see WidgetMaker).
+            makerOpen = null
             closeFolder()
             closeDrawer()
             closeSearch()
@@ -2268,6 +2273,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             visits = visits,
             setUp = { kind -> setUpWidget(kind) },
             frameDir = viewModel.frameDir,
+            madeDir = viewModel.madeDir,
         )
     }
 
@@ -2311,7 +2317,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         )
         heldItem is HostedWidgetCell -> HoldSubject.HostedWidget(heldItem.glass)
         heldItem is StackCell -> HoldSubject.Stack(
-            members = heldItem.members.map { memberName(context, it) },
+            members = heldItem.members.map { memberName(context, it, settings.madeWidgets) },
             full = heldItem.members.size >= com.gabriel.zenithui.data.StackRules.MOST,
         )
         heldDockKey != null -> HoldSubject.App(holdShortcuts.map { it.label }, inDock = true)
@@ -2379,7 +2385,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 )
 
                 is WidgetCell, is HostedWidgetCell -> {
-                    val name = if (item is WidgetCell) com.gabriel.zenithui.data.Widgets.shortName(item.type)
+                    val name = if (item is WidgetCell) com.gabriel.zenithui.data.Widgets.shortName(item.type, settings.madeWidgets)
                     else hostedName(context, (item as HostedWidgetCell).appWidgetId)
                     alert = HomeAlert(
                         title = "Remove “$name”?",
@@ -2429,7 +2435,13 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     HoldDo.RENAME -> id?.let { openFolder(it, open.frame, null) }
                     HoldDo.SET_UP -> (item as? WidgetCell)?.let { widget ->
                         val kind = com.gabriel.zenithui.data.Widgets.baseType(widget.type)
-                        if (kind == "toggles") showSheet(HomeSheet.Toggles) else setUpWidget(kind)
+                        when {
+                            MadeWidgets.isMade(kind) -> MadeWidgets.find(settings.madeWidgets, kind)?.let {
+                                makerOpen = MakerOpen(it, isNew = false, fromPage = true, itemId = widget.id)
+                            }
+                            kind == "toggles" -> showSheet(HomeSheet.Toggles)
+                            else -> setUpWidget(kind)
+                        }
                     }
                     HoldDo.STACK -> id?.let {
                         stackOnto = it
@@ -2587,7 +2599,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                         // Only on the home screen itself. Through the drawer, a folder, a sheet or
                         // an app on its way open, what it opens would be under those, and Back
                         // would go to them first.
-                        val idle = !fired && !drag.isDragging && !settingsOpen && !widgetsOpen &&
+                        val idle = !fired && !drag.isDragging && !settingsOpen && !widgetsOpen && makerOpen == null &&
                             !sheetVisible && folderUp == null && card == null && !dragging && drawer.value < 0.02f &&
                             !askingNewLook && !searchOpen && holdMenu.open == null && alert == null && !editing && !customising
                         if (!idle) continue
@@ -3505,6 +3517,49 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             onAddHosted = { info -> viewModel.addHostedWidget(info, stackOnto = stackOnto) },
             stacking = stackOnto != null,
             onDismiss = { widgetsOpen = false },
+            onMake = {
+                if (MadeWidgets.canMakeMore(settings.madeWidgets)) {
+                    makerOpen = MakerOpen.fresh(settings.madeWidgets, settings.columns, settings.rows)
+                } else {
+                    Toast.makeText(context, "You've made as many as there can be. Delete one to make another.", Toast.LENGTH_SHORT).show()
+                }
+            },
+            onOpenMade = { design -> makerOpen = MakerOpen(design, isNew = false, fromPage = false) },
+            covered = makerOpen != null,
+        )
+
+        // ------------------------------------------------------------ the widget maker
+        WidgetMaker(
+            open = makerOpen,
+            settings = settings,
+            geometry = drag.geometry,
+            onKeep = viewModel::keepMadeWidget,
+            onAddToHome = { design ->
+                val page = viewModel.addMadeWidget(design)
+                revealPage(page)
+                page != null
+            },
+            onDelete = { design -> viewModel.deleteMadeWidget(design.id) },
+            onKeepPhoto = viewModel::keepMadePhoto,
+            onChoosePlace = { showSheet(HomeSheet.WeatherPlace) },
+            onClose = { added ->
+                val was = makerOpen
+                makerOpen = null
+                if (added) widgetsOpen = false
+                // Made another size from the widget on the page: that widget is made that size too,
+                // where it stands or as near as its page has room.
+                val itemId = was?.itemId
+                val kept = was?.let { MadeWidgets.find(viewModel.settings.value.madeWidgets, it.design.type) }
+                val onPage = itemId?.let { id -> viewModel.layout.value.firstOrNull { it.id == id } as? WidgetCell }
+                if (was != null && kept != null && onPage != null && onPage.type == kept.type &&
+                    (kept.spanX != was.design.spanX || kept.rows != was.design.rows)
+                ) {
+                    if (!viewModel.resizeWidgetTo(onPage.id, kept.spanX, kept.rows * ROW_UNITS)) {
+                        Toast.makeText(context, "Its page has no room for it at that size", Toast.LENGTH_SHORT).show()
+                    }
+                }
+                viewModel.tidyMadePhotos()
+            },
         )
 
         // ------------------------------------------------------------ sheets

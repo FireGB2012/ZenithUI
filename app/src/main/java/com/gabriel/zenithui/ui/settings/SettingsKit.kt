@@ -457,12 +457,15 @@ internal fun PillSlider(
     range: ClosedFloatingPointRange<Float>,
     display: String,
     modifier: Modifier = Modifier,
+    /** Hears when the finger lets go: the end of one pull, for an undo that takes back the whole of it. */
+    onSettled: (() -> Unit)? = null,
     onChange: (Float) -> Unit,
 ) {
     val palette = LocalPalette.current
     val tick = rememberTick()
     var width by remember { mutableFloatStateOf(1f) }
     val latest by rememberUpdatedState(onChange)
+    val settled by rememberUpdatedState(onSettled)
     val span = range.endInclusive - range.start
     val fraction = ((value - range.start) / span).coerceIn(0f, 1f)
     // A tap glides the fill to where you touched; a drag is followed almost exactly.
@@ -514,6 +517,7 @@ internal fun PillSlider(
                         } while (event.changes.any { it.pressed })
                     } finally {
                         held = false
+                        settled?.invoke()
                     }
                 }
             }

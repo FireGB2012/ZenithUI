@@ -138,6 +138,24 @@ class LooksTest {
     }
 
     @Test
+    fun `a shared Look leaves out the widgets you made, which the other phone does not have`() {
+        val made = MadeWidgets.typeOf("abc")
+        val items = layout + listOf(
+            WidgetCell("mw", 2, 0, 0, made, 2, 2 * ROW_UNITS),
+            StackCell("st", 3, 0, 0, 4, 2 * ROW_UNITS, listOf(StackMember("m1", type = made), StackMember("m2", type = "clock"))),
+        )
+        val (_, kept) = Looks.apply(ZenithSettings(), Looks.forSharing(look(items = items)))
+        assertTrue(kept.none { it.id == "mw" })
+        assertEquals(WidgetCell("m2", 3, 0, 0, "clock", 4, 2 * ROW_UNITS), kept.single { it.id == "m2" })
+        // Kept on this phone, a Look keeps them where they were, unless the widget has been deleted since.
+        val withIt = ZenithSettings(madeWidgets = listOf(MadeWidget(id = "abc", name = "Mine")))
+        assertTrue(Looks.apply(withIt, look(items = items)).second.any { it.id == "mw" })
+        assertTrue(Looks.apply(ZenithSettings(), look(items = items)).second.none { it.id == "mw" })
+        // And wearing a Look never takes your widgets away.
+        assertEquals(withIt.madeWidgets, Looks.apply(withIt, look(items = items)).first.madeWidgets)
+    }
+
+    @Test
     fun `a shared Look remembers its code, and what goes to somebody else does not`() {
         val shared = look().copy(shared = "BCDFGH", sharedAt = 2_000L)
         assertEquals(shared, Look.fromJson(shared.toJson()))

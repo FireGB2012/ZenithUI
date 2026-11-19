@@ -136,7 +136,8 @@ object HoldMenuRules {
             is HoldSubject.ZenithWidget -> {
                 if (!locked && subject.sizes.size > 1) add(HoldEntry.Sizes(subject.sizes))
                 setUpLabel(subject.kind, subject.mediaAllowed)?.let { add(HoldEntry.Row(HoldDo.SET_UP, it)) }
-                add(HoldEntry.Row(HoldDo.COLOUR, "Colour"))
+                // One you made has its colours in its design, changed in the maker.
+                if (!MadeWidgets.isMade(subject.kind)) add(HoldEntry.Row(HoldDo.COLOUR, "Colour"))
                 if (!locked) {
                     add(HoldEntry.Row(HoldDo.STACK, "Stack Another Widget"))
                     add(HoldEntry.Row(HoldDo.EDIT_HOME, "Edit Home Screen"))
@@ -170,7 +171,12 @@ object HoldMenuRules {
      * What a widget's set-up row says. Most open a set-up of their own, and say "Edit Widget"; the
      * few that simply do something say what. Null for a widget with nothing to set.
      */
-    private fun setUpLabel(kind: String, mediaAllowed: Boolean): String? = when (kind) {
+    private fun setUpLabel(kind: String, mediaAllowed: Boolean): String? = when {
+        MadeWidgets.isMade(kind) -> "Edit Widget"
+        else -> setUpLabelOf(kind, mediaAllowed)
+    }
+
+    private fun setUpLabelOf(kind: String, mediaAllowed: Boolean): String? = when (kind) {
         "toggles", "world", "countdown", "weather" -> "Edit Widget"
         "photo" -> "Choose Photos"
         "todo" -> "Clear What Is Done"

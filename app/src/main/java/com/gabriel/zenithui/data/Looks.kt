@@ -108,7 +108,8 @@ object Looks {
         val settings = ZenithSettings.fromJson(JSONObject(merged.toString()))
         val array = runCatching { JSONArray(look.layout) }.getOrDefault(JSONArray())
         val items = (0 until array.length()).mapNotNull { array.optJSONObject(it)?.let(::homeItemFromJson) }
-        return settings to items
+        // A widget you made and have deleted since the Look was saved is not there to be put back.
+        return settings to MadeWidgets.onlyKnown(items, settings.madeWidgets)
     }
 
     /**
@@ -127,8 +128,10 @@ object Looks {
             .mapNotNull { item ->
                 when (item) {
                     is HostedWidgetCell, is ShortcutCell -> null
+                    // The widgets you made: the other phone does not have their designs.
+                    is WidgetCell -> item.takeUnless { MadeWidgets.isMade(it.type) }
                     is StackCell -> {
-                        val ours = item.members.filter { !it.hosted }
+                        val ours = item.members.filter { !it.hosted && !MadeWidgets.isMade(it.type) }
                         when (ours.size) {
                             0 -> null
                             1 -> StackRules.alone(item, ours.first())

@@ -441,8 +441,11 @@ internal fun hostedName(context: android.content.Context, appWidgetId: Int): Str
 }.getOrNull() ?: "Widget"
 
 /** What a member of a stack is called. */
-internal fun memberName(context: android.content.Context, member: StackMember): String =
-    if (member.hosted) hostedName(context, member.appWidgetId) else Widgets.byType(member.type)?.title ?: "Widget"
+internal fun memberName(context: android.content.Context, member: StackMember, made: List<com.gabriel.zenithui.data.MadeWidget>): String = when {
+    member.hosted -> hostedName(context, member.appWidgetId)
+    com.gabriel.zenithui.data.MadeWidgets.isMade(member.type) -> Widgets.shortName(member.type, made)
+    else -> Widgets.byType(member.type)?.title ?: "Widget"
+}
 
 @Composable
 fun HelpSheet(visible: Boolean, onDismiss: () -> Unit) {

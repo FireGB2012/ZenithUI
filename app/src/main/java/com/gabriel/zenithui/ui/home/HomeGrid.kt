@@ -127,6 +127,7 @@ import com.gabriel.zenithui.data.ShortcutCell
 import com.gabriel.zenithui.data.StackCell
 import com.gabriel.zenithui.data.WidgetCell
 import com.gabriel.zenithui.data.WidgetLooks
+import com.gabriel.zenithui.data.MadeWidgets
 import com.gabriel.zenithui.data.Widgets
 import com.gabriel.zenithui.data.ZenithSettings
 import com.gabriel.zenithui.data.IconStyles
@@ -1242,7 +1243,7 @@ fun HomePage(
                 val name = when (item) {
                     is AppCell -> appsByKey[item.key]?.label ?: "app"
                     is ShortcutCell -> item.label
-                    is WidgetCell -> Widgets.shortName(item.type)
+                    is WidgetCell -> Widgets.shortName(item.type, settings.madeWidgets)
                     else -> "widget"
                 }
                 if (item !is FolderCell) {
@@ -1514,7 +1515,7 @@ fun HomeItemContent(
             val name = when {
                 member == null -> Widgets.UNNAMED
                 member.hosted -> hostedName(member.provider, appsByKey)
-                else -> Widgets.shortName(member.type)
+                else -> Widgets.shortName(member.type, settings.madeWidgets)
             }
             WidgetName(name, geometry.widgetNameStrip(item.spanX, item.spanY))
         }
@@ -1579,7 +1580,7 @@ fun HomeItemContent(
                         .widgetGleam(item.type, settings.widgetLook),
                 )
             }
-            WidgetName(Widgets.shortName(item.type), geometry.widgetNameStrip(item.spanX, item.spanY))
+            WidgetName(Widgets.shortName(item.type, settings.madeWidgets), geometry.widgetNameStrip(item.spanX, item.spanY))
         }
     }
 }
@@ -1797,7 +1798,8 @@ private fun Modifier.iconGleam(shape: androidx.compose.ui.graphics.Shape): Modif
  */
 @Composable
 private fun Modifier.widgetGleam(type: String, look: String): Modifier =
-    if (WidgetLooks.of(look) == WidgetLooks.COLOUR && !type.startsWith(Widgets.BARE_PREFIX)) ringGleam(WidgetShape) else this
+    // One you made stands on what its design says, whatever the look of the rest.
+    if (WidgetLooks.of(look) == WidgetLooks.COLOUR && !type.startsWith(Widgets.BARE_PREFIX) && !MadeWidgets.isMade(type)) ringGleam(WidgetShape) else this
 
 @Composable
 fun AppTile(

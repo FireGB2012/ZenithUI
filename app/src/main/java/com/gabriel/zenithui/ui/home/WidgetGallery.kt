@@ -40,6 +40,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
@@ -48,6 +49,7 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Layers
 import androidx.compose.material.icons.rounded.LayersClear
 import androidx.compose.material3.Icon
@@ -78,6 +80,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
@@ -98,6 +101,8 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.gabriel.zenithui.data.HomeGeometry
+import com.gabriel.zenithui.data.MadeWidget
+import com.gabriel.zenithui.data.MadeWidgets
 import com.gabriel.zenithui.data.ROW_UNITS
 import com.gabriel.zenithui.data.WidgetBlurbs
 import com.gabriel.zenithui.data.WidgetLayouts
@@ -151,6 +156,12 @@ fun WidgetGallery(
     onAddHosted: (android.appwidget.AppWidgetProviderInfo) -> Unit = {},
     /** Opened from a widget's "Stack another widget here": what is chosen goes onto that widget. */
     stacking: Boolean = false,
+    /** Starts a widget of your own in the maker. */
+    onMake: () -> Unit = {},
+    /** Opens one you made in the maker. */
+    onOpenMade: (MadeWidget) -> Unit = {},
+    /** The maker is open over it. */
+    covered: Boolean = false,
 ) {
     var bare by remember { mutableStateOf(false) }
     var picked by remember { mutableStateOf<Picked?>(null) }
@@ -179,7 +190,7 @@ fun WidgetGallery(
     val inShowcase = animateFloatAsState(if (picked != null) 1f else 0f, tween(220), label = "showcaseTitle")
     FullPage(
         visible = visible,
-        covered = false,
+        covered = covered,
         title = picked?.let { (if (bare) bareOf(it.spec) else it.spec).title } ?: if (stacking) "Stack a widget" else "Widgets",
         canGoBack = picked != null,
         titleShown = { maxOf(inShowcase.value, (scroll.value / TITLE_GONE_PX).coerceIn(0f, 1f)) },
@@ -213,6 +224,14 @@ fun WidgetGallery(
                     onHosted = { info ->
                         onAddHosted(info)
                         onDismiss()
+                    },
+                    onMake = onMake,
+                    onPickMade = { design ->
+                        if (!stacking) {
+                            onOpenMade(design)
+                        } else if (onAdd(design.type, design.spanX, design.rows * ROW_UNITS)) {
+                            onDismiss()
+                        }
                     },
                     arrive = remember { !returned[0] },
                     onPick = { spec, size, centre ->
@@ -259,6 +278,8 @@ private fun Gallery(
     scrolled: ScrollState,
     stacking: Boolean,
     onHosted: (android.appwidget.AppWidgetProviderInfo) -> Unit,
+    onMake: () -> Unit,
+    onPickMade: (MadeWidget) -> Unit,
     /** Whether the page is opening, and the cards should come in one after another. */
     arrive: Boolean,
     onPick: (WidgetSpec, WidgetSize, Offset) -> Unit,
@@ -293,8 +314,22 @@ private fun Gallery(
                 .padding(horizontal = 4.dp)
                 .arriving(arrive, 0),
         )
+        // Your own come first: the newest thing here, and the one thing on the page that is yours.
+        val made = !stacking || settings.madeWidgets.isNotEmpty()
+        if (made) {
+            MadeShelf(
+                settings = settings,
+                geometry = geometry,
+                stacking = stacking,
+                onMake = onMake,
+                onPick = onPickMade,
+                modifier = Modifier
+                    .padding(bottom = 6.dp)
+                    .arriving(arrive, 1, card = true),
+            )
+        }
         // What the choice does is said under it, where the eye is when it is used.
-        Column(Modifier.arriving(arrive, 1)) {
+        Column(Modifier.arriving(arrive, 2)) {
             StyleHeading(Modifier.padding(start = 4.dp, bottom = 8.dp))
             StyleChoice(bare, onBare)
             Spacer(Modifier.height(10.dp))
@@ -317,7 +352,7 @@ private fun Gallery(
                         bare = bare,
                         modifier = Modifier
                             .weight(1f)
-                            .arriving(arrive, 2 + row * 2 + column, card = true),
+                            .arriving(arrive, 3 + row * 2 + column, card = true),
                         onPick = onPick,
                     )
                 }
@@ -335,7 +370,7 @@ private fun Gallery(
             bare = bare,
             modifier = Modifier
                 .fillMaxWidth()
-                .arriving(arrive, 2 + square.size, card = true),
+                .arriving(arrive, 3 + square.size, card = true),
             onPick = onPick,
         )
         // Other apps' widgets, below Zenith's own.
@@ -350,18 +385,166 @@ private fun Gallery(
             rows = settings.rows,
             modifier = Modifier
                 .padding(top = 14.dp)
-                .arriving(arrive, 3 + square.size, card = true),
+                .arriving(arrive, 4 + square.size, card = true),
             onPick = onHosted,
         )
         Spacer(Modifier.height(28.dp))
     }
 }
 
-/** What the choice under it is of, so the two sides of it are read as a choice. */
+// ------------------------------------------------------------------------------- your own
+
+/**
+ * The widgets you make yourself: a card that starts a new one, and under it the ones made already,
+ * each live, in a row to flick along. Tapping one opens it in the maker. While stacking there is no
+ * new one to start, and one tapped goes onto the stack.
+ */
 @Composable
-private fun StyleHeading(modifier: Modifier = Modifier) {
+private fun MadeShelf(
+    settings: ZenithSettings,
+    geometry: HomeGeometry?,
+    stacking: Boolean,
+    onMake: () -> Unit,
+    onPick: (MadeWidget) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val designs = settings.madeWidgets
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        GalleryHeading(if (stacking) "YOUR WIDGETS" else "MAKE YOUR OWN", Modifier.padding(start = 4.dp))
+        if (!stacking) NewWidgetCard(full = !MadeWidgets.canMakeMore(designs), onMake = onMake)
+        if (designs.isNotEmpty()) {
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                contentPadding = PaddingValues(horizontal = GALLERY_EDGE),
+                // Out to the edges of the page, so the cards go under them as they are flicked.
+                modifier = Modifier.layout { measurable, constraints ->
+                    val out = (GALLERY_EDGE * 2).roundToPx()
+                    val wide = constraints.maxWidth + out
+                    val row = measurable.measure(constraints.copy(minWidth = wide, maxWidth = wide))
+                    layout(constraints.maxWidth, row.height) { row.place(-out / 2, 0) }
+                },
+            ) {
+                items(designs, key = { it.id }) { design ->
+                    MadeCard(design, settings, geometry, onPick = { onPick(design) })
+                }
+            }
+        }
+    }
+}
+
+/** How far in from the page's edges the gallery stands. */
+private val GALLERY_EDGE = 16.dp
+
+/** The card that starts a widget of your own; [full] once as many have been made as can be kept. */
+@Composable
+private fun NewWidgetCard(full: Boolean, onMake: () -> Unit) {
+    val palette = LocalPalette.current
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .pressBounce(0.97f)
+            .clip(corners(26.dp))
+            .background(palette.onGlass.copy(alpha = 0.06f))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                role = Role.Button,
+                onClick = onMake,
+            )
+            .padding(10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            Modifier
+                .size(84.dp)
+                .wallpaperWell(corners(16.dp)),
+            contentAlignment = Alignment.Center,
+        ) {
+            // A widget yet to be made: an empty pane, with a plus on it.
+            Box(
+                Modifier
+                    .size(56.dp)
+                    .glass(corners(17.dp), interactive = false),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(Icons.Rounded.Add, contentDescription = null, tint = Color.White, modifier = Modifier.size(30.dp))
+            }
+        }
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            Text("New widget", color = palette.onGlass, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+            Text(
+                if (full) {
+                    "You've made ${MadeWidgets.MOST}, as many as there can be. Delete one to make another."
+                } else {
+                    "Start from nothing. Put the time, words, photos, shapes and more where you want them."
+                },
+                color = palette.onGlassMuted,
+                fontSize = 14.sp,
+                lineHeight = 19.sp,
+                modifier = Modifier.padding(top = 2.dp, end = 4.dp),
+            )
+        }
+    }
+}
+
+/** One of the widgets you made: itself, live, on the wallpaper, with its name and size under it. */
+@Composable
+private fun MadeCard(design: MadeWidget, settings: ZenithSettings, geometry: HomeGeometry?, onPick: () -> Unit) {
+    val palette = LocalPalette.current
+    val real = realSize(geometry, WidgetSize("", design.spanX, design.rows), settings.columns)
+    val name = design.name.ifBlank { MadeWidgets.spec(design.type).title }
+    // A wide one gets a wider card, so it is not drawn tiny.
+    val width = if (real.width > real.height * 1.4f) 236.dp else 168.dp
+    Column(
+        Modifier
+            .width(width)
+            .pressBounce(0.97f)
+            .clip(corners(22.dp))
+            .background(palette.onGlass.copy(alpha = 0.06f))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                role = Role.Button,
+                onClick = onPick,
+            )
+            .padding(10.dp),
+    ) {
+        BoxWithConstraints(
+            Modifier
+                .fillMaxWidth()
+                .height(128.dp)
+                .wallpaperWell(corners(14.dp))
+                .padding(8.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            val fit = min(1f, min(maxWidth / real.width, maxHeight / real.height))
+            LiveWidget(MadeWidgets.spec(design.type), real, fit, bare = false, settings = settings, label = name)
+        }
+        Spacer(Modifier.height(8.dp))
+        Text(
+            name,
+            color = palette.onGlass,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(horizontal = 4.dp),
+        )
+        Text(
+            "${design.spanX} by ${design.rows}",
+            color = palette.onGlassMuted,
+            fontSize = 13.sp,
+            modifier = Modifier.padding(start = 4.dp, end = 4.dp, bottom = 2.dp),
+        )
+    }
+}
+
+/** A heading over a part of the gallery. */
+@Composable
+private fun GalleryHeading(text: String, modifier: Modifier = Modifier) {
     Text(
-        "WIDGET STYLE",
+        text,
         color = LocalPalette.current.onGlassMuted,
         fontSize = 13.sp,
         fontWeight = FontWeight.SemiBold,
@@ -369,6 +552,10 @@ private fun StyleHeading(modifier: Modifier = Modifier) {
         modifier = modifier.semantics { heading() },
     )
 }
+
+/** What the choice under it is of, so the two sides of it are read as a choice. */
+@Composable
+private fun StyleHeading(modifier: Modifier = Modifier) = GalleryHeading("WIDGET STYLE", modifier)
 
 /**
  * Glass or no glass: the one choice that changes every widget on the page at once. Testers found
@@ -1071,7 +1258,7 @@ private fun bareOf(spec: WidgetSpec): WidgetSpec =
  * Zenith has no copy of the wallpaper to show, a dark plate, which anything reads on.
  */
 @Composable
-private fun Modifier.wallpaperWell(shape: Shape): Modifier =
+internal fun Modifier.wallpaperWell(shape: Shape): Modifier =
     if (LocalBackdrop.current != null) {
         glass(shape, strength = 0.6f, material = GlassMaterial.Clear, shadow = false)
     } else {
@@ -1083,7 +1270,7 @@ private fun Modifier.wallpaperWell(shape: Shape): Modifier =
  * shape of space, so only its real size shows the real thing.
  */
 @Composable
-private fun realSize(geometry: HomeGeometry?, size: WidgetSize, columns: Int): DpSize {
+internal fun realSize(geometry: HomeGeometry?, size: WidgetSize, columns: Int): DpSize {
     val density = LocalDensity.current
     val screenWidth = LocalConfiguration.current.screenWidthDp
     return remember(geometry, size, columns, screenWidth, density) {

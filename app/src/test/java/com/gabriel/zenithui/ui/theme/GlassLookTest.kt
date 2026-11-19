@@ -3,7 +3,10 @@ package com.gabriel.zenithui.ui.theme
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import com.gabriel.zenithui.data.GlassBody
+import com.gabriel.zenithui.data.GlassTuning
+import com.gabriel.zenithui.data.Themes
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -236,5 +239,56 @@ class GlassLookTest {
         }
         // Deeper in the dark, where it has to show against a dark page, as a pane's is.
         assertTrue(onGlassShadow(dark = true, sideDp = 62f).alpha > onGlassShadow(dark = false, sideDp = 62f).alpha)
+    }
+
+    @Test
+    fun `Liquid Glass's glass is the engine's own, the grey veil and white light every pane had`() {
+        assertEquals(GlassColours(WALLPAPER_VEIL, Color.White, Color.White), GlassColours.Liquid)
+        assertEquals(GlassColours.Liquid, Themes.LiquidGlass.glassColours())
+        // Glass not told whose it is, Liquid Glass's, exactly as before there were others.
+        for (material in GlassMaterial.entries) for (dark in listOf(true, false)) for (onWallpaper in listOf(true, false)) {
+            val plain = glassLook(material, 0.8f, solid = 0.4f, opacity = 1f, dark = dark, tint = WALLPAPER_VEIL, onWallpaper = onWallpaper)
+            assertEquals(GlassColours.Liquid, plain.colours)
+            assertEquals(plain, glassLook(material, 0.8f, solid = 0.4f, opacity = 1f, dark = dark, tint = WALLPAPER_VEIL, onWallpaper = onWallpaper, colours = GlassColours.Liquid))
+        }
+    }
+
+    @Test
+    fun `a theme's glass on the wallpaper wears its own veil, as thin as Liquid Glass's grey`() {
+        val aurora = Themes.Aurora.glassColours()
+        for (material in GlassMaterial.entries) {
+            val grey = glassLook(material, 0.8f, solid = 0f, opacity = 1f, dark = true, tint = WALLPAPER_VEIL, onWallpaper = true)
+            val its = glassLook(material, 0.8f, solid = 0f, opacity = 1f, dark = true, tint = aurora.veil, onWallpaper = true, colours = aurora)
+            // Its colour, not the grey's...
+            assertEquals(aurora.veil.red, its.wash.red, 1e-3f)
+            assertEquals(aurora.veil.green, its.wash.green, 1e-3f)
+            assertEquals(aurora.veil.blue, its.wash.blue, 1e-3f)
+            // ...laid on as thinly: a veil, not a coloured card.
+            assertEquals(grey.wash.alpha, its.wash.alpha, 0f)
+            // And it bends, frosts and catches the light as every pane of glass does.
+            assertEquals(grey.copy(wash = its.wash, lift = its.lift, colours = aurora), its)
+        }
+        // A colour somebody chose for a pane comes in from the theme's veil, as it did from the grey.
+        val folder = Color(0xFFFF2D55)
+        val tinted = glassLook(GlassMaterial.Regular, 0.8f, solid = 0f, opacity = 1f, dark = true, tint = folder, onWallpaper = true, colours = aurora)
+        assertEquals(androidx.compose.ui.graphics.lerp(aurora.veil, folder, 0.10f).copy(alpha = tinted.wash.alpha), tinted.wash)
+    }
+
+    @Test
+    fun `a theme's light is caught on the edge, its own colour at the corner facing the lamp and its second at the far one`() {
+        val frost = Themes.Frost.glassColours()
+        assertEquals(frost.rim, frost.lightAt(0f))
+        assertEquals(frost.rimFar, frost.lightAt(1f))
+        // Round the sides, where the edge is faint, a mix of the two.
+        val side = frost.lightAt(0.5f)
+        assertTrue(side != frost.rim && side != frost.rimFar)
+        // Liquid Glass's light is white all the way round.
+        for (at in listOf(0f, 0.3f, 0.5f, 0.7f, 1f)) assertEquals(Color.White, GlassColours.Liquid.lightAt(at))
+        // The Glass studio's tuning changes how the glass bends and shines, never whose it is.
+        val look = glassLook(GlassMaterial.Clear, 0.8f, solid = 0f, opacity = 1f, dark = true, tint = frost.veil, onWallpaper = true, colours = frost)
+        assertEquals(frost, look.tuned(GlassTuning(bend = 1.3f, rim = 0.6f)).colours)
+        // Glass lying in glass catches the same light.
+        assertEquals(frost, onGlassLook(dark = true, strength = 0.8f, colours = frost).colours)
+        assertEquals(GlassColours.Liquid, onGlassLook(dark = true, strength = 0.8f).colours)
     }
 }

@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.SdkSuppress
 import com.gabriel.zenithui.data.GlassLevels
+import com.gabriel.zenithui.data.Themes
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -105,6 +106,7 @@ class LiquidGlassShaderTest {
     }
 
     private fun red(pixel: Int) = android.graphics.Color.red(pixel)
+    private fun green(pixel: Int) = android.graphics.Color.green(pixel)
     private fun blue(pixel: Int) = android.graphics.Color.blue(pixel)
     private fun bright(pixel: Int) = red(pixel) + android.graphics.Color.green(pixel) + blue(pixel)
 
@@ -198,5 +200,30 @@ class LiquidGlassShaderTest {
             val edge = bright(pane.getPixel(x, y))
             assertTrue("($x, $y) is $edge and the middle $middle", kotlin.math.abs(edge - middle) <= 3)
         }
+    }
+
+    @Test
+    fun aThemesLightColoursTheEdgeAndLeavesTheFaceAsItWas() {
+        // The same pane twice, in Liquid Glass's white light and in Aurora's: green at the corner
+        // facing the lamp, violet at the far one.
+        val white = glassLook(GlassMaterial.Regular, strength = 1f, solid = 0f, opacity = 1f, dark = true, tint = Color(0xFF7C6CFF))
+        val aurora = glassLook(GlassMaterial.Regular, strength = 1f, solid = 0f, opacity = 1f, dark = true, tint = Color(0xFF7C6CFF), colours = Themes.Aurora.glassColours())
+        val wallpaper = flat(0xFF404858.toInt())
+        val plain = paint(wallpaper, white, Size(240f, 240f), origin = Offset(120f, 400f))
+        val lit = paint(wallpaper, aurora, Size(240f, 240f), origin = Offset(120f, 400f))
+        // The face is the same glass in both: the light is on the edge only.
+        assertTrue(kotlin.math.abs(bright(plain.getPixel(120, 120)) - bright(lit.getPixel(120, 120))) <= 3)
+        // The edge facing the light is greener than white light leaves it...
+        fun greenness(pixel: Int) = green(pixel) - red(pixel)
+        val near = lit.getPixel(120, 1)
+        assertTrue("the lit edge is not green: ${Integer.toHexString(near)}", greenness(near) > greenness(plain.getPixel(120, 1)) + 20)
+        // ...and the far one more violet than green, where white light leaves it as it found it.
+        fun violet(pixel: Int) = blue(pixel) - green(pixel)
+        val far = lit.getPixel(120, 238)
+        assertTrue("the far edge is not violet: ${Integer.toHexString(far)}", violet(far) > violet(plain.getPixel(120, 238)) + 12)
+        // And it is still light: the edge stands out from the face nearly as far as in white light.
+        val whiteLift = bright(plain.getPixel(120, 1)) - bright(plain.getPixel(120, 120))
+        val auroraLift = bright(near) - bright(lit.getPixel(120, 120))
+        assertTrue("the lit edge is $auroraLift over the face, white light's $whiteLift", auroraLift > 0.6 * whiteLift)
     }
 }

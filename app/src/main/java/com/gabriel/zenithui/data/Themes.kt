@@ -16,15 +16,13 @@ enum class ThemeMaterial(val id: String) {
     GLASS("glass"),
 
     /** Flat cards: a solid face, a hairline edge and a soft, short shadow. */
-    FLAT("flat"),
-
-    /** Smoked glass in the dark, with an edge that glows in the accent. */
-    NEON("neon"),
-
-    /** Chunky blocks: a solid face, a thick outline and a hard shadow with no blur at all. */
-    RETRO("retro");
+    FLAT("flat");
 
     companion object {
+        /**
+         * The material by its id, and glass for any other: one Zenith never had, or Neon's smoke or
+         * Retro's blocks, which went with those themes (see [Themes.successor]).
+         */
         fun byId(id: String?): ThemeMaterial = entries.firstOrNull { it.id == id } ?: GLASS
     }
 }
@@ -37,18 +35,6 @@ enum class ThemeTone(val id: String) {
 
     companion object {
         fun byId(id: String?): ThemeTone = entries.firstOrNull { it.id == id } ?: FOLLOWS
-    }
-}
-
-/** How much of what is behind a panel shows through it, and how softened: none is a solid face. */
-enum class ThemeBlur(val id: String) {
-    NONE("none"),
-    MIST("mist"),
-    FROST("frost"),
-    HAZE("haze");
-
-    companion object {
-        fun byId(id: String?): ThemeBlur = entries.firstOrNull { it.id == id } ?: FROST
     }
 }
 
@@ -70,9 +56,9 @@ data class ThemeColours(
     val accentAlt: Long,
     /** Words on the accent. */
     val onAccent: Long,
-    /** A panel's outline: a hairline, a glowing edge, a thick line. */
+    /** A panel's outline, in a theme that is not glass: a hairline. */
     val edge: Long,
-    /** What a panel's shadow (or, in Neon, its glow) is drawn in. */
+    /** What a panel's shadow is drawn in. */
     val shadow: Long,
     /** A switch that is on. */
     val switchOn: Long,
@@ -156,11 +142,48 @@ data class ThemeColours(
 }
 
 /**
+ * The colours a theme's glass is made in, where its panels are Liquid Glass: the veil it lays thin
+ * over the wallpaper, and the light its edge catches. The same in Light and in Dark, as glass on the
+ * wallpaper is. Liquid Glass's are Apple's: a grey with no colour in it, and white light. A theme of
+ * its own colours its glass with these and with nothing else: the face stays flat and clear, and the
+ * light stays on the edge, a hairline, never a line drawn round it. Their alpha is not used: how
+ * much of each there is, the glass decides.
+ */
+@Immutable
+data class ThemeGlass(
+    /** The veil of glass standing on the wallpaper (the dock, widgets, folders, Search): thin, and as deep as a grey. */
+    val veil: Long,
+    /** The light on the edge where it faces the lamp, up and to the left. */
+    val rim: Long,
+    /** The light on the far corner, where light that crossed the glass leaves it. Round the sides, a mix of the two. */
+    val rimFar: Long,
+) {
+    fun toJson(): JSONObject = JSONObject().apply {
+        put("veil", ThemeColours.hex(veil))
+        put("rim", ThemeColours.hex(rim))
+        put("rimFar", ThemeColours.hex(rimFar))
+    }
+
+    companion object {
+        /** What can be read from [o], and [fallback]'s colours for the rest. Never throws. */
+        fun fromJson(o: JSONObject?, fallback: ThemeGlass): ThemeGlass {
+            if (o == null) return fallback
+            fun colour(key: String, otherwise: Long): Long = ThemeColours.parse(o.optString(key, "")) ?: otherwise
+            return ThemeGlass(
+                veil = colour("veil", fallback.veil),
+                rim = colour("rim", fallback.rim),
+                rimFar = colour("rimFar", fallback.rimFar),
+            )
+        }
+    }
+}
+
+/**
  * A theme: everything Zenith is drawn with, in one place. The colours for light and dark, what its
- * panels are made of, how much is blurred behind a sheet, how its corners are cut, its outlines,
- * shadows and glow, and its font. Plain data, so a theme can be written down as JSON and read back
- * exactly ([toJson], [fromJson]): what one day lets a theme be shared through Zenith Connect. Adding
- * a theme is adding one of these to [Themes].
+ * panels are made of and the colours of its glass, how much is blurred behind a sheet, how its
+ * corners are cut, its outlines and shadows, and its font. Plain data, so a theme can be written
+ * down as JSON and read back exactly ([toJson], [fromJson]): what one day lets a theme be shared
+ * through Zenith Connect. Adding a theme is adding one of these to [Themes].
  */
 @Immutable
 data class Theme(
@@ -173,8 +196,6 @@ data class Theme(
     val dark: ThemeColours,
     /** How far the home screen behind a sheet, a folder or the drawer is blurred, in dp: 0 only dims it. */
     val blurBehind: Float,
-    /** What shows through a panel that is not Liquid Glass: in Neon, the wallpaper frosted. */
-    val panelBlur: ThemeBlur,
     /** Corners as they are drawn (1), or tighter: a share of the radius each was drawn with. */
     val corners: Float,
     /** The largest a corner is cut or rounded, in dp; 0 for no limit. */
@@ -190,10 +211,10 @@ data class Theme(
     /** How far a panel's shadow falls, in dp: right, and down. */
     val shadowX: Float,
     val shadowY: Float,
-    /** How far a panel's edge glows in the accent, in dp; 0 for none. */
-    val glow: Float,
     /** The font it is set in, one of `ZenithFonts`, unless you have chosen one of your own. */
     val font: String,
+    /** The colours of its glass, where its panels are glass: Liquid Glass's unless it has its own. */
+    val glass: ThemeGlass = Themes.LIQUID_GLASS,
 ) {
     /** Its colours in the tone in use. */
     fun colours(dark: Boolean): ThemeColours = if (dark) this.dark else light
@@ -208,7 +229,6 @@ data class Theme(
         put("light", light.toJson())
         put("dark", dark.toJson())
         put("blurBehind", blurBehind.toDouble())
-        put("panelBlur", panelBlur.id)
         put("corners", corners.toDouble())
         put("cornerCap", cornerCap.toDouble())
         put("cut", cut)
@@ -217,8 +237,8 @@ data class Theme(
         put("shadowBlur", shadowBlur.toDouble())
         put("shadowX", shadowX.toDouble())
         put("shadowY", shadowY.toDouble())
-        put("glow", glow.toDouble())
         put("font", font)
+        put("glass", glass.toJson())
     }
 
     companion object {
@@ -232,7 +252,6 @@ data class Theme(
         val EDGE = 0f..4f
         val SHADOW = 0f..24f
         val SHADOW_FALL = -12f..12f
-        val GLOW = 0f..24f
 
         /**
          * A theme from JSON, whoever wrote it: whatever can be read is, kept within what Zenith can
@@ -253,7 +272,6 @@ data class Theme(
                 light = ThemeColours.fromJson(o.optJSONObject("light"), d.light),
                 dark = ThemeColours.fromJson(o.optJSONObject("dark"), d.dark),
                 blurBehind = number("blurBehind", d.blurBehind, BLUR_BEHIND),
-                panelBlur = ThemeBlur.byId(o.optString("panelBlur")),
                 corners = number("corners", d.corners, CORNERS),
                 cornerCap = number("cornerCap", d.cornerCap, CORNER_CAP),
                 cut = o.optBoolean("cut", d.cut),
@@ -262,8 +280,8 @@ data class Theme(
                 shadowBlur = number("shadowBlur", d.shadowBlur, SHADOW),
                 shadowX = number("shadowX", d.shadowX, SHADOW_FALL),
                 shadowY = number("shadowY", d.shadowY, SHADOW_FALL),
-                glow = number("glow", d.glow, GLOW),
                 font = o.optString("font", d.font).trim().take(NAME_MOST).ifEmpty { d.font },
+                glass = ThemeGlass.fromJson(o.optJSONObject("glass"), d.glass),
             )
         }
     }
@@ -275,6 +293,9 @@ data class Theme(
  * is yours to try ([trying]) until Zenith next starts.
  */
 object Themes {
+
+    /** Liquid Glass's glass, and any theme's that has none of its own: Apple's grey veil and white light. */
+    val LIQUID_GLASS = ThemeGlass(veil = 0xFF3A3A3C, rim = 0xFFFFFFFF, rimFar = 0xFFFFFFFF)
 
     val LiquidGlass = Theme(
         id = "glass",
@@ -313,7 +334,6 @@ object Themes {
             scrim = 0x59000000,
         ),
         blurBehind = 20f,
-        panelBlur = ThemeBlur.FROST,
         corners = 1f,
         cornerCap = 0f,
         cut = false,
@@ -322,8 +342,8 @@ object Themes {
         shadowBlur = 16f,
         shadowX = 0f,
         shadowY = 6f,
-        glow = 0f,
         font = "system",
+        glass = LIQUID_GLASS,
     )
 
     val Clean = Theme(
@@ -363,7 +383,6 @@ object Themes {
             scrim = 0x66000000,
         ),
         blurBehind = 0f,
-        panelBlur = ThemeBlur.NONE,
         corners = 0.72f,
         cornerCap = 0f,
         cut = false,
@@ -372,104 +391,129 @@ object Themes {
         shadowBlur = 10f,
         shadowX = 0f,
         shadowY = 2f,
-        glow = 0f,
         font = "inter",
     )
 
-    private val neonNight = ThemeColours(
-        backdrop = listOf(0xFF05030B, 0xFF0B0720, 0xFF04020A),
-        surface = 0xCC0D0A1C,
-        ink = 0xFFF5F3FF,
-        accent = 0xFF00E5FF,
-        accentAlt = 0xFFFF2BD6,
-        onAccent = 0xFF04020A,
-        edge = 0xD900E5FF,
-        shadow = 0x9900E5FF,
-        switchOn = 0xFF3DFF8F,
-        destructive = 0xFFFF3D71,
-        glassTint = 0xFF6C3BFF,
+    /**
+     * Aurora's colours, always dark: a night of deep teal into indigo, an aurora's green for actions
+     * with violet beside it, and words of a white with a breath of green in it.
+     */
+    private val auroraNight = ThemeColours(
+        backdrop = listOf(0xFF031A1D, 0xFF061529, 0xFF110B2B),
+        surface = 0x14D4FFF2,
+        ink = 0xFFF2FFFB,
+        accent = 0xFF4BE3B4,
+        accentAlt = 0xFFA996FF,
+        onAccent = 0xFF04241B,
+        edge = 0x2EB8FFE6,
+        shadow = 0x66000000,
+        switchOn = 0xFF4BE3B4,
+        destructive = 0xFFFF5C70,
+        glassTint = 0xFF00E0C0,
         wallInk = 0xFFFFFFFF,
-        scrim = 0x8C04020A,
+        scrim = 0x6602080C,
     )
 
-    val Neon = Theme(
-        id = "neon",
-        name = "Neon",
-        tagline = "Dark, with edges that glow",
-        material = ThemeMaterial.NEON,
+    /**
+     * Liquid Glass under the northern lights: the same clear glass, bent at the rim, with the light
+     * its edge catches in an aurora's colours, green on the corner facing the light and violet on the
+     * far one, over a veil with a little of the night's teal in it. Always dark, as the lights are.
+     */
+    val Aurora = Theme(
+        id = "aurora",
+        name = "Aurora",
+        tagline = "Glass that catches the northern lights",
+        material = ThemeMaterial.GLASS,
         tone = ThemeTone.DARK,
-        light = neonNight,
-        dark = neonNight,
-        blurBehind = 14f,
-        panelBlur = ThemeBlur.FROST,
-        corners = 0.85f,
+        light = auroraNight,
+        dark = auroraNight,
+        blurBehind = 20f,
+        corners = 1f,
         cornerCap = 0f,
         cut = false,
         keepPills = true,
-        edgeWidth = 1.2f,
-        shadowBlur = 0f,
+        edgeWidth = 1f,
+        shadowBlur = 16f,
         shadowX = 0f,
-        shadowY = 0f,
-        glow = 9f,
-        font = "condensed",
+        shadowY = 6f,
+        font = "system",
+        glass = ThemeGlass(veil = 0xFF1C3A40, rim = 0xFF4DFFB0, rimFar = 0xFFAE8CFF),
     )
 
-    val Retro = Theme(
-        id = "retro",
-        name = "Retro",
-        tagline = "Warm colours, chunky blocks, a pixel's edge",
-        material = ThemeMaterial.RETRO,
+    /**
+     * Liquid Glass gone cold: the same clear glass, with the light on its edge the white of frost on
+     * the corner facing the light and an ice blue on the far one, over a veil of cold slate. Pale ice
+     * by day and a glacier's deep blue by night, with an ice blue for actions in both.
+     */
+    val Frost = Theme(
+        id = "frost",
+        name = "Frost",
+        tagline = "Ice-cold glass, crisp and clear",
+        material = ThemeMaterial.GLASS,
         tone = ThemeTone.FOLLOWS,
         light = ThemeColours(
-            backdrop = listOf(0xFFF3E3C3, 0xFFF7EBD3, 0xFFFBF3E2),
-            surface = 0xFFFFF8EA,
-            ink = 0xFF3A2215,
-            accent = 0xFFC2410C,
-            accentAlt = 0xFFE8A317,
-            onAccent = 0xFFFFF8EA,
-            edge = 0xFF3A2215,
-            shadow = 0xFF3A2215,
-            switchOn = 0xFF4D7C2F,
-            destructive = 0xFFB3261E,
-            glassTint = 0xFFC9A46A,
-            wallInk = 0xFFFFF6E0,
-            scrim = 0x663A2215,
+            backdrop = listOf(0xFFE6F1FA, 0xFFEFF6FC, 0xFFF9FCFF),
+            surface = 0x140C2A45,
+            ink = 0xFF0A1A2B,
+            accent = 0xFF0279BE,
+            accentAlt = 0xFF0AA5D6,
+            onAccent = 0xFFFFFFFF,
+            edge = 0x240C2A45,
+            shadow = 0x2E0A2540,
+            switchOn = 0xFF0A9EE0,
+            destructive = 0xFFE0244E,
+            glassTint = 0xFF5CC8FF,
+            wallInk = 0xFFFFFFFF,
+            scrim = 0x4D0A1B2C,
         ),
         dark = ThemeColours(
-            backdrop = listOf(0xFF1F140C, 0xFF2A1B10, 0xFF1A100A),
-            surface = 0xFF3A2719,
-            ink = 0xFFFBE8C8,
-            accent = 0xFFFF7A2F,
-            accentAlt = 0xFFFFC23D,
-            onAccent = 0xFF2A160A,
-            edge = 0xD9FBE8C8,
-            shadow = 0xCC000000,
-            switchOn = 0xFF8CC152,
-            destructive = 0xFFFF5A4A,
-            glassTint = 0xFF8A6440,
-            wallInk = 0xFFFFF3DD,
-            scrim = 0x8C120A05,
+            backdrop = listOf(0xFF030B16, 0xFF07182B, 0xFF0B243C),
+            surface = 0x14D8EEFF,
+            ink = 0xFFF0F8FF,
+            accent = 0xFF4DC3FA,
+            accentAlt = 0xFF8BE3FF,
+            onAccent = 0xFF03182A,
+            edge = 0x29D8EEFF,
+            shadow = 0x66000000,
+            switchOn = 0xFF4DC3FA,
+            destructive = 0xFFFF6B86,
+            glassTint = 0xFF3FB8FF,
+            wallInk = 0xFFFFFFFF,
+            scrim = 0x66020814,
         ),
-        blurBehind = 0f,
-        panelBlur = ThemeBlur.NONE,
-        corners = 0.5f,
-        cornerCap = 10f,
-        cut = true,
-        keepPills = false,
-        edgeWidth = 2f,
-        shadowBlur = 0f,
-        shadowX = 3f,
-        shadowY = 3f,
-        glow = 0f,
-        font = "mono",
+        blurBehind = 20f,
+        corners = 1f,
+        cornerCap = 0f,
+        cut = false,
+        keepPills = true,
+        edgeWidth = 1f,
+        shadowBlur = 16f,
+        shadowX = 0f,
+        shadowY = 6f,
+        font = "system",
+        glass = ThemeGlass(veil = 0xFF2A3A4A, rim = 0xFFD2F3FF, rimFar = 0xFF52B9FF),
     )
 
-    val all = listOf(LiquidGlass, Clean, Neon, Retro)
+    /** The three of glass first, Liquid Glass leading them, and then Clean. */
+    val all = listOf(LiquidGlass, Aurora, Frost, Clean)
 
     val DEFAULT: String = LiquidGlass.id
 
-    /** A theme by its id; Liquid Glass for one Zenith does not know. */
-    fun byId(id: String?): Theme = all.firstOrNull { it.id == id } ?: LiquidGlass
+    /** A theme by its id, or for one that went, the one after it ([successor]); Liquid Glass for one Zenith does not know. */
+    fun byId(id: String?): Theme {
+        val now = id?.let(::successor)
+        return all.firstOrNull { it.id == now } ?: LiquidGlass
+    }
+
+    /**
+     * The themes that went, and what a phone that was in one is in now: Neon, dark with a light of
+     * its own on every edge, in Aurora, which is that in glass; Retro, which nothing is like any
+     * more, in Liquid Glass, where everybody starts.
+     */
+    private val retired = mapOf("neon" to "aurora", "retro" to DEFAULT)
+
+    /** The theme [id] is now: itself, or for one that went, the one after it. A theme of your own keeps its id. */
+    fun successor(id: String): String = retired[id] ?: id
 
     /** What is shown: the one being tried, if any, else your favourite. */
     fun active(favourite: String, trying: String?): Theme = byId(trying ?: favourite)
@@ -519,7 +563,8 @@ object ThemeContrast {
     /** What is behind is taken as solid: a page is, and a panel is measured laid over one. */
     private fun opaque(argb: Long): Long = 0xFF000000L or (argb and 0xFFFFFFL)
 
-    private fun luminance(argb: Long): Double {
+    /** How bright [argb] is to the eye, from 0 (black) to 1 (white), its alpha left out. */
+    fun luminance(argb: Long): Double {
         fun linear(shift: Int): Double {
             val c = ((argb ushr shift) and 0xFF) / 255.0
             return if (c <= 0.03928) c / 12.92 else ((c + 0.055) / 1.055).pow(2.4)

@@ -42,10 +42,10 @@ val LocalTheme = staticCompositionLocalOf { Themes.LiquidGlass }
 val Theme.isGlass: Boolean get() = material == ThemeMaterial.GLASS
 
 /**
- * [shape] as this theme draws it. Liquid Glass keeps every shape exactly as it is drawn; the others
- * take a share of each rounded corner ([Theme.corners]), no more than [Theme.cornerCap], and Retro
- * cuts them off straight. A pill stays a pill where the theme keeps pills. Anything not made of
- * corners (an icon's squircle, a free-form outline) is left as it is.
+ * [shape] as this theme draws it. The glass themes keep every shape exactly as it is drawn; a
+ * theme that is not glass may take a share of each rounded corner ([Theme.corners]), no more than
+ * [Theme.cornerCap], or cut them off straight ([Theme.cut]). A pill stays a pill where the theme
+ * keeps pills. Anything not made of corners (an icon's squircle, a free-form outline) is left as it is.
  */
 fun Theme.shape(shape: Shape): Shape {
     if (corners == 1f && cornerCap == 0f && !cut) return shape

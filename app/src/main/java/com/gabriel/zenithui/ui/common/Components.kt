@@ -164,7 +164,7 @@ fun IconLabel(text: String, modifier: Modifier = Modifier, textAlign: TextAlign?
 
 /**
  * The ink a name is written in. On the wallpaper it is white whatever the palette, or the theme's
- * own light ink for names there ([wall]: Retro's is cream): a light palette's dark ink could not be
+ * own light ink for names there ([wall]): a light palette's dark ink could not be
  * read over a dark wallpaper. Anywhere else, the drawer and the folder panel, it is the palette's
  * own ink, [onGlass], which their surfaces are made for.
  */

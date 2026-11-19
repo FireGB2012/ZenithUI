@@ -43,7 +43,7 @@ data class ZenithPalette(
     val surface: Color = ink.copy(alpha = 0.07f),
     /** A panel's outline. */
     val edge: Color = ink.copy(alpha = if (dark) 0.15f else 0.14f),
-    /** What a panel's shadow, or in Neon its glow, is drawn in. */
+    /** What a panel's shadow is drawn in. */
     val shadow: Color = Color.Black.copy(alpha = if (dark) 0.4f else 0.2f),
     /** Words on the accent. */
     val onAccent: Color = Color.White,
@@ -75,7 +75,7 @@ data class ZenithPalette(
 
 /**
  * The theme's dim behind something laid over the screen, as deep as [amount] would be in Liquid
- * Glass: its own colour, warm brown in Retro, and as much deeper or lighter as the theme's is.
+ * Glass: its own colour, and as much deeper or lighter as the theme's is.
  */
 fun ZenithPalette.dim(amount: Float): Color = scrim.copy(alpha = (scrim.alpha * amount / LIQUID_SCRIM).coerceIn(0f, 1f))
 

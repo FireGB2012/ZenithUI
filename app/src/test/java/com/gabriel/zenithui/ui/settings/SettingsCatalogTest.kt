@@ -128,7 +128,7 @@ class SettingsCatalogTest {
 
     @Test
     fun `the themes are found by name, and so is your favourite`() {
-        listOf("theme", "liquid glass", "clean", "neon", "retro", "favourite", "favorite").forEach {
+        listOf("theme", "liquid glass", "aurora", "frost", "clean", "favourite", "favorite").forEach {
             assertEquals(it, "theme", found(it).first())
         }
         assertEquals(SettingsPage.Theme, SettingsCatalog.entries.first { it.id == "theme" }.page)

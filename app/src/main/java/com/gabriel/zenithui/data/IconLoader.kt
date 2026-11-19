@@ -331,12 +331,22 @@ class IconLoader(context: Context, private val repo: AppRepository) {
         if (WorkKeys.isWork(key)) return repo.workIcon(key, density)
         // One you chose for this app, unless it has gone (a pack uninstalled, a photo cleared).
         chosen[key]?.let(IconSource::parse)?.let(::sourceDrawable)?.let { return it }
+        // Zenith's own apps have their icons in Zenith: no icon pack knows them.
+        if (BuiltInApps.isBuiltIn(key)) return builtInIcon(key)
         val parts = key.split('/', limit = 2)
         if (parts.size == 2) {
             pack?.drawableFor(ComponentName(parts[0], parts[1]))?.let { return it }
         }
         return repo.originalIcon(key, density) ?: repo.systemIcon(key, density)
     }
+
+    private fun builtInIcon(key: String): Drawable? = runCatching {
+        val id = when (key) {
+            BuiltInApps.CONNECT -> com.gabriel.zenithui.R.drawable.ic_connect_app
+            else -> return@runCatching null
+        }
+        appContext.resources.getDrawableForDensity(id, density, null)
+    }.getOrNull()
 
     private fun sourceDrawable(source: IconSource): Drawable? = runCatching {
         when (source) {

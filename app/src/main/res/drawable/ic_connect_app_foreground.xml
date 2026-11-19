@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Connect's mark: a dot in two rings, fading outwards, inside the icon's safe zone. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M54,46a8,8 0,1 1,0 16a8,8 0,1 1,0 -16z" />
+    <path
+        android:strokeColor="#B3FFFFFF"
+        android:strokeWidth="3.4"
+        android:fillColor="#00000000"
+        android:pathData="M54,37a17,17 0,1 1,0 34a17,17 0,1 1,0 -34z" />
+    <path
+        android:strokeColor="#61FFFFFF"
+        android:strokeWidth="3.4"
+        android:fillColor="#00000000"
+        android:pathData="M54,29a25,25 0,1 1,0 50a25,25 0,1 1,0 -50z" />
+</vector>

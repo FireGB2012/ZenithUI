@@ -399,6 +399,7 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
             }
         }
         billing.refresh()
+        placeBuiltIns()
     }
 
     /**
@@ -1453,6 +1454,17 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
             refreshApps()
             return false
         }
+        noteLaunch(key)
+        return true
+    }
+
+    /**
+     * A built-in app opened inside Zenith (see [com.gabriel.zenithui.data.BuiltInApps]): the home
+     * screen shows it itself, and it is counted for Suggestions and Most used as any app is.
+     */
+    fun openedBuiltIn(key: String) = noteLaunch(key)
+
+    private fun noteLaunch(key: String) {
         // Remembered for the library's Suggestions, kept short: only the latest dozen matter. And
         // counted, for the drawer's Most used.
         store.update {
@@ -1461,7 +1473,34 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
                 launchCounts = com.gabriel.zenithui.data.DrawerSort.counted(it.launchCounts, key),
             )
         }
-        return true
+    }
+
+    /**
+     * Zenith's own apps go onto the home screen once, as a newly installed app would: on the first
+     * page with room, the first time a Zenith that is already set up has them. Taken off, they stay
+     * in the drawer. A Zenith still being set up gets them the next time it starts, so nothing is
+     * added under setup's own hand-off into the home screen.
+     */
+    private fun placeBuiltIns() {
+        if (!settings.value.onboarded) return
+        val prefs = getApplication<Application>().getSharedPreferences(BUILT_IN_PREFS, android.content.Context.MODE_PRIVATE)
+        val placed = prefs.getStringSet(BUILT_IN_PLACED, emptySet()).orEmpty()
+        val onHome = buildSet {
+            layout.value.forEach { item ->
+                when (item) {
+                    is AppCell -> add(item.key)
+                    is com.gabriel.zenithui.data.FolderCell -> addAll(item.keys)
+                    else -> Unit
+                }
+            }
+            addAll(settings.value.dock)
+        }
+        val due = com.gabriel.zenithui.data.BuiltInApps.all.map { it.key }
+            .filter { com.gabriel.zenithui.data.BuiltInApps.needsPlacing(it, placed, it in onHome) }
+        if (due.isEmpty()) return
+        // Once, whether or not a page had room: with none, it is in the drawer.
+        due.forEach { addAppToFirstFreeSlot(it) }
+        prefs.edit().putStringSet(BUILT_IN_PLACED, placed + due).apply()
     }
 
     // ---------------------------------------------------------------- one app's own name and icon
@@ -2305,3 +2344,7 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
         return arriving.id
     }
 }
+
+/** Where Zenith remembers which of its own apps it has already put on the home screen (see placeBuiltIns). */
+private const val BUILT_IN_PREFS = "zenith_builtins"
+private const val BUILT_IN_PLACED = "placed"

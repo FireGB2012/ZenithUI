@@ -51,13 +51,14 @@ class AppRepository(context: Context) {
                 system = (info.applicationInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0,
             )
         }
-        result.sortBy { it.label.lowercase() }
+        // Zenith's own apps are among them, though Android lists none of them (see BuiltInApps).
+        val all = BuiltInApps.joinedWith(result)
         synchronized(activities) {
             activities.clear()
             activities.putAll(map)
         }
-        _apps.value = result
-        result
+        _apps.value = all
+        all
     }
 
     /**
@@ -202,7 +203,8 @@ class AppRepository(context: Context) {
 
     /** The shortcuts [packageName] offers from its icon, in the order it ranks them: up to five. */
     suspend fun shortcuts(packageName: String): List<AppShortcut> = withContext(Dispatchers.IO) {
-        if (!canUseShortcuts()) return@withContext emptyList()
+        // Zenith's own apps are no package Android knows: they have none to ask for.
+        if (packageName == BuiltInApps.PACKAGE || !canUseShortcuts()) return@withContext emptyList()
         val query = LauncherApps.ShortcutQuery()
             .setPackage(packageName)
             .setQueryFlags(LauncherApps.ShortcutQuery.FLAG_MATCH_MANIFEST or LauncherApps.ShortcutQuery.FLAG_MATCH_DYNAMIC)
@@ -261,6 +263,16 @@ class AppRepository(context: Context) {
     }
 
     fun openAppInfo(key: String) {
+        // A built-in app is part of Zenith: its app info is Zenith's.
+        if (BuiltInApps.isBuiltIn(key)) {
+            runCatching {
+                appContext.startActivity(
+                    Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${appContext.packageName}"))
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
+            }
+            return
+        }
         val app = byKey(key) ?: return
         runCatching {
             launcherApps.startAppDetailsActivity(ComponentName(app.packageName, app.className), user, null, null)
@@ -275,6 +287,8 @@ class AppRepository(context: Context) {
     }
 
     fun uninstall(key: String) {
+        // A built-in app comes and goes with Zenith: there is nothing of its own to uninstall.
+        if (BuiltInApps.isBuiltIn(key)) return
         val app = byKey(key) ?: return
         runCatching {
             appContext.startActivity(

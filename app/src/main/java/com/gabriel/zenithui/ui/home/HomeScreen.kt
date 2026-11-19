@@ -80,6 +80,7 @@ import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -131,6 +132,7 @@ import com.gabriel.zenithui.data.StackCell
 import com.gabriel.zenithui.data.LockService
 import com.gabriel.zenithui.data.AndroidClose
 import com.gabriel.zenithui.data.AppPictures
+import com.gabriel.zenithui.data.BuiltInApps
 import com.gabriel.zenithui.data.CloseAway
 import com.gabriel.zenithui.data.CloseRoute
 import com.gabriel.zenithui.data.CloseRules
@@ -241,6 +243,10 @@ private class Closing(
 
 /** How long it has to stay there, so carrying an item past an edge does not flip anything. */
 private const val PAGE_FLIP_DELAY = 240L
+
+/** How far a built-in app's card has grown when the app itself starts coming in over it, and how long that takes. */
+private const val BUILT_IN_SHOWS_AT = 0.95f
+private const val BUILT_IN_FADE_MS = 200
 
 /**
  * How long the carried item rests over a spot before whatever is there steps aside for it: long
@@ -839,6 +845,36 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
      */
     var closingAway by remember { mutableStateOf(false) }
 
+    // ------------------------------------------------------------ Zenith's own apps
+    // An app that comes inside Zenith (see BuiltInApps) opens and closes on the same card as any
+    // app, but what fills the screen once it is open is Zenith's own page, drawn over everything
+    // here, and not another app's window.
+    /** Zenith Connect as it was left: kept while Zenith runs, so it opens again where it was. */
+    val connect = remember { com.gabriel.zenithui.ui.connect.ConnectState(scope) }
+    /** The built-in app on the screen, if one is, and how far it has come in over its card (0 to 1). */
+    var builtInUp by remember { mutableStateOf<String?>(null) }
+    val builtInShown = remember { Animatable(0f) }
+    /** The card it opened on, which it closes back into. */
+    val builtInCard = remember { arrayOfNulls<AppExpansion>(1) }
+    /** Whether it is on its way back into its icon now. */
+    val builtInClosing = remember { booleanArrayOf(false) }
+    /**
+     * A picture of it as it was left, which it opens out of next time, as an app with the picture
+     * helper does; and the colours it was taken in, since a picture in others would jump.
+     */
+    val builtInPicture = remember { arrayOfNulls<androidx.compose.ui.graphics.ImageBitmap>(1) }
+    val builtInPictureLook = remember { arrayOfNulls<Any>(1) }
+    /** What it draws, recorded as it is drawn, for that picture. */
+    val builtInLayer = androidx.compose.ui.graphics.rememberGraphicsLayer()
+    /** The colours and theme Zenith is in now, which a picture of it is only good in. */
+    val builtInLook by androidx.compose.runtime.rememberUpdatedState(palette to theme)
+    // All the way in, it hides the home screen behind it, which then is not drawn at all.
+    androidx.compose.runtime.DisposableEffect(homeCover) {
+        val cover = { if (builtInUp != null && card == null && builtInShown.value >= 0.999f) 1f else 0f }
+        homeCover.add(cover)
+        onDispose { homeCover.remove(cover) }
+    }
+
     // Arriving. One clock for the whole home screen: at 0 everything is out, and by the end of the
     // arrival (FlyIn.TOTAL_MS, or a liquid wave's own end) it is all in its place, where the clock is
     // left past the end of every style (FlyIn.AT_REST). It is wound back while nobody can see — at a
@@ -936,7 +972,8 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
     val lookDue by viewModel.lookDue.collectAsState()
     val idle = !dragging && drag.item == null && !sheetVisible && !settingsOpen && !widgetsOpen &&
         !drawerShown && folderUp == null && card == null && resizingId == null && !ambient && !overview &&
-        !askingNewLook && !searchShown && holdMenu.open == null && alert == null && !editing && !customising
+        !askingNewLook && !searchShown && holdMenu.open == null && alert == null && !editing && !customising &&
+        builtInUp == null
     LaunchedEffect(lookDue, idle) {
         if (lookDue != null && idle) {
             delay(LOOK_DUE_WAIT_MS)
@@ -1149,10 +1186,16 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
      * With [hold] it goes up in this very frame and waits, full size, until that is done: on a
      * phone that shows a still picture of Zenith before its own frames (CloseRules.cardFirst).
      */
-    fun closeIntoIcon(closed: Closing, bringHome: (() -> Unit)? = null, hold: kotlinx.coroutines.Deferred<Unit>? = null) {
+    fun closeIntoIcon(
+        closed: Closing,
+        bringHome: (() -> Unit)? = null,
+        hold: kotlinx.coroutines.Deferred<Unit>? = null,
+        /** How big the card starts, when it is not the tuning's to say: a built-in app is all on the screen as it goes. */
+        startAt: Float? = null,
+    ) {
         val t = liveTuning
         val picture = closed.picture?.asImageBitmap()
-        val from = if (closed.route == CloseRoute.Picture) t[Tune.ClosePicture] else CloseRules.cardStart(t[Tune.CloseCard])
+        val from = startAt ?: if (closed.route == CloseRoute.Picture) t[Tune.ClosePicture] else CloseRules.cardStart(t[Tune.CloseCard])
         val spot = closed.spot
         val side = closed.opened?.from?.minDimension ?: (60f * pxPerDp)
         val screenWidth = hostView.width.toFloat()
@@ -1419,6 +1462,72 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
     }
 
     /**
+     * Opens one of Zenith's own apps (see BuiltInApps) the way any app opens: out of its icon on
+     * the same card and springs, holding a picture of the app as it was left if there is one. As
+     * the card all but fills the screen the app itself comes in over it; once it is all there the
+     * card goes, and the home screen stays sunk back behind it, as it does behind any app. Opened
+     * from no icon (Search, a gesture), it grows out of the middle of the screen.
+     */
+    fun openBuiltIn(key: String) {
+        // Open, or on its way: nothing more to do.
+        if (builtInUp == key || (card?.key == key && cardOpening)) return
+        val width = hostView.width.toFloat()
+        val height = hostView.height.toFloat()
+        val from = LaunchOrigin.boundsFor(key) ?: CloseRules.middle(width, height, 60f * pxPerDp)
+        // Search folds back into its pill, as it does behind any app.
+        closeSearch()
+        if (preparingLaunch) return
+        preparingLaunch = true
+        scope.launch {
+            val icon = runCatching { viewModel.icons.load(key, 192) }.getOrNull()
+            preparingLaunch = false
+            val picture = builtInPicture[0]?.takeIf { builtInPictureLook[0] == builtInLook }
+            // Tapped again while it is still going into its icon, it turns round from where it is,
+            // as any app's card does. Any other card makes way for it.
+            val turning = card?.takeIf { it.key == key && closingCard }
+            if (card != null && turning == null) {
+                cardJob[0]?.cancel()
+                restCard()
+            }
+            launchedAt[0] = 0L
+            viewModel.openedBuiltIn(key)
+            val target = turning?.copy(from = from) ?: AppExpansion(key = key, from = from, icon = icon, picture = picture)
+            builtInCard[0] = target
+            card = target
+            cardOpening = true
+            closingCard = false
+            comeBackFromFoot = false
+            HomeRipple.origin = target.from.center
+            steerCard {
+                var opened = false
+                try {
+                    launch {
+                        snapshotFlow { cardProgress.value }.first { it >= BUILT_IN_SHOWS_AT }
+                        builtInShown.snapTo(0f)
+                        builtInUp = key
+                        builtInShown.animateTo(1f, tween(if (liveMotion.reduced) Motion.REDUCED_MS else BUILT_IN_FADE_MS))
+                    }
+                    flyCard(1f)
+                    snapshotFlow { builtInShown.value }.first { it >= 1f }
+                    // Open: the app is the screen now, and the card under it goes.
+                    opened = true
+                    holdSunk = true
+                    card = null
+                    cardOpening = false
+                    restCard()
+                } finally {
+                    // Turned round on the way (Home, Back, a tap on the card): the card is the
+                    // closing's now, and the app goes with it.
+                    if (!opened) {
+                        builtInUp = null
+                        scope.launch { builtInShown.snapTo(0f) }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
      * Opens an app the way iOS and One UI do: the icon grows until it fills the screen and the app
      * appears over it. Tapping the same icon while its card is still moving turns the card round
      * rather than starting again. An app opened any other way simply opens.
@@ -1429,6 +1538,11 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         endWait()
         setOff()
         revealHome()
+        // One of Zenith's own apps opens here, inside Zenith.
+        if (BuiltInApps.isBuiltIn(key)) {
+            openBuiltIn(key)
+            return
+        }
         val current = card
         if (current != null && current.key == key) {
             openCard(current)
@@ -1476,10 +1590,140 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         }
     }
 
+    /** Takes the picture a built-in app opens out of next time, from what it is showing now. */
+    suspend fun pictureBuiltIn(): androidx.compose.ui.graphics.ImageBitmap? {
+        val shot = runCatching { builtInLayer.toImageBitmap() }
+            .onFailure { android.util.Log.w("Zenith", "No picture of the built-in app: it closes on its icon's card", it) }
+            .getOrNull() ?: return null
+        builtInPicture[0] = shot
+        builtInPictureLook[0] = builtInLook
+        return shot
+    }
+
+    /** [closeBuiltIn], once its picture is taken: see there. */
+    suspend fun closeBuiltInNow(key: String, home: Boolean) {
+        val shot = pictureBuiltIn()
+        if (builtInUp != key) return
+        val comeBack: () -> Unit = {
+            scope.launch {
+                homeSink.snapTo(1f)
+                holdSunk = false
+                homeSink.animateTo(0f, liveTuning.springOf(Tune.ReturnStiffness, Tune.ReturnDamping))
+            }
+        }
+        if (liveMotion.reduced) {
+            builtInShown.animateTo(0f, tween(Motion.REDUCED_MS))
+            builtInUp = null
+            comeBack()
+            return
+        }
+        val opened = builtInCard[0]
+        val pkg = CloseRules.packageOf(key)
+        val over = !home && (drawerShown || folderUp != null)
+        val spot = if (over) {
+            opened?.let { IconPlaces.Spot(listOf(key), it.from) }
+        } else {
+            IconPlaces.find(key, pkg, work = false, near = opened?.from)
+        }
+        val current = viewModel.settings.value
+        val way = if (spot == null && !over) {
+            CloseAway.way(
+                key, pkg, false,
+                items = viewModel.layout.value,
+                dock = current.dock,
+                shownPage = pagerState.currentPage,
+                library = current.appsView == "library",
+            )
+        } else {
+            null
+        }
+        spot?.bounds?.center?.let { HomeRipple.origin = it }
+        val closed = Closing(
+            key = key,
+            pkg = pkg,
+            spot = spot,
+            away = way,
+            opened = opened,
+            // With no picture of it, it goes on its icon's own card, as an app with none does.
+            route = if (shot != null) CloseRoute.Picture else CloseRoute.Card,
+            picture = shot?.asAndroidBitmap(),
+            answer = null,
+            at = android.os.SystemClock.uptimeMillis(),
+        )
+        // Held, with nothing to wait for: the card is up, all of the screen, in this very frame.
+        closeIntoIcon(closed, bringHome = comeBack, hold = kotlinx.coroutines.CompletableDeferred(Unit), startAt = 1f)
+        if (shot != null) {
+            // The card is the app as it is now, so the app goes in the same frame and nothing is
+            // seen between them.
+            builtInUp = null
+            builtInShown.snapTo(0f)
+        } else {
+            // Over a card that is only its colour, it fades off it as the card sets off.
+            builtInShown.animateTo(0f, tween(BUILT_IN_FADE_MS))
+            if (builtInUp == key) builtInUp = null
+        }
+    }
+
+    /**
+     * Closes the built-in app on show back into its icon, as an app closes when you go home from
+     * it: a picture of it as it is now on the card, all of the screen, shrinking into the icon it
+     * was opened from, or towards where it lives with that icon not on show (CloseAway), while the
+     * home screen comes forward. With the drawer or a folder still up under it, it goes back into
+     * the icon it came out of there, unless it is going [home], which puts those away. With
+     * movement reduced it fades where it is; with no picture to be had, it goes on its icon's own
+     * card. Still opening, the card simply turns round.
+     */
+    fun closeBuiltIn(home: Boolean = false) {
+        val key = builtInUp ?: return
+        if (card != null && cardOpening) {
+            closeCard()
+            return
+        }
+        // Already on its way out (Back pressed again as it goes): once is enough.
+        if (builtInClosing[0]) return
+        builtInClosing[0] = true
+        scope.launch {
+            try {
+                closeBuiltInNow(key, home)
+            } finally {
+                builtInClosing[0] = false
+            }
+        }
+    }
+
+    /**
+     * Puts the built-in app away at once and unseen, as an app goes to the background when another
+     * covers it: opened again from its icon, it is where it was left. A card still opening it goes too.
+     */
+    fun putAwayBuiltIn() {
+        val opening = card?.takeIf { BuiltInApps.isBuiltIn(it.key) && cardOpening }
+        if (builtInUp == null && opening == null) return
+        if (opening != null) {
+            cardJob[0]?.cancel()
+            card = null
+            cardOpening = false
+            closingCard = false
+            scope.launch { restCard() }
+        }
+        if (builtInUp == null) return
+        scope.launch {
+            pictureBuiltIn()
+            builtInUp = null
+            builtInShown.snapTo(0f)
+            // The home screen it held sunk back is let go of, at rest, for whatever comes next.
+            holdSunk = false
+            homeSink.snapTo(0f)
+        }
+    }
+
     androidx.compose.runtime.DisposableEffect(hostLifecycle) {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
             when (event) {
                 androidx.lifecycle.Lifecycle.Event.ON_STOP -> {
+                    // One of Zenith's own apps goes to the background as another covers Zenith, to be
+                    // opened again from its icon where it was left. With the screen going off it stays,
+                    // as an app does, and is there again after the unlock.
+                    if (power?.isInteractive != false) putAwayBuiltIn()
                     // Whatever covers Zenith now is what closes when it comes back: worked out afresh.
                     away[0] = true
                     closingWorkedOut[0] = false
@@ -2160,6 +2404,18 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             // gesture, whatever that has been set to. Anything else folds everything back.
             val again = viewModel.homeAgain.value != seenAgain[0]
             seenAgain[0] = viewModel.homeAgain.value
+            // Home from one of Zenith's own apps is home from any app: it goes back into its icon,
+            // anything left open under it folds away, and that is all.
+            if (builtInUp != null) {
+                closeBuiltIn(home = true)
+                hideSheet()
+                holdMenu.close()
+                alert = null
+                closeFolder()
+                closeDrawer()
+                closeSearch()
+                return@LaunchedEffect
+            }
             val busy = (card != null && cardOpening) || sheetVisible || settingsOpen || widgetsOpen ||
                 folderUp != null || drawer.value > 0.02f || resizingId != null || ambient || askingNewLook || searchOpen ||
                 holdMenu.open != null || alert != null || editing || customising
@@ -2341,12 +2597,14 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 alert = HomeAlert(
                     title = "Remove “$name”?",
                     message = "Removing from the Dock will keep the app in your $apps.",
-                    buttons = listOf(
+                    buttons = listOfNotNull(
                         AlertButton("Remove from Dock") {
                             bubbles.pop(listOf(dockBubble(target.key)))
                             viewModel.toggleDock(target.key)
                         },
-                        AlertButton("Uninstall App", danger = true) { viewModel.uninstall(target.key) },
+                        // One of Zenith's own apps comes and goes with Zenith: there is no uninstalling it.
+                        AlertButton("Uninstall App", danger = true) { viewModel.uninstall(target.key) }
+                            .takeUnless { BuiltInApps.isBuiltIn(target.key) },
                         AlertButton("Cancel") {},
                     ),
                 )
@@ -2356,9 +2614,10 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 is AppCell -> alert = HomeAlert(
                     title = "Remove “${appsByKey[item.key]?.label ?: "this app"}”?",
                     message = "Removing from Home Screen will keep the app in your $apps.",
-                    buttons = listOf(
+                    buttons = listOfNotNull(
                         AlertButton("Remove from Home Screen") { popOff(item.id) },
-                        AlertButton("Uninstall App", danger = true) { viewModel.uninstall(item.key) },
+                        AlertButton("Uninstall App", danger = true) { viewModel.uninstall(item.key) }
+                            .takeUnless { BuiltInApps.isBuiltIn(item.key) },
                         AlertButton("Cancel") {},
                     ),
                 )
@@ -2589,7 +2848,8 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                         // would go to them first.
                         val idle = !fired && !drag.isDragging && !settingsOpen && !widgetsOpen &&
                             !sheetVisible && folderUp == null && card == null && !dragging && drawer.value < 0.02f &&
-                            !askingNewLook && !searchOpen && holdMenu.open == null && alert == null && !editing && !customising
+                            !askingNewLook && !searchOpen && holdMenu.open == null && alert == null && !editing && !customising &&
+                            builtInUp == null
                         if (!idle) continue
                         val travel = centre - startCentre
                         val gesture = when {
@@ -3410,6 +3670,23 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             )
         }
 
+        // ------------------------------------------------------------ Zenith's own apps
+        // Over the card it opened on, coming in as the card all but fills the screen, and recorded
+        // as it is drawn for the picture it closes on.
+        if (builtInUp == BuiltInApps.CONNECT) {
+            com.gabriel.zenithui.ui.connect.ConnectApp(
+                state = connect,
+                userName = settings.userName,
+                onClose = { closeBuiltIn() },
+                modifier = Modifier
+                    .graphicsLayer { alpha = builtInShown.value }
+                    .drawWithContent {
+                        builtInLayer.record { this@drawWithContent.drawContent() }
+                        drawLayer(builtInLayer)
+                    },
+            )
+        }
+
         // ------------------------------------------------------------ settings
         // Page one, small: on Settings' Theme and Home pages, and on a wallpaper's preview.
         val homePreview = SettingsPreview(
@@ -3536,6 +3813,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     DrawerAppSheet(
                         visible = up,
                         work = work,
+                        builtIn = BuiltInApps.isBuiltIn(current.key),
                         label = app?.label ?: current.key,
                         pinned = current.key in settings.dock,
                         shortcuts = shortcuts,
@@ -4012,6 +4290,8 @@ private fun DrawerAppSheet(
     visible: Boolean,
     /** A work app: it opens, and has its app info, but stays in the drawer's Work tab. */
     work: Boolean = false,
+    /** One of Zenith's own apps (see BuiltInApps): everything an app has, but nothing to uninstall. */
+    builtIn: Boolean = false,
     label: String,
     pinned: Boolean,
     shortcuts: List<AppShortcut>,
@@ -4037,7 +4317,7 @@ private fun DrawerAppSheet(
             // Apps go into the dock by dragging them there; the menu only offers the way back out.
             if (pinned) MenuRow(Icons.Rounded.PushPin, "Remove from dock", index = row++) { onToggleDock(); onDismiss() }
             MenuRow(Icons.Rounded.Info, "App info", index = row++) { onAppInfo(); onDismiss() }
-            MenuRow(Icons.Rounded.Delete, "Uninstall", danger = true, index = row) { onUninstall(); onDismiss() }
+            if (!builtIn) MenuRow(Icons.Rounded.Delete, "Uninstall", danger = true, index = row) { onUninstall(); onDismiss() }
         }
     }
 }

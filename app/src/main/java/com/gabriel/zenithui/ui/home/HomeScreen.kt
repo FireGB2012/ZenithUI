@@ -207,9 +207,6 @@ import com.gabriel.zenithui.ui.settings.AccountActions
  */
 private val PAGE_FLIP_EDGE = 16.dp
 
-/** How much of the theme's page frosts over the home screen behind the drawer, in a theme that blurs nothing. */
-private const val DRAWER_VEIL = 0.45f
-
 /** Coming home longer than this after opening an app does not shrink it back into its icon. */
 private const val CLOSE_WINDOW_MS = 30 * 60 * 1000L
 
@@ -3333,12 +3330,6 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             )
             }
             }
-            // A theme with no blur: a veil of its page over the wallpaper, faded in as the copy would
-            // be while the home screen goes out, so what is behind the drawer is quiet, not bare.
-            if (blurBehind <= 0.dp && frosting) {
-                val veil = palette.backdrop.first()
-                Box(Modifier.matchParentSize().drawBehind { drawRect(veil, alpha = DRAWER_VEIL * frost.value) })
-            }
             // The blurred copy: worked out once as it starts to come in, then only faded, which costs
             // the swipe nothing. Once the drawer is open it is the home screen's blur, and follows it.
             if (canFrost && frosting) {
@@ -3357,6 +3348,14 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         }
 
         // ------------------------------------------------------------ drawer
+        // A theme with no blur, and Lite: a veil of its page over the wallpaper, faded in as the
+        // blurred copy would be while the home screen goes out, so what is behind the drawer and the
+        // library is quiet, not bare. Over the whole screen, not inside the home screen: that sinks
+        // back as they open, and the veil went with it, a frame standing in from every edge.
+        if (blurBehind <= 0.dp && frosting) {
+            val veil = palette.backdrop.first()
+            Box(Modifier.fillMaxSize().drawBehind { drawRect(veil, alpha = DrawerFrost.veil(frost.value)) })
+        }
         // ------------------------------------------------------------ page overview
         // The page in view is read inside, so a swipe composes the overview's corner of the home
         // screen and not all of it.

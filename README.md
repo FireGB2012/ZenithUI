@@ -485,13 +485,20 @@ Look shows them, and let go of when nothing does.
 ## Zenith Connect
 
 **Connect** is an app that comes inside Zenith (`data/BuiltInApps.kt`, `ui/connect/`,
-`specs/2026-11-19-zenith-connect-built-in-app-design.md`): Discover (setups made by others, each
-with its phone in 3D and a one-tap apply), Community, the Beta Hub and the Vault, under a glass tab
-bar. To Zenith it is an app like any other, `zenith.builtin/connect`: on the home screen once, in
-the drawer, the library and Search, opened out of its icon on the same card and closed back into
-it. It is drawn by Zenith itself, so Android never sees it: it is in no app list but Zenith's, and
-there is nothing to uninstall. Its content is the prototype's sample data, and Apply shows its
-steps without changing the home screen.
+`data/connect/`; `specs/2026-11-19-zenith-connect-built-in-app-design.md` for the app itself,
+`specs/2026-11-19-zenith-connect-for-real-design.md` for what is in it). To Zenith it is an app
+like any other, `zenith.builtin/connect`: on the home screen once, in the drawer, the library and
+Search, opened out of its icon on the same card and closed back into it. It is drawn by Zenith
+itself, so Android never sees it: it is in no app list but Zenith's, and there is nothing to
+uninstall.
+
+Everything in it is real. A setup is a Look: Zenith's own picks (`ConnectPicks`), the Looks
+featured on Zenith's server, any Look by its code, and your own. Each is shown as your own page one
+wearing it, drawn by the code that draws the home screen. **Apply** puts it on Zenith, in the parts
+you choose (wallpaper, theme, icons, widgets, home screen, motion), and **Undo** puts the home
+screen back exactly as it was. Discover, Share (an account on Zenith's server and codes to send),
+the Vault (your Looks and the account backup) and Updates sit under a tab bar of glass, all of it
+the launcher's own Liquid Glass over your wallpaper, in Lite too.
 
 ## Fonts and the Glass studio
 

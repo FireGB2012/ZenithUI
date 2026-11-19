@@ -245,3 +245,37 @@ private fun Themed(
         )
     }
 }
+
+/**
+ * [content] as a Look in [settings] would draw it, inside a screen of Zenith's: its theme in its
+ * Light or Dark, its fonts, its widgets, its icons and their names. It is for a picture of a phone
+ * (Zenith Connect's previews), so its glass is frosted, with no copy of a wallpaper to bend, as the
+ * small home screens in Settings draw it; the light, the tilt and Lite stay the screen's own, and
+ * nothing here listens to a sensor.
+ */
+@Composable
+fun ThemedPicture(settings: ZenithSettings, content: @Composable () -> Unit) {
+    val theme = remember(settings.theme) { Themes.byId(settings.theme) }
+    val dark = Themes.isDark(theme, settings.isDark(isSystemInDarkTheme()))
+    val palette = remember(theme, dark) { theme.palette(dark) }
+    val font = ZenithFonts.forTheme(settings.font, theme.font)
+    val typography = remember(font) { typographyIn(font.family) }
+    val numbers = remember(font, settings.numberFont) { ZenithFonts.numbers(settings.numberFont, font) }
+    CompositionLocalProvider(
+        LocalTheme provides theme,
+        LocalPalette provides palette,
+        LocalBackdrop provides null,
+        LocalGlassLevels provides null,
+        LocalLens provides null,
+        LocalWallColour provides savedWallColour(settings),
+        LocalGlassStrength provides settings.glass,
+        LocalGlassBody provides GlassBody.byId(settings.glassBody),
+        LocalWidgetLook provides WidgetLooks.of(settings.widgetLook),
+        LocalIconStyle provides IconStyles.of(settings.iconStyle),
+        LocalLabelStyle provides LabelStyle(LabelSizes.sp(settings.labelSize).sp, settings.labelShadow),
+        LocalZenithFont provides font.family,
+        LocalNumberFont provides numbers,
+    ) {
+        MaterialTheme(colorScheme = MaterialTheme.colorScheme, typography = typography, shapes = MaterialTheme.shapes, content = content)
+    }
+}

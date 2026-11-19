@@ -851,6 +851,8 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
     // here, and not another app's window.
     /** Zenith Connect as it was left: kept while Zenith runs, so it opens again where it was. */
     val connect = remember { com.gabriel.zenithui.ui.connect.ConnectState(scope) }
+    /** What Connect put on last, while Undo can still take it off. */
+    val connectWorn by viewModel.connectWorn.collectAsState()
     /** The built-in app on the screen, if one is, and how far it has come in over its card (0 to 1). */
     var builtInUp by remember { mutableStateOf<String?>(null) }
     val builtInShown = remember { Animatable(0f) }
@@ -3681,13 +3683,23 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             )
         }
 
+        // Page one, small: on Settings' Theme and Home pages, on a wallpaper's preview, and in
+        // Zenith Connect, wearing each setup.
+        val homePreview = SettingsPreview(
+            items = remember(layout) { layout.filter { it.page == 0 } },
+            appsByKey = appsByKey,
+            wallpaper = glassLevels?.sharp,
+            screenWidth = with(density) { drawerWidthPx.toDp() },
+            screenHeight = with(density) { drawerHeightPx.toDp() },
+        )
+
         // ------------------------------------------------------------ Zenith's own apps
         // Over the card it opened on, coming in as the card all but fills the screen, and recorded
         // as it is drawn for the picture it closes on.
         if (builtInUp == BuiltInApps.CONNECT) {
             com.gabriel.zenithui.ui.connect.ConnectApp(
                 state = connect,
-                userName = settings.userName,
+                bridge = connectBridge(viewModel, settings, looks, plus.active, signed, connectWorn, homePreview) { showSheet(HomeSheet.Plus) },
                 onClose = { closeBuiltIn() },
                 modifier = Modifier
                     .graphicsLayer { alpha = builtInShown.value }
@@ -3699,14 +3711,6 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         }
 
         // ------------------------------------------------------------ settings
-        // Page one, small: on Settings' Theme and Home pages, and on a wallpaper's preview.
-        val homePreview = SettingsPreview(
-            items = remember(layout) { layout.filter { it.page == 0 } },
-            appsByKey = appsByKey,
-            wallpaper = glassLevels?.sharp,
-            screenWidth = with(density) { drawerWidthPx.toDp() },
-            screenHeight = with(density) { drawerHeightPx.toDp() },
-        )
         SettingsScreen(
             visible = settingsOpen,
             covered = sheetVisible,

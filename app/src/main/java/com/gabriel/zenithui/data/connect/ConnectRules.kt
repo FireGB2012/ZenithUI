@@ -1,362 +1,410 @@
 package com.gabriel.zenithui.data.connect
 
+import com.gabriel.zenithui.data.HomeItem
+import com.gabriel.zenithui.data.Look
+import com.gabriel.zenithui.data.Looks
+import com.gabriel.zenithui.data.homeItemFromJson
+import org.json.JSONArray
+import org.json.JSONObject
 import java.time.LocalDate
-import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
 import java.time.temporal.IsoFields
 import java.util.Locale
 
-// Zenith Connect's rules: which setups each list shows and in what order, what a card says, what
-// a setup puts on and in which steps, and what publishing one asks for. Nothing here draws; the
-// pages in ui/connect read these. The setups, posts and builds themselves are samples for now
-// (ConnectSamples): Connect has no server of its own yet.
+// Zenith Connect's rules. Nothing here draws; the pages in ui/connect read these.
+//
+// Everything Connect shows is real. A setup is a Look, as Settings → Looks keeps them: the settings
+// it puts on and, for one somebody saved, their home screen. Zenith's own picks (ConnectPicks) are
+// styles, worn over your own home screen. The rest come from Zenith's server (the Looks its keeper
+// featured, and any Look by its code) or are your own saved Looks. Applying one puts it on Zenith.
 
-/** What a setup is: a whole home screen, a set of widgets, or icons. */
-enum class SetupKind(val label: String) {
-    SETUP("Full setup"),
-    WIDGETS("Widgets"),
-    ICONS("Icon pack"),
+/** Where a setup in Connect came from. */
+enum class SetupSource {
+    /** One of Zenith's own, in ConnectPicks: a style worn over your own home screen. */
+    PICK,
+
+    /** Featured on Zenith's server by the person who runs it. */
+    FEATURED,
+
+    /** Somebody's shared Look, opened by its code. */
+    CODE,
+
+    /** A Look saved on this phone, as Settings → Looks has them. */
+    MINE,
 }
 
-/** A home screen someone made and shared, as Discover shows it. */
+/**
+ * What a setup can put on, each a part of Zenith's settings (see [ConnectLayers.keys]). One that is
+ * left off stays as you have it. [LAYOUT] is also the pages themselves: where the apps and widgets
+ * are, and the dock.
+ */
+enum class Layer(val label: String) {
+    WALLPAPER("Wallpaper"),
+    THEME("Theme & glass"),
+    ICONS("Icons"),
+    WIDGETS("Widgets"),
+    LAYOUT("Home screen"),
+    MOTION("Motion & feel"),
+}
+
+/** A setup, as Discover, the Share tab and the Vault show it. */
 data class ConnectSetup(
     val id: String,
     val name: String,
-    /** Who made it, without the @. */
+    /** Who made it, as the card says it: "Zenith", "Featured", "You", "Shared". */
     val by: String,
-    /** Its rating out of 5, or null while it is too new to have one. */
-    val rating: Float?,
-    /** How many times it has been put on. */
-    val applies: Int,
-    /** How fast it is going this week, 0 to 100: Trending's order. */
-    val trend: Int,
-    /** Days since it was published. */
-    val ageDays: Int,
-    val kind: SetupKind,
-    /** The time its preview's clock shows; empty for an icon pack, which has no clock. */
-    val clock: String,
-    /** How round its icons are, as a share of their side: 0.5 is a circle. */
-    val iconRound: Float,
-    /** Whether its wallpaper is a dark one, which its preview's words and icons are drawn for. */
-    val dark: Boolean,
-    /** Its five colours, as ARGB. */
-    val palette: List<Long>,
-    val pages: Int,
-    val widgets: Int,
-    /** Its icon pack's name, or for an icon pack how many icons it has. */
-    val pack: String,
-    /** Words it is found by, separated by spaces. */
-    val tags: String,
-    /** Its wallpaper (see [ConnectWalls]). */
-    val wall: String,
-)
+    /** One line about it. */
+    val about: String,
+    val source: SetupSource,
+    /** The settings it puts on, as a Look keeps them ([Looks.KEYS]), as JSON text. */
+    val settings: String,
+    /** Its home screen, as a Look keeps it (a JSON array), or empty for a style worn over yours. */
+    val layout: String = "",
+    /** Words it is found by. */
+    val tags: List<String> = emptyList(),
+    /** The code it is shared under on Zenith's server, without LOOK-; empty when it is not. */
+    val code: String = "",
+    /** The saved Look it is, for one of yours. */
+    val lookId: String = "",
+) {
+    /** The code as people write it, LOOK- and the six; empty when there is none. */
+    val shownCode: String get() = if (code.isEmpty()) "" else "LOOK-$code"
 
-/** Discover's four lists. */
-enum class FeedTab(val label: String) {
-    WEEK("Setup of the Week"),
-    TRENDING("Trending"),
-    TOP("Top Rated"),
-    NEW("New Release"),
+    companion object {
+        /** A Look as a setup: one of yours ([SetupSource.MINE]), or one from the server. */
+        fun of(look: Look, source: SetupSource, code: String = look.shared): ConnectSetup = ConnectSetup(
+            id = when (source) {
+                SetupSource.MINE -> "mine-${look.id}"
+                else -> "code-${ConnectCodes.clean(code) ?: look.id}"
+            },
+            name = look.name,
+            by = when (source) {
+                SetupSource.MINE -> "You"
+                SetupSource.FEATURED -> "Featured"
+                SetupSource.PICK -> "Zenith"
+                SetupSource.CODE -> "Shared"
+            },
+            about = ConnectApply.describe(look.settings, look.layout),
+            source = source,
+            settings = look.settings,
+            layout = look.layout,
+            tags = ConnectApply.tagsOf(look.settings),
+            code = ConnectCodes.clean(code).orEmpty(),
+            lookId = if (source == SetupSource.MINE) look.id else "",
+        )
+    }
+}
+
+object ConnectLayers {
+
+    /**
+     * Which part of a setup each setting a Look keeps belongs to. Every one of [Looks.KEYS] is in
+     * exactly one (ConnectRulesTest says so), so a setup put on with every layer on is the Look.
+     */
+    val keys: Map<Layer, Set<String>> = mapOf(
+        Layer.WALLPAPER to setOf(
+            "wallpaperStyle", "wallpaperPalette", "wallpaperLock", "wallpaperFollow", "paletteId", "dayPalettes",
+            "customAccent", "customAccentAlt", "customBackdrop", "customDark",
+            "wallAccent", "wallAccentAlt", "wallBackdrop", "wallDark",
+        ),
+        Layer.THEME to setOf("appearance", "theme", "glass", "glassPanels", "glassShine", "glassTuning", "font", "numberFont"),
+        Layer.ICONS to setOf("iconShape", "iconPack", "iconStyle", "iconSize", "appEdits", "badges", "labelSize", "labelShadow", "showLabels"),
+        Layer.WIDGETS to setOf("widgetLook"),
+        Layer.LAYOUT to setOf(
+            "gridDensity", "gridColumns", "gridRows", "columns", "rows", "freeform", "pages", "layoutVersion",
+            "dock", "showDock", "searchBar", "header", "dockStyle", "indicator", "folderStyle", "hideStatusBar", "island", "toggles",
+        ),
+        Layer.MOTION to setOf(
+            "openAnimation", "closeAnimation", "motion", "animation", "pageEffect", "arrival", "drawerArrival", "press",
+            "haptics", "gestures", "appsView", "drawerSort", "drawerColumns",
+        ),
+    )
+
+    /** The layer a setting is part of, or null for one a Look does not keep. */
+    fun of(key: String): Layer? = keys.entries.firstOrNull { key in it.value }?.key
+
+    /**
+     * What [setup] has to put on: each layer it holds any setting of, and the home screen if it has
+     * pages of its own. Its wallpaper only when that is one of Zenith's designs: a photo is the
+     * phone's own and does not travel, so a Look saved over one has no wallpaper to give.
+     */
+    fun available(setup: ConnectSetup): Set<Layer> {
+        val settings = runCatching { JSONObject(setup.settings) }.getOrNull() ?: JSONObject()
+        val held = buildSet {
+            settings.keys().forEach { key -> of(key)?.let(::add) }
+            if (hasLayout(setup)) add(Layer.LAYOUT)
+        }
+        // A style worn over your home screen has no pages to give, so its grid and dock are not its to give either.
+        val paged = if (hasLayout(setup)) held else held - Layer.LAYOUT
+        return if (settings.optString("wallpaperStyle").isEmpty()) paged - Layer.WALLPAPER else paged
+    }
+
+    /** Whether [setup] carries a home screen of its own, rather than going over yours. */
+    fun hasLayout(setup: ConnectSetup): Boolean =
+        setup.layout.isNotBlank() && runCatching { JSONArray(setup.layout).length() > 0 }.getOrDefault(false)
+
+    /**
+     * What is on to begin with: everything it has, except its pages and its feel when it is somebody
+     * else's (a Look from another phone has their apps in their places, and their gestures; you
+     * choose to take those), and except its wallpaper while yours is a photo of your own
+     * ([ownPhoto]): one of Zenith's designs goes in place of the photo, and Undo cannot bring a
+     * photo back, so that is for you to turn on.
+     */
+    fun startingOn(setup: ConnectSetup, ownPhoto: Boolean = false): Set<Layer> {
+        val all = available(setup)
+        val theirs = when (setup.source) {
+            SetupSource.FEATURED, SetupSource.CODE -> all - Layer.LAYOUT - Layer.MOTION
+            else -> all
+        }
+        return if (ownPhoto) theirs - Layer.WALLPAPER else theirs
+    }
+}
+
+/**
+ * A setup as it will be put on: the settings and the home screen, as a Look holds them. [keptWallpaper]
+ * says its wallpaper was one of the designs that need Plus, which this phone does not have, so the
+ * wallpaper there is stays (as Zenith keeps it when a Look like that is put on).
+ */
+data class Wearing(val settings: String, val layout: String, val fromElsewhere: Boolean, val keptWallpaper: Boolean = false)
+
+object ConnectApply {
+
+    /**
+     * [setup] over what you have now ([current] settings and [currentLayout], as a Look keeps
+     * them): every setting of a layer in [on] is the setup's, every other is yours, and the home
+     * screen is the setup's only with [Layer.LAYOUT] on and pages of its own to give. A Look from
+     * somebody else's phone, with its pages taken, is fitted to this phone as it goes on. A
+     * wallpaper design this phone does not [own] stays as yours, wallpaper and colours both.
+     */
+    fun wear(
+        current: String,
+        currentLayout: String,
+        setup: ConnectSetup,
+        on: Set<Layer>,
+        owns: (String) -> Boolean = { true },
+    ): Wearing {
+        val mine = runCatching { JSONObject(current) }.getOrNull() ?: JSONObject()
+        val theirs = runCatching { JSONObject(setup.settings) }.getOrNull() ?: JSONObject()
+        val out = JSONObject()
+        mine.keys().forEach { key -> if (key in Looks.KEYS) out.put(key, mine.get(key)) }
+        val taking = on intersect ConnectLayers.available(setup)
+        theirs.keys().forEach { key ->
+            val layer = ConnectLayers.of(key) ?: return@forEach
+            if (layer in taking && key in Looks.KEYS) out.put(key, theirs.get(key))
+        }
+        val design = theirs.optString("wallpaperStyle")
+        val kept = Layer.WALLPAPER in taking && design.isNotEmpty() && !owns(design)
+        if (kept) {
+            for (key in listOf("wallpaperStyle", "wallpaperPalette")) {
+                if (mine.has(key)) out.put(key, mine.get(key)) else out.remove(key)
+            }
+        }
+        val pages = Layer.LAYOUT in taking && ConnectLayers.hasLayout(setup)
+        return Wearing(
+            settings = out.toString(),
+            layout = if (pages) setup.layout else currentLayout.ifBlank { "[]" },
+            fromElsewhere = pages && (setup.source == SetupSource.FEATURED || setup.source == SetupSource.CODE),
+            keptWallpaper = kept,
+        )
+    }
+
+    /**
+     * Whether putting [setup] on with [on] swaps a photo of your own ([ownPhoto]) for one of
+     * Zenith's designs, which Undo cannot take back: the photo is not kept anywhere.
+     */
+    fun replacesPhoto(setup: ConnectSetup, on: Set<Layer>, ownPhoto: Boolean): Boolean =
+        ownPhoto && Layer.WALLPAPER in on && Layer.WALLPAPER in ConnectLayers.available(setup)
+
+    /** Whether there is anything to put on: some layer that is on and the setup's to give. */
+    fun canApply(setup: ConnectSetup, on: Set<Layer>): Boolean = ConnectLayers.available(setup).any { it in on }
+
+    /** What applying will put on, in words, for the apply screen: "Wallpaper · Theme & glass · Icons". */
+    fun parts(setup: ConnectSetup, on: Set<Layer>): List<String> =
+        Layer.entries.filter { it in on && it in ConnectLayers.available(setup) }.map { it.label }
+
+    /** A line about a Look, from what it holds: "Aurora · Dunes wallpaper · glass icons". */
+    fun describe(settings: String, layout: String): String {
+        val o = runCatching { JSONObject(settings) }.getOrNull() ?: JSONObject()
+        val parts = buildList {
+            o.optString("theme").takeIf { it.isNotEmpty() }?.let { add(themeName(it)) }
+            o.optString("wallpaperStyle").takeIf { it.isNotEmpty() }?.let { add("$it wallpaper") }
+            when (o.optString("iconStyle")) {
+                "glass" -> add("glass icons")
+                "tinted" -> add("tinted icons")
+            }
+            if (o.optString("widgetLook") == "colour") add("colour widgets")
+            val count = pageCount(layout)
+            if (count > 0) add(if (count == 1) "1 page" else "$count pages")
+        }
+        return parts.joinToString(" · ").ifEmpty { "A Zenith Look" }
+    }
+
+    /** The home screen a Look keeps, read the way Zenith reads it back. */
+    fun items(layout: String): List<HomeItem> {
+        val array = runCatching { JSONArray(layout) }.getOrNull() ?: return emptyList()
+        return (0 until array.length()).mapNotNull { array.optJSONObject(it)?.let(::homeItemFromJson) }
+    }
+
+    /** How many pages a Look's home screen has: none for a style, which has no home screen. */
+    fun pageCount(layout: String): Int = items(layout).maxOfOrNull { it.page }?.plus(1) ?: 0
+
+    /** The words a Look is found by: its theme, light or dark, its wallpaper, and its icons and widgets. */
+    fun tagsOf(settings: String): List<String> {
+        val o = runCatching { JSONObject(settings) }.getOrNull() ?: JSONObject()
+        return buildList {
+            o.optString("theme").takeIf { it.isNotEmpty() }?.let { add(themeName(it)) }
+            when (o.optString("appearance")) {
+                "light" -> add("Light")
+                "dark" -> add("Dark")
+            }
+            if (o.optString("theme") in setOf("glass", "aurora", "frost")) add("Glass")
+            o.optString("wallpaperStyle").takeIf { it.isNotEmpty() }?.let(::add)
+            if (o.optString("iconStyle") == "glass") add("Glass icons")
+            if (o.optString("widgetLook") == "colour") add("Colour")
+        }.distinct()
+    }
+
+    /** A theme's name as Zenith says it. */
+    fun themeName(id: String): String = when (id) {
+        "glass" -> "Liquid Glass"
+        "aurora" -> "Aurora"
+        "frost" -> "Frost"
+        "clean" -> "Clean"
+        // Neon and Retro became Aurora and Liquid Glass (Themes.successor).
+        "neon" -> "Aurora"
+        "retro" -> "Liquid Glass"
+        else -> id.replaceFirstChar { it.titlecase(Locale.US) }
+    }
+
+    /** The three lines the apply screen ticks off, in order, for what is being put on. */
+    fun steps(setup: ConnectSetup, on: Set<Layer>): List<String> {
+        val taking = on intersect ConnectLayers.available(setup)
+        return buildList {
+            if (Layer.THEME in taking || Layer.WIDGETS in taking || Layer.ICONS in taking) add("Theme, icons and widgets")
+            if (Layer.LAYOUT in taking) add("Home screen")
+            if (Layer.MOTION in taking) add("Motion & feel")
+            if (Layer.WALLPAPER in taking) add("Wallpaper")
+        }.ifEmpty { listOf("Your setup") }
+    }
+
+    /** How long each line of the apply screen takes to tick, and the pause before Done. */
+    const val STEP_MS = 340L
+    const val DONE_PAUSE_MS = 260L
+}
+
+/** Codes for shared Looks, as Zenith's server makes them: six of these, after LOOK-. */
+object ConnectCodes {
+    /** The server's alphabet (`CODE_ALPHABET` in server/zenith_server.py): no vowels, no 0, 1. */
+    const val ALPHABET = "BCDFGHJKLMNPQRSTVWXZ23456789"
+
+    /**
+     * The six characters of a code however it was typed or pasted: "LOOK-ABC234", "abc 234",
+     * "zenith://look/ABC234", a whole message with the code in it. Null when there is no code there.
+     */
+    fun clean(text: String?): String? {
+        if (text.isNullOrBlank()) return null
+        val upper = text.uppercase(Locale.US)
+        // A message with LOOK- in it: what follows.
+        val marked = Regex("LOOK[\\s/:#-]*([A-Z0-9]{6})(?![A-Z0-9])").find(upper)?.groupValues?.get(1)
+        val bare = upper.filter { it.isLetterOrDigit() }.removePrefix("LOOK")
+        val candidate = marked ?: bare.takeIf { it.length == 6 }
+        return candidate?.takeIf { code -> code.all { it in ALPHABET } }
+    }
+
+    /** What sharing a code says, for a message app. */
+    fun message(name: String, code: String): String =
+        "Try my Zenith setup \"${name.trim().ifEmpty { "My look" }}\": open Zenith Connect, tap Have a code, and type LOOK-$code"
+}
+
+/** Discover's filters. */
+enum class Filter(val label: String) {
+    ALL("All"),
+    GLASS("Glass"),
+    DARK("Dark"),
+    LIGHT("Light"),
+    COLOUR("Colour"),
 }
 
 object ConnectFeed {
 
-    /** The setup of the week, which has the big card at the top of This week. */
-    const val SPOTLIGHT = "nightfall"
-
-    /**
-     * The setups [tab] lists, found by [query] if there is one: This week leaves out the setup of
-     * the week (it has the big card) unless you are searching; Top rated goes by rating, then by
-     * trend; New releases newest first; the rest by trend. A search looks at the name, the creator,
-     * the kind and the tags, in any case, and keeps the tab's order.
-     */
-    fun list(all: List<ConnectSetup>, tab: FeedTab, query: String): List<ConnectSetup> {
-        val q = query.trim().lowercase()
-        var list = all
-        if (q.isNotEmpty()) list = list.filter { "${it.name} ${it.by} ${it.kind.label} ${it.tags}".lowercase().contains(q) }
-        if (tab == FeedTab.WEEK && q.isEmpty()) list = list.filter { it.id != SPOTLIGHT }
-        return when (tab) {
-            FeedTab.TOP -> list.sortedWith(compareByDescending<ConnectSetup> { it.rating ?: -1f }.thenByDescending { it.trend })
-            FeedTab.NEW -> list.sortedBy { it.ageDays }
-            else -> list.sortedByDescending { it.trend }
+    /** [all] found by [query] and kept to [filter], in the order they came. */
+    fun list(all: List<ConnectSetup>, query: String, filter: Filter): List<ConnectSetup> {
+        val q = query.trim().lowercase(Locale.US)
+        return all.filter { setup ->
+            val words = "${setup.name} ${setup.by} ${setup.about} ${setup.tags.joinToString(" ")} ${setup.shownCode}".lowercase(Locale.US)
+            (q.isEmpty() || q.split(Regex("\\s+")).all { words.contains(it) }) && filter.keeps(setup)
         }
     }
 
-    /** The setup of the week's big card shows on This week, with nothing searched. */
-    fun heroShown(tab: FeedTab, query: String): Boolean = tab == FeedTab.WEEK && query.isBlank()
-
-    /** The heading over the cards and the small note beside it. */
-    fun heading(tab: FeedTab, query: String, found: Int, today: LocalDate): Pair<String, String> {
-        if (query.isNotBlank()) return "Results" to "$found found"
-        return when (tab) {
-            FeedTab.WEEK -> "More this week" to "wk ${today.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR)}"
-            FeedTab.TRENDING -> "Trending now" to "live"
-            FeedTab.TOP -> "Top rated" to "all time"
-            FeedTab.NEW -> "New releases" to "last 7 days"
+    private fun Filter.keeps(setup: ConnectSetup): Boolean {
+        if (this == Filter.ALL) return true
+        val o = runCatching { JSONObject(setup.settings) }.getOrNull() ?: JSONObject()
+        return when (this) {
+            Filter.GLASS -> o.optString("theme", "glass") != "clean"
+            Filter.DARK -> o.optString("appearance") == "dark" || o.optString("theme") == "aurora"
+            Filter.LIGHT -> o.optString("appearance") == "light" && o.optString("theme") != "aurora"
+            Filter.COLOUR -> o.optString("widgetLook") == "colour"
+            Filter.ALL -> true
         }
     }
 
-    /** What a card says beside its creator: how new it is on New releases, else its rating, or New. */
-    fun stat(setup: ConnectSetup, tab: FeedTab): String = when {
-        tab == FeedTab.NEW -> if (setup.ageDays == 0) "just now" else "${setup.ageDays}d ago"
-        setup.rating == null -> "New"
-        else -> rating(setup.rating)
+    /** The heading over what was found, and the small note beside it. */
+    fun heading(query: String, filter: Filter, found: Int): Pair<String, String> = when {
+        query.isNotBlank() -> "Results" to (if (found == 1) "1 found" else "$found found")
+        filter != Filter.ALL -> filter.label to (if (found == 1) "1 setup" else "$found setups")
+        else -> "Zenith Picks" to "made for this Zenith"
     }
 
-    /** Whether that comes with a star: only a rating does. */
-    fun starred(setup: ConnectSetup, tab: FeedTab): Boolean = tab != FeedTab.NEW && setup.rating != null
-
-    fun rating(value: Float): String = String.format(Locale.US, "%.1f", value)
-
-    /** 18200 as 18.2k, 10000 as 10k, 980 as it is. */
-    fun count(n: Int): String {
-        fun short(value: Double, unit: String): String {
-            val tenths = Math.round(value * 10.0)
-            return if (tenths % 10 == 0L) "${tenths / 10}$unit" else "${tenths / 10}.${tenths % 10}$unit"
-        }
-        return when {
-            n >= 999_950 -> short(n / 1_000_000.0, "M")
-            n >= 1_000 -> short(n / 1_000.0, "k")
-            else -> n.toString()
-        }
-    }
-
-    /** How tall each kind's preview is on a card, in dp, as the cards are measured for the columns. */
-    fun previewHeight(kind: SetupKind): Int = when (kind) {
-        SetupKind.SETUP -> 244
-        SetupKind.WIDGETS -> 150
-        SetupKind.ICONS -> 160
+    /** The pick of the week for [today]: one after another, a week each, round the picks. */
+    fun ofTheWeek(picks: List<ConnectSetup>, today: LocalDate): ConnectSetup? {
+        if (picks.isEmpty()) return null
+        val week = today.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR) + today.get(IsoFields.WEEK_BASED_YEAR) * 53
+        return picks[Math.floorMod(week, picks.size)]
     }
 }
 
-/** What a setup can put on Zenith. */
-enum class Layer { WALLPAPER, WIDGETS, ICONS }
+/** What the server is to Connect at the moment. */
+enum class ServerState {
+    /** This build has no server (server.properties is empty): nothing is ever sent. */
+    NONE,
+    ASKING,
+    UP,
+    DOWN,
+}
 
-/** A step of the apply screen, or of anything else that runs: not started, going, or finished. */
-enum class StepState { WAITING, RUNNING, DONE }
-
-/** What the Beta Hub's download, or the Studio's publish, is doing. */
-enum class DownloadState { IDLE, BUSY, DONE }
-
-/** The apply screen at one moment (see [ConnectApply.stage]). */
-data class ApplyStage(
-    val steps: List<StepState>,
-    /** How many of the setup's five colours are in. */
-    val swatches: Int,
-    /** How far through its time the progress bar is, 0 to 1. */
-    val bar: Float,
-    /** The line under the last step. */
-    val line: String,
-    val done: Boolean,
-)
-
-object ConnectApply {
-
-    /** A full setup has all three; a widget preset only widgets; an icon pack only icons. */
-    fun available(setup: ConnectSetup): Set<Layer> = buildSet {
-        if (setup.kind == SetupKind.SETUP) add(Layer.WALLPAPER)
-        if (setup.kind != SetupKind.ICONS) add(Layer.WIDGETS)
-        if (setup.kind != SetupKind.WIDGETS) add(Layer.ICONS)
+object ConnectServer {
+    /** The pill at the head of Discover. */
+    fun pill(state: ServerState): String = when (state) {
+        ServerState.NONE -> "On this phone only"
+        ServerState.ASKING -> "Connecting…"
+        ServerState.UP -> "Connected to Zenith"
+        ServerState.DOWN -> "Can't reach Zenith's server"
     }
+}
 
-    fun label(layer: Layer, setup: ConnectSetup): String = when (layer) {
-        Layer.WALLPAPER -> "Wallpaper"
-        Layer.WIDGETS -> "${setup.widgets} widgets"
-        Layer.ICONS -> if (setup.kind == SetupKind.ICONS) "Icon pack" else "Icons"
-    }
+/** What a problem report carries besides your words, so it can be acted on. */
+object ConnectReport {
+    fun lines(version: String, code: Int, model: String, maker: String, release: String, lite: Boolean, theme: String): List<String> = listOf(
+        "Zenith $version ($code)",
+        "${maker.trim().replaceFirstChar { it.titlecase(Locale.US) }} ${model.trim()}".trim().ifEmpty { "Phone" } + " · Android $release",
+        "Drawing: " + (if (lite) "Lite" else "Full") + " · Theme: " + ConnectApply.themeName(theme),
+    )
 
-    /** Whether there is anything to put on: at least one layer that is both on and the setup's to give. */
-    fun canApply(setup: ConnectSetup, on: Set<Layer>): Boolean = available(setup).any { it in on }
+    /** The report as it goes to a mail or chat app: what happened, then the phone. */
+    fun text(words: String, lines: List<String>): String =
+        words.trim() + "\n\n—\n" + lines.joinToString("\n")
 
-    /** What is coming, in order, for the apply screen. */
-    fun assets(setup: ConnectSetup, on: Set<Layer>): String {
-        val given = available(setup).filter { it in on }.toSet()
-        return buildList {
-            if (Layer.WALLPAPER in given) add("Wallpaper")
-            if (Layer.WIDGETS in given) add("${setup.widgets} widgets")
-            if (Layer.ICONS in given) add(if (setup.kind == SetupKind.ICONS) setup.pack else "${setup.pack} icons")
-        }.joinToString(" · ")
-    }
-
-    /** Its three steps, each as it reads while running and once done. */
-    fun steps(kind: SetupKind): List<Pair<String, String>> = when (kind) {
-        SetupKind.SETUP -> listOf("Pulling assets" to "Assets pulled", "Applying colors" to "Colors applied", "Arranging layout" to "Layout arranged")
-        SetupKind.WIDGETS -> listOf("Pulling widgets" to "Widgets pulled", "Applying colors" to "Colors applied", "Placing widgets" to "Widgets placed")
-        SetupKind.ICONS -> listOf("Pulling icons" to "Icons pulled", "Applying colors" to "Colors applied", "Swapping icons" to "Icons swapped")
-    }
-
-    /** What the progress line counts through while the last step runs. */
-    fun progress(setup: ConnectSetup): List<String> = when (setup.kind) {
-        SetupKind.SETUP -> (1..setup.pages).map { "Page $it of ${setup.pages}" } + "Dock and app drawer"
-        SetupKind.WIDGETS -> (1..setup.widgets).map { "Widget $it of ${setup.widgets}" }
-        SetupKind.ICONS -> listOf("Home screen", "Dock", "App drawer")
-    }
-
-    /** The first line of a setup's page: what it is and how much of it there is. */
-    fun kindLine(setup: ConnectSetup): String = when (setup.kind) {
-        SetupKind.SETUP -> "Full setup · ${setup.pages} ${if (setup.pages == 1) "page" else "pages"}"
-        SetupKind.WIDGETS -> "Widget preset · ${setup.widgets} ${if (setup.widgets == 1) "widget" else "widgets"}"
-        SetupKind.ICONS -> "Icon pack · ${setup.pack}"
-    }
-
-    /** The link a setup is shared by: its name in lower case, an ampersand read out, joined by dashes. */
-    fun link(name: String): String {
-        val slug = name.lowercase().replace("&", "and").replace(Regex("[^a-z0-9]+"), "-").trim('-').ifEmpty { "setup" }
-        return "zenith://setup/$slug"
-    }
-
-    /**
-     * Where the apply screen is [elapsed] milliseconds after Apply: which steps are waiting, running
-     * or done, how many of the five colours are in, how far through its time the progress bar is
-     * (0 to 1, eased as it is drawn), the line under the last step, and whether it is all done.
-     * Worked out from the time alone, so Connect closed and opened again finds it where it got to.
-     */
-    fun stage(elapsed: Long, setup: ConnectSetup): ApplyStage {
-        fun step(from: Long, to: Long) = when {
-            elapsed < from -> StepState.WAITING
-            elapsed < to -> StepState.RUNNING
-            else -> StepState.DONE
-        }
-        val lines = progress(setup)
-        val line = when {
-            elapsed >= DONE_MS -> "Done"
-            elapsed < STEP_THREE_MS -> "Waiting"
-            else -> lines[((elapsed - STEP_THREE_MS) * lines.size / BAR_MS).toInt().coerceIn(0, lines.size - 1)]
-        }
-        return ApplyStage(
-            steps = listOf(step(STEP_ONE_MS, STEP_TWO_MS), step(STEP_TWO_MS, STEP_THREE_MS), step(STEP_THREE_MS, DONE_MS)),
-            swatches = (0 until 5).count { elapsed >= STEP_TWO_MS + SWATCH_MS * (it + 1) },
-            bar = ((elapsed - STEP_THREE_MS).toFloat() / BAR_MS).coerceIn(0f, 1f),
-            line = line,
-            done = elapsed >= DONE_MS,
-        )
-    }
-
-    /** How far apart the colours come in during the second step. */
-    const val SWATCH_MS = 110L
-
-    /** When each step starts, and when it is all done, in milliseconds from Apply. */
-    const val STEP_ONE_MS = 450L
-    const val STEP_TWO_MS = 1400L
-    const val STEP_THREE_MS = 2350L
-    const val DONE_MS = 3950L
-
-    /** How long the progress bar takes to fill during the last step. */
-    const val BAR_MS = 1500
+    fun problem(words: String): String? = if (words.isBlank()) "Say what happened first." else null
 }
 
 object ConnectStudio {
-
-    /** The tags a setup can be given, and how many at most. */
-    val TAGS = listOf("Minimal", "Dark", "Glass", "AMOLED", "Anime", "Cozy", "Gaming")
-    val DEFAULT_TAGS = listOf("Minimal", "Dark", "Glass")
-    const val MAX_TAGS = 5
-
-    /** What the capture puts in, all on to begin with. */
-    val PARTS = listOf("Wallpaper", "7 widgets", "Icon pack", "Colors")
-
-    /** The name it starts with, and the longest a name can be. */
-    const val DEFAULT_NAME = "Afterglow"
-    const val MAX_NAME = 32
-
-    /** How long publishing takes, and how long "Published" shows before the sheet goes. */
-    const val PUBLISH_MS = 1100L
-    const val PUBLISHED_HOLD_MS = 650L
+    const val MAX_NAME = 30
 
     fun nameProblem(name: String): String? = if (name.isBlank()) "Give your setup a name first." else null
 
-    /** The publish button's words, for a public setup or a link, as it goes. */
-    fun cta(public: Boolean, phase: DownloadState): String = when (phase) {
-        DownloadState.IDLE -> if (public) "Publish to Discover" else "Create share link"
-        DownloadState.BUSY -> if (public) "Publishing…" else "Creating link…"
-        DownloadState.DONE -> if (public) "Published" else "Link ready"
-    }
-
-    /** [tags] with [tag] on or off, or null when it would be one too many. */
-    fun toggleTag(tags: List<String>, tag: String): List<String>? = when {
-        tag in tags -> tags - tag
-        tags.size >= MAX_TAGS -> null
-        else -> tags + tag
-    }
-
-    /** A setup just published from this phone: yours, with no rating yet, at the top of New releases. */
-    fun published(name: String, by: String, clock: String, tags: List<String>, id: String): ConnectSetup = ConnectSetup(
-        id = id,
-        name = name.trim(),
-        by = by,
-        rating = null,
-        applies = 0,
-        trend = 0,
-        ageDays = 0,
-        kind = SetupKind.SETUP,
-        clock = clock,
-        iconRound = 0.26f,
-        dark = true,
-        palette = listOf(0xFFFF8A5B, 0xFF5B3BD9, 0xFF1A0F24, 0xFFFFC2A6, 0xFFF6F6F9),
-        pages = 3,
-        widgets = 7,
-        pack = name.trim(),
-        tags = tags.joinToString(" ") { it.lowercase() },
-        wall = "afterglow",
-    )
-
     /** Your handle: the name you gave Zenith, made into one word, or "you" with none. */
     fun handle(userName: String): String =
-        userName.trim().lowercase().split(Regex("\\s+")).filter { it.isNotEmpty() }.joinToString(".").ifEmpty { "you" }
+        userName.trim().lowercase(Locale.US).split(Regex("\\s+")).filter { it.isNotEmpty() }.joinToString(".").ifEmpty { "you" }
 
     /** The letter on your avatar. */
     fun initial(handle: String): String = handle.firstOrNull { it.isLetterOrDigit() }?.uppercaseChar()?.toString() ?: "Y"
-}
-
-object ConnectVault {
-
-    /** How long a sync by hand takes. */
-    const val SYNC_MS = 1400L
-
-    /** The sync card's two lines: kept up by itself, synced by hand with auto-sync off, or neither. */
-    fun syncCopy(auto: Boolean, byHand: Boolean, lastSync: String, layouts: Int): Pair<String, String> = when {
-        auto -> "Everything is backed up" to "Synced $lastSync · $layouts layouts, 12 themes"
-        byHand -> "Synced $lastSync" to "Auto-sync is off. Tap the cloud to sync again."
-        else -> "Auto-sync is off" to "Changes stay on this phone until you sync."
-    }
-
-    /** A backup's name: when it was made, as "Backup 19 Nov, 21:08". */
-    fun backupName(at: LocalDateTime): String =
-        "Backup ${at.dayOfMonth} ${at.format(DateTimeFormatter.ofPattern("MMM", Locale.US))}, ${at.format(DateTimeFormatter.ofPattern("HH:mm", Locale.US))}"
-
-    /** A backup's line: the pages of the layout it was made from, and that it is new. */
-    fun backupMeta(meta: String): String = "${meta.substringBefore(" · ").trim()} · just now"
-}
-
-object ConnectBeta {
-
-    /** How long the test build takes to come down. */
-    const val DOWNLOAD_MS = 2400L
-
-    fun downloadLabel(state: DownloadState, progress: Float): String = when (state) {
-        DownloadState.IDLE -> "Download APK"
-        DownloadState.BUSY -> "Downloading… ${(progress.coerceIn(0f, 1f) * 100).toInt()}%"
-        DownloadState.DONE -> "Ready to install"
-    }
-
-    /** The phone a report comes from, as its chip says it. */
-    fun deviceLine(model: String, release: String): String = "${model.trim().ifEmpty { "Phone" }} · Android $release"
-}
-
-object ConnectCommunity {
-
-    /** A like or a vote turned the other way, and the count with it, never below none. */
-    fun flip(on: Boolean, count: Int): Pair<Boolean, Int> = !on to (if (on) count - 1 else count + 1).coerceAtLeast(0)
-
-    fun replies(n: Int): String = if (n == 1) "1 reply" else "$n replies"
-
-    /**
-     * Where the post that comes in live leaves a dot: on #announcements unless you are reading it,
-     * and on the Community tab too unless you are in Community. Read as it was there, it simply
-     * comes into the list.
-     */
-    fun dotsForLivePost(onCommunity: Boolean, channel: Channel): Pair<Boolean, Boolean> {
-        val reading = onCommunity && channel == Channel.ANNOUNCEMENTS
-        return !reading to !onCommunity
-    }
 }

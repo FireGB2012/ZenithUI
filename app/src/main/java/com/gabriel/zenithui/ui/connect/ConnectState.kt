@@ -1,205 +1,499 @@
 package com.gabriel.zenithui.ui.connect
 
-import android.content.Context
-import androidx.compose.foundation.ScrollState
+import android.os.SystemClock
 import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableLongStateOf
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.geometry.Rect
-import com.gabriel.zenithui.data.connect.Channel
-import com.gabriel.zenithui.data.connect.ConnectAccent
+import com.gabriel.zenithui.data.Look
 import com.gabriel.zenithui.data.connect.ConnectApply
-import com.gabriel.zenithui.data.connect.ConnectBeta
-import com.gabriel.zenithui.data.connect.ConnectCommunity
-import com.gabriel.zenithui.data.connect.ConnectMessage
-import com.gabriel.zenithui.data.connect.ConnectSamples
+import com.gabriel.zenithui.data.connect.ConnectCodes
+import com.gabriel.zenithui.data.connect.ConnectLayers
 import com.gabriel.zenithui.data.connect.ConnectSetup
 import com.gabriel.zenithui.data.connect.ConnectStudio
-import com.gabriel.zenithui.data.connect.ConnectVault
-import com.gabriel.zenithui.data.connect.DownloadState
-import com.gabriel.zenithui.data.connect.FeedTab
+import com.gabriel.zenithui.data.connect.Filter
 import com.gabriel.zenithui.data.connect.Layer
-import com.gabriel.zenithui.data.connect.RoadmapItem
-import com.gabriel.zenithui.data.connect.VaultLayout
+import com.gabriel.zenithui.data.connect.ServerState
+import com.gabriel.zenithui.data.connect.SetupSource
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
-import java.util.Locale
 
-/** Connect's four tabs, in the order the tab bar has them. */
+/** Connect's tabs, in the order the tab bar has them. */
 enum class ConnectTab(val label: String) {
     DISCOVER("Discover"),
-    COMMUNITY("Community"),
-    BETA("Beta"),
+    SHARE("Share"),
     VAULT("Vault"),
+    UPDATES("Updates"),
 }
 
+/** The sheets Connect opens over itself. */
+enum class ConnectSheet {
+    /** Type or paste somebody's code. */
+    CODE,
+
+    /** Sign in to a Zenith account, or make one. */
+    SIGN_IN,
+
+    /** Share a Look: the home screen as it is, named first, or one already saved; then its code. */
+    SHARE,
+
+    /** Save the home screen as a Look, with a name. */
+    SAVE,
+
+    /** Put the account's backup back, which replaces the home screen: asked first. */
+    RESTORE,
+}
+
+/** A setup going on: what, as much of it as was chosen, the lines the apply screen ticks, and what to say about it. */
+@Immutable
+class Applying(
+    val setup: ConnectSetup,
+    val on: Set<Layer>,
+    val steps: List<String>,
+    /** A photo of yours as the wallpaper was swapped for one of Zenith's designs. */
+    val photoGone: Boolean,
+    /** Its wallpaper is a design that needs Plus, so yours stayed. */
+    val keptWallpaper: Boolean,
+)
+
 /**
- * Everything Connect is showing and has been told, kept for as long as Zenith runs, the way an
- * app stays as it was left: closed into its icon and opened again, it is where you left it, and
- * what it had started (a download, an apply, a post on its way in) has carried on meanwhile on
- * [scope], which is Zenith's own. Only the colour chosen for it and the setups saved are kept for
- * longer, in its own small store on the phone (see [load]), never in Zenith's settings or a Look.
+ * Zenith Connect as it was left, kept by the home screen while Zenith runs, so that it opens again
+ * where it was: the tab, a setup's page, what was typed. It holds what came from Zenith's server,
+ * too, so opening Connect again does not ask for it again for a minute.
  *
- * [clock] is the time in milliseconds that the things that run are measured by.
+ * What it does, it does through [ConnectBridge], given each time: nothing here is sample data.
  */
 @Stable
-class ConnectState(
-    private val scope: CoroutineScope,
-    val clock: () -> Long = { android.os.SystemClock.uptimeMillis() },
-) {
+class ConnectState(private val scope: CoroutineScope) {
 
     var tab by mutableStateOf(ConnectTab.DISCOVER)
-
-    /** Whether Connect is on the screen now, rather than closed into its icon. */
-    var visible by mutableStateOf(false)
-
-    // ------------------------------------------------------------------ where each page is scrolled to
-
-    val discoverGrid = LazyStaggeredGridState()
-    val communityList = LazyListState()
-    val betaScroll = ScrollState(0)
-    val vaultList = LazyListState()
-    val detailScroll = ScrollState(0)
-
-    // ------------------------------------------------------------------ Discover
-
-    var feedTab by mutableStateOf(FeedTab.WEEK)
+        private set
     var query by mutableStateOf("")
-    var searching by mutableStateOf(false)
+    var filter by mutableStateOf(Filter.ALL)
 
-    /** Every setup Discover has: the samples, and any published from this phone, newest first. */
-    val setups = mutableStateListOf<ConnectSetup>().apply { addAll(ConnectSamples.setups) }
-
-    /** The setup just published, outlined in the accent for a few seconds. */
-    var fresh by mutableStateOf<String?>(null)
-
-    /** Setups saved to the Vault, by id. */
-    val saved = mutableStateListOf<String>()
-
-    /** The setup whose page is open, and the card it grew out of (in the window), if there was one. */
+    /** The setup open on its own page, if one is, and the layers of it that are on. */
     var detail by mutableStateOf<ConnectSetup?>(null)
         private set
-    var detailFrom by mutableStateOf<Rect?>(null)
+    var layers by mutableStateOf<Set<Layer>>(emptySet())
         private set
 
-    /** Bumped each time a setup's page opens, so it plays its opening from the start. */
-    var detailRun by mutableIntStateOf(0)
+    /** A setup going on, with the apply screen up; how many of its steps are ticked, and whether it is all on. */
+    var applying by mutableStateOf<Applying?>(null)
+        private set
+    var ticked by mutableIntStateOf(0)
+        private set
+    var applied by mutableStateOf(false)
         private set
 
-    /** Which layers of the open setup are to go on: all of them, until one is turned off. */
-    var layersOn by mutableStateOf(Layer.entries.toSet())
-
-    // ------------------------------------------------------------------ apply
-
-    /** The setup being put on, while the apply screen is up, and the layers it was asked for. */
-    var applying by mutableStateOf<ConnectSetup?>(null)
+    var server by mutableStateOf(ServerState.ASKING)
         private set
-    var applyLayers by mutableStateOf(Layer.entries.toSet())
+    /** The Looks the server's keeper features, each fetched by its code. */
+    var featured by mutableStateOf<List<ConnectSetup>>(emptyList())
         private set
-
-    /** When Apply was pressed, by [clock]: everything on the apply screen is worked out from it. */
-    var applyStartedAt by mutableLongStateOf(0L)
+    var featuredLoading by mutableStateOf(false)
+        private set
+    /** Looks opened by their codes since Zenith started, newest first. */
+    var opened by mutableStateOf<List<ConnectSetup>>(emptyList())
         private set
 
-    // ------------------------------------------------------------------ Creator Studio
-
-    var studioOpen by mutableStateOf(false)
+    var sheet by mutableStateOf<ConnectSheet?>(null)
         private set
-    var studioName by mutableStateOf(ConnectStudio.DEFAULT_NAME)
-    var studioAbout by mutableStateOf("")
-    val studioTags = mutableStateListOf<String>().apply { addAll(ConnectStudio.DEFAULT_TAGS) }
-    val studioParts = mutableStateListOf<String>().apply { addAll(ConnectStudio.PARTS) }
-    var studioPublic by mutableStateOf(true)
-    var publish by mutableStateOf(DownloadState.IDLE)
+    /** The saved Look the share sheet is for; null for the home screen as it is now. */
+    var sheetLook by mutableStateOf<String?>(null)
         private set
-    var publishStartedAt by mutableLongStateOf(0L)
+    var busy by mutableStateOf(false)
         private set
-    var nameError by mutableStateOf(false)
-
-    /** Bumped to shake what was refused: the name field, or the tag count. */
-    var nameShake by mutableIntStateOf(0)
+    /** What went wrong with what a sheet or page was asked to do, in words. */
+    var problem by mutableStateOf<String?>(null)
+    /** A code just made, to show in the share sheet: the Look's name, and the code. */
+    var madeCode by mutableStateOf<Pair<String, String>?>(null)
         private set
-    var tagShake by mutableIntStateOf(0)
+    /** A Look of yours the Delete button has been pressed once for: a second press deletes it. */
+    var deleting by mutableStateOf<String?>(null)
         private set
-
-    /** Bumped each time the Studio opens, so its capture plays again. */
-    var studioRun by mutableIntStateOf(0)
-        private set
-
-    var accentOpen by mutableStateOf(false)
-
-    // ------------------------------------------------------------------ Community
-
-    var channel by mutableStateOf(Channel.ANNOUNCEMENTS)
-        private set
-    val messages = mutableStateListOf<ConnectMessage>().apply { addAll(ConnectSamples.messages) }
-    val liked = mutableStateListOf<String>()
-    val voted = mutableStateListOf<String>()
-
-    /** Channels with a post you have not seen, and whether the Community tab has one. */
-    val unread = mutableStateListOf<Channel>()
-    var communityDot by mutableStateOf(false)
-        private set
-
-    /** The post that has just come in live, flashed as it lands. */
-    var landed by mutableStateOf<String?>(null)
-        private set
-    private var welcomeScheduled = false
-
-    // ------------------------------------------------------------------ Beta Hub
-
-    var download by mutableStateOf(DownloadState.IDLE)
-        private set
-    var downloadStartedAt by mutableLongStateOf(0L)
-        private set
-    var reporting by mutableStateOf(false)
-        private set
+    /** What was being written in Updates' problem report. */
     var report by mutableStateOf("")
-    var reportError by mutableStateOf(false)
-    var reportShake by mutableIntStateOf(0)
-        private set
-    val roadmap = mutableStateListOf<RoadmapItem>().apply { addAll(ConnectSamples.roadmap) }
 
-    // ------------------------------------------------------------------ Vault
+    /** What to do once signed in, when signing in was asked for on the way to something. */
+    private var afterSignIn: (() -> Unit)? = null
 
-    var autoSync by mutableStateOf(true)
-        private set
-    var syncing by mutableStateOf(false)
-        private set
-    var lastSync by mutableStateOf("2 min ago")
-        private set
-    var syncedByHand by mutableStateOf(false)
-        private set
-
-    /** Bumped when a sync finishes, for the cloud's little pop. */
-    var syncRun by mutableIntStateOf(0)
-        private set
-    val layouts = mutableStateListOf<VaultLayout>().apply { addAll(ConnectSamples.layouts) }
-    var inUse by mutableStateOf("daily")
-        private set
-
-    /** Connect's colour: Zenith's own blue unless another was chosen. */
-    var accent by mutableStateOf(ConnectSamples.accents.first())
-        private set
-
-    // ------------------------------------------------------------------ the toast
-
-    /** The line in the pill over the tab bar, and a count that makes the same words show again. */
     var toast by mutableStateOf<String?>(null)
         private set
     var toastTurn by mutableIntStateOf(0)
         private set
     private var toastJob: Job? = null
+
+    val discoverList = LazyListState()
+    val shareList = LazyListState()
+    val vaultList = LazyListState()
+    val updatesList = LazyListState()
+
+    /** Whether Connect is on the screen now. */
+    var visible by mutableStateOf(false)
+
+    private var loadJob: Job? = null
+    private var loadedAt = 0L
+
+    fun list(of: ConnectTab): LazyListState = when (of) {
+        ConnectTab.DISCOVER -> discoverList
+        ConnectTab.SHARE -> shareList
+        ConnectTab.VAULT -> vaultList
+        ConnectTab.UPDATES -> updatesList
+    }
+
+    /** To [next]; the tab already on show goes back to its top, as iOS's tab bars do. */
+    fun goTab(next: ConnectTab) {
+        if (next == tab) {
+            scope.launch { list(next).animateScrollToItem(0) }
+        } else {
+            tab = next
+            problem = null
+        }
+    }
+
+    // ------------------------------------------------------------------ the server
+
+    /**
+     * Asks the server how it is and what it features: when Connect opens, at most once a minute,
+     * or now with [force] (Try again). A build with no server asks nothing.
+     */
+    fun load(bridge: ConnectBridge, force: Boolean = false) {
+        if (!bridge.server) {
+            server = ServerState.NONE
+            return
+        }
+        if (loadJob?.isActive == true) return
+        val now = SystemClock.elapsedRealtime()
+        if (!force && server == ServerState.UP && loadedAt != 0L && now - loadedAt < RELOAD_MS) return
+        loadJob = scope.launch {
+            if (server != ServerState.UP || force) server = ServerState.ASKING
+            featuredLoading = true
+            try {
+                server = when (bridge.serverUp()) {
+                    null -> ServerState.NONE
+                    false -> ServerState.DOWN
+                    true -> ServerState.UP
+                }
+                if (server == ServerState.UP) {
+                    val shared = bridge.featured().take(MOST_FEATURED)
+                    // Each by its code, all at once: the list names them, the code holds the Look.
+                    featured = coroutineScope {
+                        shared.map { one ->
+                            async {
+                                bridge.lookByCode(one.code).first?.let { look ->
+                                    ConnectSetup.of(look.copy(name = one.name.ifBlank { look.name }), SetupSource.FEATURED, one.code)
+                                }
+                            }
+                        }.awaitAll().filterNotNull()
+                    }
+                    loadedAt = SystemClock.elapsedRealtime()
+                }
+            } finally {
+                featuredLoading = false
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------ a setup's page
+
+    /** Opens [setup] on its page, with what it starts with on (ConnectLayers.startingOn). */
+    fun open(setup: ConnectSetup, bridge: ConnectBridge) {
+        detail = setup
+        layers = ConnectLayers.startingOn(setup, ownPhoto = bridge.settings.wallpaperStyle.isEmpty())
+        problem = null
+        deleting = null
+    }
+
+    fun closeDetail() {
+        detail = null
+        deleting = null
+    }
+
+    fun toggle(layer: Layer) {
+        layers = if (layer in layers) layers - layer else layers + layer
+    }
+
+    /**
+     * Puts the open setup on Zenith, as much of it as is on: for real, through the view model,
+     * with what was there before kept so Undo can put it back. The apply screen ticks through
+     * what went on while the home screen settles under Connect.
+     */
+    fun apply(bridge: ConnectBridge) {
+        val setup = detail ?: return
+        if (applying != null) return
+        val on = layers intersect ConnectLayers.available(setup)
+        if (on.isEmpty()) {
+            say("Turn on something to put on first.")
+            return
+        }
+        // Switching to a Look of your own is Plus, as it is under Settings, Looks.
+        if (setup.source == SetupSource.MINE && !bridge.plus) {
+            bridge.needPlus()
+            return
+        }
+        val wearing = ConnectApply.wear(bridge.currentSettings, bridge.currentLayout(), setup, on, bridge.owns)
+        val whole = on.containsAll(ConnectLayers.available(setup))
+        val lookId = if (setup.source == SetupSource.MINE && whole) setup.lookId else ""
+        val steps = ConnectApply.steps(setup, on)
+        applying = Applying(
+            setup = setup,
+            on = on,
+            steps = steps,
+            photoGone = ConnectApply.replacesPhoto(setup, on, ownPhoto = bridge.settings.wallpaperStyle.isEmpty()),
+            keptWallpaper = wearing.keptWallpaper,
+        )
+        ticked = 0
+        applied = false
+        scope.launch {
+            delay(ConnectApply.STEP_MS / 2)
+            bridge.wear(setup.name, wearing, lookId)
+            for (i in steps.indices) {
+                delay(ConnectApply.STEP_MS)
+                ticked = i + 1
+            }
+            delay(ConnectApply.DONE_PAUSE_MS)
+            applied = true
+        }
+    }
+
+    /** Takes off what was just put on: the home screen goes back to exactly what it was. */
+    fun undo(bridge: ConnectBridge) {
+        val name = bridge.worn
+        say(if (bridge.takeOff()) "Took off ${name ?: "the setup"}. Your home screen is back." else "There's nothing to take off.")
+        if (applied) applying = null
+    }
+
+    /** Leaves the apply screen once it is done, back to the setup's page. */
+    fun leaveApply() {
+        if (applied) applying = null
+    }
+
+    /** Deletes a Look of yours, on the second press of Delete. */
+    fun delete(bridge: ConnectBridge, look: Look) {
+        if (deleting != look.id) {
+            deleting = look.id
+            return
+        }
+        deleting = null
+        bridge.deleteLook(look.id)
+        if (detail?.lookId == look.id) detail = null
+        say("Deleted ${look.name}")
+    }
+
+    // ------------------------------------------------------------------ sheets
+
+    fun openSheet(which: ConnectSheet, look: String? = null) {
+        sheet = which
+        sheetLook = look
+        problem = null
+        busy = false
+        madeCode = null
+        // A word about what came before goes as the sheet comes up, so it never sits over the sheet.
+        hush()
+    }
+
+    fun closeSheet() {
+        sheet = null
+        // Signing in given up on: what it was for does not happen either.
+        afterSignIn = null
+    }
+
+    /** Finds a Look by its code and opens it on its page, without putting anything on. */
+    fun lookUp(bridge: ConnectBridge, text: String) {
+        if (busy) return
+        val code = ConnectCodes.clean(text)
+        if (code == null) {
+            problem = "A Look's code is LOOK- and six letters and numbers."
+            return
+        }
+        if (!bridge.server) {
+            problem = "This build of Zenith has no server to ask."
+            return
+        }
+        busy = true
+        problem = null
+        scope.launch {
+            val (look, why) = try {
+                bridge.lookByCode(code)
+            } finally {
+                busy = false
+            }
+            if (look == null) {
+                problem = why ?: "That code opens nothing."
+            } else {
+                val setup = ConnectSetup.of(look, SetupSource.CODE, code)
+                opened = (listOf(setup) + opened.filterNot { it.id == setup.id }).take(MOST_OPENED)
+                sheet = null
+                open(setup, bridge)
+            }
+        }
+    }
+
+    /** Signs in, or makes the account ([making]); then carries on with what it was asked on the way to. */
+    fun signIn(bridge: ConnectBridge, username: String, password: String, making: Boolean) {
+        if (busy) return
+        val name = username.trim()
+        if (name.isEmpty() || password.isEmpty()) {
+            problem = "Type a username and a password."
+            return
+        }
+        busy = true
+        problem = null
+        scope.launch {
+            val why = try {
+                if (making) bridge.createAccount(name, password) else bridge.signIn(name, password)
+            } finally {
+                busy = false
+            }
+            if (why != null) {
+                problem = why
+            } else {
+                val next = afterSignIn
+                afterSignIn = null
+                sheet = null
+                say(if (making) "Account made. You're signed in as $name." else "Signed in as $name")
+                next?.invoke()
+            }
+        }
+    }
+
+    fun signOut(bridge: ConnectBridge) {
+        scope.launch {
+            bridge.signOut()
+            say("Signed out. Everything on this phone stays.")
+        }
+    }
+
+    /** Asks for whatever sharing needs that is missing (an account, then Plus), then does [then]. */
+    private fun readyToShare(bridge: ConnectBridge, then: () -> Unit) {
+        when {
+            !bridge.server -> say("This build of Zenith has no server to share to.")
+            bridge.account == null -> {
+                openSheet(ConnectSheet.SIGN_IN)
+                afterSignIn = then
+            }
+            !bridge.plus -> bridge.needPlus()
+            else -> then()
+        }
+    }
+
+    /** Shares the home screen as it is now: named first, in the share sheet. */
+    fun shareHome(bridge: ConnectBridge) = readyToShare(bridge) { openSheet(ConnectSheet.SHARE) }
+
+    /** Saves the home screen under [name] and shares it: its code comes up in the sheet. */
+    fun shareNamed(bridge: ConnectBridge, name: String) {
+        if (busy) return
+        ConnectStudio.nameProblem(name)?.let {
+            problem = it
+            return
+        }
+        busy = true
+        problem = null
+        scope.launch {
+            val look = bridge.saveLook(name.trim().take(ConnectStudio.MAX_NAME))
+            val (code, why) = try {
+                bridge.shareLook(look.id)
+            } finally {
+                busy = false
+            }
+            if (code != null) madeCode = look.name to code else problem = why ?: "It couldn't be shared just now."
+        }
+    }
+
+    /** Shares a Look already saved, or shows its code if it is shared already. */
+    fun shareSaved(bridge: ConnectBridge, look: Look) = readyToShare(bridge) {
+        openSheet(ConnectSheet.SHARE, look.id)
+        if (look.shared.isNotEmpty() && !look.sharedIsOld) {
+            madeCode = look.name to look.shared
+            return@readyToShare
+        }
+        busy = true
+        scope.launch {
+            val (code, why) = try {
+                bridge.shareLook(look.id)
+            } finally {
+                busy = false
+            }
+            if (code != null) madeCode = look.name to code else problem = why ?: "It couldn't be shared just now."
+        }
+    }
+
+    fun stopSharing(bridge: ConnectBridge, look: Look) {
+        scope.launch {
+            val why = bridge.stopSharing(look.id)
+            say(why ?: "${look.name} isn't shared any more. Its code opens nothing now.")
+        }
+    }
+
+    /** Saving the home screen as a Look is Plus: asks for Plus, or opens the sheet that names it. */
+    fun saveHome(bridge: ConnectBridge) {
+        if (!bridge.plus) bridge.needPlus() else openSheet(ConnectSheet.SAVE)
+    }
+
+    fun saveNamed(bridge: ConnectBridge, name: String) {
+        ConnectStudio.nameProblem(name)?.let {
+            problem = it
+            return
+        }
+        val look = bridge.saveLook(name.trim().take(ConnectStudio.MAX_NAME))
+        sheet = null
+        say("Saved as ${look.name}")
+    }
+
+    fun backUp(bridge: ConnectBridge) {
+        when {
+            !bridge.plus -> bridge.needPlus()
+            bridge.account == null -> openSheet(ConnectSheet.SIGN_IN)
+            busy -> Unit
+            else -> {
+                busy = true
+                scope.launch {
+                    val why = try {
+                        bridge.backUp()
+                    } finally {
+                        busy = false
+                    }
+                    say(why ?: "Backed up to your account")
+                }
+            }
+        }
+    }
+
+    fun askRestore(bridge: ConnectBridge) {
+        when {
+            !bridge.plus -> bridge.needPlus()
+            bridge.account == null -> openSheet(ConnectSheet.SIGN_IN)
+            else -> openSheet(ConnectSheet.RESTORE)
+        }
+    }
+
+    fun restore(bridge: ConnectBridge) {
+        if (busy) return
+        busy = true
+        scope.launch {
+            val why = try {
+                bridge.restore()
+            } finally {
+                busy = false
+            }
+            if (why == null) {
+                sheet = null
+                say("Your home screen is back from your account")
+            } else {
+                problem = why
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------ the rest
 
     fun say(words: String) {
         toast = words
@@ -211,376 +505,46 @@ class ConnectState(
         }
     }
 
-    // ------------------------------------------------------------------ moving about
-
-    /** To [to], from wherever Connect is: a setup's page open over it closes first; the tab you are on goes back to its top. */
-    fun goTab(to: ConnectTab) {
-        if (detail != null) closeSetup()
-        if (to == tab) {
-            scope.launch { toTop(to) }
-            return
-        }
-        tab = to
-        if (to == ConnectTab.COMMUNITY) enterCommunity()
-    }
-
-    private suspend fun toTop(which: ConnectTab) {
-        when (which) {
-            ConnectTab.DISCOVER -> discoverGrid.animateScrollToItem(0)
-            ConnectTab.COMMUNITY -> communityList.animateScrollToItem(0)
-            ConnectTab.BETA -> betaScroll.animateScrollTo(0)
-            ConnectTab.VAULT -> vaultList.animateScrollToItem(0)
-        }
+    private fun hush() {
+        toastJob?.cancel()
+        toast = null
     }
 
     /**
-     * Back, as Android's back does inside an app: whatever is open over the page closes, the
-     * topmost first, and search folds away. False once there is nothing left to close, when back
-     * leaves Connect.
+     * Back: closes what is over everything else first: a sheet, the apply screen once it is done,
+     * a setup's page, a search; then goes to Discover. False with nothing left to close, when
+     * Connect itself closes.
      */
-    fun back(): Boolean {
-        when {
-            accentOpen -> accentOpen = false
-            studioOpen -> closeStudio()
-            applying != null -> leaveApply()
-            detail != null -> closeSetup()
-            searching -> closeSearch()
-            else -> return false
+    fun back(): Boolean = when {
+        sheet != null -> {
+            closeSheet()
+            true
         }
-        return true
-    }
-
-    fun openSearch() {
-        searching = true
-    }
-
-    /** Search folds away, and what was searched for with it. */
-    fun closeSearch() {
-        searching = false
-        query = ""
-    }
-
-    // ------------------------------------------------------------------ a setup's page
-
-    fun openSetup(setup: ConnectSetup, from: Rect?) {
-        detail = setup
-        detailFrom = from
-        layersOn = Layer.entries.toSet()
-        detailRun++
-        scope.launch { detailScroll.scrollTo(0) }
-    }
-
-    fun closeSetup() {
-        detail = null
-    }
-
-    /** One of the open setup's layers on or off. */
-    fun toggleLayer(layer: Layer) {
-        layersOn = if (layer in layersOn) layersOn - layer else layersOn + layer
-    }
-
-    fun share(setup: ConnectSetup, copy: (String) -> Boolean) {
-        val link = ConnectApply.link(setup.name)
-        say(if (copy(link)) "Copied $link" else "Share link: $link")
-    }
-
-    fun save(setup: ConnectSetup) {
-        say(if (toggleSaved(setup)) "Saved ${setup.name} to Vault" else "Removed from Vault")
-    }
-
-    // ------------------------------------------------------------------ apply
-
-    /** Apply: the apply screen comes up and runs through its steps, or with movement reduced is done at once. */
-    fun startApply(reduced: Boolean) {
-        val setup = detail ?: return
-        if (!ConnectApply.canApply(setup, layersOn)) return
-        applyLayers = layersOn
-        applyStartedAt = clock() - if (reduced) ConnectApply.DONE_MS else 0L
-        applying = setup
-    }
-
-    /** How long ago Apply was pressed. */
-    fun applyElapsed(): Long = (clock() - applyStartedAt).coerceAtLeast(0L)
-
-    /** Undo: what was put on comes off again, or, not done yet, it stops with nothing changed. */
-    fun undoApply() {
-        val done = applyElapsed() >= ConnectApply.DONE_MS
-        applying = null
-        say(if (done) "Restored your previous layout" else "Stopped. Your home screen is unchanged")
-    }
-
-    /** Back to Discover: the apply screen goes, then the setup's page, onto Discover. */
-    fun backToDiscover(reduced: Boolean) {
-        applying = null
-        scope.launch {
-            if (!reduced) delay(160)
-            closeSetup()
-            if (tab != ConnectTab.DISCOVER) tab = ConnectTab.DISCOVER
+        applying != null -> {
+            leaveApply()
+            true
         }
-    }
-
-    /**
-     * The apply screen goes, pulled away, its dim tapped, or Zenith opened from it, and what it
-     * was doing carries on behind it: the setup's page is there under it as it was.
-     */
-    fun leaveApply() {
-        applying = null
-    }
-
-    // ------------------------------------------------------------------ Creator Studio
-
-    fun openStudio() {
-        if (studioOpen) return
-        if (publish != DownloadState.BUSY) publish = DownloadState.IDLE
-        nameError = false
-        studioRun++
-        studioOpen = true
-    }
-
-    fun closeStudio() {
-        studioOpen = false
-    }
-
-    fun toggleTag(tag: String) {
-        val next = ConnectStudio.toggleTag(studioTags.toList(), tag)
-        if (next == null) {
-            tagShake++
-            say("Up to ${ConnectStudio.MAX_TAGS} tags per setup")
-            return
+        detail != null -> {
+            closeDetail()
+            true
         }
-        studioTags.clear()
-        studioTags.addAll(next)
-    }
-
-    fun togglePart(part: String) {
-        if (part in studioParts) studioParts.remove(part) else studioParts.add(part)
-    }
-
-    /**
-     * Publishes what was captured, as [by]: the button fills, says it is done, and the sheet goes.
-     * A public setup goes to the top of New releases, outlined for a moment; an unlisted one is a link.
-     */
-    fun publish(by: String) {
-        if (publish == DownloadState.BUSY) return
-        val name = studioName.trim()
-        if (ConnectStudio.nameProblem(name) != null) {
-            nameError = true
-            nameShake++
-            return
+        tab == ConnectTab.DISCOVER && (query.isNotEmpty() || filter != Filter.ALL) -> {
+            query = ""
+            filter = Filter.ALL
+            true
         }
-        val public = studioPublic
-        publish = DownloadState.BUSY
-        publishStartedAt = clock()
-        scope.launch {
-            delay(ConnectStudio.PUBLISH_MS)
-            publish = DownloadState.DONE
-            delay(ConnectStudio.PUBLISHED_HOLD_MS)
-            studioOpen = false
-            if (public) publishNew(name, by) else say("Share link ready: ${ConnectApply.link(name)}")
+        tab != ConnectTab.DISCOVER -> {
+            tab = ConnectTab.DISCOVER
+            true
         }
-    }
-
-    private fun publishNew(name: String, by: String) {
-        val now = LocalDateTime.now().format(DateTimeFormatter.ofPattern("HH:mm", Locale.US))
-        val mine = ConnectStudio.published(name, by, now, studioTags.toList(), "mine-${clock()}")
-        setups.add(0, mine)
-        if (detail != null) closeSetup()
-        tab = ConnectTab.DISCOVER
-        closeSearch()
-        feedTab = FeedTab.NEW
-        fresh = mine.id
-        scope.launch { discoverGrid.scrollToItem(0) }
-        scope.launch {
-            delay(FRESH_MS)
-            if (fresh == mine.id) fresh = null
-        }
-        say("$name is live in Discover")
-    }
-
-    // ------------------------------------------------------------------ Community
-
-    private fun enterCommunity() {
-        communityDot = false
-        if (welcomeScheduled) return
-        welcomeScheduled = true
-        scope.launch {
-            delay(ConnectSamples.WELCOME_AFTER_MS)
-            val post = ConnectSamples.welcome
-            messages.add(0, post)
-            val (channelDot, tabDot) = ConnectCommunity.dotsForLivePost(visible && tab == ConnectTab.COMMUNITY, channel)
-            if (channelDot) {
-                if (Channel.ANNOUNCEMENTS !in unread) unread.add(Channel.ANNOUNCEMENTS)
-            } else {
-                landed = post.id
-                delay(LANDED_MS)
-                if (landed == post.id) landed = null
-            }
-            if (tabDot) communityDot = true
-        }
-    }
-
-    fun pickChannel(to: Channel) {
-        channel = to
-        unread.remove(to)
-    }
-
-    /** The Changelog button: Community's #update-log. */
-    fun openChangelog() {
-        goTab(ConnectTab.COMMUNITY)
-        pickChannel(Channel.UPDATE_LOG)
-    }
-
-    fun like(message: ConnectMessage) {
-        val at = messages.indexOfFirst { it.id == message.id }
-        if (at < 0) return
-        val (on, count) = ConnectCommunity.flip(message.id in liked, messages[at].likes)
-        if (on) liked.add(message.id) else liked.remove(message.id)
-        messages[at] = messages[at].copy(likes = count)
-    }
-
-    fun vote(message: ConnectMessage) {
-        val at = messages.indexOfFirst { it.id == message.id }
-        if (at < 0) return
-        val (on, count) = ConnectCommunity.flip(message.id in voted, messages[at].votes)
-        if (on) voted.add(message.id) else voted.remove(message.id)
-        messages[at] = messages[at].copy(votes = count)
-    }
-
-    /** "Open in Discover": the setup a post shows, on its own page. */
-    fun openFromPost(id: String) {
-        val setup = setups.firstOrNull { it.id == id } ?: return
-        tab = ConnectTab.DISCOVER
-        openSetup(setup, null)
-    }
-
-    // ------------------------------------------------------------------ Beta Hub
-
-    fun startDownload() {
-        when (download) {
-            DownloadState.BUSY -> return
-            DownloadState.DONE -> {
-                say("Open the APK from your downloads to install")
-                return
-            }
-            DownloadState.IDLE -> Unit
-        }
-        download = DownloadState.BUSY
-        downloadStartedAt = clock()
-        scope.launch {
-            delay(ConnectBeta.DOWNLOAD_MS)
-            download = DownloadState.DONE
-            say("${ConnectSamples.BUILD_FILE} downloaded")
-        }
-    }
-
-    /** How far the download has got, 0 to 1. */
-    fun downloadProgress(): Float = when (download) {
-        DownloadState.IDLE -> 0f
-        DownloadState.DONE -> 1f
-        DownloadState.BUSY -> ((clock() - downloadStartedAt).toFloat() / ConnectBeta.DOWNLOAD_MS).coerceIn(0f, 1f)
-    }
-
-    fun toggleReport() {
-        reporting = !reporting
-        if (!reporting) reportError = false
-    }
-
-    fun sendReport() {
-        if (report.isBlank()) {
-            reportError = true
-            reportShake++
-            return
-        }
-        reportError = false
-        report = ""
-        reporting = false
-        say("Report sent with device info and logs")
-    }
-
-    fun voteRoad(item: RoadmapItem) {
-        val at = roadmap.indexOfFirst { it.id == item.id }
-        if (at < 0) return
-        val (on, count) = ConnectCommunity.flip(roadmap[at].mine, roadmap[at].votes)
-        roadmap[at] = roadmap[at].copy(mine = on, votes = count)
-    }
-
-    // ------------------------------------------------------------------ Vault
-
-    fun toggleAutoSync() {
-        autoSync = !autoSync
-        syncedByHand = false
-    }
-
-    fun syncNow(reduced: Boolean) {
-        if (syncing) return
-        syncing = true
-        scope.launch {
-            delay(if (reduced) 200L else ConnectVault.SYNC_MS)
-            syncing = false
-            lastSync = "just now"
-            syncedByHand = !autoSync
-            syncRun++
-            say("Layouts and themes synced")
-        }
-    }
-
-    fun restore(layout: VaultLayout) {
-        inUse = layout.id
-        say("Restoring ${layout.name} in Zenith")
-    }
-
-    fun backUp(now: LocalDateTime) {
-        val current = layouts.firstOrNull { it.id == inUse } ?: layouts.firstOrNull() ?: return
-        layouts.add(
-            0,
-            VaultLayout(
-                id = "b${clock()}",
-                name = ConnectVault.backupName(now),
-                meta = ConnectVault.backupMeta(current.meta),
-                wall = current.wall,
-                dark = current.dark,
-            ),
-        )
-        say("Backed up your current layout")
-    }
-
-    // ------------------------------------------------------------------ kept on the phone
-
-    private var store: android.content.SharedPreferences? = null
-
-    /** Reads back the colour and the saved setups, once. */
-    fun load(context: Context) {
-        if (store != null) return
-        val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        store = prefs
-        val name = prefs.getString(KEY_ACCENT, null)
-        ConnectSamples.accents.firstOrNull { it.name == name }?.let { accent = it }
-        prefs.getStringSet(KEY_SAVED, null)?.let { kept ->
-            saved.clear()
-            saved.addAll(kept.filter { id -> setups.any { it.id == id } })
-        }
-    }
-
-    fun chooseAccent(choice: ConnectAccent) {
-        accent = choice
-        store?.edit()?.putString(KEY_ACCENT, choice.name)?.apply()
-    }
-
-    /** Saves [setup] to the Vault, or takes it out; true when it is now saved. */
-    fun toggleSaved(setup: ConnectSetup): Boolean {
-        val now = setup.id !in saved
-        if (now) saved.add(setup.id) else saved.remove(setup.id)
-        store?.edit()?.putStringSet(KEY_SAVED, saved.toSet())?.apply()
-        return now
+        else -> false
     }
 
     private companion object {
-        const val PREFS = "zenith_connect"
-        const val KEY_ACCENT = "accent"
-        const val KEY_SAVED = "saved"
-
-        /** How long a setup just published stays outlined, and a post just in stays lit. */
-        const val FRESH_MS = 4_200L
-        const val LANDED_MS = 2_600L
+        /** How long what the server said is good for before Connect asks again on opening. */
+        const val RELOAD_MS = 60_000L
+        const val MOST_FEATURED = 12
+        const val MOST_OPENED = 8
+        const val TOAST_MS = 2_600L
     }
 }

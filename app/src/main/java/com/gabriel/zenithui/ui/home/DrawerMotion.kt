@@ -85,4 +85,16 @@ object DrawerFrost {
         val x = amount.coerceIn(0f, 1f)
         return 1f - x * x * x
     }
+
+    /**
+     * Where nothing is blurred (a theme that blurs nothing, and Lite, which Auto picks on a phone
+     * like the A55), a veil of the theme's page dims the wallpaper behind the drawer and the library
+     * instead: this much of it with the drawer open, as dark as it used to look. It lies over the
+     * whole screen. It was drawn inside the home screen, which sinks back to 94% behind the drawer,
+     * so it shrank with it and stood in from every edge: a frame round the drawer and the library.
+     */
+    const val VEIL = 0.2f
+
+    /** How much of the page's veil is over the wallpaper with the blurred copy [amount] of the way in. */
+    fun veil(amount: Float): Float = VEIL * amount.coerceIn(0f, 1f)
 }

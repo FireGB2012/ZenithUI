@@ -74,6 +74,24 @@ class DrawerMotionTest {
     }
 
     @Test
+    fun `with nothing blurred, the page's veil comes in with the frost and is as dark as it was`() {
+        assertEquals(0f, DrawerFrost.veil(DrawerFrost.amount(0f)), 0f)
+        assertEquals(0f, DrawerFrost.veil(DrawerFrost.amount(DrawerFrost.FROM)), 0f)
+        // As much of the page as was seen when the veil sank back inside the home screen: 45% of it
+        // there, with the home screen at 45% behind the open drawer. Now it covers the whole screen.
+        assertEquals(0.45f * 0.45f, DrawerFrost.veil(DrawerFrost.amount(1f)), 0.005f)
+        var before = 0f
+        for (step in 0..100) {
+            val now = DrawerFrost.veil(DrawerFrost.amount(step / 100f))
+            assertTrue("veil goes back to $now at $step%", now >= before)
+            before = now
+        }
+        // Never more than all of it in, whatever it is handed.
+        assertEquals(DrawerFrost.VEIL, DrawerFrost.veil(3f), 0f)
+        assertEquals(0f, DrawerFrost.veil(-1f), 0f)
+    }
+
+    @Test
     fun `the sharp and the blurred home screen together never let much of the wallpaper through`() {
         for (step in 0..100) {
             val blurred = step / 100f

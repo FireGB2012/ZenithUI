@@ -1051,10 +1051,76 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
     suspend fun featuredLooks(): List<com.gabriel.zenithui.data.server.SharedLook> =
         (server.featuredLooks() as? Reply.Ok)?.value.orEmpty()
 
+    /**
+     * A Look somebody shared, by its code, without putting it on: Zenith Connect shows it first.
+     * Needs no account. Answers with the Look, or with why not.
+     */
+    suspend fun lookByCode(code: String): Pair<com.gabriel.zenithui.data.Look?, String?> {
+        val cleaned = code.uppercase().filter { it.isLetterOrDigit() }.removePrefix("LOOK")
+        if (cleaned.length != 6) return null to "A Look's code is LOOK- and six letters and numbers."
+        return when (val reply = server.openLook(cleaned)) {
+            is Reply.Ok -> {
+                val look = runCatching { com.gabriel.zenithui.data.Look.fromJson(org.json.JSONObject(reply.value)) }.getOrNull()
+                if (look == null) null to "That code is for something that is not a Look." else look to null
+            }
+            else -> null to reply.problem()
+        }
+    }
+
+    /** Whether Zenith's server answers now; null for a build that has none. */
+    suspend fun serverUp(): Boolean? = if (!server.isSetUp) null else server.health() is Reply.Ok
+
+    // ---------------------------------------------------------------- Zenith Connect
+
+    /**
+     * What Zenith Connect put on last, and the home screen as it was just before: kept while it can
+     * be taken off again, so Undo puts back exactly what was there, other apps' widgets and all
+     * (they are held while it is, see [heldWidgetIds]). In memory only: once Zenith starts again it
+     * is gone, as an undo is.
+     */
+    private class ConnectBefore(val name: String, val look: com.gabriel.zenithui.data.Look, val activeLook: String)
+
+    private var connectBefore: ConnectBefore? = null
+    private val _connectWorn = MutableStateFlow<String?>(null)
+
+    /** The name of what Connect put on last, while Undo can still take it off; null with nothing to take off. */
+    val connectWorn: StateFlow<String?> = _connectWorn.asStateFlow()
+
+    /**
+     * Puts on what Connect worked out (ConnectApply.wear): [settings] and [layout] as a Look keeps
+     * them, called [name]. [lookId] is the saved Look it is, for one of yours with all of it taken,
+     * and empty otherwise; [fromElsewhere] when it brings somebody else's pages, which are fitted to
+     * this phone as they go on. What was there before can be put back with [takeOffConnect].
+     */
+    fun wearFromConnect(name: String, settings: String, layout: String, lookId: String, fromElsewhere: Boolean) {
+        val now = System.currentTimeMillis()
+        val current = this.settings.value
+        connectBefore = ConnectBefore(
+            name,
+            com.gabriel.zenithui.data.Looks.capture(current, this.layout.value, name, CONNECT_BEFORE, now),
+            current.activeLook,
+        )
+        applyLook(com.gabriel.zenithui.data.Look(lookId, name, settings, layout, now), fromElsewhere)
+        _connectWorn.value = name
+    }
+
+    /** Takes off what Connect put on last: the home screen goes back to exactly what it was. False with nothing to take off. */
+    fun takeOffConnect(): Boolean {
+        val before = connectBefore ?: return false
+        connectBefore = null
+        _connectWorn.value = null
+        applyLook(before.look)
+        store.update { it.copy(activeLook = before.activeLook) }
+        return true
+    }
+
     private companion object {
         const val ACCOUNT_LOOK_EVERY_MS = 10 * 60 * 1000L
         const val ACCOUNT_LOOK_AGAIN_MS = 60 * 1000L
         const val SIGN_IN_FIRST = "Sign in to your Zenith account first."
+
+        /** The id the home screen is kept under while Zenith Connect can put it back. */
+        const val CONNECT_BEFORE = "connect-before"
 
         /** As many photos as the frame holds, and the longest side each is kept at. */
         const val FRAME_MOST = 12
@@ -1470,7 +1536,8 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
             }
         }
         // Read from the store, which is there from the first line: this runs while init does.
-        val inLooks = if (!includeLooks) emptyList() else store.looks.value.flatMap { look ->
+        // And the home screen as it was before Zenith Connect put something on, while Undo can bring it back.
+        val inLooks = if (!includeLooks) emptyList() else (store.looks.value + listOfNotNull(connectBefore?.look)).flatMap { look ->
             of(com.gabriel.zenithui.data.Looks.apply(ZenithSettings(), look).second)
         }
         // What Undo can still put back holds its widgets too.
@@ -1586,7 +1653,7 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
 
     /** Every photo chosen as an icon that the home screen, or a Look saved on this phone, shows. */
     private fun photosInUse(): Set<String> =
-        (listOf(settings.value.appEdits) + store.looks.value.map { com.gabriel.zenithui.data.Looks.apply(ZenithSettings(), it).first.appEdits })
+        (listOf(settings.value.appEdits) + (store.looks.value + listOfNotNull(connectBefore?.look)).map { com.gabriel.zenithui.data.Looks.apply(ZenithSettings(), it).first.appEdits })
             .flatMap { AppEdits.icons(it).values }
             .filter { IconSource.parse(it) is IconSource.Photo }
             .toSet()

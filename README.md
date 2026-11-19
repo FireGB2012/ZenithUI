@@ -731,28 +731,35 @@ already show, keeps nothing and sends nothing.
 
 ## Themes
 
-Zenith is drawn in one of four themes, each a whole design and not only colours (`data/Themes.kt`):
+Zenith is drawn in one of four themes, each a whole design and not only colours (`data/Themes.kt`).
+Three are the same Liquid Glass, each with its own colours; one is flat:
 
 - **Liquid Glass**, everybody's to start with: clear glass over the wallpaper, lit at the rim (see How
-  the glass works).
+  the glass works). Apple's: a grey veil with no colour in it, and white light on the edge.
+- **Aurora**: glass that catches the northern lights. A night of deep teal and violet, the glass's
+  edge lit green at the corner facing the light and violet at the far one, a whisper of teal in its
+  veil, a mint accent. Always dark.
+- **Frost**: ice-cold glass, crisp and clear. Pale frost in Light and deep polar blue in Dark, the
+  edge lit ice-white and blue, a cool veil, an ice-blue accent.
 - **Clean**: flat and light. White cards with a hairline edge and a short soft shadow, one blue, Inter;
   graphite in Dark. Nothing blurs.
-- **Neon**: dark, with edges that glow. Smoked glass, cyan edges with a glow round them, magenta as the
-  second colour, condensed type. Always dark.
-- **Retro**: warm and chunky. Cream and brown with burnt orange, thick outlines, hard shadows, corners
-  cut off straight, mono type.
+
+Neon and Retro were themes up to 3.8 (108). A phone that was in Neon is in Aurora, which is what Neon was
+reaching for, in glass; one in Retro is in Liquid Glass (`Themes.successor`). Backups and Looks saved
+in them read the same way.
 
 Settings → Wallpaper & appearance → **Theme** shows the four as cards, each drawn in its own theme. A
 tap tries one at once, the whole screen cross-fading into it (`ThemeCrossfade`); the **star** makes it
 yours, the theme Zenith starts in. One only being tried lasts until Zenith next starts. The font's first
 choice, **Theme**, is the theme's own font; a font chosen by name wins in any theme.
 
-A theme is plain data: its material (glass, flat, neon or retro), whether it follows Light and Dark,
-its colours for each, its corners, edge, shadow, glow, blur and font, and it is written to JSON and
-read back whole (`Theme.toJson`, `Theme.fromJson`), so themes can be shared later. Everything reads it:
-`ZenithTheme` provides it (`LocalTheme`) with a palette made from it (`Theme.palette`), and every
-pane is asked for as `Modifier.glass`, which draws the theme's material (`themedPanel` for the three
-that are not glass). Corners go through `corners(r)` and `Theme.shape`; words on a pane over the
+A theme is plain data: its material (glass or flat), whether it follows Light and Dark, its colours
+for each, its glass (`ThemeGlass`: the veil glass on the wallpaper wears and the two colours of light
+on its edge), its corners, edge, shadow, blur and font, and it is written to JSON and read back whole
+(`Theme.toJson`, `Theme.fromJson`), so themes can be shared later. Everything reads it: `ZenithTheme`
+provides it (`LocalTheme`) with a palette made from it (`Theme.palette`), and every pane is asked for
+as `Modifier.glass`, which draws the theme's material: the glass engine for the glass themes, in
+their colours (`Theme.glassColours`), and `themedPanel` for Clean. Corners go through `corners(r)` and `Theme.shape`; words on a pane over the
 wallpaper through `wallPaneInk`; Settings' groups, tiles and pages through `themeSurface`,
 `themeTile` and `themePage`. Adding a theme is adding a `Theme` to `Themes.all`; `ThemesTest` holds
 each one to its contrast in Light and Dark.

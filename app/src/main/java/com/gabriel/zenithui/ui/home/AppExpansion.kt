@@ -55,7 +55,8 @@ import com.gabriel.zenithui.ui.theme.LocalScreenSize
 import com.gabriel.zenithui.ui.theme.LocalTilt
 import com.gabriel.zenithui.ui.theme.LocalWallpaperDim
 import com.gabriel.zenithui.ui.theme.LocalWallpaperOffset
-import com.gabriel.zenithui.ui.theme.WALLPAPER_VEIL
+import com.gabriel.zenithui.ui.theme.LocalTheme
+import com.gabriel.zenithui.ui.theme.glassColours
 import com.gabriel.zenithui.ui.theme.tuned
 import kotlin.math.roundToInt
 
@@ -163,6 +164,9 @@ fun AppLaunchCard(
     val glassStrength = LocalGlassStrength.current.coerceIn(0f, 1.4f)
     val tilt = LocalTilt.current
     val tuning = LocalGlassTuning.current
+    // The theme's glass: its veil and the light on its edge, as every pane on the home screen has.
+    val theme = LocalTheme.current
+    val colours = remember(theme) { theme.glassColours() }
     var origin by remember { mutableStateOf(Offset.Zero) }
     val clip = remember { Path() }
     // The lens every pane shares: an app opening does not have to compile one of its own first.
@@ -253,8 +257,9 @@ fun AppLaunchCard(
                         solid = 0.15f + 0.35f * amount,
                         opacity = 1f,
                         dark = true,
-                        tint = WALLPAPER_VEIL,
+                        tint = colours.veil,
                         onWallpaper = true,
+                        colours = colours,
                     ).tuned(tuning)
                     translate(left, top) {
                         clipPath(clip) {

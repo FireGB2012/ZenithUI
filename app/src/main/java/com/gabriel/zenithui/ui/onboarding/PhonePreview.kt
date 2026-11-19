@@ -78,10 +78,10 @@ import com.gabriel.zenithui.ui.home.OnWallpaper
 import com.gabriel.zenithui.ui.home.STANDARD_ICON_SIZE
 import com.gabriel.zenithui.ui.home.SearchPill
 import com.gabriel.zenithui.ui.home.SlotArrangement
-import com.gabriel.zenithui.data.ThemeMaterial
 import com.gabriel.zenithui.ui.theme.LocalPalette
 import com.gabriel.zenithui.ui.theme.LocalParallax
 import com.gabriel.zenithui.ui.theme.LocalTheme
+import com.gabriel.zenithui.ui.theme.glassColours
 import com.gabriel.zenithui.ui.theme.TiltRest
 import com.gabriel.zenithui.ui.theme.LocalBackdrop
 import com.gabriel.zenithui.ui.theme.LocalGlassLevels
@@ -132,8 +132,10 @@ fun PhonePreview(
 ) {
     val palette = LocalPalette.current
     val edge = palette.onGlass.copy(alpha = 0.16f)
-    // Soft white light, with no colour in it; Neon's glows in its own colour, as its edges do.
-    val glowColour = if (LocalTheme.current.material == ThemeMaterial.NEON) palette.accent else Color.White
+    // Soft light in the colour the theme's glass catches: white, with no colour in it, in Liquid
+    // Glass and Clean, and the first of a glass theme's two colours of light, as its edges are.
+    val theme = LocalTheme.current
+    val glowColour = remember(theme) { theme.glassColours().rim }
     // Leaning the phone floats the preview a little against the lean, as the lights behind it go
     // with it: the phone is the nearest thing on screen. None of it is left by the time it fills it.
     val parallax = LocalParallax.current

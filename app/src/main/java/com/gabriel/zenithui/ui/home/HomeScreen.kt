@@ -553,7 +553,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
     // The home screen's blur behind the drawer: a copy of it blurred once and faded in over it, not a
     // blur grown frame by frame (see DrawerFrost), as far as the theme blurs what is behind. Android 12
     // and later; before that the home screen only dims behind the drawer, as it always did there. A
-    // theme that blurs nothing (Clean, Retro) lays a veil of its page over it instead, on any phone,
+    // theme that blurs nothing (Clean) lays a veil of its page over it instead, on any phone,
     // and so does Lite, in any theme.
     val theme = com.gabriel.zenithui.ui.theme.LocalTheme.current
     val lite = com.gabriel.zenithui.ui.theme.LocalLite.current
@@ -2141,7 +2141,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         label = "homeBlur",
     )
     // As far as the theme blurs what is behind: Liquid Glass's is the blur as it is drawn, and Clean
-    // and Retro have none, only the dim. Nor has Lite.
+    // has none, only the dim. Nor has Lite.
     val blurShare = blurBehind.value / com.gabriel.zenithui.data.Themes.LiquidGlass.blurBehind
     val homeBlur = designedBlur.value * blurShare
     val homePressed by viewModel.homePressed.collectAsState()

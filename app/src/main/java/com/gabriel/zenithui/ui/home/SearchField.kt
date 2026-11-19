@@ -136,7 +136,7 @@ import com.gabriel.zenithui.ui.theme.LocalWallColour
 import com.gabriel.zenithui.ui.theme.LocalWallpaperDim
 import com.gabriel.zenithui.ui.theme.LocalWallpaperOffset
 import com.gabriel.zenithui.ui.theme.LocalZenithFont
-import com.gabriel.zenithui.ui.theme.WALLPAPER_VEIL
+import com.gabriel.zenithui.ui.theme.glassColours
 import com.gabriel.zenithui.ui.theme.WALL_TINT
 import com.gabriel.zenithui.ui.theme.ZenithShapes
 import com.gabriel.zenithui.ui.theme.drawLiquidGlass
@@ -270,6 +270,8 @@ fun SearchField(
     // no shadow under them; Liquid Glass draws its glass, words white with the names' shadow.
     val theme = LocalTheme.current
     val themed = !theme.isGlass
+    // The theme's glass, as the pill's: its veil and the light on its edge.
+    val colours = remember(theme) { theme.glassColours() }
     val ink = wallPaneInk()
     val palette = LocalPalette.current
     val fieldShape = theme.shape(ZenithShapes.pill)
@@ -318,9 +320,10 @@ fun SearchField(
                             solid = FIELD_BODY * shown,
                             opacity = if (stretch) 1f else shown,
                             dark = true,
-                            tint = WALLPAPER_VEIL,
+                            tint = colours.veil,
                             depth = body,
                             onWallpaper = true,
+                            colours = colours,
                         ).tuned(tuning).copy(wallTint = WALL_TINT)
                         drawFieldGlass(
                             at = at,

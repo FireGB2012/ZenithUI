@@ -28,7 +28,7 @@ class LocalConfigRepositoryTest {
         }
     }
 
-    private val settings = ZenithSettings(userName = "Gabriel", theme = "retro", columns = 5, rows = 6)
+    private val settings = ZenithSettings(userName = "Gabriel", theme = "frost", columns = 5, rows = 6)
 
     private val layout = listOf(
         AppCell("a", 0, 0, 0, "com.mail", ".Main"),
@@ -38,7 +38,7 @@ class LocalConfigRepositoryTest {
 
     private val look = Looks.capture(settings, layout, "Night", "look-1", 1_000L)
 
-    private val mine = Themes.Retro.copy(id = "mine", name = "Mine")
+    private val mine = Themes.Frost.copy(id = "mine", name = "Mine")
 
     private val config = ZenithConfig(settings, layout, listOf(look), listOf(mine))
 

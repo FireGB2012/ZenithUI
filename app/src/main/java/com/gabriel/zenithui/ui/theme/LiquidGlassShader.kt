@@ -38,7 +38,9 @@ import kotlin.math.max
  * It catches the light on its edge, and nowhere else: a hairline of light hugging the outline, at
  * its brightest on the corner facing the lamp and again on the corner opposite, where light that
  * crossed the glass leaves it, and faint everywhere between, with a soft glow just inside it. The
- * light swings as the phone tilts. Its colour is a little of what is round the pane ([GlassLook.glow]).
+ * light swings as the phone tilts. Its colour is the theme's ([GlassColours]: white in Liquid Glass,
+ * two colours in Aurora and Frost, one at the lit corner and one at the far one), taking a little of
+ * what is round the pane ([GlassLook.glow]).
  *
  * A finger on the glass lights it from within, the glow starting under the fingertip and spreading
  * out. A ring of light from a tap on the wallpaper (see [GlassRing]) lights its rim, and a little of
@@ -109,6 +111,11 @@ internal class LiquidGlassShader(val levels: GlassLevels) {
         shader.setFloatUniform("vibrance", look.vibrance)
         shader.setFloatUniform("glow", look.glow.coerceIn(0f, 1f))
         shader.setFloatUniform("rimmed", if (look.rimmed) 1f else 0f)
+        // The theme's light, set on every draw, so a pane never keeps another theme's.
+        val near = look.colours.rim
+        val far = look.colours.rimFar
+        shader.setFloatUniform("rimNear", near.red, near.green, near.blue)
+        shader.setFloatUniform("rimFar", far.red, far.green, far.blue)
         val length = hypot(light.x, light.y).coerceAtLeast(0.001f)
         shader.setFloatUniform("light", light.x / length, light.y / length)
         shader.setFloatUniform("dark", if (dark) 1f else 0f)
@@ -189,6 +196,8 @@ internal class LiquidGlassShader(val levels: GlassLevels) {
             uniform float vibrance;
             uniform float glow;
             uniform float rimmed;
+            uniform float3 rimNear;
+            uniform float3 rimFar;
             uniform float2 light;
             uniform float dark;
             uniform float4 wash;
@@ -336,17 +345,22 @@ internal class LiquidGlassShader(val levels: GlassLevels) {
                 float same = dark > 0.5 ? 1.0 - smoothstep(0.05, 0.42, seen) : smoothstep(0.84, 0.99, seen);
                 color = mix(color, lift.rgb, lift.a * same);
 
-                // The colour of the light. Glass has none of its own: the light it catches comes
-                // off what is round it, so over a sunset its rim is warm and over the sea it is
-                // cool, a little. Round something too dark to have a colour, the light is white.
+                // Which way this bit of the edge faces the lamp: 1 straight at it, -1 straight away.
+                float facing = dot(normal, light);
+
+                // The colour of the light. It is the theme's: white in Liquid Glass, and in a theme
+                // with two colours of light its own at the corner facing the lamp and its second at
+                // the far one, mixed round the sides. On top of that the light comes off what is
+                // round the glass, so over a sunset its rim is warm and over the sea it is cool, a
+                // little. Round something too dark to have a colour, it is the theme's alone.
                 float peak = max(air.r, max(air.g, air.b));
                 float3 tone = mix(float3(1.0), air / max(peak, 0.001), smoothstep(0.04, 0.3, peak));
-                float3 lamp = mix(float3(1.0), tone, glow);
+                float3 own = mix(rimFar, rimNear, 0.5 + 0.5 * facing);
+                float3 lamp = mix(own, tone, glow);
 
                 // Light, on the edge only. A hairline hugging the outline and a softer glow just
                 // inside it, at their brightest on the corner that faces the lamp and on the corner
                 // opposite, and faint all the way round between.
-                float facing = dot(normal, light);
                 float toward = max(facing, 0.0);
                 float away = max(-facing, 0.0);
                 float spec = toward * toward * toward + 0.65 * away * away * away;
@@ -422,6 +436,11 @@ internal data class GlassLook(
      * under every point; without the lens the pane is given one colour for the whole of it.
      */
     val wallTint: Float = 0f,
+    /**
+     * Whose glass it is: the colour of the light on its edge, and the veil it wears where nothing
+     * readable is behind it on the wallpaper. Liquid Glass's unless a theme says otherwise.
+     */
+    val colours: GlassColours = GlassColours.Liquid,
 )
 
 /** A finger on a pane: where, in pane pixels; how far its glow has spread; and how bright it is. */

@@ -88,18 +88,25 @@ import com.gabriel.zenithui.ui.theme.isGlass
 import com.gabriel.zenithui.ui.theme.wallPaneInk
 import kotlin.math.roundToInt
 
-/** iOS's blue for the one main action, as the rest of Zenith has it on glass over the wallpaper. */
-private val ACTION_BLUE = Color(0xFF0A84FF)
-
-/** The one main action on a pane on the wallpaper: [ACTION_BLUE] in Liquid Glass, else the theme's accent. */
+/**
+ * The one main action on a pane on the wallpaper. In a glass theme it is the theme's accent as Dark
+ * has it, since glass on the wallpaper is made as Dark makes it, in Light too: iOS's blue in Liquid
+ * Glass, Aurora's green, Frost's ice blue. Elsewhere it is the theme's accent.
+ */
 @Composable
 @ReadOnlyComposable
-private fun actionColour(): Color = if (LocalTheme.current.isGlass) ACTION_BLUE else LocalPalette.current.accent
+private fun actionColour(): Color {
+    val theme = LocalTheme.current
+    return if (theme.isGlass) Color(theme.dark.accent) else LocalPalette.current.accent
+}
 
 /** The words on [actionColour]. */
 @Composable
 @ReadOnlyComposable
-private fun onActionColour(): Color = if (LocalTheme.current.isGlass) Color.White else LocalPalette.current.onAccent
+private fun onActionColour(): Color {
+    val theme = LocalTheme.current
+    return if (theme.isGlass) Color(theme.dark.onAccent) else LocalPalette.current.onAccent
+}
 
 /** The bar's own size: as tall as this, and at least this wide, wider with more pages to show. */
 private val BAR_HEIGHT = 48.dp

@@ -482,6 +482,17 @@ Saving, switching, scheduling and sharing are Zenith Plus; opening a code, renam
 share and deleting are not. Photos chosen as icons are kept while the home screen or any saved
 Look shows them, and let go of when nothing does.
 
+## Zenith Connect
+
+**Connect** is an app that comes inside Zenith (`data/BuiltInApps.kt`, `ui/connect/`,
+`specs/2026-11-19-zenith-connect-built-in-app-design.md`): Discover (setups made by others, each
+with its phone in 3D and a one-tap apply), Community, the Beta Hub and the Vault, under a glass tab
+bar. To Zenith it is an app like any other, `zenith.builtin/connect`: on the home screen once, in
+the drawer, the library and Search, opened out of its icon on the same card and closed back into
+it. It is drawn by Zenith itself, so Android never sees it: it is in no app list but Zenith's, and
+there is nothing to uninstall. Its content is the prototype's sample data, and Apply shows its
+steps without changing the home screen.
+
 ## Fonts and the Glass studio
 
 **Font** (Wallpaper & appearance): Theme (the theme's own: the phone's sans in Liquid Glass), Inter,

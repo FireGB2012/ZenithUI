@@ -30,6 +30,8 @@ class WidgetWorld(
     val setUp: (String) -> Unit,
     /** Where the Photo frame's pictures are kept. */
     val frameDir: java.io.File?,
+    /** Where the photos on the widgets you made are kept. */
+    val madeDir: java.io.File? = null,
 )
 
 val LocalWidgetWorld = compositionLocalOf<WidgetWorld?> { null }

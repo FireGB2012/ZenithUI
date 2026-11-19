@@ -113,6 +113,21 @@ object WidgetColours {
     }
 
     /**
+     * The card of a widget you made, in [own], its colour, or the plain card with none. Its words
+     * are white wherever white stands at least [LARGE_WORDS] to 1, as an iPhone's are on its blue,
+     * red, purple and pink, and near-black only where white would not read: on yellow, mint, cyan,
+     * orange and green. A made widget's words are mostly large, and white is what a colour card
+     * that somebody chose is expected to carry.
+     */
+    fun made(own: Color?, dark: Boolean): WidgetFill {
+        if (own == null) return of(MADE, dark)
+        val fill = ownCard(own)
+        val white = NeutralLook.Dark.onGlass
+        if (fill.ink == white || min(contrast(white, fill.top), contrast(white, fill.bottom)) < LARGE_WORDS) return fill
+        return WidgetFill(fill.top, fill.bottom, white, quietOn(white, fill.top, fill.bottom), white)
+    }
+
+    /**
      * White or Zenith's near-black, whichever stands out more where it stands out least. They are
      * the two inks a palette carries ([NeutralLook.Dark] and [NeutralLook.Light]), so a card's words
      * can be drawn by every widget as they always are, in the palette's ink.
@@ -159,6 +174,12 @@ object WidgetColours {
 
     /** The contrast at which a colour for pressing stands out from its card: what WCAG asks of a control. */
     private const val STANDS_OUT = 3f
+
+    /** What WCAG asks of large words: the least white may stand on a made widget's own colour. */
+    private const val LARGE_WORDS = 3f
+
+    /** What a made widget is to [of]: a kind of its own, so the plain card. */
+    private const val MADE = "made"
 }
 
 /**

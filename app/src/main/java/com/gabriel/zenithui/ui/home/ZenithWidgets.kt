@@ -104,6 +104,7 @@ import com.gabriel.zenithui.data.ToggleGrid
 import com.gabriel.zenithui.data.ToggleNames
 import com.gabriel.zenithui.data.WidgetForm
 import com.gabriel.zenithui.data.WidgetLooks
+import com.gabriel.zenithui.data.MadeWidgets
 import com.gabriel.zenithui.data.Widgets
 import com.gabriel.zenithui.ui.common.labelShadow
 import com.gabriel.zenithui.ui.common.pressBounce
@@ -138,6 +139,7 @@ import com.gabriel.zenithui.ui.home.widgets.StreakWidget
 import com.gabriel.zenithui.ui.home.widgets.TodoWidget
 import com.gabriel.zenithui.ui.home.widgets.WeatherWidget
 import com.gabriel.zenithui.ui.home.widgets.WorldWidget
+import com.gabriel.zenithui.ui.home.widgets.MadeWidgetView
 import kotlinx.coroutines.delay
 import java.time.Duration
 import java.time.LocalDate
@@ -203,21 +205,16 @@ fun ZenithWidget(
         return
     }
 
-    val palette = LocalPalette.current
+    // One you made: what it stands on, and everything on it, is its own design, whatever the look of the rest.
+    if (MadeWidgets.isMade(type)) {
+        MadeWidgetView(MadeWidgets.find(LocalWidgetWorld.current?.settings?.madeWidgets.orEmpty(), type), modifier)
+        return
+    }
+
     if (type.startsWith(Widgets.BARE_PREFIX)) {
-        // Straight on the wallpaper, words take the ink the labels under the icons have: white in
-        // the dark, near-black in the light, where Zenith's own wallpapers are pale and white
-        // words would be lost. Each gets a soft edge of the opposite tone to stand on.
-        val shadow = with(LocalDensity.current) {
-            if (palette.dark) {
-                Shadow(Color.Black.copy(alpha = 0.72f), Offset(0f, 1.dp.toPx()), 5.dp.toPx())
-            } else {
-                Shadow(Color.White.copy(alpha = 0.9f), Offset.Zero, 5.dp.toPx())
-            }
-        }
         CompositionLocalProvider(
             LocalBare provides true,
-            LocalTextStyle provides LocalTextStyle.current.merge(TextStyle(shadow = shadow)),
+            LocalTextStyle provides LocalTextStyle.current.merge(TextStyle(shadow = bareShadow())),
         ) {
             BoxWithConstraints(modifier) {
                 WidgetBody(kind, formOf(maxWidth, maxHeight), maxWidth, maxHeight, userName, note, onNoteChange, toggles)
@@ -251,6 +248,23 @@ fun ZenithWidget(
     ) {
         WordsOnWallpaper {
             WidgetBody(kind, formOf(maxWidth, maxHeight), maxWidth, maxHeight, userName, note, onNoteChange, toggles)
+        }
+    }
+}
+
+/**
+ * The soft edge words stand on straight on the wallpaper, with no pane: they take the ink the labels
+ * under the icons have, white in the dark and near-black in the light, where Zenith's own wallpapers
+ * are pale and white words would be lost, and each gets a soft edge of the opposite tone.
+ */
+@Composable
+internal fun bareShadow(): Shadow {
+    val dark = LocalPalette.current.dark
+    return with(LocalDensity.current) {
+        if (dark) {
+            Shadow(Color.Black.copy(alpha = 0.72f), Offset(0f, 1.dp.toPx()), 5.dp.toPx())
+        } else {
+            Shadow(Color.White.copy(alpha = 0.9f), Offset.Zero, 5.dp.toPx())
         }
     }
 }
@@ -296,7 +310,7 @@ private fun skyNow(): Sky {
  * A colour widget's card: [fill]'s colours from top to foot, standing on a soft shadow, with what is
  * drawn on it kept inside its corners.
  */
-private fun Modifier.colourCard(fill: WidgetFill): Modifier = this
+internal fun Modifier.colourCard(fill: WidgetFill): Modifier = this
     .cardShadow(WidgetShape)
     .background(
         if (fill.top == fill.bottom) SolidColor(fill.top) else Brush.verticalGradient(listOf(fill.top, fill.bottom)),
@@ -338,7 +352,7 @@ private val CARD_SHADOW_FALL = Offset(0.41f, 0.91f)
  * stands on the wallpaper, so its words need no shadow.
  */
 @Composable
-private fun WordsOnCard(fill: WidgetFill, content: @Composable () -> Unit) {
+internal fun WordsOnCard(fill: WidgetFill, content: @Composable () -> Unit) {
     val palette = LocalPalette.current
     val onCard = remember(palette, fill) {
         palette.copy(
@@ -364,7 +378,7 @@ private fun WordsOnCard(fill: WidgetFill, content: @Composable () -> Unit) {
  * same clear glass in both. Anywhere else, a widget shown in a sheet say, its words follow the mode.
  */
 @Composable
-private fun WordsOnWallpaper(content: @Composable () -> Unit) {
+internal fun WordsOnWallpaper(content: @Composable () -> Unit) {
     if (LocalOnWallpaper.current) {
         CompositionLocalProvider(
             LocalPalette provides LocalPalette.current.inDark(),

@@ -104,8 +104,8 @@ private sealed interface Framed {
     class Ready(val image: ImageBitmap) : Framed
 }
 
-/** A photo from the frame's folder, decoded no bigger than [longest] pixels across. */
-private fun framePicture(file: java.io.File, longest: Int): ImageBitmap? = runCatching {
+/** A photo from the frame's folder, or a made widget's, decoded no bigger than [longest] pixels across. */
+internal fun framePicture(file: java.io.File, longest: Int): ImageBitmap? = runCatching {
     val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
     android.graphics.BitmapFactory.decodeFile(file.path, bounds)
     var sample = 1

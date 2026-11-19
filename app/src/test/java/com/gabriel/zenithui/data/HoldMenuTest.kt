@@ -98,6 +98,16 @@ class HoldMenuTest {
     }
 
     @Test
+    fun `a widget you made opens in the maker, and has no colour row since its colours are its own`() {
+        assertEquals(
+            listOf("<sizes>", "Edit Widget", "Stack Another Widget", "Edit Home Screen", "Remove Widget"),
+            labels(HoldSubject.ZenithWidget(MadeWidgets.typeOf("abc"), sizes)),
+        )
+        // Locked, it can still be opened, as the others' set-ups can.
+        assertEquals(listOf("Unlock Layout", "Edit Widget"), labels(HoldSubject.ZenithWidget(MadeWidgets.typeOf("abc"), sizes), locked = true))
+    }
+
+    @Test
     fun `another app's widget offers the glass either way round`() {
         assertEquals(
             listOf("Put Glass Behind It", "Stack Another Widget", "Edit Home Screen", "Remove Widget"),

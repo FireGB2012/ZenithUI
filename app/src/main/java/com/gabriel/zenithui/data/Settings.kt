@@ -161,6 +161,8 @@ data class ZenithSettings(
     val framePhotos: List<String> = emptyList(),
     /** The To-do widget's list. */
     val todos: List<TodoItem> = emptyList(),
+    /** The widgets you made in the widget maker, the newest first. See [MadeWidgets]. */
+    val madeWidgets: List<MadeWidget> = emptyList(),
     /** Where the Weather widget's forecast is for; empty until a place is chosen, and nothing is sent until then. */
     val weatherPlace: String = "",
     val weatherLat: Double = 0.0,
@@ -356,6 +358,7 @@ data class ZenithSettings(
         put("countdownFrom", countdownFrom)
         put("framePhotos", JSONArray(framePhotos))
         put("todos", JSONArray().apply { todos.forEach { put(it.toJson()) } })
+        put("madeWidgets", JSONArray().apply { madeWidgets.forEach { put(it.toJson()) } })
         put("weatherPlace", weatherPlace)
         put("weatherLat", weatherLat)
         put("weatherLon", weatherLon)
@@ -492,6 +495,11 @@ data class ZenithSettings(
                 todos = o.optJSONArray("todos")?.let { list ->
                     (0 until list.length()).mapNotNull { list.optJSONObject(it)?.let(TodoItem::fromJson) }
                 } ?: d.todos,
+                madeWidgets = o.optJSONArray("madeWidgets")?.let { list ->
+                    (0 until list.length()).mapNotNull { list.optJSONObject(it)?.let(MadeWidget::fromJson) }
+                        .distinctBy { it.id }
+                        .take(MadeWidgets.MOST)
+                } ?: d.madeWidgets,
                 weatherPlace = o.optString("weatherPlace", d.weatherPlace),
                 weatherLat = o.optDouble("weatherLat", d.weatherLat),
                 weatherLon = o.optDouble("weatherLon", d.weatherLon),

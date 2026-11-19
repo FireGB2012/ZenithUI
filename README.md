@@ -335,6 +335,22 @@ up or down on a stack brings the next, the one leaving shrinking back under it; 
 edge come up while it is swiped and fade after. Its menu takes any widget out onto a spot of its
 own, and one left alone stands as a widget again. Eight at most.
 
+## Your own widgets
+
+The gallery starts with **Make your own**: **New widget** opens the widget maker
+(`ui/home/WidgetMaker.kt`) on an empty widget, and the ones made already stand in a row under it,
+each live, a tap opening it again. A made widget's hold menu has **Edit Widget** in place of Colour.
+The maker is a page of its own: the widget on a window onto your wallpaper, drawn by the home
+screen's own code and as much as twice its size; Undo, Redo and the gallery's five sizes; a panel
+that adds pieces (the time, the date, words, the battery, a clock face, the weather, a symbol, a
+shape, a photo, a greeting, the next alarm) or changes the one picked; and **Add to Home Screen**.
+A piece is picked with a tap, moved with a finger, lining up with the middle, the margins and the
+other pieces as it goes (`MakerSnap`), and made bigger by its corner or a pinch. What it stands on
+is glass, a colour or nothing; any piece can be made of glass itself. On the page it is a widget
+like the others, `made:<id>` (`MadeWidgetView`), and it moves, resizes and stacks as they do; a
+change shows on every copy. They are kept in the settings (`madeWidgets`, so a backup carries them,
+though not their photos), at most 24. See `specs/2026-11-18-widget-maker-design.md`.
+
 ## Customisation
 
 Long-press an empty spot → **Customise** → **Settings**. Settings is a page of its own, the full

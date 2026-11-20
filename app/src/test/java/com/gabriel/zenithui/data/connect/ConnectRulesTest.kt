@@ -191,6 +191,31 @@ class ConnectRulesTest {
     }
 
     @Test
+    fun `a setup put on is let go of once Connect is left, so it opens ready for the next one`() {
+        // Left on the apply screen with it all on: Home, or See it on your home screen.
+        assertTrue(ConnectReturn.forgets(page = "pick-paper", applyScreen = true, applied = true, putOn = "pick-paper"))
+        // Done, then left from its page.
+        assertTrue(ConnectReturn.forgets(page = "pick-paper", applyScreen = false, applied = true, putOn = "pick-paper"))
+    }
+
+    @Test
+    fun `a setup still going on is let go of only once it is on`() {
+        assertFalse(ConnectReturn.forgets(page = "pick-paper", applyScreen = true, applied = false, putOn = "pick-paper"))
+    }
+
+    @Test
+    fun `a page only looked at, or one taken off again, stays where it was`() {
+        // Another setup's page, opened after putting one on.
+        assertFalse(ConnectReturn.forgets(page = "pick-graphite", applyScreen = false, applied = true, putOn = "pick-paper"))
+        // Undo took it off (nothing put on now), and its page is open again.
+        assertFalse(ConnectReturn.forgets(page = "pick-paper", applyScreen = false, applied = true, putOn = null))
+        // No page open: the tab stays as it was.
+        assertFalse(ConnectReturn.forgets(page = null, applyScreen = false, applied = true, putOn = "pick-paper"))
+        // Nothing put on yet.
+        assertFalse(ConnectReturn.forgets(page = "pick-paper", applyScreen = false, applied = false, putOn = null))
+    }
+
+    @Test
     fun `what applying puts on is said in order, and the steps follow it`() {
         val look = shared()
         assertEquals(listOf("Wallpaper", "Theme & glass", "Home screen"), ConnectApply.parts(look, setOf(Layer.LAYOUT, Layer.THEME, Layer.WALLPAPER)))

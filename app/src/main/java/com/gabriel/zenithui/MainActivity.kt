@@ -92,6 +92,11 @@ class MainActivity : ComponentActivity() {
         )
         // What this phone's chip says about how much it can draw, before the first frame: see Performance.
         com.gabriel.zenithui.data.PhonePerformance.start(applicationContext)
+        // Started afresh with an app on its way home: Android's question about it comes with the
+        // intent that started Zenith, before there is a home screen to answer it (see GestureHandshake).
+        com.gabriel.zenithui.data.GestureHandshake.heard(intent)
+        // The app Zenith opened before it was let go of, if it has not come back yet (see CloseMemory).
+        com.gabriel.zenithui.data.CloseMemory.latest(applicationContext)
         setContent { ZenithApp(viewModel) }
 
         // Ask as soon as the launcher is actually entered — including right after onboarding.
@@ -201,14 +206,15 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         // Going home from an app with gestures, Android may ask where its icon is, so it can spring
-        // the app's window into it. It is answered first, while the window is still on its way.
-        com.gabriel.zenithui.data.GestureHandshake.from(intent)?.let { ask ->
-            com.gabriel.zenithui.data.GestureHandshake.answerer?.invoke(ask)
-        }
+        // the app's window into it. It is answered first, while the window is still on its way, and
+        // which app it names is kept, answered or not (see GestureHandshake.named).
+        com.gabriel.zenithui.data.GestureHandshake.heard(intent)
         // Home pressed: everything folds back. Pressed while Zenith was already in front, rather
         // than on the way back from an app, it is also the gesture of that name. Android's own
         // launcher tells the two apart the same way.
         val alreadyHome = focused && (intent.flags and Intent.FLAG_ACTIVITY_BROUGHT_TO_FRONT) == 0
+        // Sent home from something in front of Zenith: see CloseRules.fromApp.
+        if (!alreadyHome) com.gabriel.zenithui.data.AndroidClose.sentHome()
         viewModel.onHomePressed(alreadyHome)
     }
 

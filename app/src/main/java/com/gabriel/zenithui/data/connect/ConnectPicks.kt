@@ -107,6 +107,14 @@ data class News(val version: String, val date: String, val title: String, val li
 object ConnectNews {
     val all: List<News> = listOf(
         News(
+            "3.9.5", "20 Nov 2026", "Every app goes back into its icon",
+            listOf(
+                "Closing an app plays every time now: apps opened from Search or a notification, apps left open for hours, and after Android closed Zenith in the background.",
+                "An app that never covered the whole screen sends its card back into its icon as it goes.",
+                "Settings, Motion, Advanced animation settings: under Wait for Android's close, Zenith says what the last close did.",
+            ),
+        ),
+        News(
             "3.9.4", "20 Nov 2026", "Ten more wallpapers that move",
             listOf(
                 "Lotus and Daybreak open as you unlock on a Galaxy now. One UI's word that the phone was unlocked never reached them before.",

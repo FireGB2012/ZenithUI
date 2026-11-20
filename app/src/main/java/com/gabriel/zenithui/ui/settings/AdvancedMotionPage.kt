@@ -57,6 +57,7 @@ import androidx.compose.ui.unit.sp
 import com.gabriel.zenithui.data.AndroidClose
 import com.gabriel.zenithui.data.AnimationPreset
 import com.gabriel.zenithui.data.AnimationTuning
+import com.gabriel.zenithui.data.CloseLog
 import com.gabriel.zenithui.data.CloseRules
 import com.gabriel.zenithui.data.LaunchMotion
 import com.gabriel.zenithui.data.Tune
@@ -137,6 +138,8 @@ internal fun AdvancedMotionOptions(settings: ZenithSettings, actions: SettingsAc
     val context = androidx.compose.ui.platform.LocalContext.current
     val autoWait = remember(context) { AndroidClose.planHere(context, 0f) }
     val lastTook by AndroidClose.lastTook.collectAsState()
+    // And what the last close of an app did, so one that looked wrong can be told from one that went as meant.
+    val lastClose by CloseLog.last.collectAsState()
     TuneGroup.entries.forEachIndexed { index, group ->
         Group(rise = index + 2) {
             Spot(group.spot()) {
@@ -152,7 +155,7 @@ internal fun AdvancedMotionOptions(settings: ZenithSettings, actions: SettingsAc
                         min = tune.min,
                         max = tune.max,
                         shown = tune.show(tuning[tune]),
-                        note = if (tune == Tune.CloseWait) waitNote(autoWait, lastTook) else tune.note,
+                        note = if (tune == Tune.CloseWait) waitNote(autoWait, lastTook, CloseLog.describe(lastClose)) else tune.note,
                         onChange = { set(tuning.with(tune, it)) },
                         onStep = { steps -> set(tuning.nudged(tune, steps)) },
                     )
@@ -223,15 +226,19 @@ private fun StyleChip(label: String, selected: Boolean, onClick: () -> Unit) {
     }
 }
 
-/** The wait for Android's own close, with what Auto comes to on this phone and what the last close took. */
-private fun waitNote(auto: AndroidClose.Plan?, lastTook: Long): String {
+/**
+ * The wait for Android's own close, with what Auto comes to on this phone, what the last close
+ * took, and what it did ([lastClose], from CloseLog).
+ */
+private fun waitNote(auto: AndroidClose.Plan?, lastTook: Long, lastClose: String = ""): String {
     val here = when {
         auto == null -> "Android's animations are off on this phone, so Auto does not wait."
         auto.listens -> "On this phone that is ${auto.atLeastMs} ms at least and ${auto.atMostMs} ms at the most."
         else -> "On this phone that is ${auto.atLeastMs} ms."
     }
     val last = if (lastTook > 0L) " Android's own close last took $lastTook ms." else ""
-    return "${Tune.CloseWait.note} $here$last"
+    val did = if (lastClose.isNotEmpty()) " $lastClose" else ""
+    return "${Tune.CloseWait.note} $here$last$did"
 }
 
 /**

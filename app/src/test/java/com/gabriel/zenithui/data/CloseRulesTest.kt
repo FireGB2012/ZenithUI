@@ -22,8 +22,10 @@ class CloseRulesTest {
         assertEquals(CloseRoute.Handshake, route(asked = true))
         // Ahead of a picture, which would only play the close a second time.
         assertEquals(CloseRoute.Handshake, route(asked = true, picture = true))
-        // Asked, with no icon to give: Android does its own, and nothing is added after it.
-        assertEquals(CloseRoute.None, route(asked = true, target = false, picture = true))
+        // Asked, with no icon to give, Android is told there is none and does its own: the app
+        // still goes some way of Zenith's after it, never nothing.
+        assertEquals(CloseRoute.Picture, route(asked = true, target = false, picture = true))
+        assertEquals(CloseRoute.Card, route(asked = true, target = false))
     }
 
     @Test
@@ -42,9 +44,20 @@ class CloseRulesTest {
         assertEquals(CloseRoute.Card, route(cardFrom = 0.4f))
         // No icon on show: into the middle of the screen, fading as it goes, as a picture does.
         assertEquals(CloseRoute.Card, route(target = false))
-        // Opened too long ago to be the app that has just closed: nothing of Zenith's.
-        assertEquals(CloseRoute.None, route(recent = false))
-        assertEquals(CloseRoute.None, route(recent = false, target = false, cardFrom = 0.4f))
+        // However long ago it was opened: Zenith knows it is the app closing (CloseRules.whoCloses).
+        assertEquals(CloseRoute.Card, route(recent = false))
+        assertEquals(CloseRoute.Card, route(recent = false, target = false, cardFrom = 0.4f))
+        assertEquals(CloseRoute.Picture, route(recent = false, picture = true))
+    }
+
+    @Test
+    fun `into its icon, an app Zenith knows is closing always closes some way of Zenith's`() {
+        for (asked in listOf(false, true)) for (target in listOf(false, true)) for (picture in listOf(false, true)) {
+            for (recent in listOf(false, true)) for (cardFrom in listOf(0f, 0.4f, 1f)) {
+                val way = route(asked = asked, target = target, picture = picture, recent = recent, cardFrom = cardFrom)
+                assertTrue("$asked $target $picture $recent $cardFrom: $way", way != CloseRoute.None && way != CloseRoute.Land)
+            }
+        }
     }
 
     @Test
@@ -253,6 +266,116 @@ class CloseRulesTest {
     @Test
     fun `an app with no icon on show goes into the middle of the screen`() {
         assertEquals(Rect(510f, 1170f, 570f, 1230f), CloseRules.middle(1080f, 2400f, 60f))
+    }
+
+    @Test
+    fun `two keys are the same app when they are the same package in the same profile`() {
+        assertTrue(CloseRules.sameApp("com.example.mail/.Main", "com.example.mail/.Compose"))
+        assertTrue(CloseRules.sameApp("shortcut:com.example.mail/compose/new", "com.example.mail/.Main"))
+        assertTrue(CloseRules.sameApp("work:com.example.mail/.Main", "work:com.example.mail/.Inbox"))
+        assertFalse(CloseRules.sameApp("work:com.example.mail/.Main", "com.example.mail/.Main"))
+        assertFalse(CloseRules.sameApp("com.example.mail/.Main", "com.example.maps/.Main"))
+    }
+
+    private val mail = "com.example.mail/.Main"
+    private val maps = "com.example.maps/.Main"
+    private val notes = "com.example.notes/.Main"
+
+    @Test
+    fun `the app Android was told about is the one closing, whatever else says otherwise`() {
+        val pick = CloseRules.whoCloses(answered = mail, named = maps, seen = maps, opened = notes, remembered = notes)
+        assertEquals(CloseRules.Pick(mail, CloseSource.Answered), pick)
+    }
+
+    @Test
+    fun `then the one Android named, then the one the helper saw, ahead of the one Zenith opened`() {
+        // Opened from a notification, or from the app Zenith opened, or switched to: the one in front.
+        assertEquals(CloseRules.Pick(maps, CloseSource.Named), CloseRules.whoCloses(null, maps, notes, mail, mail))
+        assertEquals(CloseRules.Pick(maps, CloseSource.Seen), CloseRules.whoCloses(null, null, maps, mail, mail))
+    }
+
+    @Test
+    fun `named as the app Zenith opened, the key of the icon it was opened from is kept`() {
+        // Android names the screen of it that was in front, which may not be the one its icon opens.
+        val compose = "com.example.mail/.Compose"
+        assertEquals(CloseRules.Pick(mail, CloseSource.Named), CloseRules.whoCloses(null, compose, null, mail, null))
+        assertEquals(CloseRules.Pick(mail, CloseSource.Named), CloseRules.whoCloses(null, compose, null, null, mail))
+        assertEquals(CloseRules.Pick(mail, CloseSource.Seen), CloseRules.whoCloses(null, null, compose, mail, null))
+        // The work profile's copy of it is another app.
+        val work = "work:com.example.mail/.Main"
+        assertEquals(CloseRules.Pick(work, CloseSource.Named), CloseRules.whoCloses(null, work, null, mail, mail))
+    }
+
+    @Test
+    fun `told nothing, the app Zenith opened on its card, then the last one it opened any way`() {
+        assertEquals(CloseRules.Pick(mail, CloseSource.Opened), CloseRules.whoCloses(null, null, null, mail, maps))
+        assertEquals(CloseRules.Pick(maps, CloseSource.Remembered), CloseRules.whoCloses(null, null, null, null, maps))
+        // Nothing at all: an app Zenith knows nothing of, and the home screen comes in on its own.
+        assertEquals(null, CloseRules.whoCloses(null, null, null, null, null))
+    }
+
+    @Test
+    fun `Android's question names the app closing only if it was asked since Zenith was covered, and lately`() {
+        assertTrue(CloseRules.namedFresh(at = 1_000, coveredAt = 500, now = 1_200))
+        assertTrue(CloseRules.namedFresh(at = 1_000, coveredAt = 500, now = 1_000 + CloseRules.NAMED_FRESH_MS))
+        // A Zenith started afresh is asked a second or more after it was shown.
+        assertTrue(CloseRules.NAMED_FRESH_MS >= 2_000L)
+        // Asked about an earlier visit, before this one covered Zenith.
+        assertFalse(CloseRules.namedFresh(at = 400, coveredAt = 500, now = 1_200))
+        assertFalse(CloseRules.namedFresh(at = 500, coveredAt = 500, now = 1_200))
+        // Long ago, or a clock that has gone backwards.
+        assertFalse(CloseRules.namedFresh(at = 1_000, coveredAt = 500, now = 1_001 + CloseRules.NAMED_FRESH_MS))
+        assertFalse(CloseRules.namedFresh(at = 1_000, coveredAt = 500, now = 900))
+    }
+
+    @Test
+    fun `an app that opened as the screen went off, closed after the unlock, is waited out like any other`() {
+        // Covered with the screen on: an app.
+        assertTrue(CloseRules.fromApp(coveredByApp = true, homeAt = 0, coveredAt = 500, known = false))
+        // Covered with the screen off, then sent home with an app to close: it came up behind the lock.
+        assertTrue(CloseRules.fromApp(coveredByApp = false, homeAt = 900, coveredAt = 500, known = true))
+        // A plain unlock sends nothing home; a home press from before does not count.
+        assertFalse(CloseRules.fromApp(coveredByApp = false, homeAt = 0, coveredAt = 500, known = true))
+        assertFalse(CloseRules.fromApp(coveredByApp = false, homeAt = 400, coveredAt = 500, known = true))
+        // Sent home with nothing Zenith knows of to close: the home screen is there at once.
+        assertFalse(CloseRules.fromApp(coveredByApp = false, homeAt = 900, coveredAt = 500, known = false))
+    }
+
+    @Test
+    fun `a phone that twice in a row never says the window got there is not told where icons are any more`() {
+        assertTrue(CloseRules.trustsHandshake(0))
+        // Once could be a close cut short.
+        assertTrue(CloseRules.trustsHandshake(1))
+        assertFalse(CloseRules.trustsHandshake(2))
+        assertFalse(CloseRules.trustsHandshake(7))
+        assertEquals(2, CloseRules.HANDSHAKE_MISSES)
+    }
+
+    @Test
+    fun `a card held up for Android's close is let go of before long, whatever happens`() {
+        val late = AndroidClose.Plan(atLeastMs = 600, atMostMs = 900, listens = true, cardFirst = true)
+        assertEquals(900L + CloseRules.HOLD_SLACK_MS, CloseRules.holdCap(late))
+        assertEquals(CloseRules.HOLD_SLACK_MS, CloseRules.holdCap(null))
+        // Long enough for Android's word to be late, never so long the screen looks stuck.
+        assertTrue(CloseRules.HOLD_SLACK_MS in 500L..3_000L)
+    }
+
+    @Test
+    fun `a closing card is never kept from going up for long by its icon`() {
+        // About a quarter of a second: a few frames, then its own colour.
+        assertTrue(CloseRules.ICON_WAIT_MS in 100L..400L)
+    }
+
+    @Test
+    fun `a card left up by an app that came over Zenith without covering it goes back into its icon`() {
+        assertTrue(CloseRules.cameBackOver(away = false, opening = true, launched = true, settled = true))
+        // Covered after all: it closes the usual way as Zenith comes forward.
+        assertFalse(CloseRules.cameBackOver(away = true, opening = true, launched = true, settled = true))
+        // Still growing, or the app not yet asked to open: its own check sees to it.
+        assertFalse(CloseRules.cameBackOver(away = false, opening = true, launched = true, settled = false))
+        assertFalse(CloseRules.cameBackOver(away = false, opening = true, launched = false, settled = true))
+        // No card opening an app (one closing, or none).
+        assertFalse(CloseRules.cameBackOver(away = false, opening = false, launched = true, settled = true))
     }
 
     @Test

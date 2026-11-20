@@ -134,8 +134,11 @@ import com.gabriel.zenithui.data.AndroidClose
 import com.gabriel.zenithui.data.AppPictures
 import com.gabriel.zenithui.data.BuiltInApps
 import com.gabriel.zenithui.data.CloseAway
+import com.gabriel.zenithui.data.CloseLog
+import com.gabriel.zenithui.data.CloseMemory
 import com.gabriel.zenithui.data.CloseRoute
 import com.gabriel.zenithui.data.CloseRules
+import com.gabriel.zenithui.data.CloseSource
 import com.gabriel.zenithui.data.GestureHandshake
 import com.gabriel.zenithui.data.PictureRules
 import com.gabriel.zenithui.data.PictureService
@@ -213,6 +216,9 @@ private const val CLOSE_WINDOW_MS = 30 * 60 * 1000L
 /** How long after Zenith comes back from an app the home button still counts as part of coming back. */
 private const val COMING_BACK_MS = 2_000L
 
+/** How long after opening an app with no card Zenith can still be in front and the app have opened. */
+private const val NEVER_COVERED_MS = 1_500L
+
 /** The app closing as Zenith comes back, and how it goes back into its icon (see [CloseRules.route]). */
 private class Closing(
     /** The app, as Zenith writes it. */
@@ -234,6 +240,10 @@ private class Closing(
     val answer: GestureHandshake.Answer?,
     /** When it was worked out. */
     val at: Long,
+    /** How Zenith knew it was this app (see CloseRules.whoCloses). */
+    val source: CloseSource = CloseSource.Opened,
+    /** The icon it was opened from, if Zenith knows it: how big the card is with none on show to go into. */
+    val near: androidx.compose.ui.geometry.Rect? = opened?.from,
 ) {
     /** The icon that lands: none for a folder, which only knocks the icons round it. */
     val landKey: String? get() = spot?.takeIf { !it.folder }?.key
@@ -790,12 +800,27 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
     /** When the app was asked to open, or 0 while it has not been. */
     val launchedAt = remember { LongArray(1) }
     /**
+     * Zenith started afresh with an app it opened not back yet (see CloseMemory): Android let its
+     * process go, or made its screen again, while that app was in front. Zenith is coming back from
+     * it now, and closes it as it would have: the home screen sunk back from the first frame, and
+     * the app counted as what covered it.
+     */
+    val restarting = remember { CloseMemory.latest(context) }
+    /**
+     * Or, with nothing of its own kept, the app Android named as it started Zenith on the way home
+     * from it (see GestureHandshake.named): one Zenith did not open, closed all the same.
+     */
+    val namedAtStart = remember {
+        GestureHandshake.named?.takeIf { CloseRules.namedFresh(it.at, coveredAt = 0L, now = android.os.SystemClock.uptimeMillis()) }
+    }
+    val backAtStart = restarting != null || namedAtStart != null
+    /**
      * How far the home screen is sunk back while no card is on show: 1 while an app covers Zenith,
      * springing to 0 as you come home. The card's own progress drives the sink while it is moving.
      */
     val homeSink = remember { Animatable(0f) }
     /** The app that covered Zenith when it was stopped, so its icon can land when we come back. */
-    val returningKey = remember { arrayOfNulls<String>(1) }
+    val returningKey = remember { arrayOfNulls<String>(1).also { it[0] = restarting?.key ?: namedAtStart?.key } }
     /** Its card as it was opened, for the icon's place on the page and for a closing card. */
     val returningCard = remember { arrayOfNulls<AppExpansion>(1) }
     /**
@@ -803,7 +828,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
      * forward. A plain state write, not an animation, so it is already true for the very first frame
      * Android shows on the way home — no flash of the full-size screen before it sinks.
      */
-    var holdSunk by remember { mutableStateOf(false) }
+    var holdSunk by remember { mutableStateOf(backAtStart) }
     /**
      * Back from an app after Android's own close, with a card going into the icon: the home screen
      * comes forward about the middle of its foot, over the dock, where Android's close left the
@@ -811,7 +836,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
      */
     var comeBackFromFoot by remember { mutableStateOf(false) }
     /** Set when an app covers Zenith, and let go of as Zenith comes forward again, so that happens once each time. */
-    val away = remember { BooleanArray(1) }
+    val away = remember { BooleanArray(1).also { it[0] = backAtStart } }
     /** Android's question about the app being closed, as Zenith answered it (see [GestureHandshake]). */
     val handshake = remember { arrayOfNulls<GestureHandshake.Answer>(1) }
     /** The app closing this time Zenith comes back, worked out once, by whichever needs it first. */
@@ -835,7 +860,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
     val waitJob = remember { arrayOfNulls<kotlinx.coroutines.Job>(1) }
     /** When Zenith was last covered, and whether by an app with the screen on, which Android then closes. */
     val coveredAt = remember { LongArray(1) }
-    val coveredByApp = remember { BooleanArray(1) }
+    val coveredByApp = remember { BooleanArray(1).also { it[0] = backAtStart } }
     /** Where a closing card set off from, and whether it has no icon to go into and fades instead. */
     var closingFrom by remember { androidx.compose.runtime.mutableFloatStateOf(1f) }
     var closingVanishes by remember { mutableStateOf(false) }
@@ -1082,12 +1107,16 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
      * One UI asks too, and then closes the app into the middle of the screen whatever it is told,
      * never saying the window got anywhere (AndroidClose.followsHandshake). There it is told there
      * is no icon, so that it does its own, and the app goes into its icon Zenith's own way after.
+     * So is any other phone that has been told twice in a row and never said the window got there
+     * (CloseRules.trustsHandshake), and any phone for an app with no icon on show: Android does its
+     * own close, and the app goes off towards where it lives on Zenith's card after it, rather than
+     * nothing of Zenith's at all. Whichever, the app it asks about is kept (GestureHandshake.named).
      */
     fun answerHandshake(ask: GestureHandshake) {
         val now = android.os.SystemClock.uptimeMillis()
         handshake[0] = null
         if (viewModel.settings.value.closeAnimation == CloseRules.PLAIN || liveMotion.reduced) return
-        if (!AndroidClose.followsHandshake(AndroidClose.makeHere())) {
+        if (!AndroidClose.followsHandshake(AndroidClose.makeHere()) || !CloseRules.trustsHandshake(CloseMemory.handshakeMisses(context))) {
             ask.answer(null) {}
             return
         }
@@ -1095,22 +1124,40 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             CloseRules.packageOf(it.key) == ask.packageName && CloseRules.isWork(it.key) == !ask.personal
         }
         val spot = IconPlaces.find(opened?.key ?: ask.key, ask.packageName, work = !ask.personal, near = opened?.from)
+        if (spot == null) {
+            ask.answer(null) {}
+            return
+        }
         // The app as its icon on the home screen has it, which may be another of its screens.
         val answer = GestureHandshake.Answer(
-            key = spot?.takeIf { !it.folder }?.key ?: opened?.key ?: ask.key,
+            key = spot.takeIf { !it.folder }?.key ?: opened?.key ?: ask.key,
             at = now,
-            target = spot?.bounds,
-            folder = spot?.folder == true,
+            target = spot.bounds,
+            folder = spot.folder,
         )
         handshake[0] = answer
         val window = windowOnScreen()
-        ask.answer(spot?.let { GestureHandshake.onScreen(it.bounds, window[0], window[1]) }) { answer.arrived.complete(Unit) }
+        ask.answer(GestureHandshake.onScreen(spot.bounds, window[0], window[1])) { answer.arrived.complete(Unit) }
+    }
+
+    /**
+     * An app's key as Zenith lists it, for [pkg] in the work profile or not: Android names the
+     * screen of it that was in front, which may not be the one its icon opens. Null for anything
+     * Zenith does not list, such as the phone's own launcher showing Recents, or Zenith itself;
+     * with no apps read yet (Zenith just started afresh), whatever was named.
+     */
+    fun listedKey(pkg: String, work: Boolean, named: String?): String? {
+        if (pkg.isEmpty() || pkg == context.packageName) return null
+        val listed = if (work) viewModel.workApps.value else apps
+        if (listed.isEmpty()) return named ?: CloseRules.keyOf(pkg, "", work)
+        return listed.firstOrNull { it.packageName == pkg && it.work == work }?.key
     }
 
     /**
      * Which app is closing as Zenith comes back, which icon it goes into, and how (see
-     * [CloseRules.route]). The app is the one Android asked about, failing that the one the
-     * picture helper saw in front, failing that the one opened from Zenith. Worked out once each
+     * [CloseRules.route]). The app is the one Android was told about, failing that the one it
+     * named, or the one the picture helper saw in front, failing that the one opened from Zenith,
+     * or the last one Zenith opened any way at all (CloseRules.whoCloses). Worked out once each
      * time, by the first to need it: the home button deciding whether to stay on this page, or
      * the home screen coming forward.
      */
@@ -1122,34 +1169,31 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         closingWorkedOut[0] = true
         val current = viewModel.settings.value
         val style = if (liveMotion.reduced) CloseRules.PLAIN else current.closeAnimation
-        val answer = handshake[0]?.takeIf { it.fresh(now) }
+        val answer = handshake[0]?.takeIf { it.fresh(now) && it.target != null }
         handshake[0] = null
         val opened = returningCard[0]
-        val seen = if (answer == null) AppPictures.closingApp(now) else null
-        val key: String
-        val pkg: String
-        when {
-            answer != null -> {
-                key = answer.key
-                pkg = CloseRules.packageOf(answer.key)
-            }
-            // Another app than the one opened from Zenith: one it opened, say, or one opened from a notification.
-            seen != null && (opened == null || CloseRules.packageOf(opened.key) != seen) -> {
-                pkg = seen
-                key = apps.firstOrNull { it.packageName == seen && !it.work }?.key ?: CloseRules.keyOf(seen, "", work = false)
-            }
-            opened != null -> {
-                key = opened.key
-                pkg = CloseRules.packageOf(opened.key)
-            }
-            else -> return null
-        }
+        val remembered = CloseMemory.latest(context)
+        val named = GestureHandshake.named
+            ?.takeIf { CloseRules.namedFresh(it.at, coveredAt[0], now) }
+            ?.let { listedKey(it.packageName, it.work, it.key) }
+        // Gone by, it names nothing again: not for a screen made again moments on, say.
+        GestureHandshake.forgetNamed()
+        val seen = if (answer == null && named == null) AppPictures.closingApp(now)?.let { listedKey(it, false, null) } else null
+        val pick = CloseRules.whoCloses(answer?.key, named, seen, opened?.key, remembered?.key) ?: return null
+        val key = pick.key
+        val pkg = CloseRules.packageOf(key)
         val work = CloseRules.isWork(key)
-        val back = opened?.takeIf { CloseRules.packageOf(it.key) == pkg && CloseRules.isWork(it.key) == work }
+        val back = opened?.takeIf { CloseRules.sameApp(it.key, key) }
+        val memory = remembered?.takeIf { CloseRules.sameApp(it.key, key) }
+        val near = back?.from ?: memory?.from
         val spot = if (answer != null) {
             answer.target?.let { IconPlaces.Spot(listOf(answer.key), it, folder = answer.folder) }
         } else {
-            IconPlaces.find(back?.key ?: key, pkg, work, near = back?.from)
+            IconPlaces.find(back?.key ?: memory?.key ?: key, pkg, work, near = near)
+                // Zenith started afresh has not seen where its icons are yet: the one it was opened from.
+                ?: memory?.restSpot(pagerState.currentPage)
+                    ?.takeIf { IconPlaces.spots().none { it.bounds.width > 0f } }
+                    ?.let { IconPlaces.Spot(listOf(memory.key), it, dock = memory.dock) }
         }
         // With no icon of it on show, it goes off the screen towards where it lives: its page, the
         // drawer below or the library to the side (CloseAway).
@@ -1165,8 +1209,15 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         } else {
             null
         }
-        // Opened from Zenith a long time ago and never seen closing: maybe not the app closing now.
-        val recent = back == null || (launchedAt[0] != 0L && now - launchedAt[0] < CLOSE_WINDOW_MS)
+        // Closing Plain, an app opened from Zenith a long time ago and never seen closing may not be
+        // the app closing now, and only lands its icon if it was opened lately. Into its icon it
+        // closes however long it was open (CloseRules.route).
+        val recent = when {
+            back != null -> launchedAt[0] != 0L && now - launchedAt[0] < CLOSE_WINDOW_MS
+            memory != null && pick.source == CloseSource.Remembered ->
+                android.os.SystemClock.elapsedRealtime() - memory.at < CLOSE_WINDOW_MS
+            else -> true
+        }
         // A picture from this time it was open, so it shows what was on the screen as it closed,
         // the same way up as the screen is now.
         val since = AppPictures.visitStart(pkg) ?: Long.MAX_VALUE
@@ -1178,7 +1229,26 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             }
         }
         val route = CloseRules.route(style, asked = answer != null, target = spot != null, picture = picture != null, recent = recent, cardFrom = liveTuning[Tune.CloseCard])
-        return Closing(key, pkg, spot, away, back, route, picture, answer, at = now).also { closing[0] = it }
+        return Closing(key, pkg, spot, away, back, route, picture, answer, at = now, source = pick.source, near = near)
+            .also { closing[0] = it }
+    }
+
+    /** What the last close was, for Settings (see CloseLog), once it is worked out. */
+    fun logClose(closed: Closing?, waited: Boolean) {
+        if (closed == null) {
+            CloseLog.note(CloseLog.Entry(label = null, source = null, route = CloseRoute.None, where = CloseLog.Where.Nowhere, waited = waited))
+            return
+        }
+        val label = (apps + viewModel.workApps.value).firstOrNull { CloseRules.sameApp(it.key, closed.key) }?.label
+        CloseLog.note(
+            CloseLog.Entry(
+                label = label,
+                source = closed.source,
+                route = closed.route,
+                where = CloseLog.where(spot = closed.spot != null, folder = closed.spot?.folder == true, away = closed.away),
+                waited = waited,
+            )
+        )
     }
 
     /**
@@ -1201,14 +1271,18 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         hold: kotlinx.coroutines.Deferred<Unit>? = null,
         /** How big the card starts, when it is not the tuning's to say: a built-in app is all on the screen as it goes. */
         startAt: Float? = null,
+        /** The longest it is held up for [hold]: past it, it goes whatever has or has not happened (CloseRules.holdCap). */
+        holdMs: Long = CloseRules.holdCap(null),
     ) {
         val t = liveTuning
         val picture = closed.picture?.asImageBitmap()
         val from = startAt ?: if (closed.route == CloseRoute.Picture) t[Tune.ClosePicture] else CloseRules.cardStart(t[Tune.CloseCard])
         val spot = closed.spot
-        val side = closed.opened?.from?.minDimension ?: (60f * pxPerDp)
-        val screenWidth = hostView.width.toFloat()
-        val screenHeight = hostView.height.toFloat()
+        val side = closed.near?.minDimension?.takeIf { it > 0f } ?: (60f * pxPerDp)
+        // Before its first layout (Zenith just started afresh), the screen it will fill.
+        val metrics = context.resources.displayMetrics
+        val screenWidth = hostView.width.takeIf { it > 0 }?.toFloat() ?: metrics.widthPixels.toFloat()
+        val screenHeight = hostView.height.takeIf { it > 0 }?.toFloat() ?: metrics.heightPixels.toFloat()
         val away = closed.away.takeIf { spot == null }
         val target = spot?.bounds
             ?: away?.let { CloseAway.target(it, screenWidth, screenHeight, side) }
@@ -1227,8 +1301,11 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             try {
                 // Again, in case a card it took over from let go of it on its way out.
                 if (landKey != null) AppLanding.hold(landKey)
+                // Not kept waiting for its icon: past a moment it goes up in a colour of its own.
                 val icon = opened?.icon ?: viewModel.icons.peek(iconKey, 192)
-                    ?: runCatching { viewModel.icons.load(iconKey, 192) }.getOrNull()
+                    ?: kotlinx.coroutines.withTimeoutOrNull(CloseRules.ICON_WAIT_MS) {
+                        runCatching { viewModel.icons.load(iconKey, 192) }.getOrNull()
+                    }
                 card = AppExpansion(key = closed.key, from = target, icon = icon, wideIcon = wide, picture = picture)
                 cardOpening = false
                 closingCard = true
@@ -1241,8 +1318,9 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 // Bringing the home screen back with it: shown whole behind it from this frame, and
                 // on its way forward once the card is well on its way, so it is seen coming forward.
                 revealHome()
-                // Up at once, the app back on the screen, until Android's close is waited out.
-                hold?.await()
+                // Up at once, the app back on the screen, until Android's close is waited out, and
+                // never for longer than that could take.
+                if (hold != null) kotlinx.coroutines.withTimeoutOrNull(holdMs) { hold.await() }
                 if (bringHome != null) {
                     launch {
                         snapshotFlow { cardProgress.value }.first { it <= CloseRules.HOME_GOES_AT }
@@ -1330,7 +1408,9 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         closed?.takeIf { it.route == CloseRoute.Card || it.route == CloseRoute.Picture }?.landKey?.let(AppLanding::hold)
         // Android's own window going into the icon is Android's, and the icons are wanted in their
         // places for it to land in, so that is not waited for; nor is anything with movement reduced.
-        val fromApp = coveredByApp[0]
+        // Covered with the screen off, then sent home with an app to close, is an app that opened
+        // behind the lock screen being closed after the unlock (CloseRules.fromApp).
+        val fromApp = CloseRules.fromApp(coveredByApp[0], AndroidClose.homeAt, coveredAt[0], known = closed != null)
         coveredByApp[0] = false
         val plan = if (fromApp && closed?.answer == null && !liveMotion.reduced) {
             AndroidClose.planHere(context, liveTuning[Tune.CloseWait])
@@ -1353,6 +1433,11 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         }
         val turn = ++forwardTurn[0]
         forward[0] = go@{
+            // The app has come back: what Zenith kept of it, should it be started afresh, is spent.
+            // Covered again before this, it is kept for the next time (see CloseMemory).
+            CloseMemory.spent(context)
+            // Said in Settings as it goes, when the app's name is known even to a Zenith just started.
+            if (closed != null || fromApp) logClose(closed, waited = plan != null)
             // Brought back by a card, it comes forward when the card says (see closeIntoIcon).
             if (sunk && !withCard) comeBack()
             closed ?: return@go
@@ -1360,10 +1445,18 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 CloseRoute.None -> Unit
                 CloseRoute.Land -> scope.launch { landIcon(closed.landKey, spot?.bounds) }
                 CloseRoute.Handshake -> scope.launch {
-                    // The window is Android's to move: once it says it has got there, or after a moment
-                    // in case it never does, the icon takes it.
-                    kotlinx.coroutines.withTimeoutOrNull(CloseRules.HANDSHAKE_WAIT_MS) { closed.answer?.arrived?.await() }
-                    if (spot != null) receiveWindow(closed.landKey, spot.bounds)
+                    // The window is Android's to move: once it says it has got there the icon takes it.
+                    // If it never does, Android closed the app its own way, and the icon lands instead,
+                    // so it is still seen going back; after twice in a row this phone is not told any
+                    // more, and closes on Zenith's card (CloseRules.trustsHandshake).
+                    val came = kotlinx.coroutines.withTimeoutOrNull(CloseRules.HANDSHAKE_WAIT_MS) { closed.answer?.arrived?.await() } != null
+                    CloseMemory.handshakeHeard(context, came)
+                    if (came) {
+                        if (spot != null) receiveWindow(closed.landKey, spot.bounds)
+                    } else {
+                        CloseLog.missed()
+                        landIcon(closed.landKey, spot?.bounds)
+                    }
                 }
                 // Already up and waiting: let go of it.
                 CloseRoute.Card, CloseRoute.Picture -> if (held != null) {
@@ -1386,7 +1479,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             }
             // The card up now, full size, over the home screen sunk back behind it, so the still
             // picture the phone shows of Zenith before its own frames is the app back on the screen.
-            if (held != null && closed != null) closeIntoIcon(closed, bringHome = comeBack, hold = held)
+            if (held != null && closed != null) closeIntoIcon(closed, bringHome = comeBack, hold = held, holdMs = CloseRules.holdCap(plan))
             val startedAt = android.os.SystemClock.uptimeMillis()
             val since = coveredAt[0]
             waitJob[0]?.cancel()
@@ -1425,10 +1518,28 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
      */
     fun homeZoom(): Float = 1f + (liveTuning[Tune.HomeScale] - 1f) * homeDepth()
 
+    /**
+     * Zenith has asked Android to open [key], from the icon at [from] if it was opened from one:
+     * kept until it comes back (see CloseMemory), so it goes back into its icon whichever way it
+     * was opened, and with Zenith started afresh meanwhile. Where that icon is at rest is kept too,
+     * if it is one on the home screen's page or dock.
+     */
+    fun rememberLaunch(key: String, from: androidx.compose.ui.geometry.Rect?): CloseMemory.Launch {
+        val spot = from?.let { touched ->
+            IconPlaces.spots().firstOrNull { place ->
+                key in place.keys && !place.folder && place.bounds.width > 0f &&
+                    (place.bounds.center - touched.center).getDistance() < 4f * pxPerDp
+            }
+        }
+        return CloseMemory.launched(context, key, from, spot?.bounds, dock = spot?.dock == true, page = pagerState.currentPage)
+    }
+
     /** Sends the card back into its icon from wherever it is, and stops the app opening if it has not yet. */
     fun closeCard() {
         if (card == null) return
         cardOpening = false
+        // Sent back before it covered Zenith: there is nothing to come back from.
+        CloseMemory.spent(context)
         steerCard {
             flyCard(0f)
             card = null
@@ -1450,19 +1561,22 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 val launchAt = liveTuning[Tune.OpenLaunchAt]
                 snapshotFlow { cardProgress.value }.first { it >= launchAt }
                 launchedAt[0] = android.os.SystemClock.uptimeMillis()
-                viewModel.open(
+                rememberLaunch(target.key, target.from)
+                val opened = viewModel.open(
                     target.key,
                     LaunchOrigin.toScreen(hostView, target.from),
                     android.app.ActivityOptions
                         .makeCustomAnimation(context, com.gabriel.zenithui.R.anim.zenith_app_enter, 0)
                         .toBundle(),
                 )
+                if (!opened) CloseMemory.spent(context)
             }
             flyCard(1f)
             // The app should now cover Zenith. If Zenith is still in front, it never opened: come back.
             delay(900)
             if (hostLifecycle?.currentState?.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED) == true) {
                 cardOpening = false
+                CloseMemory.spent(context)
                 flyCard(0f)
                 card = null
                 launchedAt[0] = 0L
@@ -1559,8 +1673,22 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         }
         val from = LaunchOrigin.boundsFor(key)
         if (from == null) {
-            if (!viewModel.open(key) && ShortcutKeys.isShortcut(key)) {
-                Toast.makeText(context, "The app does not offer that shortcut any more", Toast.LENGTH_SHORT).show()
+            // Opened with no icon to grow out of (Search, a gesture, a shortcut): it still goes back
+            // into its icon as it closes, as it is kept until then (CloseMemory).
+            val launch = rememberLaunch(key, null)
+            if (!viewModel.open(key)) {
+                CloseMemory.spent(context)
+                if (ShortcutKeys.isShortcut(key)) {
+                    Toast.makeText(context, "The app does not offer that shortcut any more", Toast.LENGTH_SHORT).show()
+                }
+                return
+            }
+            // Never covered by it, with Zenith still in front a moment on: it opened nowhere to be
+            // seen, and there is nothing to come back from.
+            scope.launch {
+                delay(NEVER_COVERED_MS)
+                val front = hostLifecycle?.currentState?.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED) == true
+                if (front && !away[0]) CloseMemory.spent(context, launch)
             }
             return
         }
@@ -1806,6 +1934,22 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                 // now, and set off once Zenith can be seen (see comeForward). Window focus, below,
                 // is when that is on the phones that resume before the home screen is shown.
                 androidx.lifecycle.Lifecycle.Event.ON_RESUME -> {
+                    // An app that came over Zenith without covering it (a see-through one, or a
+                    // window that leaves some of the screen) pauses Zenith and never stops it, so
+                    // the card it opened on is still up, full size, under it: it goes back into its
+                    // icon now. One still on its way is left to its own check (see openCard).
+                    val opening = card?.takeIf { cardOpening }
+                    if (CloseRules.cameBackOver(away[0], opening != null, launchedAt[0] != 0L, settled = cardJob[0]?.isActive != true)) {
+                        val label = (apps + viewModel.workApps.value).firstOrNull { CloseRules.sameApp(it.key, opening!!.key) }?.label
+                        CloseLog.note(
+                            CloseLog.Entry(label, CloseSource.Opened, CloseRoute.Card, CloseLog.Where.Icon, waited = false, over = true)
+                        )
+                        closeCard()
+                    } else if (!away[0] && card == null) {
+                        // Nothing has covered Zenith since it was last in front: whatever it opened
+                        // in that time never did, and has nothing to come back from.
+                        CloseMemory.spent(context)
+                    }
                     comeForward()
                     // With the window already in front, arrive now; otherwise when it gets there,
                     // and in any case before long, so the home screen is never left wound back.

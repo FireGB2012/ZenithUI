@@ -89,6 +89,35 @@ class GestureHandshake private constructor(
          */
         var answerer: ((GestureHandshake) -> Unit)? = null
 
+        /** The app a question names, and when it was asked (uptime). */
+        data class Named(val key: String, val packageName: String, val work: Boolean, val at: Long)
+
+        /**
+         * The app Android's latest question named, answered or not. A Galaxy is never told where
+         * the icon is (AndroidClose.followsHandshake), and an app with no icon on show is told there
+         * is none, but either way Android has said which app it is closing: one opened from a
+         * notification, from Recents, or from another app, which Zenith did not open itself.
+         */
+        var named: Named? = null
+            private set
+
+        /** The close it named has been worked out: it names nothing again. */
+        fun forgetNamed() {
+            named = null
+        }
+
+        /**
+         * Takes in Android's question in [intent], if there is one: which app it names, kept, and
+         * the question answered by the home screen, or with no home screen up yet (Zenith being
+         * started afresh) told there is no icon, so Android does its own close at once.
+         */
+        fun heard(intent: Intent?) {
+            val ask = from(intent) ?: return
+            named = Named(ask.key, ask.packageName, work = !ask.personal, at = android.os.SystemClock.uptimeMillis())
+            val answer = answerer
+            if (answer != null) answer(ask) else ask.answer(null) {}
+        }
+
         /** Android's question, if [intent] holds one, taken out of it so it is only answered once. */
         fun from(intent: Intent?): GestureHandshake? {
             if (intent == null) return null

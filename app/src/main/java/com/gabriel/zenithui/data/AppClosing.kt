@@ -24,6 +24,23 @@ enum class CloseRoute {
     None,
 }
 
+/**
+ * How Zenith knows which app is closing as it comes back, the surest first (see
+ * [CloseRules.whoCloses]).
+ */
+enum class CloseSource {
+    /** Android asked where its icon is and was told: it is moving the app's own window there. */
+    Answered,
+    /** Android asked where its icon is, naming the app, and was not told: One UI, or no icon on show. */
+    Named,
+    /** The app picture helper saw it in front as it went. */
+    Seen,
+    /** Opened from Zenith on its card, which was still up as it covered Zenith. */
+    Opened,
+    /** The last app Zenith opened, however it opened it, that has not come back since (see CloseMemory). */
+    Remembered,
+}
+
 /** The rules of closing an app, kept apart from the screen so they can be tested on their own. */
 object CloseRules {
     /** Settings → Motion & feel → Closing apps: into its icon, every way the phone allows. */
@@ -99,22 +116,112 @@ object CloseRules {
     const val VANISH = 0.3f
 
     /**
-     * Which way it closes. [asked]: Android asked where the icon is (the gesture handshake);
-     * [target]: there is an icon on show to go into; [picture]: there is a picture of the app from
-     * this time it was open; [recent]: it was opened lately enough to be the app now closing;
-     * [cardFrom]: the Closing card's size to start from, Auto below [CARD_OFF].
+     * Which way it closes. [asked]: Android asked where the icon is (the gesture handshake) and was
+     * told; [target]: there is an icon on show to go into; [picture]: there is a picture of the app
+     * from this time it was open; [recent]: it was opened lately enough to be the app now closing,
+     * which only Plain goes by; [cardFrom]: the Closing card's size to start from, Auto below [CARD_OFF].
+     *
+     * Into its icon, an app Zenith knows is closing always closes some way of Zenith's: Android's
+     * own window into the icon, a picture of it, or failing both its card, into the icon, off
+     * towards where it lives or into the middle. Never nothing: see
+     * `specs/2026-11-20-the-close-always-plays-design.md`.
      */
     fun route(style: String, asked: Boolean, target: Boolean, picture: Boolean, recent: Boolean, cardFrom: Float): CloseRoute = when {
         style == PLAIN -> asBefore(target, recent, cardFrom)
         // Answered, Android has already moved the window as far as it can: anything more would
         // only play the close a second time.
-        asked -> if (target) CloseRoute.Handshake else CloseRoute.None
+        asked && target -> CloseRoute.Handshake
         picture -> CloseRoute.Picture
-        // Neither (a Galaxy, buttons, a copy with no picture helper): the card the app opened on
-        // goes back into its icon, or into the middle of the screen with none on show.
-        recent -> CloseRoute.Card
-        else -> CloseRoute.None
+        // Neither (a Galaxy, buttons, a copy with no picture helper, or Android told there is no
+        // icon on show): the card goes back into its icon, or off towards where the app lives, or
+        // into the middle, however long ago it was opened.
+        else -> CloseRoute.Card
     }
+
+    /** Whether [a] and [b] are keys of the same app: the same package, in the same profile. */
+    fun sameApp(a: String, b: String): Boolean = packageOf(a) == packageOf(b) && isWork(a) == isWork(b)
+
+    /** The app that is closing, as Zenith writes it, and how it knows (see [whoCloses]). */
+    data class Pick(val key: String, val source: CloseSource)
+
+    /**
+     * Which app is closing as Zenith comes back, from what it has to go on, each a key or null:
+     * [answered], the app Android was told an icon for; [named], the one Android's question named
+     * ([GestureHandshake], asked on a Galaxy too, which is never told); [seen], the one the picture
+     * helper saw go; [opened], the one whose card was up as it covered Zenith; [remembered], the
+     * last one Zenith opened, however, that has not come back since (CloseMemory).
+     *
+     * Android's word first, then the helper's: they are about the app in front as it closed, which
+     * need not be the one opened from Zenith (one opened from a notification, or from the one Zenith
+     * opened, or switched to). When that is the one Zenith opened, its key is kept, the key of the
+     * icon it was opened from. Failing both, the one Zenith opened. Null when none says anything:
+     * an app Zenith knows nothing of, which the home screen's own arrival comes home from.
+     */
+    fun whoCloses(answered: String?, named: String?, seen: String?, opened: String?, remembered: String?): Pick? {
+        if (answered != null) return Pick(answered, CloseSource.Answered)
+        val told = named ?: seen
+        if (told != null) {
+            val ours = listOfNotNull(opened, remembered).firstOrNull { sameApp(it, told) }
+            return Pick(ours ?: told, if (named != null) CloseSource.Named else CloseSource.Seen)
+        }
+        if (opened != null) return Pick(opened, CloseSource.Opened)
+        if (remembered != null) return Pick(remembered, CloseSource.Remembered)
+        return null
+    }
+
+    /**
+     * How long after Android's question it still names the app closing: longer than its answer
+     * decides how ([HANDSHAKE_FRESH_MS]), since a Zenith that Android has had to start afresh asks
+     * after its first frame is ready, a second or more on.
+     */
+    const val NAMED_FRESH_MS = 5_000L
+
+    /** Whether Android's question, asked at [at], names the app closing at [now]: asked since Zenith was covered at [coveredAt], and lately. */
+    fun namedFresh(at: Long, coveredAt: Long, now: Long): Boolean = at > coveredAt && now >= at && now - at <= NAMED_FRESH_MS
+
+    /**
+     * Whether Zenith is coming back from an app Android is closing, whose close is then waited out
+     * first: covered by one with the screen on ([coveredByApp]); or covered with the screen off and
+     * then sent home ([homeAt], after [coveredAt]) with an app to close ([known]). That is the screen
+     * going off as an app opened: it came up behind the lock screen, and the swipe home after the
+     * unlock closes it. A plain unlock sends nothing home, and the home screen is there at once.
+     */
+    fun fromApp(coveredByApp: Boolean, homeAt: Long, coveredAt: Long, known: Boolean): Boolean =
+        coveredByApp || (known && homeAt > coveredAt)
+
+    /**
+     * How many times in a row Android may ask where an icon is, be told, and never say the window got
+     * there, before this phone is not told any more and its apps close on Zenith's own card: a make
+     * that asks and closes its own way, as One UI does (AndroidClose.followsHandshake), found out on
+     * the phone itself rather than known ahead. Two, so one close cut short does not count against it.
+     */
+    const val HANDSHAKE_MISSES = 2
+
+    /** Whether Android is still told where icons are after it has not said the window arrived [missed] times in a row. */
+    fun trustsHandshake(missed: Int): Boolean = missed < HANDSHAKE_MISSES
+
+    /** How long a closing card waits for its icon to be drawn before it goes up in a colour of its own. */
+    const val ICON_WAIT_MS = 250L
+
+    /** How much longer than the longest wait for Android's close a card held up for it ever waits. */
+    const val HOLD_SLACK_MS = 1_500L
+
+    /**
+     * The longest a closing card is ever held up, full size, for the wait to be over ([plan]): past
+     * it, it goes into its icon whatever has or has not happened, so the screen is never left
+     * covered by it.
+     */
+    fun holdCap(plan: AndroidClose.Plan?): Long = (plan?.atMostMs ?: 0L) + HOLD_SLACK_MS
+
+    /**
+     * Whether an app's card, open full size over a Zenith that was never covered ([away] false), is
+     * one an app has come and gone over: one that does not fill the screen (see-through, a pop-up),
+     * which pauses Zenith without stopping it. [opening] and [launched]: the card is up for an app
+     * Android was asked to open; [settled]: it is done growing. It goes back into its icon then,
+     * rather than staying up over the home screen until it is tapped.
+     */
+    fun cameBackOver(away: Boolean, opening: Boolean, launched: Boolean, settled: Boolean): Boolean =
+        !away && opening && launched && settled
 
     /** How far to full size the closing card sets off from: [cardFrom] if it is set to a size, [CARD_START] at Auto. */
     fun cardStart(cardFrom: Float): Float = if (cardFrom > CARD_OFF) cardFrom else CARD_START

@@ -170,6 +170,15 @@ object AndroidClose {
         saidDone.value = SystemClock.uptimeMillis()
     }
 
+    /** When Zenith was last sent home from something else (a home intent, not a press with it in front), in uptime. */
+    var homeAt: Long = 0L
+        private set
+
+    /** Zenith has been sent home from whatever was in front: see CloseRules.fromApp. */
+    fun sentHome() {
+        homeAt = SystemClock.uptimeMillis()
+    }
+
     /**
      * Waits out [plan], counted from [startedAt], taking only what Android says after [since]: the
      * moment Zenith was covered, so the word on an earlier visit does not count for this one.

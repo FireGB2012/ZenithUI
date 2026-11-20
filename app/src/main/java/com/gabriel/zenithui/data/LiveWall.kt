@@ -1,5 +1,6 @@
 package com.gabriel.zenithui.data
 
+import android.content.Intent
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.exp
@@ -100,8 +101,67 @@ class LiveUnlock(private val openMs: Long) {
     /** Whether it is opening at [now], so frames are wanted. */
     fun opening(now: Long): Boolean = openedAt != NOT_OPENING && now - openedAt < openMs
 
+    /**
+     * Whether it is at the lock pose with nothing yet having said the phone was unlocked: while it
+     * is on show like this, the wallpaper looks at the lock screen itself ([LiveLock.WATCH_MS]), as
+     * the word can come late, or not at all.
+     */
+    fun waiting(): Boolean = shut && !pending && openedAt == NOT_OPENING
+
     private companion object {
         const val NOT_OPENING = Long.MIN_VALUE
+    }
+}
+
+/** What one thing Android says means for an unlock design. */
+enum class LockWord {
+    /** The phone is being unlocked, or is unlocked: open, if it is shut. */
+    Unlocked,
+
+    /** The screen is going off: back to the lock pose. */
+    ScreenOff,
+
+    /** Nothing for it to do. */
+    Nothing,
+}
+
+/**
+ * How an unlock design hears that the phone was unlocked. Android says so in more than one way,
+ * and phones differ in which they say and when, so it listens for all of them and opens on the
+ * first ([LiveUnlock] opens only once for each time the screen went off):
+ * - the user being present, a broadcast System UI sends once the lock screen is gone. System UI is
+ *   not Android's own process, so a receiver that is not exported never hears it, which is why
+ *   unlock designs once never opened on a Galaxy;
+ * - Android's word to the wallpaper itself that the lock screen is starting to go, which is the
+ *   moment to start;
+ * - and, while it waits on show at its lock pose, the lock screen itself, looked at every
+ *   [WATCH_MS].
+ */
+object LiveLock {
+
+    /** Android's word to a wallpaper that the lock screen is starting to go (WallpaperManager's, hidden). */
+    const val KEYGUARD_GOING_AWAY = "android.wallpaper.keyguardgoingaway"
+
+    /** Android's word to a wallpaper that the screen is starting to go off (WallpaperManager's, hidden). */
+    const val GOING_TO_SLEEP = "android.wallpaper.goingtosleep"
+
+    /** How often an unlock design waiting on show at its lock pose looks for the lock screen having gone. */
+    const val WATCH_MS = 100L
+
+    /** What a command sent to the wallpaper, [action], means. */
+    fun ofCommand(action: String?): LockWord = when (action) {
+        KEYGUARD_GOING_AWAY -> LockWord.Unlocked
+        GOING_TO_SLEEP -> LockWord.ScreenOff
+        else -> LockWord.Nothing
+    }
+
+    /** What a broadcast, [action], means, the lock screen being up ([keyguardLocked]) or not as it came. */
+    fun ofBroadcast(action: String?, keyguardLocked: Boolean): LockWord = when (action) {
+        Intent.ACTION_USER_PRESENT -> LockWord.Unlocked
+        // With no lock screen to get past, the screen coming on is the phone unlocked.
+        Intent.ACTION_SCREEN_ON -> if (keyguardLocked) LockWord.Nothing else LockWord.Unlocked
+        Intent.ACTION_SCREEN_OFF -> LockWord.ScreenOff
+        else -> LockWord.Nothing
     }
 }
 

@@ -291,6 +291,25 @@ object ConnectApply {
     const val DONE_PAUSE_MS = 260L
 }
 
+/**
+ * What Connect keeps of where it was when it is left (closed into its icon, Home, another app over
+ * Zenith), so that it opens there again: the tab, a search, a setup's page, a sheet. All of it but
+ * a setup it has put on. Once you have left to see that one on your home screen, its apply screen
+ * and its page are done with, and Connect opens on the tab it was on, ready for the next one;
+ * otherwise opening Connect again to try another shows the one just put on. One still going on
+ * when Connect is left goes the same way as soon as it is on.
+ */
+object ConnectReturn {
+
+    /**
+     * Whether Connect, left with the setup [page] open (its id), the apply screen up for it
+     * ([applyScreen]) and all on there or still going ([applied]), lets go of the page and the apply
+     * screen. [putOn] is the setup Connect put on last, while it is still on: Undo takes it off.
+     */
+    fun forgets(page: String?, applyScreen: Boolean, applied: Boolean, putOn: String?): Boolean =
+        if (applyScreen) applied else page != null && page == putOn
+}
+
 /** Codes for shared Looks, as Zenith's server makes them: six of these, after LOOK-. */
 object ConnectCodes {
     /** The server's alphabet (`CODE_ALPHABET` in server/zenith_server.py): no vowels, no 0, 1. */

@@ -895,6 +895,13 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
     val builtInLayer = androidx.compose.ui.graphics.rememberGraphicsLayer()
     /** The colours and theme Zenith is in now, which a picture of it is only good in. */
     val builtInLook by androidx.compose.runtime.rememberUpdatedState(palette to theme)
+
+    /**
+     * What a picture of it is good for: the colours and theme it was taken in, and where Connect
+     * stood. Left with a setup it had put on, Connect lets go of it (ConnectState.left) and opens on
+     * its tab next time, so a picture taken before shows it where it no longer opens.
+     */
+    fun builtInPictureKey(): Any = builtInLook to connect.forgot
     // All the way in, it hides the home screen behind it, which then is not drawn at all.
     androidx.compose.runtime.DisposableEffect(homeCover) {
         val cover = { if (builtInUp != null && card == null && builtInShown.value >= 0.999f) 1f else 0f }
@@ -1597,7 +1604,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
         scope.launch {
             val icon = runCatching { viewModel.icons.load(key, 192) }.getOrNull()
             preparingLaunch = false
-            val picture = builtInPicture[0]?.takeIf { builtInPictureLook[0] == builtInLook }
+            val picture = builtInPicture[0]?.takeIf { builtInPictureLook[0] == builtInPictureKey() }
             // Tapped again while it is still going into its icon, it turns round from where it is,
             // as any app's card does. Any other card makes way for it.
             val turning = card?.takeIf { it.key == key && closingCard }
@@ -1726,7 +1733,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             .onFailure { android.util.Log.w("Zenith", "No picture of the built-in app: it closes on its icon's card", it) }
             .getOrNull() ?: return null
         builtInPicture[0] = shot
-        builtInPictureLook[0] = builtInLook
+        builtInPictureLook[0] = builtInPictureKey()
         return shot
     }
 

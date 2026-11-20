@@ -17,6 +17,7 @@ import android.graphics.Paint
 import android.graphics.Shader
 import android.hardware.display.DisplayManager
 import android.os.Build
+import android.os.Bundle
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.Looper
@@ -31,10 +32,12 @@ import android.view.SurfaceHolder
 import androidx.core.content.ContextCompat
 import com.gabriel.zenithui.data.ConfigRepository
 import com.gabriel.zenithui.data.LiveCurves
+import com.gabriel.zenithui.data.LiveLock
 import com.gabriel.zenithui.data.LiveMotion
 import com.gabriel.zenithui.data.LivePace
 import com.gabriel.zenithui.data.LiveScene
 import com.gabriel.zenithui.data.LiveUnlock
+import com.gabriel.zenithui.data.LockWord
 import com.gabriel.zenithui.data.Performance
 import com.gabriel.zenithui.data.PhonePerformance
 import com.gabriel.zenithui.data.WallColors
@@ -162,6 +165,18 @@ class LiveWallpaper : WallpaperService() {
 
         override fun onComputeColors(): WallpaperColors? = colours
 
+        override fun onCommand(action: String?, x: Int, y: Int, z: Int, extras: Bundle?, resultRequested: Boolean): Bundle? {
+            // Android's own word to the wallpaper as the lock screen starts to go, or the screen to sleep.
+            if (!isPreview) {
+                when (LiveLock.ofCommand(action)) {
+                    LockWord.Unlocked -> render.post { unlocked() }
+                    LockWord.ScreenOff -> render.post { screenOff() }
+                    LockWord.Nothing -> Unit
+                }
+            }
+            return super.onCommand(action, x, y, z, extras, resultRequested)
+        }
+
         override fun onVisibilityChanged(visible: Boolean) {
             super.onVisibilityChanged(visible)
             val locked = keyguard?.isKeyguardLocked == true
@@ -188,6 +203,8 @@ class LiveWallpaper : WallpaperService() {
                 surface = holder
                 this.width = width
                 this.height = height
+                // A new surface may give the hardware canvas the last one would not.
+                hardware = true
                 build()
                 draw(now())
             }
@@ -330,6 +347,7 @@ class LiveWallpaper : WallpaperService() {
         private fun stillOnly(): Boolean = plan?.reduced == true || !hardware
 
         private fun pace() {
+            watch()
             val wanted = frameMs(now()) > 0
             val c = choreographer ?: return
             if (wanted && !looping) {
@@ -472,12 +490,14 @@ class LiveWallpaper : WallpaperService() {
 
         private val events = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
-                when (intent.action) {
-                    Intent.ACTION_SCREEN_OFF -> render.post { screenOff() }
-                    Intent.ACTION_USER_PRESENT -> render.post { unlocked() }
-                    // With no lock screen to get past, the screen coming on is the phone unlocked.
-                    Intent.ACTION_SCREEN_ON -> if (keyguard?.isKeyguardLocked != true) render.post { unlocked() }
-                    PowerManager.ACTION_POWER_SAVE_MODE_CHANGED -> replan()
+                if (intent.action == PowerManager.ACTION_POWER_SAVE_MODE_CHANGED) {
+                    replan()
+                    return
+                }
+                when (LiveLock.ofBroadcast(intent.action, keyguard?.isKeyguardLocked == true)) {
+                    LockWord.Unlocked -> render.post { unlocked() }
+                    LockWord.ScreenOff -> render.post { screenOff() }
+                    LockWord.Nothing -> Unit
                 }
             }
         }
@@ -495,12 +515,38 @@ class LiveWallpaper : WallpaperService() {
                 filter.addAction(Intent.ACTION_SCREEN_ON)
                 filter.addAction(Intent.ACTION_USER_PRESENT)
             }
-            runCatching { ContextCompat.registerReceiver(this@LiveWallpaper, events, filter, ContextCompat.RECEIVER_NOT_EXPORTED) }
+            // Exported, or the word that the phone was unlocked never comes: System UI sends it, and
+            // System UI is not Android's own process, which is all a receiver that is not exported
+            // hears. These are protected broadcasts, which only the system can send, so exporting
+            // it lets nothing else in.
+            runCatching { ContextCompat.registerReceiver(this@LiveWallpaper, events, filter, ContextCompat.RECEIVER_EXPORTED) }
             runCatching {
                 contentResolver.registerContentObserver(Settings.Global.getUriFor(Settings.Global.ANIMATOR_DURATION_SCALE), false, animations)
             }
             LiveWallpapers.watch(this@LiveWallpaper, toneChanged)
             listening = true
+        }
+
+        private val lockCheck = Runnable { lookAtLock() }
+
+        /**
+         * While an unlock design waits on show at its lock pose, looks at the lock screen itself
+         * every so often: the word that the phone was unlocked can come late, or not at all, and a
+         * design that came into view while the lock screen was still going would wait for it.
+         */
+        private fun watch() {
+            render.removeCallbacks(lockCheck)
+            if (!isPreview && visible && shown?.style?.live == LiveMotion.Unlock && unlock.waiting()) {
+                render.postDelayed(lockCheck, LiveLock.WATCH_MS)
+            }
+        }
+
+        private fun lookAtLock() {
+            if (isPreview || !visible || !unlock.waiting()) return
+            // The screen on and no lock screen up. While the screen is going off the lock screen
+            // may not be up yet, and that is not the phone being unlocked.
+            val gone = power?.isInteractive == true && keyguard?.isKeyguardLocked != true
+            if (gone) unlocked() else render.postDelayed(lockCheck, LiveLock.WATCH_MS)
         }
 
         /**

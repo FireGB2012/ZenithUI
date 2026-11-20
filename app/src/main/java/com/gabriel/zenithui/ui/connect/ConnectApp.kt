@@ -120,8 +120,9 @@ fun ConnectApp(state: ConnectState, bridge: ConnectBridge, onClose: () -> Unit, 
     val latest by rememberUpdatedState(bridge)
     LaunchedEffect(state) { state.load(latest) }
     DisposableEffect(state) {
-        state.visible = true
-        onDispose { state.visible = false }
+        state.shown()
+        // However it goes (its icon, Home, another app over Zenith), a setup it put on goes with it.
+        onDispose { state.left() }
     }
     BackHandler {
         if (!state.back()) onClose()
@@ -167,11 +168,9 @@ fun ConnectApp(state: ConnectState, bridge: ConnectBridge, onClose: () -> Unit, 
                 }
             }
             SetupPage(state, bridge)
-            ApplyScreen(state, bridge, onOpenZenith = {
-                state.leaveApply()
-                state.closeDetail()
-                onClose()
-            })
+            // Closed on the apply screen as it is, so it goes into its icon as it was seen: leaving
+            // lets go of the setup just put on (ConnectState.left), and Connect opens next time on its tab.
+            ApplyScreen(state, bridge, onOpenZenith = onClose)
             ConnectSheets(state, bridge)
             // With a sheet up a word comes at the top, clear of the sheet.
             val sheetUp = state.sheet != null

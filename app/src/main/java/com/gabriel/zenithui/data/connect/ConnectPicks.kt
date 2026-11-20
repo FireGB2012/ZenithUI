@@ -107,6 +107,10 @@ data class News(val version: String, val date: String, val title: String, val li
 object ConnectNews {
     val all: List<News> = listOf(
         News(
+            "3.9.3", "20 Nov 2026", "Ready for the next one",
+            listOf("Put a setup on and go home to see it: next time Connect opens on the tab you were on, ready for the next one, not on the one you just put on."),
+        ),
+        News(
             "3.9.2", "19 Nov 2026", "Zenith Connect, for real",
             listOf(
                 "Connect is Liquid Glass over your own wallpaper, the same glass as your home screen, in Lite too.",

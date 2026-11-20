@@ -12,6 +12,7 @@ import com.gabriel.zenithui.data.Look
 import com.gabriel.zenithui.data.connect.ConnectApply
 import com.gabriel.zenithui.data.connect.ConnectCodes
 import com.gabriel.zenithui.data.connect.ConnectLayers
+import com.gabriel.zenithui.data.connect.ConnectReturn
 import com.gabriel.zenithui.data.connect.ConnectSetup
 import com.gabriel.zenithui.data.connect.ConnectStudio
 import com.gabriel.zenithui.data.connect.Filter
@@ -66,8 +67,10 @@ class Applying(
 
 /**
  * Zenith Connect as it was left, kept by the home screen while Zenith runs, so that it opens again
- * where it was: the tab, a setup's page, what was typed. It holds what came from Zenith's server,
- * too, so opening Connect again does not ask for it again for a minute.
+ * where it was: the tab, a setup's page, what was typed. Not a setup it has put on, though: left
+ * with one of those on show, it opens next time on the tab it was on (ConnectReturn, [left]). It
+ * holds what came from Zenith's server, too, so opening Connect again does not ask for it again
+ * for a minute.
  *
  * What it does, it does through [ConnectBridge], given each time: nothing here is sample data.
  */
@@ -136,8 +139,19 @@ class ConnectState(private val scope: CoroutineScope) {
     val vaultList = LazyListState()
     val updatesList = LazyListState()
 
-    /** Whether Connect is on the screen now. */
+    /** Whether Connect is on the screen now: see [shown] and [left]. */
     var visible by mutableStateOf(false)
+        private set
+
+    /** The setup Connect put on last, by its id, while it is still on: Undo takes it off. */
+    private var putOn: String? = null
+
+    /**
+     * How many times Connect was left and let go of a setup it had put on ([left]). A picture of
+     * Connect taken before then shows it where it no longer opens. Read outside of drawing.
+     */
+    var forgot = 0
+        private set
 
     private var loadJob: Job? = null
     private var loadedAt = 0L
@@ -252,6 +266,7 @@ class ConnectState(private val scope: CoroutineScope) {
         )
         ticked = 0
         applied = false
+        putOn = setup.id
         scope.launch {
             delay(ConnectApply.STEP_MS / 2)
             bridge.wear(setup.name, wearing, lookId)
@@ -261,14 +276,48 @@ class ConnectState(private val scope: CoroutineScope) {
             }
             delay(ConnectApply.DONE_PAUSE_MS)
             applied = true
+            // On, with Connect already left to see it: it opens next time ready for the next one.
+            if (!visible) letGoOfWorn()
         }
     }
 
     /** Takes off what was just put on: the home screen goes back to exactly what it was. */
     fun undo(bridge: ConnectBridge) {
         val name = bridge.worn
-        say(if (bridge.takeOff()) "Took off ${name ?: "the setup"}. Your home screen is back." else "There's nothing to take off.")
+        val tookOff = bridge.takeOff()
+        if (tookOff) putOn = null
+        say(if (tookOff) "Took off ${name ?: "the setup"}. Your home screen is back." else "There's nothing to take off.")
         if (applied) applying = null
+    }
+
+    /** Connect is on the screen. */
+    fun shown() {
+        visible = true
+    }
+
+    /**
+     * Connect has gone from the screen: into its icon, home, or under another app. Where it was
+     * stays for next time, except a setup it put on (ConnectReturn): its apply screen and its page
+     * go, and Connect opens on the tab it was on, ready for the next one.
+     */
+    fun left() {
+        visible = false
+        letGoOfWorn()
+    }
+
+    /** Lets go of the setup on show if it is one Connect has put on (ConnectReturn.forgets). */
+    private fun letGoOfWorn() {
+        val forgets = ConnectReturn.forgets(
+            page = detail?.id,
+            applyScreen = applying != null,
+            applied = applied,
+            putOn = putOn,
+        )
+        if (!forgets) return
+        applying = null
+        detail = null
+        deleting = null
+        forgot++
     }
 
     /** Leaves the apply screen once it is done, back to the setup's page. */

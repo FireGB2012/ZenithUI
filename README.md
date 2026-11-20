@@ -401,24 +401,27 @@ rows under them sit in a group of their own, a line between each.
 ## Wallpapers
 
 Zenith paints its own wallpapers on the phone (`WallpaperArt`, `WallDesigns`, `WallDepth`,
-`WallDepthMore`, `LiveScenes`): fifty-four designs on six shelves — Live, Depth, Soft, Lines, Shapes
+`WallDepthMore`, `LiveScenes`, `LiveScenesDrift`, `LiveScenesUnlock`): sixty-four designs on six shelves — Live, Depth, Soft, Lines, Shapes
 and Scenes — eleven of them for Zenith Plus, each of which aura can also buy for good, from its preview or the Aura page. Every design comes in a choice of colour sets (thirteen free ones round the colour wheel, six
 of them once Zenith's themes, the Aura sets your level has reached or that you bought with aura,
 colours of your own made before the themes went,
 and colours taken from your wallpaper) and has a light picture and a dark one, each made so labels
 and the status bar stay readable over it.
 
-**Live**, the first shelf, is five designs that move, set as Android's live wallpaper
-(`live/LiveWallpaper`, "Zenith Live"). Hover, Tide and Cosmos drift on their own while they can be
-seen; Lotus and Daybreak hold still on the lock screen and open once as you unlock into the home
-screen. Each paints its layers once and then only moves them, on its own thread with the hardware
+**Live**, the first shelf, is fifteen designs that move, set as Android's live wallpaper
+(`live/LiveWallpaper`, "Zenith Live"). Hover, Tide, Cosmos, Borealis, Petals, Kaleido, Flow, Jelly
+and Clouds drift on their own while they can be seen; Lotus, Daybreak, Planet, Aperture, Gyro and
+Ink hold still on the lock screen and open once as you unlock into the home screen. They hear the
+unlock three ways (`LiveLock`), as One UI's word that the phone was unlocked comes from System UI,
+which a receiver that is not exported never hears. Each paints its layers once and then only moves them, on its own thread with the hardware
 canvas: 60 frames a second in Full, 30 in Lite, still with Battery saver on or movement reduced, and
 nothing at all while it cannot be seen (the rules are in `LiveWall`, with `LiveWallTest`). Android
 asks you to confirm a live wallpaper once, in its own screen; Zenith opens it, and puts the old
 design back if you back out. Where the lock screen does not show the live wallpaper itself and "Home
 and lock" was chosen, Zenith puts a still of it there, an unlock design in its lock pose, and the
 glass bends a still of it at its home pose. In the picker they carry a LIVE badge and their preview
-moves. See `specs/2026-11-18-live-and-more-depth-wallpapers-design.md`.
+moves. See `specs/2026-11-18-live-and-more-depth-wallpapers-design.md` and
+`specs/2026-11-20-unlock-fix-and-ten-more-live-wallpapers-design.md`.
 
 **Depth** is sixteen designs with a body to them, as the wallpapers that come with an iPhone or a
 Galaxy have: Iris, Layers, Satin, Marbles, Liquid, Twist, Fluted, Orb, Arcs, Pond, Dew and Fan,

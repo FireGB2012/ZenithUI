@@ -136,6 +136,59 @@ class LiveWallTest {
         assertEquals(1f, unlock.pose(200L), 0f)
     }
 
+    // ---- Hearing that the phone was unlocked ----
+
+    @Test
+    fun `at the lock pose, with nothing yet saying the phone was unlocked, it is waiting on the lock screen`() {
+        val unlock = LiveUnlock(openMs)
+        // Just set, it is open, and there is nothing to wait for.
+        assertFalse(unlock.waiting())
+        unlock.screenOff()
+        assertTrue(unlock.waiting())
+        // Coming into view on the lock screen changes nothing: it still waits for the unlock.
+        unlock.shown(now = 1_000L, locked = true)
+        assertTrue(unlock.waiting())
+    }
+
+    @Test
+    fun `opening, open, settled, or told while out of sight, it is not waiting any more`() {
+        val opening = LiveUnlock(openMs).apply { screenOff(); unlocked(now = 0L, visible = true) }
+        assertFalse(opening.waiting())
+        // Once open it stays not waiting, however long after.
+        assertEquals(1f, opening.pose(5_000L), 0f)
+        assertFalse(opening.waiting())
+        val told = LiveUnlock(openMs).apply { screenOff(); unlocked(now = 0L, visible = false) }
+        // Told while out of sight, it opens when it is first seen: nothing to look for.
+        assertFalse(told.waiting())
+        val settled = LiveUnlock(openMs).apply { screenOff(); settle() }
+        assertFalse(settled.waiting())
+    }
+
+    @Test
+    fun `the lock screen starting to go is the word to open, and the screen starting to sleep the word to close`() {
+        assertEquals(LockWord.Unlocked, LiveLock.ofCommand("android.wallpaper.keyguardgoingaway"))
+        assertEquals(LockWord.ScreenOff, LiveLock.ofCommand("android.wallpaper.goingtosleep"))
+        // Taps, drops and Android's other words to a wallpaper mean nothing here.
+        assertEquals(LockWord.Nothing, LiveLock.ofCommand("android.wallpaper.tap"))
+        assertEquals(LockWord.Nothing, LiveLock.ofCommand("android.wallpaper.wakingup"))
+        assertEquals(LockWord.Nothing, LiveLock.ofCommand(null))
+    }
+
+    @Test
+    fun `the user being present means unlocked, the screen coming on only when there is no lock screen up`() {
+        assertEquals(LockWord.Unlocked, LiveLock.ofBroadcast("android.intent.action.USER_PRESENT", keyguardLocked = true))
+        assertEquals(LockWord.Unlocked, LiveLock.ofBroadcast("android.intent.action.USER_PRESENT", keyguardLocked = false))
+        assertEquals(LockWord.Unlocked, LiveLock.ofBroadcast("android.intent.action.SCREEN_ON", keyguardLocked = false))
+        assertEquals(LockWord.Nothing, LiveLock.ofBroadcast("android.intent.action.SCREEN_ON", keyguardLocked = true))
+        assertEquals(LockWord.ScreenOff, LiveLock.ofBroadcast("android.intent.action.SCREEN_OFF", keyguardLocked = true))
+        assertEquals(LockWord.Nothing, LiveLock.ofBroadcast("android.os.action.POWER_SAVE_MODE_CHANGED", keyguardLocked = false))
+    }
+
+    @Test
+    fun `waiting on the lock screen, it looks for the lock having gone ten times a second`() {
+        assertEquals(100L, LiveLock.WATCH_MS)
+    }
+
     // ---- How often a frame is drawn ----
 
     @Test

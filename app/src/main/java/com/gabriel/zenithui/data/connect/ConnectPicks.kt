@@ -107,6 +107,14 @@ data class News(val version: String, val date: String, val title: String, val li
 object ConnectNews {
     val all: List<News> = listOf(
         News(
+            "3.9.4", "20 Nov 2026", "Ten more wallpapers that move",
+            listOf(
+                "Lotus and Daybreak open as you unlock on a Galaxy now. One UI's word that the phone was unlocked never reached them before.",
+                "Six more that drift on their own: Borealis, Petals, Kaleido, Flow, Jelly and Clouds.",
+                "Four more that open as you unlock: Planet, Aperture, Gyro and Ink.",
+            ),
+        ),
+        News(
             "3.9.3", "20 Nov 2026", "Ready for the next one",
             listOf("Put a setup on and go home to see it: next time Connect opens on the tab you were on, ready for the next one, not on the one you just put on."),
         ),

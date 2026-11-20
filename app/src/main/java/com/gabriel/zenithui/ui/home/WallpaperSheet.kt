@@ -727,7 +727,7 @@ internal fun WallpaperImage(style: WallStyle, palette: ZenithPalette, widthPx: I
 
 /**
  * Painted thumbnails, kept by how much memory they take and not by how many there are:
- * fifty-four designs in every colour set, light and dark, would otherwise be a great many pictures.
+ * sixty-four designs in every colour set, light and dark, would otherwise be a great many pictures.
  */
 private val thumbCache = object : LruCache<String, ImageBitmap>(24 * 1024 * 1024) {
     override fun sizeOf(key: String, value: ImageBitmap): Int = value.width * value.height * 4

@@ -26,10 +26,11 @@ import kotlin.math.sqrt
 import kotlin.random.Random
 
 /*
- * The five designs that move. Each paints its layers once, lit as the Depth designs are (light
- * added as light, colours run round the spectrum between the set's two accents), and then only
- * moves, turns and fades them from frame to frame. The light picture is drawn for a pale page, not
- * washed out from the dark one, and the lower part of both is kept quiet for the icons.
+ * The first five designs that move; the next ten are in LiveScenesDrift and LiveScenesUnlock. Each
+ * paints its layers once, lit as the Depth designs are (light added as light, colours run round the
+ * spectrum between the set's two accents), and then only moves, turns and fades them from frame to
+ * frame. The light picture is drawn for a pale page, not washed out from the dark one, and the
+ * lower part of both is kept quiet for the icons.
  */
 
 private const val TAU = (2.0 * PI).toFloat()

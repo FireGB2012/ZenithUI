@@ -8,12 +8,12 @@ import org.junit.Test
 class WallStyleTest {
 
     @Test
-    fun `there are fifty-four designs, sorted onto six shelves`() {
-        assertEquals(54, WallStyle.entries.size)
+    fun `there are sixty-four designs, sorted onto six shelves`() {
+        assertEquals(64, WallStyle.entries.size)
         val shelves = WallStyle.entries.groupBy { it.group }.mapValues { it.value.size }
         assertEquals(
             mapOf(
-                WallGroup.Live to 5,
+                WallGroup.Live to 15,
                 WallGroup.Depth to 16,
                 WallGroup.Soft to 9,
                 WallGroup.Lines to 9,
@@ -27,7 +27,13 @@ class WallStyleTest {
     @Test
     fun `the Live shelf is the newest and first in the picker, then Depth, with its eight new ones before its Plus ones`() {
         assertEquals(listOf(WallGroup.Live, WallGroup.Depth), WallGroup.entries.take(2))
-        assertEquals(listOf("Hover", "Tide", "Cosmos", "Lotus", "Daybreak"), WallStyle.entries.take(5).map { it.name })
+        assertEquals(
+            listOf(
+                "Hover", "Tide", "Cosmos", "Borealis", "Petals", "Kaleido", "Flow", "Jelly", "Clouds",
+                "Lotus", "Daybreak", "Planet", "Aperture", "Gyro", "Ink",
+            ),
+            WallStyle.entries.take(15).map { it.name },
+        )
         assertEquals(
             listOf(
                 "Iris", "Layers", "Satin", "Marbles", "Liquid", "Twist",
@@ -43,13 +49,13 @@ class WallStyleTest {
     }
 
     @Test
-    fun `three designs drift on their own, two open as the phone unlocks, and only the Live shelf moves`() {
+    fun `nine designs drift on their own, six open as the phone unlocks, and only the Live shelf moves`() {
         assertEquals(
-            listOf("Hover", "Tide", "Cosmos"),
+            listOf("Hover", "Tide", "Cosmos", "Borealis", "Petals", "Kaleido", "Flow", "Jelly", "Clouds"),
             WallStyle.entries.filter { it.live == LiveMotion.Idle }.map { it.name },
         )
         assertEquals(
-            listOf("Lotus", "Daybreak"),
+            listOf("Lotus", "Daybreak", "Planet", "Aperture", "Gyro", "Ink"),
             WallStyle.entries.filter { it.live == LiveMotion.Unlock }.map { it.name },
         )
         WallStyle.entries.forEach { assertEquals(it.name, it.group == WallGroup.Live, it.live != null) }

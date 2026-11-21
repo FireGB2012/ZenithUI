@@ -67,7 +67,9 @@ internal fun PhotoWidget(form: WidgetForm, width: Dp, height: Dp) {
     val name = photos[((world.visits + tapped) % photos.size + photos.size) % photos.size]
     val longest = with(LocalDensity.current) { maxOf(width, height).roundToPx() }
     val picture by produceState<Framed>(initialValue = Framed.Loading, name, longest) {
-        value = withContext(Dispatchers.IO) { framePicture(java.io.File(dir, name), longest) }?.let { Framed.Ready(it) } ?: Framed.Gone
+        value = withContext(Dispatchers.IO) {
+            com.gabriel.zenithui.data.FramePhotos.fileIn(dir, name)?.let { framePicture(it, longest) }
+        }?.let { Framed.Ready(it) } ?: Framed.Gone
     }
     // A photo that cannot be read any more (its file gone, or spoilt) asks for photos again, rather
     // than leave the pane empty.

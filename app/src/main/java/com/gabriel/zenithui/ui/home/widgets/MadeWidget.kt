@@ -577,7 +577,9 @@ private fun PhotoPiece(piece: Piece, world: PieceWorld) {
     val wanted = max(piece.w * world.width, piece.h * world.height)
     val longest = (ceil(wanted / DECODE_STEP) * DECODE_STEP).toInt().coerceIn(DECODE_STEP.toInt(), DECODE_MOST)
     val picture by produceState<ImageBitmap?>(null, dir, name, longest) {
-        value = if (dir == null || name.isEmpty()) null else withContext(Dispatchers.IO) { framePicture(File(dir, name), longest) }
+        value = if (dir == null || name.isEmpty()) null else withContext(Dispatchers.IO) {
+            com.gabriel.zenithui.data.FramePhotos.fileIn(dir, name)?.let { framePicture(it, longest) }
+        }
     }
     val image = picture
     Box(Modifier.fillMaxSize().clip(shape), contentAlignment = Alignment.Center) {

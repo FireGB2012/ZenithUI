@@ -82,7 +82,12 @@ class ZenithServer(
     /** The Looks the server's keeper chose to show everybody. */
     suspend fun featuredLooks(): Reply<List<SharedLook>> = call("GET", "/v1/looks/featured").json { o ->
         val list = o.getJSONArray("looks")
-        (0 until list.length()).map { i -> list.getJSONObject(i).let { SharedLook(it.getString("code"), it.optString("name", "A Look")) } }
+        // Only real codes, under names that are one line; no more than a shelf shows.
+        (0 until minOf(list.length(), FEATURED_MOST)).mapNotNull { i ->
+            val one = list.optJSONObject(i) ?: return@mapNotNull null
+            val code = one.optString("code").takeIf { code -> code.length == 6 && code.all { it in com.gabriel.zenithui.data.connect.ConnectCodes.ALPHABET } } ?: return@mapNotNull null
+            SharedLook(code, com.gabriel.zenithui.data.Looks.cleanName(one.optString("name", "A Look")))
+        }
     }
 
     // ------------------------------------------------------------------------- plumbing
@@ -155,6 +160,11 @@ class ZenithServer(
             } catch (_: IllegalArgumentException) {
                 // An address that is not an address.
                 Answer.Lost(Reply.NO_ANSWER)
+            } catch (e: RuntimeException) {
+                // Anything else the connection throws is the server out of reach, never Zenith
+                // falling over: Connect and the account live inside the home screen.
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                Answer.Lost(Reply.NO_ANSWER)
             } finally {
                 connection?.disconnect()
             }
@@ -163,6 +173,9 @@ class ZenithServer(
     private companion object {
         const val CONNECT_MS = 10_000
         const val READ_MS = 20_000
+
+        /** The most featured Looks read: more than Connect's shelf shows. */
+        const val FEATURED_MOST = 24
 
         /** A backup is at most half a megabyte; nothing the server says is longer than that. */
         const val MAX_ANSWER = 1024 * 1024

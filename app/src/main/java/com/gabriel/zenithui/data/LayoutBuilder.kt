@@ -298,6 +298,33 @@ object LayoutBuilder {
 
     fun newId(): String = UUID.randomUUID().toString().take(8)
 
+    /**
+     * [items] each under a name of its own: the first to use a name keeps it, and one after it with
+     * the same name, or with none, is given a new one. Zenith never writes two the same, but a
+     * damaged save or somebody else's Look can, and the pages tell their items apart by name.
+     */
+    fun uniqueIds(items: List<HomeItem>): List<HomeItem> {
+        val seen = HashSet<String>(items.size * 2)
+        if (items.all { it.id.isNotEmpty() && seen.add(it.id) }) return items
+        seen.clear()
+        return items.map { item ->
+            if (item.id.isNotEmpty() && seen.add(item.id)) {
+                item
+            } else {
+                var fresh = newId()
+                while (!seen.add(fresh)) fresh = newId()
+                when (item) {
+                    is AppCell -> item.copy(id = fresh)
+                    is FolderCell -> item.copy(id = fresh)
+                    is ShortcutCell -> item.copy(id = fresh)
+                    is WidgetCell -> item.copy(id = fresh)
+                    is HostedWidgetCell -> item.copy(id = fresh)
+                    is StackCell -> item.copy(id = fresh)
+                }
+            }
+        }
+    }
+
     /** Layouts saved before the grid gained sub-rows measured everything in whole rows. */
     fun upgradeToRowUnits(items: List<HomeItem>): List<HomeItem> = items.map { item ->
         when (item) {

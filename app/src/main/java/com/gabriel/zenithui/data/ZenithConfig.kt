@@ -88,8 +88,10 @@ data class ZenithConfig(
          * The layout in [array], read back exactly as saved. Sizes and positions are put right by the
          * view model, which can see the grid and everything else on the page; enlarging one widget
          * here, blind to its neighbours, is what once let widgets grow over the icons around them.
+         * Only what no grid could hold is brought in (see ItemBounds), and two items that answer to
+         * one name are told apart (LayoutBuilder.uniqueIds).
          */
-        fun layoutFrom(array: JSONArray?): List<HomeItem> = entries(array) { homeItemFromJson(it) }
+        fun layoutFrom(array: JSONArray?): List<HomeItem> = LayoutBuilder.uniqueIds(entries(array) { homeItemFromJson(it) })
 
         fun looksFrom(array: JSONArray?): List<Look> = entries(array) { Look.fromJson(it) }
 

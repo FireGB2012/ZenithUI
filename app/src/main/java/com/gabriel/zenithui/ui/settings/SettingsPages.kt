@@ -220,7 +220,7 @@ internal fun ThemeOptions(settings: ZenithSettings, plus: PlusStatus, preview: S
                 PillSlider(
                     label = "Glass",
                     value = settings.glass,
-                    range = 0.2f..1.2f,
+                    range = ZenithSettings.GLASS_LEAST..ZenithSettings.GLASS_MOST,
                     display = "${(settings.glass * 100).toInt()}%",
                 ) { value -> change { it.copy(glass = value) } }
                 Spacer(Modifier.height(8.dp))

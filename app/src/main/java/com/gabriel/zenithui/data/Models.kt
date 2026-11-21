@@ -103,6 +103,11 @@ data class FolderCell(
     override val spanX: Int get() = 1
     override val spanY: Int get() = ROW_UNITS
 
+    companion object {
+        /** The longest name a folder (or a shortcut) is read back with: far more than fits under an icon. */
+        const val TITLE_MOST = 60
+    }
+
     override fun moved(page: Int, col: Int, row: Int) = copy(page = page, col = col, row = row, dx = 0f, dy = 0f)
 
     override fun nudged(dx: Float, dy: Float) = copy(dx = dx, dy = dy)
@@ -489,28 +494,48 @@ object Widgets {
 fun homeItemFromJson(o: JSONObject): HomeItem? =
     baseItemFromJson(o)?.let { item ->
         // Only items placed freely carry an offset; everything else reads back exactly as before.
-        val dx = o.optDouble("dx", 0.0).toFloat()
-        val dy = o.optDouble("dy", 0.0).toFloat()
+        val dx = ItemBounds.nudge(o.optDouble("dx", 0.0))
+        val dy = ItemBounds.nudge(o.optDouble("dy", 0.0))
         if (dx == 0f && dy == 0f) item else item.nudged(dx, dy)
     }
 
+/**
+ * How far an item read back is believed: on one of the pages there can be, inside the biggest grid
+ * there can be, no bigger than that grid, and nudged at most the half cell free placement allows.
+ * Everything Zenith writes is inside these, so it reads back exactly as written; what is outside
+ * them came from a damaged save or from somebody else's Look, and drawn as it stands it could take
+ * the home screen down (an offset that is not a number cannot even be rounded to a pixel).
+ */
+internal object ItemBounds {
+    const val UNIT_ROWS = GridDensity.MAX_ROWS * ROW_UNITS
+
+    fun page(o: JSONObject): Int = o.optInt("p").coerceIn(0, LayoutBuilder.MAX_PAGES - 1)
+    fun col(o: JSONObject): Int = o.optInt("c").coerceIn(0, GridDensity.MAX_COLUMNS - 1)
+    fun row(o: JSONObject): Int = o.optInt("r").coerceIn(0, UNIT_ROWS - 1)
+    fun spanX(o: JSONObject, fallback: Int): Int = o.optInt("sx", fallback).coerceIn(1, GridDensity.MAX_COLUMNS)
+    fun spanY(o: JSONObject, fallback: Int): Int = o.optInt("sy", fallback).coerceIn(1, UNIT_ROWS)
+
+    /** A free-placement offset: a fraction of a cell, within half a cell either way; nothing for what is not a number. */
+    fun nudge(value: Double): Float = if (value.isFinite()) value.toFloat().coerceIn(-0.5f, 0.5f) else 0f
+}
+
 private fun baseItemFromJson(o: JSONObject): HomeItem? = when (o.optString("t")) {
     "app" -> AppCell(
-        id = o.optString("id"), page = o.optInt("p"), col = o.optInt("c"), row = o.optInt("r"),
+        id = o.optString("id"), page = ItemBounds.page(o), col = ItemBounds.col(o), row = ItemBounds.row(o),
         packageName = o.optString("pkg"), className = o.optString("cls"),
-        spanX = o.optInt("sx", 1), spanY = o.optInt("sy", ROW_UNITS),
+        spanX = ItemBounds.spanX(o, 1), spanY = ItemBounds.spanY(o, ROW_UNITS),
     )
 
     "folder" -> FolderCell(
-        id = o.optString("id"), page = o.optInt("p"), col = o.optInt("c"), row = o.optInt("r"),
-        title = o.optString("title", "Folder"),
+        id = o.optString("id"), page = ItemBounds.page(o), col = ItemBounds.col(o), row = ItemBounds.row(o),
+        title = o.optString("title", "Folder").take(FolderCell.TITLE_MOST),
         keys = o.optJSONArray("keys").toStringList(),
         colour = o.optLong("col", 0L),
     )
 
     "widget" -> WidgetCell(
-        id = o.optString("id"), page = o.optInt("p"), col = o.optInt("c"), row = o.optInt("r"),
-        type = o.optString("type"), spanX = o.optInt("sx", 2).coerceAtLeast(1), spanY = o.optInt("sy", 2).coerceAtLeast(1),
+        id = o.optString("id"), page = ItemBounds.page(o), col = ItemBounds.col(o), row = ItemBounds.row(o),
+        type = o.optString("type"), spanX = ItemBounds.spanX(o, 2), spanY = ItemBounds.spanY(o, 2),
         accent = o.optLong("acc", 0L),
     )
 
@@ -518,16 +543,16 @@ private fun baseItemFromJson(o: JSONObject): HomeItem? = when (o.optString("t"))
         val pkg = o.optString("pkg")
         val sid = o.optString("sid")
         if (pkg.isEmpty() || sid.isEmpty()) null else ShortcutCell(
-            id = o.optString("id"), page = o.optInt("p"), col = o.optInt("c"), row = o.optInt("r"),
-            packageName = pkg, shortcutId = sid, label = o.optString("label"),
+            id = o.optString("id"), page = ItemBounds.page(o), col = ItemBounds.col(o), row = ItemBounds.row(o),
+            packageName = pkg, shortcutId = sid, label = o.optString("label").take(FolderCell.TITLE_MOST),
         )
     }
 
     "hosted" -> {
         val provider = o.optString("prov")
         if (provider.isEmpty()) null else HostedWidgetCell(
-            id = o.optString("id"), page = o.optInt("p"), col = o.optInt("c"), row = o.optInt("r"),
-            spanX = o.optInt("sx", 2).coerceAtLeast(1), spanY = o.optInt("sy", 2 * ROW_UNITS).coerceAtLeast(1),
+            id = o.optString("id"), page = ItemBounds.page(o), col = ItemBounds.col(o), row = ItemBounds.row(o),
+            spanX = ItemBounds.spanX(o, 2), spanY = ItemBounds.spanY(o, 2 * ROW_UNITS),
             appWidgetId = o.optInt("wid", 0), provider = provider, glass = o.optBoolean("glass", false),
         )
     }
@@ -536,8 +561,8 @@ private fun baseItemFromJson(o: JSONObject): HomeItem? = when (o.optString("t"))
         val array = o.optJSONArray("members") ?: JSONArray()
         val members = (0 until array.length()).mapNotNull { array.optJSONObject(it)?.let(StackMember::fromJson) }
         val stack = StackCell(
-            id = o.optString("id"), page = o.optInt("p"), col = o.optInt("c"), row = o.optInt("r"),
-            spanX = o.optInt("sx", 2).coerceAtLeast(1), spanY = o.optInt("sy", 2 * ROW_UNITS).coerceAtLeast(1),
+            id = o.optString("id"), page = ItemBounds.page(o), col = ItemBounds.col(o), row = ItemBounds.row(o),
+            spanX = ItemBounds.spanX(o, 2), spanY = ItemBounds.spanY(o, 2 * ROW_UNITS),
             members = members,
         )
         // A stack written with one widget left in it is that widget; with none, nothing.

@@ -248,3 +248,14 @@ object LiveCurves {
     /** -ln(0.005): how many time constants a spring needs to settle to half a percent. */
     private const val SETTLE = 5.298
 }
+
+/**
+ * Which design Zenith's live wallpaper shows: the one the settings name, moving or still, so that
+ * wherever Android keeps it up (the lock screen, once a still design has gone on the home screen
+ * alone) it shows what was chosen. With none named (a photo, or a wallpaper chosen elsewhere) it
+ * keeps to the one it showed [last]; Hover only when it has shown nothing yet.
+ */
+object LiveDesign {
+    fun of(named: String, last: String?): WallStyle =
+        WallStyle.byName(named) ?: last?.let(WallStyle::byName) ?: WallStyle.Hover
+}

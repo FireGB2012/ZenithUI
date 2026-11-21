@@ -3,6 +3,7 @@ package com.gabriel.zenithui.data
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -59,5 +60,61 @@ class WallpaperFollowTest {
         assertFalse(WallpaperFollow.shouldRepaint(following.copy(wallpaperStyle = ""), "new", "old", ownWallpaperUp = true))
         // One was, but something else is on screen now.
         assertFalse(WallpaperFollow.shouldRepaint(following, "new", "old", ownWallpaperUp = false))
+    }
+
+    // ---- Zenith's live wallpaper is Zenith's wallpaper, whatever design it shows ----
+    // 2026-11-21 ("it keeps picking the bubble wallpaper"): putting a still design on while a
+    // moving one was up, the live wallpaper's own new colours were taken for another app's
+    // wallpaper. The design was forgotten half way up, the live wallpaper stayed on showing Hover's
+    // marbles, and every setup after went on with its wallpaper left off.
+
+    @Test
+    fun `a change of wallpaper while Zenith's live wallpaper is up never forgets the design`() {
+        // A still design on its way up over it: the live wallpaper announces its new colours first.
+        assertFalse(WallpaperFollow.forgets("Iris", liveUp = true, copyUp = false))
+        assertFalse(WallpaperFollow.forgets("Lotus", liveUp = true, copyUp = false))
+    }
+
+    @Test
+    fun `a still design is Zenith's while its own picture is up`() {
+        assertFalse(WallpaperFollow.forgets("Iris", liveUp = false, copyUp = true))
+    }
+
+    @Test
+    fun `with neither up, something else has become the wallpaper and the design is forgotten`() {
+        assertTrue(WallpaperFollow.forgets("Iris", liveUp = false, copyUp = false))
+        assertTrue(WallpaperFollow.forgets("Lotus", liveUp = false, copyUp = false))
+        // A design that moves is never a still picture, so a picture up is not it.
+        assertTrue(WallpaperFollow.forgets("Lotus", liveUp = false, copyUp = true))
+    }
+
+    @Test
+    fun `with no design named there is nothing to forget`() {
+        assertFalse(WallpaperFollow.forgets("", liveUp = false, copyUp = false))
+        assertFalse(WallpaperFollow.forgets("", liveUp = true, copyUp = true))
+    }
+
+    @Test
+    fun `with no design named while Zenith's live wallpaper is up, the one it shows is named again`() {
+        assertEquals("Hover", WallpaperFollow.adopt("", liveUp = true, liveShows = "Hover", copyUp = false, appliedKey = null))
+        assertEquals("Iris", WallpaperFollow.adopt("", liveUp = true, liveShows = "Iris", copyUp = false, appliedKey = key(style = "Pond")))
+    }
+
+    @Test
+    fun `with no design named while Zenith's picture of one is up, that one is named again`() {
+        assertEquals("Iris", WallpaperFollow.adopt("", liveUp = false, liveShows = null, copyUp = true, appliedKey = key(style = "Iris")))
+    }
+
+    @Test
+    fun `a photo, a wallpaper from elsewhere, or a design already named, names nothing`() {
+        // A photo Zenith put up: its picture is up, and it is no design.
+        assertNull(WallpaperFollow.adopt("", liveUp = false, liveShows = null, copyUp = true, appliedKey = null))
+        // Something else is up.
+        assertNull(WallpaperFollow.adopt("", liveUp = false, liveShows = null, copyUp = false, appliedKey = key(style = "Iris")))
+        // Named already.
+        assertNull(WallpaperFollow.adopt("Waves", liveUp = true, liveShows = "Hover", copyUp = true, appliedKey = key(style = "Iris")))
+        // A design Zenith no longer has.
+        assertNull(WallpaperFollow.adopt("", liveUp = false, liveShows = null, copyUp = true, appliedKey = key(style = "Neon")))
+        assertNull(WallpaperFollow.adopt("", liveUp = true, liveShows = "Neon", copyUp = false, appliedKey = null))
     }
 }

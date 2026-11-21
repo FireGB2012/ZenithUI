@@ -64,6 +64,10 @@ import kotlin.math.roundToInt
  * only for the moment it opens. Each frame only poses layers painted once ([LiveScene]). Which
  * design, in which colours, light or dark, comes from Zenith's settings, as for the still designs
  * ([LiveWallpapers]); Android is told its colours, so the phone's own colours can follow it.
+ *
+ * A still design named there it shows still, as the picture Zenith puts up for it: Android keeps
+ * the live wallpaper on the lock screen when a still one goes on the home screen alone, and for
+ * the moment before that picture is up it is still the home screen's ([LiveDesign]).
  */
 class LiveWallpaper : WallpaperService() {
 
@@ -241,7 +245,7 @@ class LiveWallpaper : WallpaperService() {
                 Settings.Global.getFloat(contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) > 0f
             }.getOrDefault(true)
             val next = Plan(
-                style = LiveWallpapers.design(settings),
+                style = LiveWallpapers.design(app, settings),
                 colors = LiveWallpapers.colors(app, settings, night),
                 lite = Performance.isLite(settings.performance, PhonePerformance.verdict.value),
                 reduced = MotionLevel.of(settings.motion, animations).reduced,
@@ -267,7 +271,7 @@ class LiveWallpaper : WallpaperService() {
             val w = width
             val h = height
             scope.launch(Dispatchers.Default) {
-                val made = runCatching { LiveScene.of(next.style, next.colors, w.toFloat(), h.toFloat()).also { it.prepare() } }.getOrNull()
+                val made = runCatching { LiveScene.forWallpaper(next.style, next.colors, w.toFloat(), h.toFloat()).also { it.prepare() } }.getOrNull()
                 if (made == null) {
                     render.post { if (wantedKey == key) wantedKey = null }
                     return@launch

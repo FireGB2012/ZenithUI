@@ -152,6 +152,7 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
     private val director = WallpaperDirector(
         application, viewModelScope, store.settings, wallpaperSource,
         forget = { store.update { it.copy(wallpaperStyle = "") } },
+        adopt = { name -> store.update { if (it.wallpaperStyle.isEmpty()) it.copy(wallpaperStyle = name) else it } },
         askLive = { _liveAsks.trySend(Unit) },
     )
 

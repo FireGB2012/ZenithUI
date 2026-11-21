@@ -304,4 +304,29 @@ class LiveWallTest {
         assertTrue(LiveCurves.burst(0.35f, 1.6f) in 1.45f..1.6f)
         assertTrue(abs(LiveCurves.burst(0.99f, 1.6f) - 1f) < 0.01f)
     }
+
+    // ---- Which design the live wallpaper shows ----
+    // 2026-11-21: with a still design named it showed Hover's marbles instead, on the lock screen,
+    // and on the home screen until the still picture was up: "it keeps picking the bubble wallpaper".
+
+    @Test
+    fun `it shows the design named, moving or still`() {
+        assertEquals(WallStyle.Lotus, LiveDesign.of("Lotus", last = null))
+        assertEquals(WallStyle.Iris, LiveDesign.of("Iris", last = "Lotus"))
+        assertEquals(WallStyle.Marbles, LiveDesign.of("Marbles", last = null))
+    }
+
+    @Test
+    fun `with none named, a photo or a wallpaper from elsewhere, it keeps to the one it showed last`() {
+        assertEquals(WallStyle.Lotus, LiveDesign.of("", last = "Lotus"))
+        assertEquals(WallStyle.Iris, LiveDesign.of("", last = "Iris"))
+    }
+
+    @Test
+    fun `Hover only when it has shown nothing yet`() {
+        assertEquals(WallStyle.Hover, LiveDesign.of("", last = null))
+        // A name Zenith no longer has is nothing.
+        assertEquals(WallStyle.Hover, LiveDesign.of("Neon", last = "Retro"))
+        assertEquals(WallStyle.Daybreak, LiveDesign.of("Neon", last = "Daybreak"))
+    }
 }

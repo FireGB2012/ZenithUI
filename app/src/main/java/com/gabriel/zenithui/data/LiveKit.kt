@@ -142,6 +142,13 @@ internal abstract class LiveScene(val c: WallColors, val w: Float, val h: Float)
         }
 
         /**
+         * The scene the live wallpaper draws for any design: a moving one's own, or a still one's
+         * picture, which is what it shows of a still design wherever Android keeps it up.
+         */
+        fun forWallpaper(style: WallStyle, colors: WallColors, width: Float, height: Float): LiveScene =
+            if (style.live != null) of(style, colors, width, height) else StillScene(style, colors, width, height)
+
+        /**
          * A still picture of [style] on [canvas], [width] by [height]: the frame at 0 seconds,
          * [open] of the way open. What the picker's thumbnails, the glass and the lock screen show.
          */
@@ -159,6 +166,26 @@ internal abstract class LiveScene(val c: WallColors, val w: Float, val h: Float)
             }
             canvas.drawRect(0f, 0f, width, height, paint)
         }
+    }
+}
+
+/**
+ * One of the designs that hold still, as the live wallpaper shows it: the very picture Zenith puts
+ * up for it, painted once and drawn as it is. The live wallpaper lays its grain over every frame,
+ * so the picture is painted without its own.
+ */
+internal class StillScene(private val style: WallStyle, c: WallColors, w: Float, h: Float) : LiveScene(c, w, h) {
+
+    private var picture: Bitmap? = null
+    private val paint = layerPaint()
+    private val whole = RectF(0f, 0f, w, h)
+
+    override fun prepare() {
+        picture = keep(WallpaperArt.render(style, c, w.toInt().coerceAtLeast(1), h.toInt().coerceAtLeast(1), grain = false))
+    }
+
+    override fun draw(canvas: Canvas, seconds: Double, open: Float) {
+        picture?.let { canvas.drawBitmap(it, null, whole, paint) }
     }
 }
 

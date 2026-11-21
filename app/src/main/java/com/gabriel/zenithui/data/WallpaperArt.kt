@@ -125,15 +125,15 @@ object WallpaperArt {
     /**
      * [style] painted [width] by [height]. A design that moves is painted as it stands still: its
      * frame at 0 seconds, [open] of the way from its lock-screen pose to its home-screen pose (an
-     * idle design has only the one).
+     * idle design has only the one). Without [grain] for a picture that gets its grain elsewhere.
      */
-    fun render(style: WallStyle, colors: WallColors, width: Int, height: Int, open: Float = 1f): Bitmap {
+    fun render(style: WallStyle, colors: WallColors, width: Int, height: Int, open: Float = 1f, grain: Boolean = true): Bitmap {
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val easel = Easel(Canvas(bitmap), colors, width.toFloat(), height.toFloat(), Random(style.name.hashCode()))
         if (style.live != null) LiveScene.paintStill(style, colors, easel.canvas, easel.w, easel.h, open) else WallDesigns.paint(style, easel)
         // A fine grain keeps big gradients from banding on a real screen. Thumbnails are too small
         // to show it, so they skip it.
-        if (width >= 600) easel.grain()
+        if (grain && width >= 600) easel.grain()
         return bitmap
     }
 

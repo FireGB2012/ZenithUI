@@ -144,8 +144,9 @@ For 3.8 (108): the same text again. 108 is 107 with a portrait screen marked as 
 (`android.hardware.screen.portrait`), which Play's pre-review check asked for so tablets,
 Chromebooks and Android XR are not ruled out. Nothing a phone shows changed.
 
-For 4.0 (115), the first update after Zenith went live: everything since 3.8 (108), the last
-bundle Play took (480 characters):
+For 4.0.1 (116), the first update after Zenith went live: everything since 3.8 (108), the last
+bundle Play took (480 characters). 4.0.1 is 4.0 (115, never uploaded) with the wallpaper fix, so
+the text is 4.0's:
 
 ```
 Zenith 4.0: faster, safer, and Zenith Connect.

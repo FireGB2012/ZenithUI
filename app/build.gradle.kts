@@ -36,8 +36,8 @@ android {
         applicationId = "com.gabriel.zenith_Launcher"
         minSdk = 29
         targetSdk = 37
-        versionCode = 115
-        versionName = "4.0"
+        versionCode = 116
+        versionName = "4.0.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

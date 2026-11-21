@@ -107,6 +107,14 @@ data class News(val version: String, val date: String, val title: String, val li
 object ConnectNews {
     val all: List<News> = listOf(
         News(
+            "4.0.1", "21 Nov 2026", "Your wallpaper, every time",
+            listOf(
+                "Putting a setup on over a wallpaper that moves no longer leaves Hover's marbles behind: its own wallpaper goes on, and so does every setup's after it.",
+                "Zenith's live wallpaper shows the design you chose wherever Android keeps it up, the lock screen too, moving or still.",
+                "A setup's page shows that setup's own wallpaper again, not the one you already have on.",
+            ),
+        ),
+        News(
             "4.0", "21 Nov 2026", "Faster, safer, and a cleaner Connect",
             listOf(
                 "Zenith is made ready for your phone as it installs, so it runs at full speed from the first minute, not after days of use. It's 0.6 MB smaller too.",

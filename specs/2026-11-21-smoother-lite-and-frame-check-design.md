@@ -53,6 +53,22 @@ drawing side on the phone itself, and that is where these changes go:
   Zenith (`ProfileVerifier`). With a moving wallpaper on, it says so. A screenshot of it is what
   to ask him for next time it is slow.
 
+## What the rig shows after
+
+The JVM perf rig in Lite at the A55's size, 4.0.1 against 4.0.2:
+
+| | 4.0.1 | 4.0.2 |
+|---|---|---|
+| Two page swipes: layers recorded again | 367 | 145 |
+| Two page swipes: writes of the wallpaper offset | 73 | 0 |
+| Drawer opening: layers recorded again | 243 | 242 |
+| Drawer closing: layers recorded again | 194 | 193 |
+
+The panes off the page that moves (the dock, Search) are no longer drawn again on every frame of
+a swipe. The clock widget's ticks follow the wall clock, not the rig's own, so how many of them fall
+in a run differs from run to run; they are left out of the comparison. Fading in place and the
+moving wallpaper's pause are on the drawing side, which the rig does not time.
+
 ## Not changed
 
 Lite keeps all it kept: the glass, its lens, its rim and its shadow. Nothing about Full changed but

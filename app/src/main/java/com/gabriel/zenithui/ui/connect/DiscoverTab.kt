@@ -354,13 +354,13 @@ internal fun SetupCard(setup: ConnectSetup, state: ConnectState, bridge: Connect
             Box(Modifier.matchParentSize().tap("Open ${setup.name}", open))
         }
         Spacer(Modifier.height(9.dp))
-        Text(
+        // A name a little long for the card ("Northern Lights") is set a little smaller, not cut.
+        FitText(
             setup.name,
             color = palette.onGlass,
-            fontSize = 15.sp,
+            most = 15.sp,
+            least = 13.sp,
             fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(horizontal = 6.dp),
         )
         Text(

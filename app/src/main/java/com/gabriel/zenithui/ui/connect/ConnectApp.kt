@@ -257,11 +257,11 @@ private fun TopFade() {
     Box(
         Modifier
             .fillMaxWidth()
-            .height(top + 22.dp)
+            .height(top + 28.dp)
             .background(
                 Brush.verticalGradient(
-                    0f to ink.copy(alpha = if (strong) 0.92f else 0.45f),
-                    0.6f to ink.copy(alpha = if (strong) 0.6f else 0.22f),
+                    0f to ink.copy(alpha = if (strong) 0.92f else 0.74f),
+                    0.55f to ink.copy(alpha = if (strong) 0.62f else 0.44f),
                     1f to Color.Transparent,
                 ),
             ),
@@ -270,7 +270,7 @@ private fun TopFade() {
 
 /**
  * Under the tab bar what scrolls down fades out, as it does under iOS 26's, so nothing shows
- * plainly round the foot of the floating bar.
+ * plainly round the foot of the floating bar: beside it, under it, or by the gesture bar.
  */
 @Composable
 private fun FootFade(modifier: Modifier = Modifier) {
@@ -278,7 +278,7 @@ private fun FootFade(modifier: Modifier = Modifier) {
     Box(
         modifier
             .fillMaxWidth()
-            .height(bottom + TAB_BAR_HEIGHT + 34.dp)
+            .height(bottom + TAB_BAR_HEIGHT + 40.dp)
             .background(footFade()),
     )
 }
@@ -298,7 +298,14 @@ internal fun footFade(): Brush {
     val ink = edgeColour(top = false)
     return remember(ink, onWall) {
         if (onWall) {
-            Brush.verticalGradient(0f to Color.Transparent, 0.4f to ink.copy(alpha = 0.3f), 1f to ink.copy(alpha = 0.62f))
+            // Quick, and deep by the floating bar's top edge, so what scrolls beside or under the
+            // bar, or by the gesture bar, is gone there rather than showing through dimmed.
+            Brush.verticalGradient(
+                0f to Color.Transparent,
+                0.33f to ink.copy(alpha = 0.84f),
+                0.6f to ink.copy(alpha = 0.93f),
+                1f to ink.copy(alpha = 0.97f),
+            )
         } else {
             Brush.verticalGradient(0f to Color.Transparent, 0.4f to ink.copy(alpha = 0.75f), 1f to ink.copy(alpha = 0.96f))
         }

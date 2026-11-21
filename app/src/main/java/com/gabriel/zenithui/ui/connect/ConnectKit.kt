@@ -14,6 +14,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -30,6 +31,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -51,6 +53,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -59,6 +62,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.gabriel.zenithui.data.connect.ServerState
@@ -212,12 +216,19 @@ internal fun Chip(text: String, on: Boolean, onClick: () -> Unit, modifier: Modi
     }
 }
 
-/** The heading over a block of a page, with a small note beside it. */
+/** The heading over a block of a page, with a small note beside it, standing on the heading's own line. */
 @Composable
 internal fun SectionHead(title: String, modifier: Modifier = Modifier, note: String? = null) {
     val palette = LocalPalette.current
-    Row(modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalAlignment = Alignment.Bottom) {
-        Text(title, color = palette.onGlass, fontSize = 21.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.3).sp)
+    Row(modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
+        Text(
+            title,
+            color = palette.onGlass,
+            fontSize = 21.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = (-0.3).sp,
+            modifier = Modifier.alignByBaseline(),
+        )
         if (note != null) {
             Spacer(Modifier.width(8.dp))
             Text(
@@ -226,9 +237,39 @@ internal fun SectionHead(title: String, modifier: Modifier = Modifier, note: Str
                 fontSize = 13.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(bottom = 3.dp),
+                modifier = Modifier.alignByBaseline(),
             )
         }
+    }
+}
+
+/**
+ * One line of words at [most] size, made a little smaller (down to [least]) where they would not
+ * fit, and cut short with an ellipsis only past that: a setup's name on a card, whole where it can be.
+ */
+@Composable
+internal fun FitText(
+    text: String,
+    color: Color,
+    most: TextUnit,
+    least: TextUnit,
+    fontWeight: FontWeight,
+    modifier: Modifier = Modifier,
+) {
+    val measurer = rememberTextMeasurer()
+    val base = LocalTextStyle.current
+    BoxWithConstraints(modifier) {
+        val width = constraints.maxWidth
+        val size = remember(text, width, base, most, least, fontWeight) {
+            var fitted = most.value
+            while (fitted > least.value) {
+                val style = base.merge(TextStyle(fontSize = fitted.sp, fontWeight = fontWeight))
+                if (measurer.measure(text, style, softWrap = false, maxLines = 1).size.width <= width) break
+                fitted -= 0.5f
+            }
+            fitted.coerceAtLeast(least.value).sp
+        }
+        Text(text, color = color, fontSize = size, fontWeight = fontWeight, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 

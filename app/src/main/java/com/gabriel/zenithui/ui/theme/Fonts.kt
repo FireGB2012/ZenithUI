@@ -21,9 +21,11 @@ data class ZenithFont(val id: String, val label: String, val family: FontFamily)
 data class NumberFont(val family: FontFamily, val weight: FontWeight? = null)
 
 /**
- * The typefaces Zenith can be set in. Two are carried in the app, unchanged: Inter and JetBrains
- * Mono, under the SIL Open Font Licence (About & help → Fonts shows it). The rest are the phone's
- * own, asked for by the names Android gives them; a phone that lacks one shows its usual font.
+ * The typefaces Zenith can be set in. Two are carried in the app: Inter and JetBrains Mono, under
+ * the SIL Open Font Licence (About & help → Fonts shows it), cut down to Latin, Greek, Cyrillic and
+ * the symbols and without hinting, which Android does not use, so they weigh 0.6 MB less. A letter
+ * outside that is drawn by the phone's own font. The rest are the phone's own, asked for by the
+ * names Android gives them; a phone that lacks one shows its usual font.
  */
 object ZenithFonts {
     const val SYSTEM = "system"

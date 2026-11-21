@@ -107,6 +107,16 @@ data class News(val version: String, val date: String, val title: String, val li
 object ConnectNews {
     val all: List<News> = listOf(
         News(
+            "4.0", "21 Nov 2026", "Faster, safer, and a cleaner Connect",
+            listOf(
+                "Zenith is made ready for your phone as it installs, so it runs at full speed from the first minute, not after days of use. It's 0.6 MB smaller too.",
+                "A Look from a code, or a backup, is checked before any of it goes on: nothing in one can crash Zenith, rename your apps, or give anybody Plus.",
+                "The PIN on your hidden apps is kept only as a hash, so not even a backup file shows it.",
+                "Connect is tidied up: what a setup puts on sits clear of Apply, headings line up, and the foot of every tab fades cleanly under the tab bar.",
+                "A Look that couldn't be shared no longer pushes your oldest saved Look out when you try again.",
+            ),
+        ),
+        News(
             "3.9.5", "20 Nov 2026", "Every app goes back into its icon",
             listOf(
                 "Closing an app plays every time now: apps opened from Search or a notification, apps left open for hours, and after Android closed Zenith in the background.",

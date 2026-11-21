@@ -144,6 +144,24 @@ For 3.8 (108): the same text again. 108 is 107 with a portrait screen marked as 
 (`android.hardware.screen.portrait`), which Play's pre-review check asked for so tablets,
 Chromebooks and Android XR are not ruled out. Nothing a phone shows changed.
 
+For 4.0 (115), the first update after Zenith went live: everything since 3.8 (108), the last
+bundle Play took (480 characters):
+
+```
+Zenith 4.0: faster, safer, and Zenith Connect.
+- Zenith Connect: try a setup on your own home screen, apply it, undo it, or share yours by code
+- Make your own widget from scratch
+- Aurora and Frost, two new glass themes
+- More wallpapers that move, some open as you unlock
+- Every app closes back into its icon
+- Full speed from the first minute, and a smaller download
+- Shared Looks and backups are checked before anything goes on
+- Your hidden apps' PIN is kept only as a hash
+```
+
+The full description doesn't name Zenith Connect yet. It is at 3,968 of 4,000 characters, so a
+paragraph on Connect needs something else cut first.
+
 For the next update, the one that makes everything yours (check it is under 500 characters):
 
 ```

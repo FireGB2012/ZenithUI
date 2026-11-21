@@ -4,10 +4,10 @@
 
 | | |
 | --- | --- |
-| Application ID | `com.gabriel.zenithui` |
-| Debug builds install as | `com.gabriel.zenithui.debug` (so a debug and a release build can coexist) |
-| minSdk / targetSdk | 31 (Android 12) / 37 |
-| Version | `versionCode` and `versionName` in `app/build.gradle.kts` (109 / 3.9 as of 2026-11-19: the sideload build with #20 to #22; Play last got 108) |
+| Application ID | `com.gabriel.zenith_Launcher` (the Kotlin package and `namespace` stay `com.gabriel.zenithui`) |
+| Debug builds install as | `com.gabriel.zenith_Launcher.debug` (so a debug and a release build can coexist) |
+| minSdk / targetSdk | 29 (Android 10) / 37 |
+| Version | `versionCode` and `versionName` in `app/build.gradle.kts` (115 / 4.0 as of 2026-11-21: the release for Play after Zenith went live; a new upload always takes a higher `versionCode`) |
 
 The application ID is permanent once the first build is uploaded to Play. Change it **before**
 uploading if you want a different one — edit `applicationId` and `namespace` in

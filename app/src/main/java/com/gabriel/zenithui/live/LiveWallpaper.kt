@@ -31,6 +31,7 @@ import android.view.Display
 import android.view.SurfaceHolder
 import androidx.core.content.ContextCompat
 import com.gabriel.zenithui.data.ConfigRepository
+import com.gabriel.zenithui.data.LauncherMotion
 import com.gabriel.zenithui.data.LiveCurves
 import com.gabriel.zenithui.data.LiveLock
 import com.gabriel.zenithui.data.LiveMotion
@@ -347,6 +348,17 @@ class LiveWallpaper : WallpaperService() {
                 LivePace.frameMs(LiveMotion.Idle, p.lite, p.reduced, p.powerSave, opening = false) > 0
         }
 
+        /**
+         * Whether an idle design holds still on this frame for Zenith, which is moving ([LivePace.holds]):
+         * never while one design fades into another, nor in Android's preview of it.
+         */
+        private fun makesWay(frameTimeNanos: Long, now: Long): Boolean {
+            val p = plan ?: return false
+            val motion = shown?.style?.live ?: return false
+            if (isPreview || fadeFrom != 0L || unlock.opening(now)) return false
+            return LivePace.holds(motion, p.lite, LauncherMotion.moving(frameTimeNanos))
+        }
+
         /** Without movement, or without a canvas fast enough for it, an unlock design goes straight to its home pose. */
         private fun stillOnly(): Boolean = plan?.reduced == true || !hardware
 
@@ -379,12 +391,18 @@ class LiveWallpaper : WallpaperService() {
                     return
                 }
                 if (LivePace.due(frameTimeNanos, lastFrame, ms, vsyncNanos)) {
-                    if (drifting()) {
-                        if (clockFrom != 0L) seconds += (frameTimeNanos - clockFrom).coerceIn(0L, MAX_STEP_NANOS) / 1e9
-                        clockFrom = frameTimeNanos
+                    if (makesWay(frameTimeNanos, now)) {
+                        // Zenith is moving: the frame is left to it, and the design's clock waits, so
+                        // it carries on from where it stopped rather than jumping ahead.
+                        clockFrom = 0L
+                    } else {
+                        if (drifting()) {
+                            if (clockFrom != 0L) seconds += (frameTimeNanos - clockFrom).coerceIn(0L, MAX_STEP_NANOS) / 1e9
+                            clockFrom = frameTimeNanos
+                        }
+                        draw(now)
                     }
                     lastFrame = frameTimeNanos
-                    draw(now)
                 }
                 val next = frameMs(now)
                 if (next > 0) {

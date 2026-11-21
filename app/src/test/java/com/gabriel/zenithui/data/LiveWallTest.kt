@@ -213,6 +213,19 @@ class LiveWallTest {
         }
     }
 
+    @Test
+    fun `in lite a moving design holds still while zenith moves, so the two do not share each frame`() {
+        assertTrue(LivePace.holds(LiveMotion.Idle, lite = true, launcherMoving = true))
+        assertFalse(LivePace.holds(LiveMotion.Idle, lite = true, launcherMoving = false))
+    }
+
+    @Test
+    fun `in full it moves on whatever zenith does, and an unlock design never holds its opening`() {
+        assertFalse(LivePace.holds(LiveMotion.Idle, lite = false, launcherMoving = true))
+        assertFalse(LivePace.holds(LiveMotion.Unlock, lite = true, launcherMoving = true))
+        assertFalse(LivePace.holds(LiveMotion.Unlock, lite = false, launcherMoving = true))
+    }
+
     /** Which of [vsyncs] vsyncs, [vsyncNanos] apart, a design paced to [frameMs] draws on. */
     private fun drawn(frameMs: Int, vsyncNanos: Long, vsyncs: Int = 24): List<Int> {
         var last = 0L

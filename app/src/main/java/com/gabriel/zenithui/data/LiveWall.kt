@@ -189,6 +189,15 @@ object LivePace {
     fun due(now: Long, last: Long, frameMs: Int, vsyncNanos: Long): Boolean =
         last == 0L || now - last >= frameMs * 1_000_000L - vsyncNanos / 2
 
+    /**
+     * Whether a design holds still for now: in Lite, a design with a motion of its own ([LiveMotion.Idle])
+     * while Zenith is moving ([LauncherMotion]), so the wallpaper and the home screen are not drawn
+     * by the same phone for the same frames. It carries on from where it stopped once Zenith is
+     * still. An unlock design's opening never waits.
+     */
+    fun holds(motion: LiveMotion, lite: Boolean, launcherMoving: Boolean): Boolean =
+        lite && launcherMoving && motion == LiveMotion.Idle
+
     const val FULL_MS = 16
     const val LITE_MS = 33
 }

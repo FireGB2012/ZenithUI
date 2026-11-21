@@ -15,6 +15,8 @@ coroutines = "1.9.0"
 billing = "8.3.0"
 fragment = "1.8.6"
 credentials = "1.6.0"
+# Already in the app through Compose; named so the frame check can ask whether the code is compiled.
+profileinstaller = "1.3.1"
 # 1.2.1 was built with a newer Kotlin than this project compiles with (metadata 2.4): move up
 # together with the Kotlin plugin, not before it.
 googleid = "1.2.0"
@@ -46,6 +48,7 @@ androidx-fragment = { group = "androidx.fragment", name = "fragment", version.re
 androidx-credentials = { group = "androidx.credentials", name = "credentials", version.ref = "credentials" }
 androidx-credentials-play-services-auth = { group = "androidx.credentials", name = "credentials-play-services-auth", version.ref = "credentials" }
 googleid = { group = "com.google.android.libraries.identity.googleid", name = "googleid", version.ref = "googleid" }
+androidx-profileinstaller = { group = "androidx.profileinstaller", name = "profileinstaller", version.ref = "profileinstaller" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

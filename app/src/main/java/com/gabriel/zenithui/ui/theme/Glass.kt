@@ -489,8 +489,16 @@ internal val SYSTEM_WALLPAPER_ZOOM: Float = if (Build.VERSION.SDK_INT >= 34) 1.1
  * mWallpaperX 1.0 on the last page and the picture did not move), so the glass stays centred too.
  * Before that, the launcher's offsets slide it, as they always did.
  */
-internal fun systemWallpaperOffset(launcher: Offset): Offset =
-    if (Build.VERSION.SDK_INT >= 34) Offset(0.5f, 0.5f) else launcher
+internal fun systemWallpaperOffset(launcher: Offset, sdk: Int = Build.VERSION.SDK_INT): Offset =
+    if (glassFollowsPages(sdk)) launcher else Offset(0.5f, 0.5f)
+
+/**
+ * Whether the glass needs to hear where across the wallpaper the pages are: only before Android 14,
+ * where the wallpaper slides with them. From 14 every page shows its middle, so the home screen
+ * leaves the offset it hands the glass alone: told it on every frame of a swipe, every pane would be
+ * drawn again for the same picture.
+ */
+internal fun glassFollowsPages(sdk: Int = Build.VERSION.SDK_INT): Boolean = sdk < 34
 
 /**
  * A lens of its own for [levels], rebuilt only when the wallpaper itself changes: what [ZenithTheme]

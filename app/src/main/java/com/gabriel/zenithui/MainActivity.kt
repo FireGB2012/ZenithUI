@@ -281,6 +281,12 @@ fun ZenithApp(viewModel: ZenithViewModel) {
         val stop = activity?.let { com.gabriel.zenithui.data.PhonePerformance.watch(it) }
         onDispose { stop?.invoke() }
     }
+    // Every frame Zenith draws, for the frame check in Settings and for the live wallpaper, which in
+    // Lite holds still while the home screen moves (see FrameRecorder).
+    androidx.compose.runtime.DisposableEffect(activity) {
+        val stop = activity?.let { com.gabriel.zenithui.data.FrameRecorder.attach(it) }
+        onDispose { stop?.invoke() }
+    }
 
     val view = LocalView.current
     // Light or dark exactly as ZenithTheme works it out, so the bar icons never disagree with the page.

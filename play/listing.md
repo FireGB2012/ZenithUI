@@ -160,6 +160,17 @@ Zenith 4.0: faster, safer, and Zenith Connect.
 - Your hidden apps' PIN is kept only as a hash
 ```
 
+For 4.0.2 (117), if 4.0.1 (116) is already up: 4.0.1 made smoother in Lite (under 500 characters).
+If 116 never went up, use 4.0's text above instead: everything in it is in 117 too.
+
+```
+Smoother on phones in Lite.
+- A wallpaper that moves holds still while you swipe, so your phone draws one thing at a time
+- Pages and the home screen fade without being drawn twice over
+- The glass no longer redraws on every frame of a swipe
+- A frame check under Settings, Performance shows how smoothly your home screen runs
+```
+
 The full description doesn't name Zenith Connect yet. It is at 3,968 of 4,000 characters, so a
 paragraph on Connect needs something else cut first.
 

@@ -124,6 +124,12 @@ class PerformanceTest {
     }
 
     @Test
+    fun `lite fades a page or the home screen in place, not through a picture of it drawn first`() {
+        assertTrue(Performance.fadesInPlace(lite = true))
+        assertFalse(Performance.fadesInPlace(lite = false))
+    }
+
+    @Test
     fun `the choice is saved, and a settings file from before it reads as auto`() {
         val lite = ZenithSettings(performance = Performance.LITE)
         assertEquals(Performance.LITE, ZenithSettings.fromJson(lite.toJson()).performance)

@@ -50,6 +50,13 @@ import com.gabriel.zenithui.data.CloseRules
 import com.gabriel.zenithui.data.PictureService
 import com.gabriel.zenithui.data.Performance
 import com.gabriel.zenithui.data.PhonePerformance
+import com.gabriel.zenithui.data.FrameCheck
+import com.gabriel.zenithui.data.FrameRecorder
+import com.gabriel.zenithui.data.LiveMotion
+import com.gabriel.zenithui.data.RefreshRate
+import com.gabriel.zenithui.data.findActivity
+import com.gabriel.zenithui.live.LiveWallpapers
+import kotlin.math.roundToInt
 import com.gabriel.zenithui.data.Badges
 import com.gabriel.zenithui.data.DrawerSort
 import com.gabriel.zenithui.data.GlassBody
@@ -596,6 +603,32 @@ private fun rememberNotificationAccess(): Boolean {
     return allowed
 }
 
+/**
+ * The frame check, under Performance: how smoothly the home screen ran the last times it moved,
+ * which part of drawing a frame held it back, whether Android has compiled Zenith's code yet, and
+ * whether a moving wallpaper is being drawn alongside it ([FrameCheck]). Worked out as the page
+ * opens, off the main thread, so a screenshot of it says what a slow phone is doing.
+ */
+@Composable
+private fun FrameCheckNotes(settings: ZenithSettings) {
+    val context = LocalContext.current
+    val lines by produceState<List<String>?>(null, settings.wallpaperStyle) {
+        value = withContext(Dispatchers.IO) {
+            val hz = context.findActivity()?.let { RefreshRate.currentHz(it).roundToInt() } ?: 60
+            val moving = runCatching {
+                LiveWallpapers.isOurs(context) && LiveWallpapers.design(context, settings).live == LiveMotion.Idle
+            }.getOrDefault(false)
+            FrameCheck.lines(FrameRecorder.report(), FrameRecorder.code(context), hz, moving)
+        }
+    }
+    Caption("Frame check")
+    Spacer(Modifier.height(4.dp))
+    (lines ?: listOf("Checking…")).forEach { line ->
+        Note(line)
+        Spacer(Modifier.height(4.dp))
+    }
+}
+
 @Composable
 internal fun MotionOptions(settings: ZenithSettings, actions: SettingsActions, onAdvanced: () -> Unit) {
     val change = actions.change
@@ -645,6 +678,8 @@ internal fun MotionOptions(settings: ZenithSettings, actions: SettingsActions, o
                         }
                     }
                 )
+                Spacer(Modifier.height(14.dp))
+                FrameCheckNotes(settings)
             }
         }
     }

@@ -1,0 +1,10 @@
+# Zenith's own code, compiled ahead of time when the app is installed or updated, so the home
+# screen, the drawer, Settings and Connect run at full speed from the first minute instead of
+# stuttering while Android learns which code is hot (which on a mid-range phone takes days of
+# use and a night on the charger). The libraries bring their own profiles; AGP merges them.
+#
+# There is no phone in the cloud to record a profile on, so this names the whole package rather
+# than a recorded list: every class is loaded from the app image and every method is compiled.
+# AGP expands the wildcards against the app's classes before R8 renames them.
+HSPLcom/gabriel/zenithui/**;->**(**)**
+Lcom/gabriel/zenithui/**;

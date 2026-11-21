@@ -374,10 +374,18 @@ data class ZenithSettings(
     }
 
     companion object {
+        /** How weak and how strong the glass can be set (Settings, Appearance). */
+        const val GLASS_LEAST = 0.2f
+        const val GLASS_MOST = 1.2f
+
         fun fromJson(o: JSONObject): ZenithSettings {
             val d = ZenithSettings()
-            val columns = o.optInt("columns", d.columns)
-            val rows = o.optInt("rows", d.rows)
+            // Numbers are read inside what Zenith can draw (see ItemBounds for the layout's): all
+            // Zenith writes is inside, and what is not came from a damaged save or somebody else's
+            // Look. A glass of fifty would ask for colours brighter than white; a million drawer
+            // columns for a million cells in every row.
+            val columns = o.optInt("columns", d.columns).coerceIn(GridDensity.MIN_COLUMNS, GridDensity.MAX_COLUMNS)
+            val rows = o.optInt("rows", d.rows).coerceIn(GridDensity.MIN_ROWS, GridDensity.MAX_ROWS)
             val aura = o.optInt("aura", d.aura)
             val unlockedThemes = o.optJSONArray("unlockedThemes").toStringList()
             // Settings from before levels: everything earned was either still in hand or spent in
@@ -390,12 +398,13 @@ data class ZenithSettings(
                 appearance = o.optString("appearance", d.appearance),
                 // A theme that went (Neon, Retro) is read as the one after it: see Themes.successor.
                 theme = Themes.successor(o.optString("theme", d.theme).ifEmpty { d.theme }),
-                glass = o.optDouble("glass", d.glass.toDouble()).toFloat(),
+                glass = o.optDouble("glass", d.glass.toDouble()).takeIf { it.isFinite() }?.toFloat()?.coerceIn(GLASS_LEAST, GLASS_MOST) ?: d.glass,
                 glassBody = o.optString("glassPanels", d.glassBody),
                 // Layouts saved before densities existed are matched to the nearest preset.
                 gridDensity = o.optString("gridDensity", GridDensity.fromGrid(columns, rows).id),
-                gridColumns = o.optInt("gridColumns", d.gridColumns),
-                gridRows = o.optInt("gridRows", d.gridRows),
+                // Zero, or less, is no grid of your own.
+                gridColumns = o.optInt("gridColumns", d.gridColumns).let { if (it <= 0) 0 else it.coerceIn(GridDensity.MIN_COLUMNS, GridDensity.MAX_COLUMNS) },
+                gridRows = o.optInt("gridRows", d.gridRows).let { if (it <= 0) 0 else it.coerceIn(GridDensity.MIN_ROWS, GridDensity.MAX_ROWS) },
                 columns = columns,
                 rows = rows,
                 iconSize = o.optInt("iconSize", d.iconSize),
@@ -421,7 +430,7 @@ data class ZenithSettings(
                     counts.keys().asSequence().mapNotNull { key -> (counts.opt(key) as? Int)?.takeIf { it > 0 }?.let { key to it } }.toMap()
                 } ?: d.launchCounts,
                 drawerSort = o.optString("drawerSort", d.drawerSort),
-                drawerColumns = o.optInt("drawerColumns", d.drawerColumns),
+                drawerColumns = o.optInt("drawerColumns", d.drawerColumns).coerceIn(0, GridDensity.MAX_COLUMNS),
                 drawerTabs = o.optJSONArray("drawerTabs")?.let { tabs ->
                     (0 until tabs.length()).mapNotNull { tabs.optJSONObject(it)?.let(DrawerTab::fromJson) }
                 } ?: d.drawerTabs,
@@ -485,14 +494,15 @@ data class ZenithSettings(
                         .mapNotNull { code -> (paid.opt(code) as? Int)?.takeIf { it >= 0 }?.let { code to it } }
                         .toMap()
                 } ?: d.referralsPaid,
-                pages = o.optInt("pages", d.pages),
+                pages = o.optInt("pages", d.pages).coerceIn(1, LayoutBuilder.MAX_PAGES),
                 note = o.optString("note", d.note),
                 // A list that was there but emptied stays empty; one never written gets the three cities.
                 worldClocks = if (o.has("worldClocks")) o.optJSONArray("worldClocks").toStringList() else d.worldClocks,
                 countdownTitle = o.optString("countdownTitle", d.countdownTitle),
                 countdownDay = o.optLong("countdownDay", d.countdownDay),
                 countdownFrom = o.optLong("countdownFrom", d.countdownFrom),
-                framePhotos = o.optJSONArray("framePhotos").toStringList(),
+                // Names in the frame's own folder: one that is a path could point anywhere in Zenith's files.
+                framePhotos = o.optJSONArray("framePhotos").toStringList().filter(FramePhotos::isPlainName),
                 todos = o.optJSONArray("todos")?.let { list ->
                     (0 until list.length()).mapNotNull { list.optJSONObject(it)?.let(TodoItem::fromJson) }
                 } ?: d.todos,

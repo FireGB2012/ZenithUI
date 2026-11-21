@@ -88,6 +88,7 @@ import com.gabriel.zenithui.ui.theme.ZenithShapes
 import com.gabriel.zenithui.ui.theme.corners
 import com.gabriel.zenithui.ui.theme.glass
 import com.gabriel.zenithui.ui.theme.inkOnTint
+import kotlinx.coroutines.launch
 
 /**
  * The one paid thing in Zenith. It is shown as a description of what you get rather than as a
@@ -531,6 +532,9 @@ fun HiddenAppsSheet(
     var editingPin by remember(visible) { mutableStateOf(false) }
     /** Counts the wrong PINs: the box shakes its head once for each. */
     var refusals by remember { mutableIntStateOf(0) }
+    // The PIN is kept as a slow hash, so it is checked away from the main thread, once per tap.
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var checking by remember(visible) { mutableStateOf(false) }
 
     ZenithSheet(visible = visible, onDismiss = onDismiss, title = "Hidden apps") {
         // The right PIN, and the lock gives way to the list where it stands, the sheet growing to
@@ -547,11 +551,22 @@ fun HiddenAppsSheet(
                     GlassButton(
                         text = "Unlock",
                         onClick = {
-                            if (entry == settings.hiddenPin) {
-                                unlocked = true
-                            } else {
-                                entry = ""
-                                refusals++
+                            if (!checking) {
+                                checking = true
+                                val typed = entry
+                                val kept = settings.hiddenPin
+                                scope.launch {
+                                    val right = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+                                        com.gabriel.zenithui.data.HiddenPin.matches(typed, kept)
+                                    }
+                                    checking = false
+                                    if (right) {
+                                        unlocked = true
+                                    } else {
+                                        entry = ""
+                                        refusals++
+                                    }
+                                }
                             }
                         },
                         modifier = Modifier.fillMaxWidth(),

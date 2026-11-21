@@ -96,6 +96,14 @@ object Performance {
      */
     fun blurBehind(theme: Float, lite: Boolean): Float = if (lite) 0f else theme
 
+    /**
+     * Whether a page turning, or the home screen going back behind the drawer, fades by drawing each
+     * thing on it a little lighter, rather than drawing all of it into a picture first and fading
+     * that: in Lite, where that picture, the size of the screen, was drawn again on every frame of
+     * the swipe. The two only differ where things overlap, and only while they fade.
+     */
+    fun fadesInPlace(lite: Boolean): Boolean = lite
+
     /** The glass as you tuned it; in Lite without the whisper of colour at its rim, which looks at the wallpaper three times where once will do. */
     fun tuning(tuning: GlassTuning, lite: Boolean): GlassTuning = if (lite) tuning.copy(rainbow = 0f) else tuning
 

@@ -67,13 +67,13 @@
 <body>
 <main>
   <h1>Privacy Policy — Zenith UI</h1>
-  <p class="updated">Last updated: 11 November 2026</p>
+  <p class="updated">Last updated: 21 November 2026</p>
 
   <p class="lede">Zenith UI is a home screen replacement (launcher) for Android. This policy explains
   what the app does with your information. The short version: Zenith works without an account, and
   without one nothing you do in it leaves your phone — with two exceptions you choose: the Weather
-  widget, which sends the place you pick to a weather service, and opening a Look somebody shared,
-  which asks Zenith's server for it. If you choose to make a Zenith account, the app sends Zenith's
+  widget, which sends the place you pick to a weather service, and Zenith Connect, which asks
+  Zenith's server for the Looks it features and for any Look whose code you type. If you choose to make a Zenith account, the app sends Zenith's
   server only what is listed under "A Zenith account" below.</p>
 
   <h2>What Zenith UI collects</h2>
@@ -104,12 +104,16 @@
   logged or sent anywhere.</p>
 
   <h2>Opening a Look</h2>
-  <p>A Look is a home screen design: its colours, wallpaper design, icon choices and layout. Under
-  Settings &gt; Looks you can type a code somebody gave you, or tap Featured looks. Either one asks
-  Zenith's server for the Look, with or without an account: the request holds the code, or asks for
-  the list, and nothing about you. Like any server, Zenith's sees the internet address the request
-  comes from, as described under "A Zenith account". The Look that comes back is put on your home
-  screen and kept on your phone only if you save it. Nothing is sent until you tap.</p>
+  <p>A Look is a home screen design: its colours, wallpaper design, icon choices and layout. Zenith
+  Connect, the app inside Zenith, shows the Looks featured on Zenith's server when you open it, and
+  you can type a code somebody gave you there or under Settings &gt; Looks. Either one asks Zenith's
+  server for the Look, with or without an account: the request holds the code, or asks for the
+  featured list, and nothing about you. Like any server, Zenith's sees the internet address the
+  request comes from, as described under "A Zenith account". A Look that comes back is checked
+  before any of it is used: it can only change how your home screen looks, never your name, your
+  PIN, Zenith Plus or the names you gave your apps. It goes on your home screen only when you tap
+  Apply, and stays on your phone only if you save it. Nothing is sent until you open Connect or type
+  a code.</p>
 
   <h2>A Zenith account</h2>
   <p>An account is optional. It makes your Aura code count, for the friend who uses it and for you,
@@ -241,7 +245,7 @@
         <tr><td><code>VIBRATE</code></td><td>Provides a short haptic tick when you pick up an icon or resize a widget</td></tr>
         <tr><td><code>READ_CALENDAR</code></td><td>Optional. Asked for only when you tap "Show your events" on the Calendar widget or "Allow calendar" on the bedside clock, so they can list today's events</td></tr>
         <tr><td><code>com.android.vending.BILLING</code></td><td>Lets Google Play sell Zenith Plus inside the app</td></tr>
-        <tr><td><code>INTERNET</code>, <code>ACCESS_NETWORK_STATE</code></td><td>Lets the app reach Zenith's server once you make or sign in to a Zenith account, lets Google's Play Billing library reach Google Play, and lets the Weather widget reach Open-Meteo once you choose a place for it. Otherwise Zenith UI itself opens no network connections</td></tr>
+        <tr><td><code>INTERNET</code>, <code>ACCESS_NETWORK_STATE</code></td><td>Lets the app reach Zenith's server once you make or sign in to a Zenith account, or when you open Zenith Connect or a Look's code, lets Google's Play Billing library reach Google Play, and lets the Weather widget reach Open-Meteo once you choose a place for it. Otherwise Zenith UI itself opens no network connections</td></tr>
         <tr><td><code>EXPAND_STATUS_BAR</code></td><td>Lets a swipe down on the home screen pull down the notification shade, as a phone's own launcher does</td></tr>
         <tr><td>Notification access (optional)</td><td>Given in Android's settings, for notification dots and the Now playing widget, as described above</td></tr>
         <tr><td>Accessibility: the lock helper (optional)</td><td>Switched on in Android's settings, only to lock the phone with a gesture you chose</td></tr>

@@ -32,7 +32,20 @@ object Backup {
         true
     }.getOrDefault(false)
 
+    /** No backup is anywhere near this big; a file that is (a video picked by mistake) is not read into memory. */
+    const val MOST_BYTES = 8 * 1024 * 1024
+
     fun read(context: Context, uri: Uri): String? = runCatching {
-        context.contentResolver.openInputStream(uri)?.use { it.readBytes().decodeToString() }
+        context.contentResolver.openInputStream(uri)?.use { input ->
+            val out = java.io.ByteArrayOutputStream()
+            val buffer = ByteArray(64 * 1024)
+            while (true) {
+                val n = input.read(buffer)
+                if (n < 0) break
+                out.write(buffer, 0, n)
+                if (out.size() > MOST_BYTES) return null
+            }
+            out.toByteArray().decodeToString()
+        }
     }.getOrNull()
 }

@@ -9,6 +9,7 @@ import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.os.Build
 import com.gabriel.zenithui.data.ConfigRepository
+import com.gabriel.zenithui.data.LiveDesign
 import com.gabriel.zenithui.data.LiveMotion
 import com.gabriel.zenithui.data.WallColors
 import com.gabriel.zenithui.data.WallStyle
@@ -32,6 +33,7 @@ object LiveWallpapers {
     private const val KEY_LOCK_ID = "lockId"
     private const val KEY_LOCK_KEY = "lockKey"
     private const val KEY_TONE = "tone"
+    private const val KEY_SHOWN = "shown"
 
     fun component(context: Context): ComponentName = ComponentName(context.packageName, LiveWallpaper::class.java.name)
 
@@ -50,9 +52,17 @@ object LiveWallpapers {
         Intent(WallpaperManager.ACTION_LIVE_WALLPAPER_CHOOSER),
     )
 
-    /** The design the live wallpaper shows: the one in the settings, or Hover where that one does not move. */
-    fun design(settings: ZenithSettings): WallStyle =
-        WallStyle.byName(settings.wallpaperStyle)?.takeIf { it.live != null } ?: WallStyle.Hover
+    /**
+     * The design the live wallpaper shows: the one in the settings, moving or still, or with none
+     * there the one it showed last (LiveDesign). Noted each time, so it can keep to it.
+     */
+    fun design(context: Context, settings: ZenithSettings): WallStyle {
+        val prefs = prefs(context)
+        val last = prefs.getString(KEY_SHOWN, null)
+        val shown = LiveDesign.of(settings.wallpaperStyle, last)
+        if (shown.name != last) prefs.edit().putString(KEY_SHOWN, shown.name).apply()
+        return shown
+    }
 
     /**
      * Whether it is in its dark colours: as Zenith is now ([night] being whether the phone is dark),
@@ -137,7 +147,7 @@ object LiveWallpapers {
     fun glassStill(context: Context): GlassStill {
         val app = context.applicationContext
         val settings = ConfigRepository.get(app).settings.value
-        val style = design(settings)
+        val style = design(app, settings)
         val colors = colors(app, settings, night(app))
         val (screenWidth, screenHeight) = WallpaperArt.screenSize(app)
         // The glass softens most of what it shows. A design that drifts is softened further below,

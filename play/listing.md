@@ -144,6 +144,36 @@ For 3.8 (108): the same text again. 108 is 107 with a portrait screen marked as 
 (`android.hardware.screen.portrait`), which Play's pre-review check asked for so tablets,
 Chromebooks and Android XR are not ruled out. Nothing a phone shows changed.
 
+For 4.0.1 (116), the first update after Zenith went live: everything since 3.8 (108), the last
+bundle Play took (480 characters). 4.0.1 is 4.0 (115, never uploaded) with the wallpaper fix, so
+the text is 4.0's:
+
+```
+Zenith 4.0: faster, safer, and Zenith Connect.
+- Zenith Connect: try a setup on your own home screen, apply it, undo it, or share yours by code
+- Make your own widget from scratch
+- Aurora and Frost, two new glass themes
+- More wallpapers that move, some open as you unlock
+- Every app closes back into its icon
+- Full speed from the first minute, and a smaller download
+- Shared Looks and backups are checked before anything goes on
+- Your hidden apps' PIN is kept only as a hash
+```
+
+For 4.0.2 (117), if 4.0.1 (116) is already up: 4.0.1 made smoother in Lite (under 500 characters).
+If 116 never went up, use 4.0's text above instead: everything in it is in 117 too.
+
+```
+Smoother on phones in Lite.
+- A wallpaper that moves holds still while you swipe, so your phone draws one thing at a time
+- Pages and the home screen fade without being drawn twice over
+- The glass no longer redraws on every frame of a swipe
+- A frame check under Settings, Performance shows how smoothly your home screen runs
+```
+
+The full description doesn't name Zenith Connect yet. It is at 3,968 of 4,000 characters, so a
+paragraph on Connect needs something else cut first.
+
 For the next update, the one that makes everything yours (check it is under 500 characters):
 
 ```

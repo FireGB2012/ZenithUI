@@ -31,6 +31,7 @@ import android.view.Display
 import android.view.SurfaceHolder
 import androidx.core.content.ContextCompat
 import com.gabriel.zenithui.data.ConfigRepository
+import com.gabriel.zenithui.data.LauncherMotion
 import com.gabriel.zenithui.data.LiveCurves
 import com.gabriel.zenithui.data.LiveLock
 import com.gabriel.zenithui.data.LiveMotion
@@ -64,6 +65,10 @@ import kotlin.math.roundToInt
  * only for the moment it opens. Each frame only poses layers painted once ([LiveScene]). Which
  * design, in which colours, light or dark, comes from Zenith's settings, as for the still designs
  * ([LiveWallpapers]); Android is told its colours, so the phone's own colours can follow it.
+ *
+ * A still design named there it shows still, as the picture Zenith puts up for it: Android keeps
+ * the live wallpaper on the lock screen when a still one goes on the home screen alone, and for
+ * the moment before that picture is up it is still the home screen's ([LiveDesign]).
  */
 class LiveWallpaper : WallpaperService() {
 
@@ -241,7 +246,7 @@ class LiveWallpaper : WallpaperService() {
                 Settings.Global.getFloat(contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) > 0f
             }.getOrDefault(true)
             val next = Plan(
-                style = LiveWallpapers.design(settings),
+                style = LiveWallpapers.design(app, settings),
                 colors = LiveWallpapers.colors(app, settings, night),
                 lite = Performance.isLite(settings.performance, PhonePerformance.verdict.value),
                 reduced = MotionLevel.of(settings.motion, animations).reduced,
@@ -267,7 +272,7 @@ class LiveWallpaper : WallpaperService() {
             val w = width
             val h = height
             scope.launch(Dispatchers.Default) {
-                val made = runCatching { LiveScene.of(next.style, next.colors, w.toFloat(), h.toFloat()).also { it.prepare() } }.getOrNull()
+                val made = runCatching { LiveScene.forWallpaper(next.style, next.colors, w.toFloat(), h.toFloat()).also { it.prepare() } }.getOrNull()
                 if (made == null) {
                     render.post { if (wantedKey == key) wantedKey = null }
                     return@launch
@@ -343,6 +348,17 @@ class LiveWallpaper : WallpaperService() {
                 LivePace.frameMs(LiveMotion.Idle, p.lite, p.reduced, p.powerSave, opening = false) > 0
         }
 
+        /**
+         * Whether an idle design holds still on this frame for Zenith, which is moving ([LivePace.holds]):
+         * never while one design fades into another, nor in Android's preview of it.
+         */
+        private fun makesWay(frameTimeNanos: Long, now: Long): Boolean {
+            val p = plan ?: return false
+            val motion = shown?.style?.live ?: return false
+            if (isPreview || fadeFrom != 0L || unlock.opening(now)) return false
+            return LivePace.holds(motion, p.lite, LauncherMotion.moving(frameTimeNanos))
+        }
+
         /** Without movement, or without a canvas fast enough for it, an unlock design goes straight to its home pose. */
         private fun stillOnly(): Boolean = plan?.reduced == true || !hardware
 
@@ -375,12 +391,18 @@ class LiveWallpaper : WallpaperService() {
                     return
                 }
                 if (LivePace.due(frameTimeNanos, lastFrame, ms, vsyncNanos)) {
-                    if (drifting()) {
-                        if (clockFrom != 0L) seconds += (frameTimeNanos - clockFrom).coerceIn(0L, MAX_STEP_NANOS) / 1e9
-                        clockFrom = frameTimeNanos
+                    if (makesWay(frameTimeNanos, now)) {
+                        // Zenith is moving: the frame is left to it, and the design's clock waits, so
+                        // it carries on from where it stopped rather than jumping ahead.
+                        clockFrom = 0L
+                    } else {
+                        if (drifting()) {
+                            if (clockFrom != 0L) seconds += (frameTimeNanos - clockFrom).coerceIn(0L, MAX_STEP_NANOS) / 1e9
+                            clockFrom = frameTimeNanos
+                        }
+                        draw(now)
                     }
                     lastFrame = frameTimeNanos
-                    draw(now)
                 }
                 val next = frameMs(now)
                 if (next > 0) {

@@ -1,4 +1,7 @@
-Zenith UI includes two typefaces, unchanged, under the SIL Open Font License, Version 1.1:
+Zenith UI includes two typefaces under the SIL Open Font License, Version 1.1. They are
+cut down to the Latin, Greek and Cyrillic letters, numbers and symbols, with their
+hinting taken out, so the app is smaller; the letters themselves are not changed.
+The cut-down fonts are under the same license:
 
 Inter (https://github.com/rsms/inter)
 Copyright © 2020 The Inter Project Authors

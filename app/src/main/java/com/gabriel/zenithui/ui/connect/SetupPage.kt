@@ -66,6 +66,7 @@ import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -146,7 +147,12 @@ private fun PageBody(setup: ConnectSetup, state: ConnectState, bridge: ConnectBr
         if (y.isNaN()) 0f else ((scroll.value - y) / height.coerceAtLeast(1f)).coerceIn(0f, 1f)
     }
 
-    Box(Modifier.fillMaxSize()) {
+    // Anything scrolled under the bar at the top darkens it at once, not only the big name.
+    val scrolledBy = with(LocalDensity.current) { 48.dp.toPx() }
+    val shade = { maxOf((underBar() * 1.5f).coerceAtMost(1f), 0.75f * (scroll.value / scrolledBy).coerceIn(0f, 1f)) }
+
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val pageHeight = maxHeight
         Column(
             Modifier
                 .fillMaxSize()
@@ -155,7 +161,10 @@ private fun PageBody(setup: ConnectSetup, state: ConnectState, bridge: ConnectBr
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             BoxWithConstraints(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                val phoneWidth = (maxWidth * 0.6f).coerceAtMost(290.dp)
+                // The page's picture, but never so tall that, at rest, its name and what it is are
+                // pushed under Apply: on a tall, narrow phone (a Galaxy A55) it gives up a little width.
+                val byHeight = (pageHeight - top - bottom - 340.dp) * aspect
+                val phoneWidth = minOf((maxWidth * 0.6f).coerceAtMost(290.dp), byHeight).coerceAtLeast(150.dp)
                 Box(Modifier.width(phoneWidth).aspectRatio(aspect).turned(spin, reduced)) {
                     SetupPhone(worn, bridge, Modifier.fillMaxSize(), artWidth = 540)
                 }
@@ -177,8 +186,9 @@ private fun PageBody(setup: ConnectSetup, state: ConnectState, bridge: ConnectBr
                 modifier = Modifier
                     .padding(horizontal = 24.dp)
                     .onPlaced { title[0] = it.positionInParent().y to it.size.height.toFloat() }
-                    // Going under the bar at the top, it gives way to the small one there.
-                    .graphicsLayer { alpha = 1f - underBar() },
+                    // Going under the bar at the top, it is gone before the small one there comes
+                    // up, so the two are never seen on top of each other.
+                    .graphicsLayer { alpha = 1f - (underBar() * 1.8f).coerceAtMost(1f) },
             )
             Spacer(Modifier.height(4.dp))
             Text(whoBy(setup), color = palette.onGlassMuted, fontSize = 14.sp, fontWeight = FontWeight.Medium, textAlign = TextAlign.Center)
@@ -238,7 +248,7 @@ private fun PageBody(setup: ConnectSetup, state: ConnectState, bridge: ConnectBr
             InThisSetup(setup)
         }
 
-        TopBar(setup, underBar, onBack = { state.closeDetail() })
+        TopBar(setup, underBar, shade, onBack = { state.closeDetail() })
         ApplyBar(setup, on, state, bridge)
     }
 }
@@ -409,11 +419,12 @@ private fun pagesOf(setup: ConnectSetup): String {
 }
 
 /**
- * Back, at the top, over a shade so the clock stays clear. As the big name goes under it the shade
- * deepens and the name comes up small beside Back ([underBar], 0 to 1, read while drawing).
+ * Back, at the top, over a shade so the clock stays clear. As the page scrolls under it the shade
+ * deepens ([shade]), and once the big name has gone under it the name comes up small beside Back
+ * ([underBar], 0 to 1). Both are read while drawing.
  */
 @Composable
-private fun BoxScope.TopBar(setup: ConnectSetup, underBar: () -> Float, onBack: () -> Unit) {
+private fun BoxScope.TopBar(setup: ConnectSetup, underBar: () -> Float, shade: () -> Float, onBack: () -> Unit) {
     val palette = LocalPalette.current
     val ink = edgeColour(top = true)
     val strong = !LocalOnWallpaper.current
@@ -422,11 +433,11 @@ private fun BoxScope.TopBar(setup: ConnectSetup, underBar: () -> Float, onBack: 
             .align(Alignment.TopCenter)
             .fillMaxWidth()
             .drawBehind {
-                val deep = underBar()
+                val deep = shade()
                 drawRect(
                     Brush.verticalGradient(
-                        0f to ink.copy(alpha = if (strong) 0.9f + 0.08f * deep else 0.5f + 0.42f * deep),
-                        0.7f to ink.copy(alpha = if (strong) 0.55f + 0.4f * deep else 0.2f + 0.64f * deep),
+                        0f to ink.copy(alpha = if (strong) 0.9f + 0.08f * deep else 0.5f + 0.47f * deep),
+                        0.7f to ink.copy(alpha = if (strong) 0.55f + 0.4f * deep else 0.2f + 0.7f * deep),
                         1f to Color.Transparent,
                     ),
                 )
@@ -445,7 +456,7 @@ private fun BoxScope.TopBar(setup: ConnectSetup, underBar: () -> Float, onBack: 
             modifier = Modifier
                 .align(Alignment.Center)
                 .padding(horizontal = 60.dp)
-                .graphicsLayer { alpha = underBar() },
+                .graphicsLayer { alpha = ((underBar() - 0.55f) / 0.45f).coerceIn(0f, 1f) },
         )
     }
 }

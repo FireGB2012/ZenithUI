@@ -63,6 +63,8 @@ class WallpaperDirector(
     private val source: WallpaperSource,
     /** Called when something else has become the wallpaper: Zenith's design is no longer in use. */
     private val forget: () -> Unit,
+    /** Called with a design to name again: the settings name none, yet one of Zenith's is the wallpaper. */
+    private val adopt: (String) -> Unit,
     /** Called when a design that moves was asked for and Zenith's live wallpaper is not up: Android's screen for it is to be opened. */
     private val askLive: () -> Unit,
 ) {
@@ -134,15 +136,21 @@ class WallpaperDirector(
         requests.value += 1
     }
 
-    /** Android announced that the wallpaper changed, from here or from anywhere else. */
+    /**
+     * Android announced that the wallpaper changed, from here or from anywhere else. Zenith's own
+     * live wallpaper announces its new colours too, as a still design goes up over it, and that is
+     * never something else (WallpaperFollow.forgets).
+     */
     fun wallpaperChanged() {
         announced.value += 1
         val name = settings.value.wallpaperStyle
         if (name.isEmpty()) return
-        val live = WallStyle.byName(name)?.live != null
         scope.launch {
-            val ours = withContext(Dispatchers.IO) { if (live) LiveWallpapers.isOurs(app) else GlassWallpaper.isCurrent(app) }
-            if (!ours) forget()
+            val forgets = withContext(Dispatchers.IO) {
+                val liveUp = LiveWallpapers.isOurs(app)
+                WallpaperFollow.forgets(name, liveUp, copyUp = !liveUp && GlassWallpaper.isCurrent(app))
+            }
+            if (forgets && settings.value.wallpaperStyle == name) forget()
         }
     }
 
@@ -161,6 +169,9 @@ class WallpaperDirector(
         if (style == null) {
             answered = request
             dismiss()
+            // None named, and one of Zenith's up all the same (one forgotten by mistake): named again.
+            val named = withContext(Dispatchers.IO) { onScreen(now) }
+            if (named != null) adopt(named)
             return
         }
         if (style.live != null) {
@@ -175,11 +186,15 @@ class WallpaperDirector(
         if (!explicit) {
             val ours = withContext(Dispatchers.IO) { GlassWallpaper.isCurrent(app) }
             if (!WallpaperFollow.shouldRepaint(now, key, GlassWallpaper.appliedKey(app), ours)) {
-                if (!ours) forget()
+                // Zenith's live wallpaper up shows the design itself, in whatever colours it has.
+                val liveUp = !ours && withContext(Dispatchers.IO) { LiveWallpapers.isOurs(app) }
+                if (WallpaperFollow.forgets(now.wallpaperStyle, liveUp, ours)) forget()
                 dismiss()
                 return
             }
         }
+        // Wherever Android keeps Zenith's live wallpaper up, it shows this design in this tone too.
+        if (explicit || now.wallpaperFollow) LiveWallpapers.keepTone(app, now.isDark(systemDark.value))
         val bitmap = withContext(Dispatchers.Default) { WallpaperArt.render(style, colors, width, height) }
         val which = if (now.wallpaperLock) {
             WallpaperManager.FLAG_SYSTEM or WallpaperManager.FLAG_LOCK
@@ -234,6 +249,24 @@ class WallpaperDirector(
             withContext(Dispatchers.Default) { LiveWallpapers.setLockStill(app, style, colors, force = explicit) }
         }
         source.refresh()
+    }
+
+    /**
+     * The design to name for the wallpaper up now while [now] names none: the one Zenith's live
+     * wallpaper shows, or the one whose picture Zenith put up; null for a photo or anything else.
+     */
+    private fun onScreen(now: ZenithSettings): String? {
+        if (now.wallpaperStyle.isNotEmpty()) return null
+        val liveUp = LiveWallpapers.isOurs(app)
+        val copyUp = !liveUp && GlassWallpaper.isCurrent(app)
+        if (!liveUp && !copyUp) return null
+        return WallpaperFollow.adopt(
+            now.wallpaperStyle,
+            liveUp = liveUp,
+            liveShows = if (liveUp) LiveWallpapers.design(app, now).name else null,
+            copyUp = copyUp,
+            appliedKey = GlassWallpaper.appliedKey(app),
+        )
     }
 
     /** Takes the layer away, if it is up, and hands the glass back to whatever the wallpaper really is. */

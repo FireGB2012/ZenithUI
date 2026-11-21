@@ -189,6 +189,15 @@ object LivePace {
     fun due(now: Long, last: Long, frameMs: Int, vsyncNanos: Long): Boolean =
         last == 0L || now - last >= frameMs * 1_000_000L - vsyncNanos / 2
 
+    /**
+     * Whether a design holds still for now: in Lite, a design with a motion of its own ([LiveMotion.Idle])
+     * while Zenith is moving ([LauncherMotion]), so the wallpaper and the home screen are not drawn
+     * by the same phone for the same frames. It carries on from where it stopped once Zenith is
+     * still. An unlock design's opening never waits.
+     */
+    fun holds(motion: LiveMotion, lite: Boolean, launcherMoving: Boolean): Boolean =
+        lite && launcherMoving && motion == LiveMotion.Idle
+
     const val FULL_MS = 16
     const val LITE_MS = 33
 }
@@ -247,4 +256,15 @@ object LiveCurves {
 
     /** -ln(0.005): how many time constants a spring needs to settle to half a percent. */
     private const val SETTLE = 5.298
+}
+
+/**
+ * Which design Zenith's live wallpaper shows: the one the settings name, moving or still, so that
+ * wherever Android keeps it up (the lock screen, once a still design has gone on the home screen
+ * alone) it shows what was chosen. With none named (a photo, or a wallpaper chosen elsewhere) it
+ * keeps to the one it showed [last]; Hover only when it has shown nothing yet.
+ */
+object LiveDesign {
+    fun of(named: String, last: String?): WallStyle =
+        WallStyle.byName(named) ?: last?.let(WallStyle::byName) ?: WallStyle.Hover
 }

@@ -66,6 +66,12 @@ object Looks {
     /** As many as are kept on the phone. */
     const val MOST = 12
 
+    /** The longest name a Look is given (Settings, Looks lets you type no more). */
+    const val NAME_MOST = 30
+
+    /** As many items as the most pages of the biggest grid hold: a Look from a code holds no more. */
+    const val ITEMS_MOST = LayoutBuilder.MAX_PAGES * GridDensity.MAX_COLUMNS * GridDensity.MAX_ROWS
+
     /**
      * What a Look keeps, by the names the settings are written under. Not `newLookAsked`: whether
      * this phone has been offered the new look is about the phone, so putting a Look on neither
@@ -107,10 +113,52 @@ object Looks {
         kept.keys().forEach { key -> if (key in KEYS) merged.put(key, kept.get(key)) }
         val settings = ZenithSettings.fromJson(JSONObject(merged.toString()))
         val array = runCatching { JSONArray(look.layout) }.getOrDefault(JSONArray())
-        val items = (0 until array.length()).mapNotNull { array.optJSONObject(it)?.let(::homeItemFromJson) }
+        val items = LayoutBuilder.uniqueIds((0 until array.length()).mapNotNull { array.optJSONObject(it)?.let(::homeItemFromJson) })
         // A widget you made and have deleted since the Look was saved is not there to be put back.
         return settings to MadeWidgets.onlyKnown(items, settings.madeWidgets)
     }
+
+    /**
+     * [look] as it came from somebody else, by a code: read as a stranger's word, since what the
+     * server hands over need not have been sent by Zenith at all. Only what a Look keeps ([KEYS])
+     * stays, and none of what [forSharing] leaves out (another phone's widgets and shortcuts, its
+     * photos, the names given to apps, which could say anything over your apps). Its name is one
+     * line no longer than one you could give it here; it holds no more than a home screen can; and
+     * its gestures open Zenith's own things or apps, never a shortcut of theirs, and only apps that
+     * are [installed] when that is known. Going through this twice changes nothing more.
+     */
+    fun fromElsewhere(look: Look, installed: Set<String>? = null): Look {
+        val raw = runCatching { JSONObject(look.settings) }.getOrDefault(JSONObject())
+        val settings = JSONObject()
+        KEYS.forEach { key -> if (raw.has(key)) settings.put(key, raw.get(key)) }
+        settings.optJSONObject("gestures")?.let { theirs ->
+            val kept = JSONObject()
+            theirs.keys().forEach { gesture ->
+                val action = theirs.optString(gesture)
+                val app = GestureActions.appKey(action)
+                val fine = when {
+                    gesture !in Gestures.ids -> false
+                    action in GestureActions.fixed -> true
+                    app != null -> installed == null || app in installed
+                    else -> false
+                }
+                if (fine) kept.put(gesture, action)
+            }
+            settings.put("gestures", kept)
+        }
+        val array = runCatching { JSONArray(look.layout) }.getOrDefault(JSONArray())
+        val layout = JSONArray()
+        var i = 0
+        while (i < array.length() && layout.length() < ITEMS_MOST) {
+            array.optJSONObject(i)?.let(layout::put)
+            i++
+        }
+        return forSharing(look.copy(name = cleanName(look.name), settings = settings.toString(), layout = layout.toString()))
+    }
+
+    /** A name from somebody else, as a Look's name: one line, no longer than one you could type here. */
+    fun cleanName(name: String): String =
+        name.replace(Regex("[\\p{Cntrl}\\s]+"), " ").trim().take(NAME_MOST).trim().ifEmpty { "A Look" }
 
     /**
      * [look] as it may go to somebody else. Left out: what only works on this phone (other apps'

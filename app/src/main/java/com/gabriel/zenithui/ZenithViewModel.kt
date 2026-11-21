@@ -152,6 +152,7 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
     private val director = WallpaperDirector(
         application, viewModelScope, store.settings, wallpaperSource,
         forget = { store.update { it.copy(wallpaperStyle = "") } },
+        adopt = { name -> store.update { if (it.wallpaperStyle.isEmpty()) it.copy(wallpaperStyle = name) else it } },
         askLive = { _liveAsks.trySend(Unit) },
     )
 
@@ -353,6 +354,7 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
         // before the themes went have no colour set for it, so it is given paletteId's, once and
         // before anything is painted. Those are the colours it already has, so nothing repaints.
         if (settings.value.wallpaperPalette.isEmpty()) store.update { it.copy(wallpaperPalette = it.paletteId) }
+        sealHiddenPin()
         director.start()
         viewModelScope.launch {
             val current = settings.value
@@ -593,7 +595,31 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
         current.copy(hiddenApps = if (key in hidden) hidden - key else hidden + key)
     }
 
-    fun setHiddenPin(pin: String) = store.update { it.copy(hiddenPin = pin.filter { c -> c.isDigit() }.take(6)) }
+    /** The last PIN asked for: one sealed after it, by a slower hash, is not put in over it. */
+    private var pinAsked = 0
+
+    /** Seals the PIN away from the main thread (the hash takes a moment on purpose). */
+    fun setHiddenPin(pin: String) {
+        val asked = ++pinAsked
+        viewModelScope.launch {
+            val sealed = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { com.gabriel.zenithui.data.HiddenPin.seal(pin) }
+            if (asked == pinAsked) store.update { it.copy(hiddenPin = sealed) }
+        }
+    }
+
+    /**
+     * A hidden-apps PIN kept as typed (by a Zenith from before the hash, or in an old backup) is
+     * kept from now on only as its hash: worked out away from the main thread, and put in only if
+     * the PIN has not been changed meanwhile.
+     */
+    private fun sealHiddenPin() {
+        val plain = settings.value.hiddenPin
+        if (!com.gabriel.zenithui.data.HiddenPin.isPlain(plain)) return
+        viewModelScope.launch {
+            val sealed = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { com.gabriel.zenithui.data.HiddenPin.seal(plain) }
+            store.update { if (it.hiddenPin == plain) it.copy(hiddenPin = sealed) else it }
+        }
+    }
 
     fun backupText(): String = Backup.encode(store.config())
 
@@ -630,6 +656,7 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
         )
         upgradeLayout()
         tidyWidgetIds()
+        sealHiddenPin()
         viewModelScope.launch { icons.configure(restored.iconPack, restored.iconShape) }
         return true
     }
@@ -1038,8 +1065,7 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
         if (cleaned.length != 6) return@seenThrough "A Look's code is LOOK- and six letters and numbers."
         when (val reply = server.openLook(cleaned)) {
             is Reply.Ok -> {
-                val look = runCatching { com.gabriel.zenithui.data.Look.fromJson(org.json.JSONObject(reply.value)) }.getOrNull()
-                    ?: return@seenThrough "That code is for something that is not a Look."
+                val look = strangersLook(reply.value) ?: return@seenThrough "That code is for something that is not a Look."
                 applyLook(look, fromElsewhere = true)
                 null
             }
@@ -1060,11 +1086,22 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
         if (cleaned.length != 6) return null to "A Look's code is LOOK- and six letters and numbers."
         return when (val reply = server.openLook(cleaned)) {
             is Reply.Ok -> {
-                val look = runCatching { com.gabriel.zenithui.data.Look.fromJson(org.json.JSONObject(reply.value)) }.getOrNull()
+                val look = strangersLook(reply.value)
                 if (look == null) null to "That code is for something that is not a Look." else look to null
             }
             else -> null to reply.problem()
         }
+    }
+
+    /**
+     * A Look somebody shared, as the server handed it over: read as a stranger's word
+     * (Looks.fromElsewhere), and fitted to the apps on this phone. Null when it is not a Look.
+     */
+    private fun strangersLook(text: String): com.gabriel.zenithui.data.Look? {
+        val look = runCatching { com.gabriel.zenithui.data.Look.fromJson(org.json.JSONObject(text)) }.getOrNull() ?: return null
+        // Apps not read yet is not knowing what this phone has, rather than it having none.
+        val installed = repository.apps.value.mapTo(HashSet()) { it.key }.takeIf { it.isNotEmpty() }
+        return runCatching { com.gabriel.zenithui.data.Looks.fromElsewhere(look, installed) }.getOrNull()
     }
 
     /** Whether Zenith's server answers now; null for a build that has none. */
@@ -1231,7 +1268,9 @@ class ZenithViewModel(application: Application) : AndroidViewModel(application) 
         if (kept.isEmpty()) return false
         val before = settings.value.framePhotos
         store.update { it.copy(framePhotos = kept) }
-        before.filterNot { it in kept }.forEach { runCatching { java.io.File(frameDir, it).delete() } }
+        before.filterNot { it in kept }.forEach { old ->
+            runCatching { com.gabriel.zenithui.data.FramePhotos.fileIn(frameDir, old)?.delete() }
+        }
         return true
     }
 

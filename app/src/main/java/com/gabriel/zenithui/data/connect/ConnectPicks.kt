@@ -107,6 +107,33 @@ data class News(val version: String, val date: String, val title: String, val li
 object ConnectNews {
     val all: List<News> = listOf(
         News(
+            "4.0.2", "21 Nov 2026", "Smoother in Lite",
+            listOf(
+                "In Lite, a wallpaper that moves holds still while you swipe, open the drawer or open an app, then carries on from where it stopped, so the phone draws one thing at a time.",
+                "Pages and the home screen fade in place in Lite, instead of being drawn twice over on every frame of a swipe.",
+                "On Android 14 and later the glass is no longer drawn again on every frame of a swipe, since the wallpaper behind it stays put.",
+                "Settings, Motion & feel, Performance has a frame check: how smoothly the home screen last ran, what held it back, and whether Android has compiled Zenith yet.",
+            ),
+        ),
+        News(
+            "4.0.1", "21 Nov 2026", "Your wallpaper, every time",
+            listOf(
+                "Putting a setup on over a wallpaper that moves no longer leaves Hover's marbles behind: its own wallpaper goes on, and so does every setup's after it.",
+                "Zenith's live wallpaper shows the design you chose wherever Android keeps it up, the lock screen too, moving or still.",
+                "A setup's page shows that setup's own wallpaper again, not the one you already have on.",
+            ),
+        ),
+        News(
+            "4.0", "21 Nov 2026", "Faster, safer, and a cleaner Connect",
+            listOf(
+                "Zenith is made ready for your phone as it installs, so it runs at full speed from the first minute, not after days of use. It's 0.6 MB smaller too.",
+                "A Look from a code, or a backup, is checked before any of it goes on: nothing in one can crash Zenith, rename your apps, or give anybody Plus.",
+                "The PIN on your hidden apps is kept only as a hash, so not even a backup file shows it.",
+                "Connect is tidied up: what a setup puts on sits clear of Apply, headings line up, and the foot of every tab fades cleanly under the tab bar.",
+                "A Look that couldn't be shared no longer pushes your oldest saved Look out when you try again.",
+            ),
+        ),
+        News(
             "3.9.5", "20 Nov 2026", "Every app goes back into its icon",
             listOf(
                 "Closing an app plays every time now: apps opened from Search or a notification, apps left open for hours, and after Android closed Zenith in the background.",

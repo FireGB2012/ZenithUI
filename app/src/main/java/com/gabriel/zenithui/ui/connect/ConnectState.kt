@@ -128,6 +128,13 @@ class ConnectState(private val scope: CoroutineScope) {
     /** What to do once signed in, when signing in was asked for on the way to something. */
     private var afterSignIn: (() -> Unit)? = null
 
+    /**
+     * The Look saved for a share that did not go through: its name and its id. Share again under
+     * the same name and that one is shared, rather than a copy saved each try, which, with only so
+     * many Looks kept, would push your oldest one out.
+     */
+    private var savedForShare: Pair<String, String>? = null
+
     var toast by mutableStateOf<String?>(null)
         private set
     var toastTurn by mutableIntStateOf(0)
@@ -446,13 +453,17 @@ class ConnectState(private val scope: CoroutineScope) {
         }
         busy = true
         problem = null
+        val named = name.trim().take(ConnectStudio.MAX_NAME)
         scope.launch {
-            val look = bridge.saveLook(name.trim().take(ConnectStudio.MAX_NAME))
-            val (code, why) = try {
-                bridge.shareLook(look.id)
+            val (look, code, why) = try {
+                val again = savedForShare?.takeIf { it.first == named }?.second?.let { id -> bridge.looks.firstOrNull { it.id == id } }
+                val look = again ?: bridge.saveLook(named)
+                val (code, why) = bridge.shareLook(look.id)
+                Triple(look, code, why)
             } finally {
                 busy = false
             }
+            savedForShare = if (code == null) look.name to look.id else null
             if (code != null) madeCode = look.name to code else problem = why ?: "It couldn't be shared just now."
         }
     }

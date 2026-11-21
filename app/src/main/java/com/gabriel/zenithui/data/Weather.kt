@@ -277,7 +277,22 @@ class WeatherRepository(context: Context) {
             connection.readTimeout = 8_000
             connection.setRequestProperty("User-Agent", "ZenithUI")
             try {
-                if (connection.responseCode !in 200..299) null else connection.inputStream.use { it.readBytes().decodeToString() }
+                if (connection.responseCode !in 200..299) {
+                    null
+                } else {
+                    // A forecast is a few kilobytes: anything near a megabyte is not one.
+                    connection.inputStream.use { input ->
+                        val out = java.io.ByteArrayOutputStream()
+                        val buffer = ByteArray(16 * 1024)
+                        while (true) {
+                            val n = input.read(buffer)
+                            if (n < 0) break
+                            out.write(buffer, 0, n)
+                            if (out.size() > 1024 * 1024) return@runCatching null
+                        }
+                        out.toByteArray().decodeToString()
+                    }
+                }
             } finally {
                 connection.disconnect()
             }

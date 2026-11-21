@@ -528,6 +528,10 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
     // The home screen fades out and sinks back under either of them, exactly as far as it is covered:
     // as they come up, and as they are pulled away again by a finger.
     val homeCover = remember { HomeCover() }
+    // The frame check in Settings is about the home screen: the frames of a page over it are not kept.
+    LaunchedEffect(homeCover) {
+        snapshotFlow { homeCover.amount() > 0f }.collect { com.gabriel.zenithui.data.FrameRecorder.covered = it }
+    }
     val glassLevels by viewModel.glassLevels.collectAsState()
 
     var drawerHeightPx by remember { mutableFloatStateOf(0f) }
@@ -574,6 +578,13 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
     val theme = com.gabriel.zenithui.ui.theme.LocalTheme.current
     val lite = com.gabriel.zenithui.ui.theme.LocalLite.current
     val blurBehind = com.gabriel.zenithui.data.Performance.blurBehind(theme.blurBehind, lite).dp
+    // How the home screen and its pages fade: in Lite each thing on them is drawn a little lighter,
+    // instead of all of it into a picture the size of the screen first, again on every frame.
+    val fade = if (com.gabriel.zenithui.data.Performance.fadesInPlace(lite)) {
+        androidx.compose.ui.graphics.CompositingStrategy.ModulateAlpha
+    } else {
+        androidx.compose.ui.graphics.CompositingStrategy.Auto
+    }
     val canFrost = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S && blurBehind > 0.dp
     val homeLayer = androidx.compose.ui.graphics.rememberGraphicsLayer()
     val frost = remember { derivedStateOf { DrawerFrost.amount(drawerNow()) } }
@@ -2007,7 +2018,8 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
             runCatching {
                 wallpaperManager.setWallpaperOffsetSteps(1f / last, 1f)
                 wallpaperManager.setWallpaperOffsets(token, horizontal, 0.5f)
-                wallpaperOffset.value = Offset(horizontal, 0.5f)
+                // The glass's copy of the wallpaper only slides where the real one does.
+                if (com.gabriel.zenithui.ui.theme.glassFollowsPages()) wallpaperOffset.value = Offset(horizontal, 0.5f)
             }
         }
     }
@@ -3094,6 +3106,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                     val sunk = depth.coerceIn(0f, 1f)
                     // Settings is glass over the wallpaper; the home screen is not seen through it.
                     alpha = (1f - 0.55f * drawerOpenBy) * (1f - t[Tune.HomeDim] * sunk) * (1f - covered)
+                    compositingStrategy = fade
                     // Pulled down for the swipe-down gesture: after the finger, but less and less.
                     if (!motion.reduced) translationY = band(pulled(), PULL_REACH.toPx())
                 }
@@ -3119,7 +3132,10 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                                     homeLayer.record { this@drawWithContent.drawContent() }
                                     drawLayer(homeLayer)
                                 }
-                            blurBehind <= 0.dp -> Modifier.graphicsLayer { alpha = DrawerFrost.sharpAlpha(frost.value) }
+                            blurBehind <= 0.dp -> Modifier.graphicsLayer {
+                                alpha = DrawerFrost.sharpAlpha(frost.value)
+                                compositingStrategy = fade
+                            }
                             else -> Modifier
                         }
                     )
@@ -3304,6 +3320,7 @@ private fun HomeContent(viewModel: ZenithViewModel, wallpaperOffset: MutableStat
                                             // the layer changes with it and the page is not composed.
                                             val turn = PageEffects.transform(effect, offsetNow(), page == pagerState.settledPage)
                                             alpha = turn.alpha
+                                            compositingStrategy = fade
                                             scaleX = turn.scale * turn.squash
                                             scaleY = turn.scale
                                             rotationY = turn.rotationY

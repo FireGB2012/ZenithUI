@@ -160,8 +160,9 @@ Zenith 4.0: faster, safer, and Zenith Connect.
 - Your hidden apps' PIN is kept only as a hash
 ```
 
-For 4.0.2 (117), if 4.0.1 (116) is already up: 4.0.1 made smoother in Lite (under 500 characters).
-If 116 never went up, use 4.0's text above instead: everything in it is in 117 too.
+For 4.0.2 (118, the same build as 117 under a new number), if 4.0.1 (116) is already up: 4.0.1
+made smoother in Lite (under 500 characters). If 116 never went up, use 4.0's text above instead:
+everything in it is in 118 too.
 
 ```
 Smoother on phones in Lite.

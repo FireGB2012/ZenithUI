@@ -50,7 +50,7 @@ def main():
     for name in ("ic_launcher.xml", "ic_launcher_round.xml"):
         with open(os.path.join(res, "mipmap-anydpi", name), "w") as f:
             f.write(ADAPTIVE_XML)
-    clean_png(glob.glob(os.path.join(opt, "*-play-store-512.png"))[0], os.path.join(repo, "play", "icon-512.png"), "RGB")
+    clean_png(glob.glob(os.path.join(opt, "*-play-store-512.png"))[0], os.path.join(repo, "play", "icon-512.png"), "RGBA")
     print("installed", os.path.basename(opt.rstrip("/")), "into", repo)
 
 
